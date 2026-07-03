@@ -9,11 +9,11 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 1. **确认当前工作目录**：运行 `pwd`（应为 SubLift 项目根目录）
 2. **完整阅读本文档**
 3. **阅读项目文档**：
-   - `docs/ARCHITECTURE.md` — 架构设计（模块职责、数据流、技术栈）
+   - `docs/ARCHITECTURE.md` — 架构设计（模块职责、数据流、技术栈；feat-004 填充前见 `docs/plans/`）
    - `docs/REQUIREMENTS.md` — 项目依赖和项目规格
-   - `README.md` — 快速上手与 CLI 用法
+   - `README.md` — 快速上手与 CLI 用法（feat-004 填充前为占位）
 4. **运行 `./init.sh`**，确认环境状态正常
-5. **阅读 `feature-list.json`**，了解项目级功能总览以及当前的开发状态；如需查看当前 Phase 的开发细节，打开对应的 `docs/phases/phaseN.json`
+5. **阅读 `feature-list.json`**，了解项目级功能总览以及当前的开发状态；如需查看当前 Phase 的开发细节，打开对应的 `docs/phases/phaseN.json`；如需查看设计源头，打开 `docs/plans/`
 6. **查看最近提交**：运行 `git log --oneline -5`
 
 如果基线验证失败，请先修复它，再添加新的工作范围。
@@ -31,6 +31,7 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 ## 工作规则
 
 - **一次只做一个功能**：从当前 Phase 的 `docs/phases/phaseN.json` 中只选择一个未完成的功能
+- **任务粒度**：一个任务 = 一个可独立验收的功能块；任务内部细节通过 `subtasks` 字段承载，不拆成独立任务。粒度以「能否独立验收」为准
 - **必须验证**：未运行验证命令前，不要声称任务已完成
 - **更新产物**：结束会话前，更新 `progress.md` 和对应的 Phase 细节文件（`docs/phases/phaseN.json`）；如大功能块状态变化，同步更新 `feature-list.json`
 - **保持范围聚焦**：不要修改与当前功能无关的文件
@@ -40,7 +41,8 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 ## 必需产物
 
 - `feature-list.json` — 项目级功能总览（按 Phase 分组的大功能块）
-- `docs/phases/phaseN.json` — Phase 级细粒度功能跟踪（开发细节与验证证据的唯一事实来源）
+- `docs/phases/phaseN.json` — Phase 级功能跟踪（开发细节与验证证据的唯一事实来源）
+- `docs/plans/` — Phase 设计源头（模块布局、数据流、任务拆分与执行顺序）
 - `progress.md` — 会话连续性**导航**日志（保持精简，见下方防膨胀规则）
 - `docs/DECISIONS.md` — 架构决策归档（长期累积，按时间倒序）
 - `docs/HURDLES.md` — 阻塞开发的任务总结，解决流程，失败原因，最终解决方案和原理。
@@ -63,7 +65,7 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 1. 在 `progress.md` 中更新当前状态，并**清理**本次会话的临时内容（见防膨胀规则）
 2. 在对应的 `docs/phases/phaseN.json` 中更新功能状态；如大功能块状态变化，同步更新 `feature-list.json`
 3. 记录所有尚未解决的风险或阻塞项
-5. 保持仓库足够干净，使下一次会话能够立即运行 `./init.sh`
+4. 保持仓库足够干净，使下一次会话能够立即运行 `./init.sh`
 
 ## `progress.md` 防膨胀规则
 
@@ -81,14 +83,25 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 
 ## 验证命令
 
+完整验证（等价于 `./init.sh` 的验证段）：
+
 ```bash
-# 完整验证
+uv sync
+uv run ruff check .
+uv run mypy src tests
+uv run pytest
 ```
 
 必需检查：
 
+- `uv run ruff check .` — lint，必须 0 error
+- `uv run mypy src tests` — 类型检查（strict），必须 no issues
+- `uv run pytest` — 单元测试，必须全绿
+
+集成测试（需外部资源，CI 跳过）：
+
 ```bash
-# 单元测试
+uv run pytest -m integration
 ```
 
 ## 升级处理

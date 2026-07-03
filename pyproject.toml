@@ -56,14 +56,25 @@ line-length = 100
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B"]
+# E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade,
+# B: bugbear, RUF: ruff 专有, SIM: simplify, ANN: 类型注解检查
+select = ["E", "F", "W", "I", "UP", "B", "RUF", "SIM", "ANN"]
+# RUF001/002/003: 中文全角标点误报；ANN401: 允许 Any
+ignore = ["RUF001", "RUF002", "RUF003", "ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ANN", "S101"]  # 测试允许无注解与 assert
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 warn_unused_ignores = true
 warn_redundant_casts = true
-files = ["src"]
+files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["Vision.*", "Quartz.*", "CoreGraphics.*", "Foundation.*"]
@@ -72,4 +83,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --cov=sublift --cov-report=term-missing"
+markers = [
+    "integration: 需要外部资源（视频/ffmpeg/Vision）的集成测试",
+]

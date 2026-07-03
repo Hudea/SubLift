@@ -187,20 +187,19 @@ class Exporter(Protocol):
 内部细节通过 `subtasks` 字段承载（见 `docs/phases/phase1.json`）。
 `description` 内嵌「验收：xxx」作为主验收标准。
 
-### 7.1 foundation（项目骨架与工具链）
+### 7.1 foundation 基座（feat-001~003）
 
 | id | 任务 | 依赖 | 前置/阻塞 | 分步验证 |
 |---|---|---|---|---|
 | `feat-001` | pyproject.toml 与 uv 初始化 | — | 前置：无 | `uv sync` 成功；`uv run python -c "import sublift"` 无错 |
 | `feat-002` | 包结构骨架 | `feat-001` | 前置：feat-001 | `uv run python -m sublift` 退出 0；ruff/mypy 对空实现无错 |
 | `feat-003` | init.sh 环境检查 | `feat-002` | 前置：feat-002 | `./init.sh` 退出 0；能检出 uv/ffmpeg/python |
-| `feat-004` | 项目文档与架构填充 | `feat-002` | 前置：feat-002 | README 含 install/usage；ARCHITECTURE 含模块职责与数据流；AGENTS 验证命令段非空 |
-| `feat-005` | 工具链配置细化 | `feat-001` | 前置：feat-001 | ruff/mypy/pytest 全绿；pytest 收集到至少 1 个测试 |
 
 ### 7.2 三能力模块（extractor / detector / ocr）
 
 | id | 任务 | 依赖 | 前置/阻塞 | 分步验证 |
 |---|---|---|---|---|
+| `feat-005` | 工具链配置细化 | `feat-001` | 前置：feat-001 | ruff/mypy/pytest 全绿；pytest 收集到至少 1 个测试 |
 | `feat-006` | 帧采样模块（extractor） | `feat-002` | 前置：feat-002；阻塞项：依赖系统 ffmpeg | 合成短视频抽帧；帧数与时间戳断言正确 |
 | `feat-007` | 字幕区域检测模块（detector） | `feat-002` | 前置：feat-002 | 给定帧尺寸断言裁剪区域正确 |
 | `feat-008` | OCR 引擎模块（ocr） | `feat-002` | 前置：feat-002；阻塞项：Vision 仅 macOS、CI 不可用 | Mock 单测返回固定文本/置信度；macOS 真实帧识别出文本（可手动） |
@@ -212,25 +211,32 @@ class Exporter(Protocol):
 | `feat-009` | 端到端编排与时间轴（pipeline） | `feat-006`, `feat-007`, `feat-008` | 前置：三能力模块 | Mock OCR + 合成帧跑通闭环，产出 SubtitleEntry 列表；timeline/dedupe 单测 |
 | `feat-010` | 字幕导出（export） | `feat-009` | 前置：feat-009 | SRT 单测生成符合格式 SRT；ASS/VTT 占位 mypy 通过 |
 
-### 7.4 CLI 与端到端验收
+### 7.4 文档收尾（feat-004，置末）
+
+| id | 任务 | 依赖 | 前置/阻塞 | 分步验证 |
+|---|---|---|---|---|
+| `feat-004` | 项目文档与架构填充 | `feat-010` | 前置：feat-010（实现完成后文档才准确） | README 含 install/usage；ARCHITECTURE 含模块职责与数据流；AGENTS 验证命令段非空 |
+
+### 7.5 CLI 与端到端验收
 
 CLI `extract` 子命令的实现随 `feat-009`/`feat-010` 完成后接入（已在 `feat-002` 建好桩）。
 真实视频端到端验收（`sublift extract <video> -o out.srt`）作为 **Phase 1 级验收门**，
 不单列任务，见 §9。
 
-**合计 10 个粗粒度任务（feat-001~010）。**
+**合计 10 个粗粒度任务（feat-001~010，其中 feat-004 置末）。**
 
 ## 8. 执行顺序总览
 
 ```
 feat-001 → feat-002 → feat-003          （foundation 基座）
-feat-004, feat-005                       （文档与工具链，可与后续并行）
+feat-005                                （工具链细化，可与后续并行）
   → feat-006（extractor）
   → feat-007（detector）
   → feat-008（ocr，含 Mock + Vision）
   → feat-009（pipeline，汇聚三能力模块）
   → feat-010（export）
   → CLI extract 接入 + Phase 1 端到端验收门
+  → feat-004（文档收尾，实现稳定后再写）
 ```
 
 ## 9. Phase 1 验收标准

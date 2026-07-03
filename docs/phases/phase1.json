@@ -32,9 +32,9 @@
     {
       "id": "feat-004",
       "name": "项目文档与架构填充",
-      "description": "完善 README.md（项目简介、安装、CLI 用法、依赖说明）；填充 docs/ARCHITECTURE.md（模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致）；补全 AGENTS.md 验证命令段（pytest/ruff/mypy）。前置：feat-002。验收：README 含 install/usage 段；ARCHITECTURE 含模块职责与数据流；AGENTS.md 验证命令段非空。",
+      "description": "完善 README.md（项目简介、安装、CLI 用法、依赖说明）；填充 docs/ARCHITECTURE.md（模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致）；补全 AGENTS.md 验证命令段（pytest/ruff/mypy）。前置：feat-010。验收：README 含 install/usage 段；ARCHITECTURE 含模块职责与数据流；AGENTS.md 验证命令段非空。",
       "module": "README.md, docs/ARCHITECTURE.md, AGENTS.md",
-      "dependencies": ["feat-002"],
+      "dependencies": ["feat-010"],
       "status": "not-started",
       "evidence": "",
       "subtasks": [
@@ -58,8 +58,8 @@
       "description": "在 pyproject.toml 中细化 ruff（lint 规则扩展）、mypy（strict 级别确认）、pytest（markers/coverage）配置，并补一个最小冒烟测试让 init.sh 的 pytest 不再 SKIP。前置：feat-001。验收：uv run ruff check .、uv run mypy src、uv run pytest 全绿且 pytest 收集到至少 1 个测试。",
       "module": "pyproject.toml, tests/",
       "dependencies": ["feat-001"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "uv run ruff check . 通过（规则扩展为 E/F/W/I/UP/B/RUF/SIM/ANN，忽略 RUF001/002/003 中文标点误报与 ANN401）；uv run mypy src tests 通过（18 source files，strict）；uv run pytest 通过（12 tests，coverage 40%）；./init.sh 退出 0（pytest 不再 SKIP）。新增 tests/test_smoke.py 覆盖 models 与 cli 参数解析。"
     },
     {
       "id": "feat-006",
