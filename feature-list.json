@@ -11,15 +11,14 @@
         {
           "id": "foundation",
           "name": "项目骨架与工具链",
-          "description": "pyproject.toml + uv 初始化、包结构、init.sh 环境检查、README、ruff/mypy/pytest 配置、ARCHITECTURE.md 填充。是所有后续功能块的基座。",
-          "status": "not-started",
+          "description": "pyproject.toml + uv 初始化、包结构、init.sh 环境检查、README/ARCHITECTURE/AGENTS 文档、ruff/mypy/pytest 配置细化。是所有后续功能块的基座。",
+          "status": "in-progress",
           "covers": [
             "feat-001",
             "feat-002",
             "feat-003",
             "feat-004",
-            "feat-005",
-            "feat-006"
+            "feat-005"
           ]
         },
         {
@@ -28,8 +27,7 @@
           "description": "能力模块：从视频按可配置采样率抽取帧。定义 Extractor Protocol + Frame 模型，提供 ffmpeg 默认实现。",
           "status": "not-started",
           "covers": [
-            "feat-007",
-            "feat-008"
+            "feat-006"
           ]
         },
         {
@@ -38,8 +36,7 @@
           "description": "能力模块：确定字幕所在区域。定义 Detector Protocol + Region 类型，提供下部裁剪默认实现，支持手动指定区域。",
           "status": "not-started",
           "covers": [
-            "feat-009",
-            "feat-010"
+            "feat-007"
           ]
         },
         {
@@ -48,9 +45,7 @@
           "description": "能力模块：可插拔多引擎 OCR。定义 OcrEngine Protocol + OcrResult 类型，提供 Mock 引擎（测试用）与 Apple Vision 实现（PyObjC 桥接）。",
           "status": "not-started",
           "covers": [
-            "feat-011",
-            "feat-012",
-            "feat-013"
+            "feat-008"
           ]
         },
         {
@@ -59,10 +54,7 @@
           "description": "串联层：组合 extractor/detector/ocr，处理时间轴生成（变化点状态机）与去重合并，产出 SubtitleEntry 列表。",
           "status": "not-started",
           "covers": [
-            "feat-014",
-            "feat-015",
-            "feat-016",
-            "feat-017"
+            "feat-009"
           ]
         },
         {
@@ -71,20 +63,15 @@
           "description": "串联层：将 SubtitleEntry 列表导出为字幕文件。定义 Exporter Protocol，Phase 1 实现 SRT，ASS/VTT 仅留接口占位。",
           "status": "not-started",
           "covers": [
-            "feat-018",
-            "feat-019",
-            "feat-020"
+            "feat-010"
           ]
         },
         {
           "id": "cli",
-          "name": "CLI 入口",
-          "description": "入口层：sublift extract 子命令，解析参数调用 pipeline 与 export。Phase 1 端到端验收入口。",
+          "name": "CLI 入口与端到端验收",
+          "description": "入口层：sublift extract 子命令，解析参数调用 pipeline 与 export。Phase 1 端到端验收入口（真实视频→SRT）作为 Phase 1 级验收门，不单列任务。",
           "status": "not-started",
-          "covers": [
-            "feat-021",
-            "feat-022"
-          ]
+          "covers": []
         }
       ]
     }

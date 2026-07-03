@@ -8,8 +8,8 @@
       "description": "创建 pyproject.toml，用 uv 初始化项目，声明依赖（Pillow 必需；pyobjc-framework-Vision/Quartz 为 macOS 可选；pytest/ruff/mypy 为 dev）。前置：无。验收：uv sync 成功；uv run python -c \"import sublift\" 无错。",
       "module": "pyproject.toml",
       "dependencies": [],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "uv sync 成功（Python 3.12.13，安装 16 包含 pillow/pytest/ruff/mypy）；uv run python -c \"import sublift\" 输出 OK；uv run ruff check . / mypy src / pytest 全绿。pyproject.toml 含 [project]/[project.scripts]sublift/[project.optional-dependencies]vision/[dependency-groups]dev + ruff/mypy/pytest 配置。附带创建 .python-version、README.md 占位（feat-004 完善）、src/sublift/{__init__.py,py.typed}（feat-002 完善）。"
     },
     {
       "id": "feat-002",
@@ -17,8 +17,8 @@
       "description": "创建 src/sublift/ 包结构（含 __init__.py、__main__.py、cli.py、models.py、config.py 及 pipeline/detector/extractor/ocr/export 子包），均为空实现或最小桩。前置：feat-001。验收：uv run python -m sublift 退出 0；ruff/mypy 对空实现无错。",
       "module": "src/sublift/",
       "dependencies": ["feat-001"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "uv run python -m sublift 退出 0（打印 help）；uv run sublift --help 退出 0；uv run ruff check . 通过；uv run mypy src 通过（17 source files）；uv run pytest 通过（0 tests）。已建骨架：__init__.py（__version__）、__main__.py、cli.py（argparse + extract 子命令桩）、models.py（BoundingBox/Region/Frame/OcrResult/SubtitleEntry）、config.py（Config）；子包 base.py + __init__.py：detector/extractor/ocr/export/pipeline。"
     },
     {
       "id": "feat-003",
@@ -26,179 +26,151 @@
       "description": "补全 init.sh：检出 uv/python/ffmpeg，运行 ruff/mypy/pytest 验证。前置：feat-002。验收：./init.sh 退出 0；能检出 uv/ffmpeg/python。",
       "module": "init.sh",
       "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "./init.sh 退出 0；检出 uv(/opt/homebrew/bin/uv)、python3、ffmpeg(/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg)；python 版本 3.12 via uv；uv sync 成功；ruff check . / mypy src 通过；pytest 无测试用例 SKIP（退出码 5 容忍）。"
     },
     {
       "id": "feat-004",
-      "name": "README.md",
-      "description": "创建 README.md：项目简介、安装（uv sync）、CLI 用法（sublift extract）、依赖说明。前置：feat-002。验收：文档存在；含 install/usage 段。",
-      "module": "README.md",
+      "name": "项目文档与架构填充",
+      "description": "完善 README.md（项目简介、安装、CLI 用法、依赖说明）；填充 docs/ARCHITECTURE.md（模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致）；补全 AGENTS.md 验证命令段（pytest/ruff/mypy）。前置：feat-002。验收：README 含 install/usage 段；ARCHITECTURE 含模块职责与数据流；AGENTS.md 验证命令段非空。",
+      "module": "README.md, docs/ARCHITECTURE.md, AGENTS.md",
       "dependencies": ["feat-002"],
       "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "README.md",
+          "description": "项目简介、安装（uv sync）、CLI 用法（sublift extract）、依赖说明。验收：含 install/usage 段。"
+        },
+        {
+          "name": "ARCHITECTURE.md 填充",
+          "description": "模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致。验收：含模块职责与数据流。"
+        },
+        {
+          "name": "AGENTS.md 验证命令段",
+          "description": "补全「验证命令」段为 pytest/ruff/mypy 实际命令。验收：验证命令段非空。"
+        }
+      ]
     },
     {
       "id": "feat-005",
-      "name": "ruff/mypy/pytest 配置",
-      "description": "在 pyproject.toml 中配置 ruff（lint 规则）、mypy（strict 或合理级别）、pytest。前置：feat-001。验收：uv run ruff check .、uv run mypy src、uv run pytest 全绿（空实现阶段）。",
-      "module": "pyproject.toml",
+      "name": "工具链配置细化",
+      "description": "在 pyproject.toml 中细化 ruff（lint 规则扩展）、mypy（strict 级别确认）、pytest（markers/coverage）配置，并补一个最小冒烟测试让 init.sh 的 pytest 不再 SKIP。前置：feat-001。验收：uv run ruff check .、uv run mypy src、uv run pytest 全绿且 pytest 收集到至少 1 个测试。",
+      "module": "pyproject.toml, tests/",
       "dependencies": ["feat-001"],
       "status": "not-started",
       "evidence": ""
     },
     {
       "id": "feat-006",
-      "name": "ARCHITECTURE.md 填充与 AGENTS.md 验证命令段",
-      "description": "填充 docs/ARCHITECTURE.md（模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致）；补全 AGENTS.md 的「验证命令」段（pytest/ruff/mypy）。前置：无（文档任务）。验收：ARCHITECTURE.md 含模块职责与数据流；AGENTS.md 验证命令段非空。",
-      "module": "docs/ARCHITECTURE.md, AGENTS.md",
-      "dependencies": [],
+      "name": "帧采样模块（extractor）",
+      "description": "定义 Extractor Protocol + Frame 模型（feat-007），实现 ffmpeg_extractor（feat-008），通过 subprocess 调 ffmpeg 按 fps 抽帧并转为 PIL.Image。前置：feat-002。阻塞项：依赖系统 ffmpeg。验收：合成短视频抽帧；断言帧数与时间戳正确。",
+      "module": "src/sublift/extractor/",
+      "dependencies": ["feat-002"],
       "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "Extractor Protocol 与 Frame 模型",
+          "description": "在 base.py 定义 Extractor Protocol（extract(video_path) -> Iterator[Frame]）与 Frame 模型。验收：mypy 通过；单测可实例化最小 Extractor。"
+        },
+        {
+          "name": "ffmpeg 抽帧实现",
+          "description": "实现 FfmpegExtractor，subprocess 调 ffmpeg 按 fps 抽帧转 PIL.Image。验收：合成短视频抽帧；帧数与时间戳断言正确。"
+        }
+      ]
     },
     {
       "id": "feat-007",
-      "name": "Extractor Protocol 与 Frame 模型",
-      "description": "在 src/sublift/extractor/base.py 定义 Extractor Protocol（extract(video_path) -> Iterator[Frame]）与 Frame 模型（timestamp_ms + PIL.Image）。前置：feat-002。验收：mypy 通过；单测可实例化一个最小 Extractor。",
-      "module": "src/sublift/extractor/base.py, src/sublift/models.py",
+      "name": "字幕区域检测模块（detector）",
+      "description": "定义 Detector Protocol + Region/BoundingBox 类型（feat-009），实现下部裁剪默认实现（feat-010），默认裁剪画面下部 30%，支持配置比例与手动指定区域。前置：feat-002。验收：给定帧尺寸断言裁剪区域正确。",
+      "module": "src/sublift/detector/",
       "dependencies": ["feat-002"],
       "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "Detector Protocol 与 Region 类型",
+          "description": "在 base.py 定义 Detector Protocol 与 Region/BoundingBox。验收：mypy 通过；单测。"
+        },
+        {
+          "name": "下部裁剪默认实现",
+          "description": "实现 BottomCropDetector，默认下部 30%，支持配置与手动指定。验收：给定帧尺寸断言裁剪区域正确。"
+        }
+      ]
     },
     {
       "id": "feat-008",
-      "name": "ffmpeg 抽帧实现",
-      "description": "在 src/sublift/extractor/ffmpeg_extractor.py 实现 FfmpegExtractor，通过 subprocess 调 ffmpeg 按 fps 抽帧并转为 PIL.Image。前置：feat-007。阻塞项：依赖系统 ffmpeg。验收：用 ffmpeg 生成合成短视频抽帧；断言帧数与时间戳正确。",
-      "module": "src/sublift/extractor/ffmpeg_extractor.py",
-      "dependencies": ["feat-007"],
+      "name": "OCR 引擎模块（ocr）",
+      "description": "定义 OcrEngine Protocol + OcrResult 类型（feat-011），实现 MockOcrEngine 测试用（feat-012），实现 VisionOcrEngine 通过 PyObjC 调 VNRecognizeTextRequest（feat-013）。前置：feat-002。阻塞项：Vision 仅 macOS 可用、CI 不可用。验收：Mock 单测返回固定文本/置信度；macOS 上真实帧识别出文本（集成测试可手动，CI 跳过）。",
+      "module": "src/sublift/ocr/",
+      "dependencies": ["feat-002"],
       "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "OcrEngine Protocol 与 OcrResult 类型",
+          "description": "在 base.py 定义 OcrEngine Protocol 与 OcrResult。验收：mypy 通过；单测。"
+        },
+        {
+          "name": "MockOcrEngine 测试实现",
+          "description": "实现 MockOcrEngine，返回固定/可配置文本与置信度。验收：单测。"
+        },
+        {
+          "name": "VisionOcrEngine（Apple Vision）",
+          "description": "通过 pyobjc-framework-Vision 调 VNRecognizeTextRequest，导入失败优雅降级。验收：macOS 真实帧识别出文本（可手动；CI 跳过）。"
+        }
+      ]
     },
     {
       "id": "feat-009",
-      "name": "Detector Protocol 与 Region 类型",
-      "description": "在 src/sublift/detector/base.py 定义 Detector Protocol（detect(frame) -> Region）与 Region/BoundingBox 类型。前置：feat-002。验收：mypy 通过；单测。",
-      "module": "src/sublift/detector/base.py, src/sublift/models.py",
-      "dependencies": ["feat-002"],
+      "name": "端到端编排与时间轴（pipeline）",
+      "description": "实现 SubtitleEntry 模型（feat-014）、端到端编排 core.py（feat-015，组合 extractor→detector→ocr→timeline→dedupe）、变化点状态机 timeline.py（feat-016）、去重合并 dedupe.py（feat-017）。前置：feat-006、feat-007、feat-008。验收：Mock OCR + 合成帧跑通闭环，产出 SubtitleEntry 列表；timeline/dedupe 单测覆盖出现/持续/消失/合并/抖动场景。",
+      "module": "src/sublift/pipeline/, src/sublift/models.py",
+      "dependencies": ["feat-006", "feat-007", "feat-008"],
       "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "SubtitleEntry 核心模型",
+          "description": "在 models.py 定义 SubtitleEntry。验收：单测覆盖构造与字段。"
+        },
+        {
+          "name": "端到端编排 core.py",
+          "description": "组合 extractor→detector→ocr→timeline→dedupe，产出 list[SubtitleEntry]。验收：Mock OCR + 合成帧跑通闭环。"
+        },
+        {
+          "name": "变化点状态机 timeline.py（F5）",
+          "description": "基于逐帧 OCR 结果生成 start_ms/end_ms。验收：单测覆盖出现/持续/消失/合并。"
+        },
+        {
+          "name": "去重合并 dedupe.py（F6）",
+          "description": "合并连续相同/相似，消除抖动。验收：单测覆盖连续相同/相似/抖动。"
+        }
+      ]
     },
     {
       "id": "feat-010",
-      "name": "下部裁剪默认实现",
-      "description": "在 src/sublift/detector/bottom_crop.py 实现 BottomCropDetector，默认裁剪画面下部 30%，支持配置比例与手动指定区域。前置：feat-009。验收：给定帧尺寸断言裁剪区域 BoundingBox 正确。",
-      "module": "src/sublift/detector/bottom_crop.py",
+      "name": "字幕导出（export）",
+      "description": "定义 Exporter Protocol（feat-018），实现 SRT exporter（feat-019），ASS/VTT 留接口占位（feat-020）。前置：feat-009。验收：SRT 单测生成符合格式 SRT；时间码与序号正确；ASS/VTT 占位 mypy 通过。",
+      "module": "src/sublift/export/",
       "dependencies": ["feat-009"],
       "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-011",
-      "name": "OcrEngine Protocol 与 OcrResult 类型",
-      "description": "在 src/sublift/ocr/base.py 定义 OcrEngine Protocol（recognize(image) -> OcrResult）与 OcrResult 类型（text + confidence）。前置：feat-002。验收：mypy 通过；单测。",
-      "module": "src/sublift/ocr/base.py, src/sublift/models.py",
-      "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-012",
-      "name": "MockOcrEngine 测试实现",
-      "description": "在 src/sublift/ocr/mock.py 实现 MockOcrEngine，返回固定或可配置的文本/置信度，供 pipeline 与 cli 测试用。前置：feat-011。验收：单测返回固定文本/置信度。",
-      "module": "src/sublift/ocr/mock.py",
-      "dependencies": ["feat-011"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-013",
-      "name": "VisionOcrEngine（Apple Vision）",
-      "description": "在 src/sublift/ocr/vision.py 通过 pyobjc-framework-Vision 调用 VNRecognizeTextRequest 实现 VisionOcrEngine，返回文本+置信度。导入失败时优雅降级提示。前置：feat-011。阻塞项：仅 macOS 可用；CI 环境不可用。验收：macOS 上对真实帧识别出文本（集成测试，可手动；CI 跳过）。",
-      "module": "src/sublift/ocr/vision.py",
-      "dependencies": ["feat-011"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-014",
-      "name": "SubtitleEntry 核心模型",
-      "description": "在 src/sublift/models.py 定义 SubtitleEntry（start_ms/end_ms/text）等 pipeline 所需核心模型。前置：feat-002。验收：单测覆盖构造与字段。",
-      "module": "src/sublift/models.py",
-      "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-015",
-      "name": "端到端编排",
-      "description": "在 src/sublift/pipeline/core.py 实现编排：extractor→detector→ocr→timeline→dedupe，产出 list[SubtitleEntry]。前置：feat-007、feat-009、feat-012、feat-014。验收：Mock OCR + 合成帧跑通闭环，产出 SubtitleEntry 列表。",
-      "module": "src/sublift/pipeline/core.py",
-      "dependencies": ["feat-007", "feat-009", "feat-012", "feat-014"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-016",
-      "name": "变化点状态机（F5 时间轴）",
-      "description": "在 src/sublift/pipeline/timeline.py 实现变化点状态机：基于逐帧 OCR 结果生成 start_ms/end_ms，覆盖出现/持续/消失/合并场景。前置：feat-014。验收：单测覆盖出现、持续、消失、合并场景。",
-      "module": "src/sublift/pipeline/timeline.py",
-      "dependencies": ["feat-014"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-017",
-      "name": "去重合并（F6）",
-      "description": "在 src/sublift/pipeline/dedupe.py 实现去重：合并连续相同/相似识别结果，消除抖动。前置：feat-014。验收：单测覆盖连续相同、相似、抖动场景。",
-      "module": "src/sublift/pipeline/dedupe.py",
-      "dependencies": ["feat-014"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-018",
-      "name": "Exporter Protocol",
-      "description": "在 src/sublift/export/base.py 定义 Exporter Protocol（export(entries, output) -> None）。前置：feat-002。验收：mypy 通过。",
-      "module": "src/sublift/export/base.py",
-      "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-019",
-      "name": "SRT exporter",
-      "description": "在 src/sublift/export/srt.py 实现 SrtExporter，生成符合 SRT 格式文件（序号、时间码、文本）。前置：feat-018、feat-014。验收：单测生成符合格式 SRT；时间码与序号正确。",
-      "module": "src/sublift/export/srt.py",
-      "dependencies": ["feat-018", "feat-014"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-020",
-      "name": "ASS/VTT 接口占位",
-      "description": "在 src/sublift/export/ass.py 与 vtt.py 留接口占位（raise NotImplementedError）。前置：feat-018。验收：mypy 通过。",
-      "module": "src/sublift/export/ass.py, src/sublift/export/vtt.py",
-      "dependencies": ["feat-018"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-021",
-      "name": "CLI extract 子命令",
-      "description": "在 src/sublift/cli.py 用 argparse 实现 sublift extract <video> -o <output>，支持参数覆盖默认配置（采样率/区域/置信度/引擎）。前置：feat-015、feat-019。验收：uv run sublift extract --help 正常；参数解析单测。",
-      "module": "src/sublift/cli.py",
-      "dependencies": ["feat-015", "feat-019"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-022",
-      "name": "端到端真实视频验收",
-      "description": "用真实 1080p 硬字幕视频端到端验收：uv run sublift extract <video> -o out.srt 产出可加载 SRT。前置：feat-021、feat-013。阻塞项：依赖真实视频样本与 macOS Vision 环境。验收：产出 SRT 可在 IINA/VLC 正常加载并对齐。",
-      "module": "src/sublift/cli.py",
-      "dependencies": ["feat-021", "feat-013"],
-      "status": "not-started",
-      "evidence": ""
+      "evidence": "",
+      "subtasks": [
+        {
+          "name": "Exporter Protocol",
+          "description": "在 base.py 定义 Exporter Protocol。验收：mypy 通过。"
+        },
+        {
+          "name": "SRT exporter",
+          "description": "实现 SrtExporter 生成符合格式 SRT。验收：单测；时间码与序号正确。"
+        },
+        {
+          "name": "ASS/VTT 接口占位",
+          "description": "ass.py/vtt.py 留 NotImplementedError。验收：mypy 通过。"
+        }
+      ]
     }
   ]
 }

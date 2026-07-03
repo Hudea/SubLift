@@ -3,21 +3,21 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-03
-- **当前功能：** Phase 1 规划完成，任务就绪待执行
-- **分支：** main（commit 1adbf35）
-- **说明：** 本次会话完成 Phase 1 规划与设计落档，清理了 REQUIREMENTS 过期状态，未写任何实现代码。下一步从 `foundation.pyproject` 开始执行。
+- **当前功能：** feat-003 完成，准备 feat-004（项目文档与架构填充）
+- **分支：** main（commit 9f7e1fb，feat-001/002/003 改动未提交）
+- **说明：** Phase 1 实现进行中。任务粒度已从 22 细任务合并为 10 粗任务（feat-001~010），细节移入 subtasks 字段。feat-001/002/003 完成，下一步 feat-004。
 
 ## 进行中
 
-- 无
+- feat-004：项目文档与架构填充（待开始）
 
 ## 近期完成（最近 5 个）
 
-- [x] 写 `docs/plans/phase1.md`：Phase 1 设计与执行计划（模块布局/数据流/模型/接口/依赖/22 任务/验证/验收）
-- [x] 写 `feature-list.json`：Phase 1 七大功能块（按 schema）
-- [x] 写 `docs/phases/phase1.json`：22 细粒度任务（按 schema，含分步验证）
-- [x] 清理 `docs/REQUIREMENTS.md`：过期 ✅ 全重置为初始状态，标注 Phase 1 范围
-- [x] 归档 ADR-0001/0002/0003 到 `docs/DECISIONS.md`
+- [x] 任务粒度调整：22 细任务 → 10 粗任务（feat-001~010），subtasks 字段承载细节
+- [x] feat-003：init.sh 环境检查；./init.sh 退出 0
+- [x] feat-002：包结构骨架；python -m sublift 退出 0；ruff/mypy/pytest 全绿
+- [x] feat-001：pyproject.toml + uv 初始化；uv sync + import sublift 全绿
+- [x] 规划落档：docs/plans/phase1.md + feature-list.json + docs/phases/phase1.json
 
 ## 阻塞项 / 风险
 

@@ -74,6 +74,13 @@
           },
           "uniqueItems": true
         },
+        "subtasks": {
+          "type": "array",
+          "description": "任务内部的子步骤明细，用于在粗粒度任务中承载细粒度规划。可选。",
+          "items": {
+            "$ref": "#/$defs/subtask"
+          }
+        },
         "status": {
           "$ref": "#/$defs/status"
         },
@@ -101,6 +108,22 @@
           }
         }
       ]
+    },
+    "subtask": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "子步骤名称。"
+        },
+        "description": {
+          "type": "string",
+          "description": "子步骤目标、行为或验收范围。"
+        }
+      }
     }
   }
 }
