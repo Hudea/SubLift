@@ -25,7 +25,7 @@
           "id": "extractor",
           "name": "帧采样模块",
           "description": "能力模块：从视频按可配置采样率抽取帧。定义 Extractor Protocol + Frame 模型，提供 ffmpeg 默认实现。",
-          "status": "not-started",
+          "status": "done",
           "covers": [
             "feat-006"
           ]

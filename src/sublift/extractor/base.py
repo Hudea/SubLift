@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sublift.models import Frame
 
 
+@runtime_checkable
 class Extractor(Protocol):
     """从视频按采样率抽取帧。"""
 

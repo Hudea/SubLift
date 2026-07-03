@@ -67,8 +67,8 @@
       "description": "定义 Extractor Protocol + Frame 模型（feat-007），实现 ffmpeg_extractor（feat-008），通过 subprocess 调 ffmpeg 按 fps 抽帧并转为 PIL.Image。前置：feat-002。阻塞项：依赖系统 ffmpeg。验收：合成短视频抽帧；断言帧数与时间戳正确。",
       "module": "src/sublift/extractor/",
       "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": "",
+      "status": "done",
+      "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（20 source files）；uv run pytest 通过（19 tests，含 4 Protocol 单测，integration 跳过）；uv run pytest -m integration 通过（3 ffmpeg 抽帧测试：3秒视频1fps得3帧时间戳[0,1000,2000]、尺寸320x240、2fps得6帧）。Extractor Protocol 加 @runtime_checkable；FfmpegExtractor 用 ffprobe 取分辨率 + rawvideo pipe 抽帧转 PIL.Image。./init.sh 退出 0。",
       "subtasks": [
         {
           "name": "Extractor Protocol 与 Frame 模型",
