@@ -50,9 +50,9 @@
         },
         {
           "id": "pipeline",
-          "name": "端到端编排",
-          "description": "串联层：组合 extractor/detector/ocr，处理时间轴生成（变化点状态机）与去重合并，产出 SubtitleEntry 列表。",
-          "status": "not-started",
+          "name": "端到端编排与时间轴",
+          "description": "串联层：组合三能力模块，含帧签名/变化点状态机/时间轴/去重合并/端到端 Pipeline。OCR 后置（每段代表帧调一次）。",
+          "status": "done",
           "covers": [
             "feat-009"
           ]

@@ -128,8 +128,8 @@
       "description": "实现 SubtitleEntry 模型（feat-014）、端到端编排 core.py（feat-015，组合 extractor→detector→ocr→timeline→dedupe）、变化点状态机 timeline.py（feat-016）、去重合并 dedupe.py（feat-017）。前置：feat-006、feat-007、feat-008。验收：Mock OCR + 合成帧跑通闭环，产出 SubtitleEntry 列表；timeline/dedupe 单测覆盖出现/持续/消失/合并/抖动场景。",
       "module": "src/sublift/pipeline/, src/sublift/models.py",
       "dependencies": ["feat-006", "feat-007", "feat-008"],
-      "status": "not-started",
-      "evidence": "",
+      "status": "done",
+      "evidence": "子任务1（打轴）+ 子任务2（去重）+ 子任务3（串联）全部完成。uv run ruff check . 通过；uv run mypy src tests 通过（33 source files）；uv run pytest 通过（82 passed + 4 skipped vision）；./init.sh 退出 0。新增依赖 numpy 2.5.0 + opencv-python-headless 5.0.0.93。config.py 新增 SignatureConfig（block_size_ratio=0.08, adaptive_c=12, hash_size=8）、ChangePointConfig（presence_threshold=0.01, hysteresis_frames=2, change_threshold=10, enable_ssim_verify=False 默认关接口就位）、sample_fps=5.0。pipeline/signature.py：双信号帧签名——信号A 前景占比（cv2.adaptiveThreshold + THRESH_BINARY_INV + 2x2 形态学开运算），信号B dHash（9x8 降采样 64bit），compute_ssim numpy 回退。pipeline/changepoint.py：三态状态机 EMPTY⇄STABLE→STABLE_PRIME + 迟滞确认 + 时间戳回溯 + 候选/稳定确认双阶段 + SSIM hook（默认关）。pipeline/timeline.py：TimelineSegment + TimelineBuilder.consume(StateEvent) → list[TimelineSegment]。pipeline/dedupe.py：merge_entries 3-pass（合并→过滤→合并），归一化移除所有空白，抖动消除 A→B(短)→A→A。pipeline/core.py：Pipeline 类（extractor/detector/ocr 依赖注入），run() 串联七组件——首帧 detector 定 Region 一次性，逐帧 crop+compute_signature+changepoint.process，事件驱动 TimelineBuilder，OCR 后置（每段代表帧调一次），confidence_threshold 过滤低置信度，merge_entries 最终清理；只缓存事件触发帧（anchor_frames）控制内存。测试覆盖：test_signature 10、test_changepoint 9、test_timeline 7、test_dedupe 16、test_pipeline 5（空场景/单段/两段/dedupe 生效/confidence 过滤，StubExtractor+MockOcrEngine 闭环，不依赖 ffmpeg/Vision）。HURDLES 记录 dHash 对中文判别力不足（待完整 pipeline 跑通后评估，首选方案加 pixel-diff 互补信号）。端到端实测基线：debug/Zootopia_clip_hardsub1.mkv 00:01:00~00:02:00 窗口 5fps，23 实际段正确识别 21 段，召回/精确率 91.3%，0 误检；缺陷：2 段 OCR 空文本（锚帧落过渡画面）+ 1 段合并 4 段（dHash 漏检），详见 docs/HURDLES.md。",
       "subtasks": [
         {
           "name": "SubtitleEntry 核心模型",

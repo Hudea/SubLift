@@ -3,21 +3,21 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-03
-- **当前功能：** feat-008 完成，准备 feat-009（端到端编排与时间轴 pipeline）
-- **分支：** main（commit 99edf83，feat-008 改动未提交）
-- **说明：** Phase 1 实现进行中。feat-001~008 完成，三能力模块（extractor/detector/ocr）全部就位。下一步 pipeline 串联层。
+- **当前功能：** feat-009 完成，准备 feat-010（字幕导出 export）
+- **分支：** main（commit da22b75，feat-009 改动未提交）
+- **说明：** Phase 1 实现进行中。三能力模块 + pipeline 全部就位，端到端闭环可跑。下一步 export。
 
 ## 进行中
 
-- feat-009：端到端编排与时间轴 pipeline（待开始）
+- feat-010：字幕导出 export（待开始）
 
 ## 近期完成（最近 5 个）
 
+- [x] feat-009：端到端编排与时间轴 pipeline（打轴+去重+串联三子任务）；82 单测全绿，StubExtractor+MockOcrEngine 闭环验证
 - [x] feat-008：OCR 引擎模块（MockOcrEngine 固定+序列双模式 + VisionOcrEngine PyObjC 桥接，默认 zh-Hans+en-US 双语识别）；39 单测 + 3 Vision integration（含中英文真实识别）全绿
 - [x] feat-007：字幕区域检测模块（BottomCropDetector 比例模式 + FixedRegionDetector 手动模式）；9 单测全绿
 - [x] feat-006：帧采样模块（FfmpegExtractor + Protocol @runtime_checkable）；19 单测 + 3 integration 全绿
 - [x] feat-005：工具链配置细化（ruff 扩展 RUF/SIM/ANN、mypy 覆盖 tests、pytest coverage+markers）；12 测试全绿
-- [x] feat-003：init.sh 环境检查；./init.sh 退出 0
 
 ## 阻塞项 / 风险
 
