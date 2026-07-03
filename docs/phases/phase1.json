@@ -105,8 +105,8 @@
       "description": "定义 OcrEngine Protocol + OcrResult 类型（feat-011），实现 MockOcrEngine 测试用（feat-012），实现 VisionOcrEngine 通过 PyObjC 调 VNRecognizeTextRequest（feat-013）。前置：feat-002。阻塞项：Vision 仅 macOS 可用、CI 不可用。验收：Mock 单测返回固定文本/置信度；macOS 上真实帧识别出文本（集成测试可手动，CI 跳过）。",
       "module": "src/sublift/ocr/",
       "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": "",
+      "status": "done",
+      "evidence": "uv sync --extra vision 安装 pyobjc-framework-Vision/Quartz 12.2.1，import Vision/Quartz 成功。uv run ruff check . 通过；uv run mypy src tests 通过（26 source files）；uv run pytest 通过（39 tests，含 11 ocr 测试：6 Mock 单测 + 1 Vision Protocol 单测 + 1 降级 monkeypatch 单测 + 3 Vision 集成测试 skip）；uv run pytest -m integration 通过（3 Vision 集成测试：英文 'Hello' 识别成功、中文 '你好世界' 识别成功（验证默认 zh-Hans+en-US 语言设置生效）、空白图返回 OcrResult('',0.0)）。OcrEngine Protocol 加 @runtime_checkable 且 image 类型从 object 改为 Image.Image。MockOcrEngine 支持固定模式（text+confidence）与序列模式（sequence list 按调用顺序返回，越界 IndexError）。VisionOcrEngine 模块级 try/except 导入设 _VISION_AVAILABLE 标志，不可用时 __init__ 抛 RuntimeError 提示 'uv sync --extra vision'；recognize 流程 PIL.Image→convert('RGB')→tobytes→CGDataProviderCreateWithData+CGImageCreate→VNImageRequestHandler→VNRecognizeTextRequest→setRecognitionLanguages_(['zh-Hans','en-US'] 默认，可通过 recognition_languages 参数覆盖)→performRequests_error_→results 多 observation 合并为 '\\n'.join texts confidence 取均值，无结果返回 OcrResult('',0.0)。关键修复：VNRecognizeTextRequest 默认 recognitionLanguages 仅 en_US 无法识别中文，必须显式 setRecognitionLanguages_；默认 ['zh-Hans','en-US'] 覆盖 SubLift 核心场景。./init.sh 退出 0（默认 uv sync 不装 vision，集成测试自动 skip）。",
       "subtasks": [
         {
           "name": "OcrEngine Protocol 与 OcrResult 类型",

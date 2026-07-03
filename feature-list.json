@@ -42,8 +42,8 @@
         {
           "id": "ocr",
           "name": "OCR 引擎模块",
-          "description": "能力模块：可插拔多引擎 OCR。定义 OcrEngine Protocol + OcrResult 类型，提供 Mock 引擎（测试用）与 Apple Vision 实现（PyObjC 桥接）。",
-          "status": "not-started",
+          "description": "能力模块：对图像执行 OCR 识别。定义 OcrEngine Protocol，提供 MockOcrEngine（测试用，固定+序列双模式）与 VisionOcrEngine（Apple Vision via PyObjC，macOS 可选）。",
+          "status": "done",
           "covers": [
             "feat-008"
           ]

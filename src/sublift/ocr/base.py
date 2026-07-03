@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from sublift.models import OcrResult
 
+if TYPE_CHECKING:
+    from PIL import Image
 
+
+@runtime_checkable
 class OcrEngine(Protocol):
     """对图像执行 OCR 识别。"""
 
-    def recognize(self, image: object) -> OcrResult:
+    def recognize(self, image: Image.Image) -> OcrResult:
         """识别图像中的文字。
 
         Args:
