@@ -1,0 +1,92 @@
+{
+  "project": "SubLift",
+  "description": "项目级功能总览。按 Phase 分组的大功能块，每个功能块覆盖的 Phase 级细粒度任务 ID 见 covers 字段。状态枚举：not-started / in-progress / blocked / done。",
+  "phases": [
+    {
+      "id": "phase1",
+      "name": "Phase 1 - CLI MVP",
+      "description": "交付可运行的 CLI MVP：一条命令把烧录字幕的本地视频还原为 SRT 文件。包含三能力模块（extractor/detector/ocr）的抽象接口与默认实现、端到端编排、SRT 导出与 CLI 入口。设计细节见 docs/plans/phase1.md，细粒度任务见 docs/phases/phase1.json。",
+      "detail_file": "docs/phases/phase1.json",
+      "features": [
+        {
+          "id": "foundation",
+          "name": "项目骨架与工具链",
+          "description": "pyproject.toml + uv 初始化、包结构、init.sh 环境检查、README、ruff/mypy/pytest 配置、ARCHITECTURE.md 填充。是所有后续功能块的基座。",
+          "status": "not-started",
+          "covers": [
+            "feat-001",
+            "feat-002",
+            "feat-003",
+            "feat-004",
+            "feat-005",
+            "feat-006"
+          ]
+        },
+        {
+          "id": "extractor",
+          "name": "帧采样模块",
+          "description": "能力模块：从视频按可配置采样率抽取帧。定义 Extractor Protocol + Frame 模型，提供 ffmpeg 默认实现。",
+          "status": "not-started",
+          "covers": [
+            "feat-007",
+            "feat-008"
+          ]
+        },
+        {
+          "id": "detector",
+          "name": "字幕区域检测模块",
+          "description": "能力模块：确定字幕所在区域。定义 Detector Protocol + Region 类型，提供下部裁剪默认实现，支持手动指定区域。",
+          "status": "not-started",
+          "covers": [
+            "feat-009",
+            "feat-010"
+          ]
+        },
+        {
+          "id": "ocr",
+          "name": "OCR 引擎模块",
+          "description": "能力模块：可插拔多引擎 OCR。定义 OcrEngine Protocol + OcrResult 类型，提供 Mock 引擎（测试用）与 Apple Vision 实现（PyObjC 桥接）。",
+          "status": "not-started",
+          "covers": [
+            "feat-011",
+            "feat-012",
+            "feat-013"
+          ]
+        },
+        {
+          "id": "pipeline",
+          "name": "端到端编排",
+          "description": "串联层：组合 extractor/detector/ocr，处理时间轴生成（变化点状态机）与去重合并，产出 SubtitleEntry 列表。",
+          "status": "not-started",
+          "covers": [
+            "feat-014",
+            "feat-015",
+            "feat-016",
+            "feat-017"
+          ]
+        },
+        {
+          "id": "export",
+          "name": "字幕导出",
+          "description": "串联层：将 SubtitleEntry 列表导出为字幕文件。定义 Exporter Protocol，Phase 1 实现 SRT，ASS/VTT 仅留接口占位。",
+          "status": "not-started",
+          "covers": [
+            "feat-018",
+            "feat-019",
+            "feat-020"
+          ]
+        },
+        {
+          "id": "cli",
+          "name": "CLI 入口",
+          "description": "入口层：sublift extract 子命令，解析参数调用 pipeline 与 export。Phase 1 端到端验收入口。",
+          "status": "not-started",
+          "covers": [
+            "feat-021",
+            "feat-022"
+          ]
+        }
+      ]
+    }
+  ]
+}
