@@ -33,8 +33,8 @@
         {
           "id": "detector",
           "name": "字幕区域检测模块",
-          "description": "能力模块：确定字幕所在区域。定义 Detector Protocol + Region 类型，提供下部裁剪默认实现，支持手动指定区域。",
-          "status": "not-started",
+          "description": "能力模块：确定字幕所在区域。定义 Detector Protocol，提供下部裁剪（按比例）与固定区域（手动指定）两种默认实现。",
+          "status": "done",
           "covers": [
             "feat-007"
           ]

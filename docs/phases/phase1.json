@@ -86,8 +86,8 @@
       "description": "定义 Detector Protocol + Region/BoundingBox 类型（feat-009），实现下部裁剪默认实现（feat-010），默认裁剪画面下部 30%，支持配置比例与手动指定区域。前置：feat-002。验收：给定帧尺寸断言裁剪区域正确。",
       "module": "src/sublift/detector/",
       "dependencies": ["feat-002"],
-      "status": "not-started",
-      "evidence": "",
+      "status": "done",
+      "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（23 source files）；uv run pytest 通过（28 tests，含 9 detector 单测，纯单测无 integration）。Detector Protocol 加 @runtime_checkable。实现两个类：BottomCropDetector（比例模式，默认 0.3，crop_h=int(h*ratio)，box=(0,h-crop_h,w,crop_h)）与 FixedRegionDetector（手动模式，原样返回 BoundingBox，忽略帧尺寸）。不 clamp 越界（由下游负责）；ratio=0.0 允许（返回 height=0）。./init.sh 退出 0。",
       "subtasks": [
         {
           "name": "Detector Protocol 与 Region 类型",

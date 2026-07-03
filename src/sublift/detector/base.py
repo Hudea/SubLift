@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from sublift.models import Frame, Region
 
 
+@runtime_checkable
 class Detector(Protocol):
     """确定字幕所在区域。"""
 
