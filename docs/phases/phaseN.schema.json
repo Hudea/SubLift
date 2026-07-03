@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/schemas/phase.schema.json",
+  "title": "SubLift Phase Detail Schema",
+  "description": "Phase 级细粒度功能跟踪 Schema。用于描述单个 Phase 内的任务、依赖、状态和验证证据。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "phase", "features"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "项目名称。"
+    },
+    "phase": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Phase 的显示名称。"
+    },
+    "features": {
+      "type": "array",
+      "description": "该 Phase 内的细粒度功能或任务列表。",
+      "items": {
+        "$ref": "#/$defs/feature"
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "description": "细粒度功能或任务的开发状态。",
+      "enum": ["not-started", "in-progress", "blocked", "done"]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "feature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "module",
+        "dependencies",
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Phase 级任务的稳定标识。"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "任务名称。"
+        },
+        "description": {
+          "type": "string",
+          "description": "任务目标、行为或验收范围。"
+        },
+        "module": {
+          "type": "string",
+          "description": "主要涉及的源码模块、目录或文档路径。"
+        },
+        "dependencies": {
+          "type": "array",
+          "description": "该任务依赖的其他 Phase 级任务 ID。",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "uniqueItems": true
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "evidence": {
+          "type": "string",
+          "description": "实际运行过的验证命令、结果和必要说明。未开始任务可为空字符串。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "done"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

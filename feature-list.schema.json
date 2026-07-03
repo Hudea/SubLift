@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/schemas/feature-list.schema.json",
+  "title": "SubLift Feature List Schema",
+  "description": "项目级功能总览 Schema。用于描述按 Phase 分组的大功能块，以及这些大功能块覆盖的 Phase 级细粒度任务。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "description", "phases"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "项目名称。"
+    },
+    "description": {
+      "type": "string",
+      "description": "项目级功能总览文件的用途说明。"
+    },
+    "phases": {
+      "type": "array",
+      "description": "按开发阶段组织的功能分组。",
+      "items": {
+        "$ref": "#/$defs/phase"
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "description": "功能或功能组的开发状态。",
+      "enum": ["not-started", "in-progress", "blocked", "done"]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "detail_file", "features"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Phase 的稳定标识。"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Phase 的显示名称。"
+        },
+        "description": {
+          "type": "string",
+          "description": "Phase 的范围或目标说明。"
+        },
+        "detail_file": {
+          "type": "string",
+          "pattern": "^docs/phases/phase[0-9]+\\.json$",
+          "description": "该 Phase 对应的细粒度任务文件路径。"
+        },
+        "features": {
+          "type": "array",
+          "description": "项目级大功能块列表。",
+          "items": {
+            "$ref": "#/$defs/feature_group"
+          }
+        }
+      }
+    },
+    "feature_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "description", "status", "covers"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "项目级功能块的稳定标识。"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "功能块名称。"
+        },
+        "description": {
+          "type": "string",
+          "description": "功能块目标、范围或交付内容。"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "covers": {
+          "type": "array",
+          "description": "该功能块覆盖的 Phase 级任务 ID。",
+          "items": {
+            "$ref": "#/$defs/identifier"
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
