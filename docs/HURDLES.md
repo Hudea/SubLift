@@ -70,4 +70,22 @@
 - **结论**：Pipeline 端到端在 5fps 下表现扎实，打轴状态机很干净（0 误检）。主要瓶颈在 OCR 精度（空文本、英文水印干扰）和长段合并（dHash 对相似内容的区分度不够）。对 Phase 1 MVP 是不错的起点。
 - **相关文件**：`scripts/test_timeline.py`、`debug/timeline_compare_result.txt`
 
+---
+
+### 字幕区域裁剪过宽导致 OCR 质量低
+- **日期**：2026-07-04
+- **状态**：未解决（feat-011 端到端 benchmark 发现）
+- **现象**：CLI 端到端 benchmark（1080p, 5fps, vision），63 条导出中 OCR 字符准确率仅 22.5%（1-CER）。逐条对比显示前 6 条 CER=0% 完全正确，第 7-10 条 CER=131~525% 严重偏离。
+- **排查路径**：
+  1. 分析逐条对比文件（`debug/cli_comparison.txt`），发现偏离条目的检测文本含 `DEVELOPING`、`LIKELY DUO UNCOVERS CONSPIRACY`、`PRISONZNN` 等英文
+  2. 这些英文是画面上方的新闻标题/字幕栏，不是目标中文字幕
+  3. 抽帧分析字幕实际位置：字幕带在 y=860~950（画面 80~87% 区域），而 `bottom_ratio=0.3` 裁剪 y=756~1080（下部 30%），多带了 234px 非字幕噪声区域
+- **根本原因**：`BottomCropDetector` 默认 `bottom_ratio=0.3` 是通用默认值，未针对实际视频字幕位置校准。裁剪区域过宽把画面上方的英文新闻标题也包含进来，Vision 把英文标题误识别为字幕，导致 OCR 文本严重偏离真实 SRT。
+- **待评估方案**：
+  1. **调小 bottom_ratio（首选）**：从 0.3 调到 0.13~0.15（y=918~1080 或 y=936~1080），精准对齐字幕带。改动小，只需改 Config 默认值或 CLI 加 `--region-ratio` 参数。
+  2. **CLI 加区域参数**：加 `--region-ratio` / `--region-box` 参数让用户指定裁剪区域。灵活性高但增加 CLI 复杂度。
+  3. **自适应区域检测**：用 Vision 的文字检测框自动定位字幕区域。精度最高但实现复杂，属 Phase 2 增强。
+- **影响评估**：这是当前 OCR 质量低的主因，前 6 条（无英文标题干扰）CER=0% 证明 OCR 引擎本身精度足够。调准区域后预计字符准确率可大幅提升。
+- **相关文件**：`src/sublift/detector/bottom_crop.py`、`src/sublift/config.py`（`region_bottom_ratio=0.3`）、`debug/cli_comparison.txt`（逐条对比证据）
+
 

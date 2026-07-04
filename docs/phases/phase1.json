@@ -191,6 +191,27 @@
           "description": "ass.py/vtt.py 留 NotImplementedError。验收：mypy 通过。"
         }
       ]
+    },
+    {
+      "id": "feat-011",
+      "name": "CLI 接入与端到端验收",
+      "description": "实现 cli.py extract 命令贯通（FfmpegExtractor→BottomCropDetector→OCR→Pipeline→SrtExporter），--engine 参数支持 vision/mock。真实视频端到端验收 + 性能/准确率 benchmark。前置：feat-010。验收：sublift extract 命令可运行产出 SRT；性能 ≥ 1x 实时；字符级准确率记录实测值。",
+      "module": "src/sublift/cli.py, scripts/test_cli_e2e.py",
+      "dependencies": [
+        "feat-010"
+      ],
+      "status": "done",
+      "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（38 source files）；uv run pytest 通过（116 passed + 4 skipped，较 feat-010 新增 8 CLI 测试）；./init.sh 退出 0（8/8 通过）。cli.py 实现 extract 命令：参数 video/-o/--fps(默认5.0)/--confidence(默认0.5)/--engine(vision|mock, 默认 vision)。_build_ocr_engine 选择引擎：vision 不可用时友好报错提示 uv sync --extra vision 并 exit 1；mock 返回 MockOcrEngine(text=[mock subtitle], confidence=1.0)。Pipeline.run() 后用 SrtExporter.export 写文件，打印条目数/耗时。tests/test_cli.py 8 个单测覆盖参数解析默认值/自定义值/engine choices/未知引擎拒绝/无命令打印 help/视频不存在报错/Vision 不可用报错/mock 引擎贯通写 SRT（monkeypatch Pipeline.run 返回伪造 entries）。test_smoke.py 的 CLI 测试精简（移除被 test_cli.py 覆盖的重复项，更新默认 fps 断言 1.0→5.0）。端到端验收：debug/Zootopia_clip_1080p.mkv（4K 原始 clip 缩放到 1920x1080, 254s, 由 ffmpeg 生成）, uv run sublift extract --fps 5 --engine vision, 产出 63 条字幕, 耗时 15.9s（16.0x 实时）。benchmark 脚本（scripts/test_cli_e2e.py）输出两个核心指标：指标1 打轴精度——召回率 72.4%(63/87) 精确率 100%(63/63), 判定标准时间重叠≥50%；指标2 OCR 质量——字符准确率 22.5%(1-CER) 平均 CER 77.5% 空文本 0/63, 判定标准 Levenshtein 编辑距离。输出 debug/cli_benchmark_report.txt（汇总）+ debug/cli_comparison.txt（逐条对比表）。OCR 质量低的主因：字幕区域裁剪过宽（bottom_ratio=0.3 即 y=756~1080，实际字幕在 y=860~950 约 80~87% 区域），画面上方英文新闻标题（DEVELOPING/LIKELY DUO UNCOVERS CONSPIRACY 等）被误识别为字幕，对比表显示前 6 条 CER=0% 完全正确，第 7-10 条 CER=131~525% 因英文标题干扰严重偏离。已知限制见 docs/HURDLES.md。",
+      "subtasks": [
+        {
+          "name": "CLI extract 命令实现",
+          "description": "cli.py 参数解析→构造 Pipeline→run→SrtExporter.export。验收：sublift extract 命令可运行。"
+        },
+        {
+          "name": "端到端验收 + benchmark",
+          "description": "真实视频跑通，性能/准确率 benchmark。验收：SRT 产出，性能数据记录。"
+        }
+      ]
     }
   ]
 }

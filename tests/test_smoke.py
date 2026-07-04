@@ -44,7 +44,7 @@ class TestModels:
 
 
 class TestCli:
-    """CLI 参数解析测试。"""
+    """CLI 参数解析基础测试（扩展覆盖见 test_cli.py）。"""
 
     def test_extract_parses_required_args(self) -> None:
         parser = build_parser()
@@ -53,25 +53,10 @@ class TestCli:
         assert args.video == "video.mp4"
         assert args.output == "output.srt"
 
-    def test_extract_parses_output_option(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["extract", "video.mp4", "-o", "out.srt"])
-        assert args.output == "out.srt"
-
     def test_extract_default_fps(self) -> None:
         parser = build_parser()
         args = parser.parse_args(["extract", "video.mp4"])
-        assert args.fps == 1.0
-
-    def test_extract_custom_fps(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["extract", "video.mp4", "--fps", "2.0"])
-        assert args.fps == 2.0
-
-    def test_extract_default_confidence(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["extract", "video.mp4"])
-        assert args.confidence == 0.5
+        assert args.fps == 5.0
 
     def test_no_command_sets_none(self) -> None:
         parser = build_parser()

@@ -70,7 +70,7 @@
           "id": "cli",
           "name": "CLI 入口与端到端验收",
           "description": "入口层：sublift extract 子命令，解析参数调用 pipeline 与 export。Phase 1 端到端验收入口（真实视频→SRT）作为 Phase 1 级验收门，不单列任务。",
-          "status": "not-started",
+          "status": "done",
           "covers": []
         }
       ]

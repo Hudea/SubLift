@@ -151,5 +151,6 @@ OCR 返回 `confidence < config.confidence_threshold` 时，text 置空（保留
 
 - **dHash 对中文判别力不足**：9×8 降采样丢失汉字笔画高频信息，两句长度相近的中文字幕 dHash 距离可能 < 阈值，导致漏分段。详见 `docs/HURDLES.md`。首选待评估方案：加 pixel-diff 互补信号。
 - **OCR 锚帧过渡画面空文本**：锚帧（IN/CHANGE 事件触发帧）可能落在字幕淡入/切换瞬间，Vision 识别不出文字。详见 `docs/HURDLES.md`。首选待评估方案：锚帧延后 N 帧。
+- **字幕区域裁剪过宽**：`bottom_ratio=0.3` 是通用默认值，未针对实际视频校准。裁剪过宽会把画面上方英文标题/新闻栏误纳入，Vision 误识别为字幕，导致 OCR 字符准确率低。详见 `docs/HURDLES.md`。首选待评估方案：调小 bottom_ratio 或加 CLI 区域参数。
 
-端到端实测基线（Zootopia clip, 5fps）：23 段识别 21 段，召回/精确率 91.3%，0 误检。
+端到端实测基线（Zootopia clip, 1080p, 5fps）：打轴召回率 72.4%/精确率 100%，OCR 字符准确率 22.5%（主因是区域裁剪过宽，前 6 条无干扰时 CER=0%）。

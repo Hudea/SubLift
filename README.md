@@ -31,11 +31,10 @@ uv sync --extra vision     # Apple Vision OCR（macOS 可选依赖）
 
 ## 使用
 
-> CLI 接入进行中，以下为目标命令，即将可用。
-
 ```bash
 uv run sublift extract <video> -o output.srt
 uv run sublift extract clip.mkv --fps 5 -o out.srt
+uv run sublift extract clip.mkv --engine mock -o out.srt   # 无 Vision 时跑流程
 ```
 
 ### CLI 参数
@@ -46,6 +45,7 @@ uv run sublift extract clip.mkv --fps 5 -o out.srt
 | `-o, --output` | output.srt | 输出字幕文件路径 |
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 置信度阈值，低于此值的文本置空 |
+| `--engine` | vision | OCR 引擎（vision / mock） |
 
 ## 开发
 
