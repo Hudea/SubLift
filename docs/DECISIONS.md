@@ -5,6 +5,33 @@
 
 ---
 
+## ADR-0007 Phase 2 GUI 三项设计决策（2026-07-04）
+
+Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
+
+### ADR-0007a Pipeline 帧流接入：新增 `run_frames()`（feat-016）
+
+- **背景**：Phase 1 `Pipeline.run(video_path: Path)` 内部调 `self._extractor.extract(video_path)`，假设帧来自视频文件。Phase 2 GUI 模式下帧由 Swift 端 AVFoundation/ffmpeg 抽取后经 IPC 以 JPEG 字节流送入 Python，无 `video_path`。plan §5.3 原写「小幅改造由 feat-016 评估」，未定方案。
+- **决策**：在 `Pipeline` 上新增 `run_frames(frames: Iterator[Frame]) -> list[SubtitleEntry]` 方法，与 `run(video_path)` 并列。`run(video_path)` 内部重构为先用 extractor 生成 frames 迭代器再调 `run_frames`，避免逻辑重复。`bridge.py` 接收 IPC JPEG 帧后重建 `PIL.Image` 组装 `Frame`，调 `run_frames`。
+- **理由**：这是真实的接口需求（GUI 帧源不是文件），「Python 核心零修改」是 Phase 2 起初的理想化约束，最小侵入的扩展方法优于 bridge 重写编排逻辑（C 方案）或假 path 包装（B 方案）。`run_frames` 与 `run` 共享内部步骤，不破坏 Phase 1 CLI 行为。
+- **影响**：`src/sublift/pipeline/core.py` 新增 `run_frames` 并重构 `run`；feat-016 bridge 直接调 `run_frames`；Phase 1 测试需保持通过（`run` 行为不变）。更新 `docs/plans/phase2.md` §5.3 与 `docs/phases/phase2.json` feat-016 描述。
+
+### ADR-0007b SRT 导出：Swift 端直接实现（feat-024）
+
+- **背景**：feat-024 原写「经 IPC 调 Python SrtExporter 或 Swift 端直接调 sublift.export 模块，双方案内选一」。编辑后的字幕条目已存在于 Swift 内存，走 IPC 往返 Python 无收益。
+- **决策**：SRT 格式化在 Swift 端实现。Swift 维护 `entries: [SubtitleEntry]` 模型，导出时本地格式化为 SRT 文本写文件。
+- **理由**：SRT 格式极简（序号 + `HH:MM:SS,mmm --> HH:MM:SS,mmm` + 文本 + 空行），无理由走 IPC 往返；且避免引入「为导出再发 IPC 请求」的状态机分支。
+- **影响**：`apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift` 新增；不调 Python 导出。更新 `docs/phases/phase2.json` feat-024 描述。
+
+### ADR-0007c Swift 端 MsgPack：手写编解码，不引第三方库（feat-015）
+
+- **背景**：plan §4.2 原指定用 `swift-msgpack` 库，但未验证维护状态、Codable 支持、SwiftPM 可用性，且会成为 feat-025 公证的第三方依赖风险点。
+- **决策**：Swift 端手写 MsgPack 编解码。5 类消息（start_job/frame/cancel_job/progress/entries/log/done）字段固定，用 `Data` + 固定字节序手写 pack/unpack，双向单测覆盖。
+- **理由**：零第三方依赖，公证风险最小，符合 AGENTS.md「低耦合」原则。MsgPack 协议本身简单（nil/bool/int/str/bin/array/map 各 1 字节类型 tag + 长度 + 负载），手写成本低于评估一个库的成本。
+- **影响**：`apps/macos/Sources/SubLiftMac/Core/MsgPack.swift` 新增；`apps/macos/Tests/` 增编解码单测。更新 `docs/plans/phase2.md` §4.2 与 `docs/phases/phase2.json` feat-015 描述。
+
+---
+
 ## ADR-0004 任务粒度调整：22 细任务合并为 10 粗任务（2026-07-03）
 
 - **背景**：初始 Phase 1 规划拆出 22 个细粒度任务（feat-001~022），实践中发现粒度过细，导航与跟踪成本高。

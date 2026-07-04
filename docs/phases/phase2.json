@@ -6,43 +6,43 @@
       "id": "feat-012",
       "name": "AVFoundation 抽帧 spike",
       "description": "写 50 行 Swift CLI 工具,遍历 6 个测试素材(mp4-h264, mp4-hevc-8bit, mp4-hevc-10bit, mov-h264, mov-hevc, mkv-h264),记录 AVFoundation 可读性、首帧时间、pixel buffer 尺寸、耗时、mkv 是否 -11828。产出 docs/spikes/avf-phase2.md,作为 feat-018/019 数据驱动。前置:无。",
-      "module": "docs/spikes/avf-phase2.md",
+      "module": "apps/macos/spikes/avf-spike/, debug/spikes/",
       "dependencies": [],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "SwiftPM spike 工具 apps/macos/spikes/avf-spike/(Package.swift + probe.swift 64 行,使用 AVURLAsset + AVAssetImageGenerator 同步探测,Semaphore 阻塞 callback)。6 个素材:5 个 ffmpeg 合成(1920x1080, 5s, 30fps, -movflags +faststart)+ 1 个现成 debug/Zootopia_clip_hardsub1.mkv。\n\n测试环境:Apple Silicon M1, macOS 26.x, Swift 6.3.1, ffmpeg 8.1。\n\n实测结果(TSV 完整跑通):\n- mp4-h264.mp4 (H.264 High 8bit): true, 1920x1080, avc1, 5000ms, 112ms\n- mp4-hevc-8bit.mp4 (HEVC Main 8bit): true, 1920x1080, hvc1, 5000ms, 6ms\n- mp4-hevc-10bit.mp4 (HEVC Main10 10bit): true, 1920x1080, hvc1, 5000ms, 10ms\n- mov-h264.mov (H.264 High 8bit): true, 1920x1080, avc1, 5000ms, 8ms\n- mov-hevc.mov (HEVC Main 8bit): true, 1920x1080, hvc1, 5000ms, 6ms\n- Zootopia_clip_hardsub1.mkv (mkv + HEVC): false, -11828 AVFoundationErrorDomain 'Cannot Open', 底层 NSOSStatusErrorDomain -12847 (kMediaSubServicesError 容器解析失败)\n\n关键发现:\n1. AVFoundation 完整支持 mp4/mov 容器 + H.264/HEVC(8/10-bit) 编码,无需额外组件\n2. mkv 触发 -11828 (Cannot Open),容器层拒绝(非 codec 解析层)\n3. 重要副作用:ffmpeg 默认 mp4 写入 moov 在末尾,AVFoundation 会报 -17913 (assetProperty_AssetType 失败);需加 -movflags +faststart 强制 moov 前置。这不是 AVFoundation 兼容性问题,是 ffmpeg 输出设置;主流制作工具(ffmpeg+x264+x265 默认支持,QuickTime/iMovie 永远 faststart)不会触发\n4. AVAssetImageGenerator 同步 API(generateCGImagesAsynchronously + Semaphore.wait) 是 macOS 26 SDK 下从 CLI tool 调用 AVFoundation 的可靠方式;async load API(Task+await) 在 sync main 上下文会抛 -11800\n\n决策建议:\n- feat-018 走 AVFoundation 路径(VideoToolbox 硬解零依赖,本 spike 验证 mp4/mov 全覆盖)\n- feat-019 走系统 ffmpeg 兜底 mkv:启动时 which ffmpeg 检测,缺失弹窗引导 brew install,UI 禁用 mkv 拖入\n- 生成测试视频时统一加 -movflags +faststart\n- macOS 13/14 行为待 13/14 实机复测(本机仅 macOS 26)\n\n基线验证:uv run ruff check . 通过;uv run mypy src tests 通过(38 source files);uv run pytest 通过(116 passed + 4 skipped vision,Python 端无回归)。"
     },
     {
       "id": "feat-013",
       "name": "双工程结构 + Package.swift",
-      "description": "创建 apps/sublift-mac/ 目录;Package.swift (macOS 13+, SwiftUI);最小 SubLiftMacApp.swift 显示空白窗口。验证 swift build 成功。前置:feat-012。",
-      "module": "apps/sublift-mac/",
+      "description": "创建 apps/macos/ 目录;Package.swift (macOS 13+, SwiftUI);最小 SubLiftMacApp.swift 显示空白窗口。验证 swift build 成功。前置:feat-012。",
+      "module": "apps/macos/",
       "dependencies": ["feat-012"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "apps/macos/ 正式 SwiftUI 工程骨架创建完成,spike 原样保留。\n\n工程结构:\n- apps/macos/Package.swift:swift-tools-version 5.9,platforms [.macOS(.v13)],单 executableTarget(SubLiftMac, path: Sources/SubLiftMac) + 单 testTarget(SubLiftMacTests, dependencies: [SubLiftMac], path: Tests/SubLiftMacTests)。无第三方依赖(按 ADR-0007c)。\n- apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift:@main + WindowGroup + ContentView(Text(\"SubLift\"))。feat-013 阶段单文件,未预先拆 App/ContentView/MainWindow 多文件,未建 Core/UI/Resources 空目录(后续按需建)。\n- apps/macos/Tests/SubLiftMacTests/SmokeTests.swift:最小占位测试 testAppCompiles,消除空 Tests 目录 warning。\n- .gitignore 增 .swiftpm/(SwiftPM 元数据)。\n\n设计决策:\n- 不拆多 target:Sources 内子目录(App/Core/UI/Resources)是文件组织,非 target 边界。feat-014+ 按需在 Sources/SubLiftMac/ 下建 Core/、UI/ 子目录即可,不需重构 Package.swift。\n- 不加 swift build 到 init.sh:避免 Python 验证被 Swift 编译失败阻塞;feat-016 端到端跑通后再考虑纳入。\n- 不写 Info.plist/entitlements.plist:feat-025 打包阶段才需要。\n\n验证:\n- swift build:Build complete! 0 error 0 warning(5.56s)\n- swift test:1 passed(0 failures)\n- swift run SubLiftMac:进程正常启动并存活(GUI 窗口需人工验收,进程验证已通过)\n- Python 端无回归:uv run ruff check . 通过;uv run mypy src tests 通过(38 source files);uv run pytest 通过(116 passed + 4 skipped vision)\n\n环境:Apple Silicon M1, macOS 26.x, Swift 6.3.1, SwiftPM 6.3.1。"
     },
     {
       "id": "feat-014",
       "name": "Python UDS service 启动骨架",
       "description": "Python 端 src/sublift/ipc/server.py 实现 asyncio.start_unix_server;Swift 端 Process().launch + UDS connect;单测 hello/bye 消息往返。前置:feat-013。",
-      "module": "src/sublift/ipc/, apps/sublift-mac/Sources/SubLiftMac/Core/PipelineClient.swift",
+      "module": "src/sublift/ipc/, apps/macos/Sources/SubLiftMac/Core/PipelineClient.swift",
       "dependencies": ["feat-013"],
       "status": "not-started",
       "evidence": ""
     },
     {
       "id": "feat-015",
-      "name": "IPC 协议 + MsgPack 序列化",
-      "description": "Python src/sublift/ipc/protocol.py 用 msgpack 定义 5 类消息 schema;Swift 端用 swift-msgpack Codable 包装;双向序列化单测覆盖 start_job / frame / entries / progress / done。前置:feat-014。",
-      "module": "src/sublift/ipc/protocol.py, apps/sublift-mac/Sources/SubLiftMac/Core/PipelineClient.swift",
+      "name": "IPC 协议 + MsgPack 序列化（Swift 端手写编解码）",
+      "description": "Python src/sublift/ipc/protocol.py 用 msgpack 定义消息 schema；Swift 端手写 MsgPack 编解码（MsgPack.swift，不引第三方库，按 ADR-0007c）；双向序列化单测覆盖 start_job / frame / cancel_job / progress / entries / log / done 七类消息。前置:feat-014。",
+      "module": "src/sublift/ipc/protocol.py, apps/macos/Sources/SubLiftMac/Core/MsgPack.swift",
       "dependencies": ["feat-014"],
       "status": "not-started",
       "evidence": ""
     },
     {
       "id": "feat-016",
-      "name": "Python bridge 包装 Phase 1 Pipeline",
-      "description": "src/sublift/ipc/bridge.py 把 UDS 接收的 JPEG 帧流重建成 PIL.Image,调 sublift.pipeline.Pipeline.run()(视情况小幅扩展 Pipeline 接受帧流,与原 video_path 签名兼容);Swift 端 PipelineClient 暴露 AsyncSequence<SubtitleEntry>。前置:feat-015。",
-      "module": "src/sublift/ipc/bridge.py",
+      "name": "Python bridge 包装 Phase 1 Pipeline（调 run_frames）",
+      "description": "src/sublift/ipc/bridge.py 把 UDS 接收的 JPEG 帧流重建成 PIL.Image 组装 Frame，调 Pipeline.run_frames(frames)（按 ADR-0007a 新增；run(video_path) 内部重构为 run_frames 调用，CLI 行为不变）；Swift 端 PipelineClient 暴露 AsyncSequence<SubtitleEntry>。前置:feat-015。",
+      "module": "src/sublift/ipc/bridge.py, src/sublift/pipeline/core.py",
       "dependencies": ["feat-015"],
       "status": "not-started",
       "evidence": ""
@@ -51,7 +51,7 @@
       "id": "feat-017",
       "name": "视频预览(AVPlayer)+ 当前帧时间显示",
       "description": "VideoPreview.swift 用 AVPlayer + AVPlayerLayer 嵌入;显示当前播放时间 player.currentTime() * 1000 ms。前置:feat-013。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/VideoPreview.swift",
+      "module": "apps/macos/Sources/SubLiftMac/UI/VideoPreview.swift",
       "dependencies": ["feat-013"],
       "status": "not-started",
       "evidence": ""
@@ -60,7 +60,7 @@
       "id": "feat-018",
       "name": "AVFoundation 抽帧 + IPC 帧流端到端",
       "description": "FrameSampler.swift 用 AVAssetReader 抽 5 fps 1080p 视频,CVPixelBuffer→CGImage→JPEG q=85,串接 PipelineClient 送 IPC;端到端:5s 视频跑出 ≥ 5 条 entries。首条识别结果 ≤ 10s benchmark 记录在 evidence。前置:feat-012, feat-016, feat-017。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/Core/FrameSampler.swift",
+      "module": "apps/macos/Sources/SubLiftMac/Core/FrameSampler.swift",
       "dependencies": ["feat-012", "feat-016", "feat-017"],
       "status": "not-started",
       "evidence": ""
@@ -69,7 +69,7 @@
       "id": "feat-019",
       "name": "mkv 兜底 + 系统 ffmpeg 检测",
       "description": "FfmpegFallback.swift 启动时 which ffmpeg 检测;缺失时 SwiftUI 弹窗引导 brew install ffmpeg,UI 禁用 mkv 拖入;存在时 spawn ffmpeg -i input -vf fps=5 -f image2pipe -vcodec mjpeg - 抽 MJPEG 流。前置:feat-018。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/Core/FfmpegFallback.swift",
+      "module": "apps/macos/Sources/SubLiftMac/Core/FfmpegFallback.swift",
       "dependencies": ["feat-018"],
       "status": "not-started",
       "evidence": ""
@@ -78,7 +78,7 @@
       "id": "feat-020",
       "name": "拖拽导入(DropZone)+ 视频元数据解析",
       "description": "DropZone.swift 用 onDrop(of: [.fileURL]);AVURLAsset 解析分辨率/时长/编码;显示在主窗口元数据栏。前置:feat-013, feat-018。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/DropZone.swift",
+      "module": "apps/macos/Sources/SubLiftMac/UI/DropZone.swift",
       "dependencies": ["feat-013", "feat-018"],
       "status": "not-started",
       "evidence": ""
@@ -87,7 +87,7 @@
       "id": "feat-021",
       "name": "字幕时间轴 + 列表 + 编辑",
       "description": "SubtitleList.swift List + ForEach;双击 Text 进入 TextEditor 编辑;拖动 start_ms/end_ms 调整(Slider 或步进器);合并/拆分按钮。编辑后 re-export SRT 与编辑一致。前置:feat-018。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/SubtitleList.swift",
+      "module": "apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift",
       "dependencies": ["feat-018"],
       "status": "not-started",
       "evidence": ""
@@ -96,7 +96,7 @@
       "id": "feat-022",
       "name": "区域框选(鼠标画 Rectangle)→ 重新跑流水线",
       "description": "RegionPicker.swift 用 DragGesture 在 Image 上画 Rectangle;输出新 Region,重新发 start_job 给 Python;进度条显示重新跑。前置:feat-021。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/RegionPicker.swift",
+      "module": "apps/macos/Sources/SubLiftMac/UI/RegionPicker.swift",
       "dependencies": ["feat-021"],
       "status": "not-started",
       "evidence": ""
@@ -105,16 +105,16 @@
       "id": "feat-023",
       "name": "引擎选择(SettingsView + UserDefaults)",
       "description": "SettingsView.swift Picker 选 vision / mock;@AppStorage(\"default_engine\") 持久化;PipelineClient 启动时读取。前置:feat-016。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/SettingsView.swift",
+      "module": "apps/macos/Sources/SubLiftMac/UI/SettingsView.swift",
       "dependencies": ["feat-016"],
       "status": "not-started",
       "evidence": ""
     },
     {
       "id": "feat-024",
-      "name": "SRT 导出(NSSavePanel)",
-      "description": "NSSavePanel 保存 SRT;调 Python 端 SrtExporter.format() 经 IPC 或 Swift 端直接调 sublift.export 模块(双方案 feat-024 内选一);导出后 NSWorkspace.open 验证。前置:feat-021。",
-      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/MainWindow.swift",
+      "name": "SRT 导出（Swift 端直接格式化 + NSSavePanel）",
+      "description": "NSSavePanel 保存 SRT；Swift 端 SrtFormatter.swift 直接把内存中 SubtitleEntry 列表格式化为 SRT 文本写文件（按 ADR-0007b，不走 IPC 往返 Python）；导出后 NSWorkspace.open 验证 IINA/VLC 可加载。前置:feat-021。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift, apps/macos/Sources/SubLiftMac/UI/MainWindow.swift",
       "dependencies": ["feat-021"],
       "status": "not-started",
       "evidence": ""
@@ -123,7 +123,7 @@
       "id": "feat-025",
       "name": ".app 打包 + Developer ID 公证 spike",
       "description": "SwiftPM .build/release/SubLiftMac.app;嵌入 Python.framework + sublift 包;codesign --deep --options=runtime;xcrun notarytool submit --wait;xcrun stapler staple。验证另一台 Mac 下载 Gatekeeper 不拦截。产出 docs/spikes/notarization-phase2.md。前置:feat-019, feat-024。",
-      "module": "apps/sublift-mac/, docs/spikes/notarization-phase2.md",
+      "module": "apps/macos/, docs/spikes/notarization-phase2.md",
       "dependencies": ["feat-019", "feat-024"],
       "status": "not-started",
       "evidence": ""

@@ -18,7 +18,7 @@
 
 ### 1.2 在范围内
 
-- `apps/sublift-mac/` 全新 SwiftUI 工程(与 `src/sublift/` Python 包双工程并列)
+- `apps/macos/` 全新 SwiftUI 工程(与 `src/sublift/` Python 包双工程并列)
 - **Swift 端**
   - 主窗口(三栏:左预览 / 中时间轴 / 右编辑)
   - 拖拽导入(DropZone)+ 视频元数据解析
@@ -65,14 +65,14 @@
 - [ ] `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿(Python 端无回归)
 - [ ] `xcodebuild test` 全绿(Swift 端至少 IPC 单测 + UI smoke)
 - [ ] `./init.sh` 退出 0
-- [ ] `apps/sublift-mac/scripts/test_gui_e2e.sh` 端到端冒烟通过
+- [ ] `apps/macos/scripts/test_gui_e2e.sh` 端到端冒烟通过
 
 ## 2. 模块布局
 
 ```
 SubLift/
   apps/                                  # NEW: macOS 端工程根
-    sublift-mac/                         # NEW: SwiftUI 壳工程
+    macos/                              # NEW: SwiftUI 壳工程
       Package.swift                      # SwiftPM 入口(macOS 13+)
       project.yml                        # xcodegen 配置(spike 后定)
       Sources/SubLiftMac/
@@ -111,7 +111,7 @@ SubLift/
     models.py  config.py
 ```
 
-**关键边界**:`pipeline/` / `extractor/` / `detector/` / `ocr/` / `export/` / `models.py` / `config.py` 在 Phase 2 **零修改**。新代码只进 `apps/sublift-mac/` 与 `src/sublift/ipc/`。
+**关键边界**:`pipeline/` / `extractor/` / `detector/` / `ocr/` / `export/` / `models.py` / `config.py` 在 Phase 2 **零修改**。新代码只进 `apps/macos/` 与 `src/sublift/ipc/`。
 
 ## 3. 数据流
 
@@ -165,11 +165,11 @@ SubLift/
 ### 4.2 协议实现
 
 - **传输层**:Unix Domain Socket(`/tmp/sublift-<pid>.sock`)
-- **序列化**:MsgPack(Python `msgpack`,Swift `swift-msgpack`)
+- **序列化**:MsgPack(Python `msgpack`,Swift 端**手写编解码**,按 ADR-0007c,不引第三方库)
 - **消息分帧**:4 字节大端长度前缀 + MsgPack body
 - **Server 端**:`asyncio.start_unix_server` + `msgpack.unpackb`
-- **Client 端**:`DispatchSourceRead` + `msgpack.packb`
-- **错误处理**:socket 断开 → 自动重启 Python 子进程 + 重新发送 `start_job`
+- **Client 端**:`DispatchSourceRead` + 手写 `MsgPack.pack/unpack`(`MsgPack.swift`)
+- **错误处理**:socket 断开 → 弹窗报错,用户重新拖入(MVP 不做自动重启)
 
 ### 4.3 进程启动
 
@@ -200,7 +200,7 @@ Phase 1 `Extractor` Protocol 是「视频文件 → 帧迭代器」。Phase 2 �
 
 - Swift 端 `FrameSampler`(AVFoundation / ffmpeg)输出 JPEG 字节流
 - Python 端 IPC 接收 JPEG,重建为 `PIL.Image`,用 `Frame(timestamp_ms, image)` 注入 Pipeline
-- **Phase 1 `Pipeline.run(video_path)` 接受帧流的小幅改造由 feat-016 评估**(需兼容 Phase 1 的 `Pipeline.run(video_path: Path) -> list[SubtitleEntry]` 签名)
+- **Pipeline 接入**:按 ADR-0007a,在 `Pipeline` 上新增 `run_frames(frames: Iterator[Frame]) -> list[SubtitleEntry]`,`run(video_path)` 重构为内部调 `run_frames`。`bridge.py` 调 `run_frames`。Phase 1 CLI 行为不变。
 
 ## 6. 任务拆分
 
@@ -298,7 +298,7 @@ feat-012 (AVF spike) ─┐
 
 - [ ] `.app` 通过 Developer ID + notarytool + Gatekeeper
 - [ ] `xcodebuild test` 全绿
-- [ ] `apps/sublift-mac/scripts/test_gui_e2e.sh` 通过
+- [ ] `apps/macos/scripts/test_gui_e2e.sh` 通过
 - [ ] `docs/ARCHITECTURE.md` 加 macOS 端工程章节
 - [ ] `docs/REQUIREMENTS.md` §3.4 状态推进
 - [ ] `docs/DECISIONS.md` 增 ADR-0005(GUI 架构)、ADR-0006(抽帧双方案)
