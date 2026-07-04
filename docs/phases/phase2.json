@@ -1,0 +1,141 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 2 - macOS GUI",
+  "features": [
+    {
+      "id": "feat-012",
+      "name": "AVFoundation 抽帧 spike",
+      "description": "写 50 行 Swift CLI 工具,遍历 6 个测试素材(mp4-h264, mp4-hevc-8bit, mp4-hevc-10bit, mov-h264, mov-hevc, mkv-h264),记录 AVFoundation 可读性、首帧时间、pixel buffer 尺寸、耗时、mkv 是否 -11828。产出 docs/spikes/avf-phase2.md,作为 feat-018/019 数据驱动。前置:无。",
+      "module": "docs/spikes/avf-phase2.md",
+      "dependencies": [],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-013",
+      "name": "双工程结构 + Package.swift",
+      "description": "创建 apps/sublift-mac/ 目录;Package.swift (macOS 13+, SwiftUI);最小 SubLiftMacApp.swift 显示空白窗口。验证 swift build 成功。前置:feat-012。",
+      "module": "apps/sublift-mac/",
+      "dependencies": ["feat-012"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-014",
+      "name": "Python UDS service 启动骨架",
+      "description": "Python 端 src/sublift/ipc/server.py 实现 asyncio.start_unix_server;Swift 端 Process().launch + UDS connect;单测 hello/bye 消息往返。前置:feat-013。",
+      "module": "src/sublift/ipc/, apps/sublift-mac/Sources/SubLiftMac/Core/PipelineClient.swift",
+      "dependencies": ["feat-013"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-015",
+      "name": "IPC 协议 + MsgPack 序列化",
+      "description": "Python src/sublift/ipc/protocol.py 用 msgpack 定义 5 类消息 schema;Swift 端用 swift-msgpack Codable 包装;双向序列化单测覆盖 start_job / frame / entries / progress / done。前置:feat-014。",
+      "module": "src/sublift/ipc/protocol.py, apps/sublift-mac/Sources/SubLiftMac/Core/PipelineClient.swift",
+      "dependencies": ["feat-014"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-016",
+      "name": "Python bridge 包装 Phase 1 Pipeline",
+      "description": "src/sublift/ipc/bridge.py 把 UDS 接收的 JPEG 帧流重建成 PIL.Image,调 sublift.pipeline.Pipeline.run()(视情况小幅扩展 Pipeline 接受帧流,与原 video_path 签名兼容);Swift 端 PipelineClient 暴露 AsyncSequence<SubtitleEntry>。前置:feat-015。",
+      "module": "src/sublift/ipc/bridge.py",
+      "dependencies": ["feat-015"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-017",
+      "name": "视频预览(AVPlayer)+ 当前帧时间显示",
+      "description": "VideoPreview.swift 用 AVPlayer + AVPlayerLayer 嵌入;显示当前播放时间 player.currentTime() * 1000 ms。前置:feat-013。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/VideoPreview.swift",
+      "dependencies": ["feat-013"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-018",
+      "name": "AVFoundation 抽帧 + IPC 帧流端到端",
+      "description": "FrameSampler.swift 用 AVAssetReader 抽 5 fps 1080p 视频,CVPixelBuffer→CGImage→JPEG q=85,串接 PipelineClient 送 IPC;端到端:5s 视频跑出 ≥ 5 条 entries。首条识别结果 ≤ 10s benchmark 记录在 evidence。前置:feat-012, feat-016, feat-017。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/Core/FrameSampler.swift",
+      "dependencies": ["feat-012", "feat-016", "feat-017"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-019",
+      "name": "mkv 兜底 + 系统 ffmpeg 检测",
+      "description": "FfmpegFallback.swift 启动时 which ffmpeg 检测;缺失时 SwiftUI 弹窗引导 brew install ffmpeg,UI 禁用 mkv 拖入;存在时 spawn ffmpeg -i input -vf fps=5 -f image2pipe -vcodec mjpeg - 抽 MJPEG 流。前置:feat-018。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/Core/FfmpegFallback.swift",
+      "dependencies": ["feat-018"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-020",
+      "name": "拖拽导入(DropZone)+ 视频元数据解析",
+      "description": "DropZone.swift 用 onDrop(of: [.fileURL]);AVURLAsset 解析分辨率/时长/编码;显示在主窗口元数据栏。前置:feat-013, feat-018。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/DropZone.swift",
+      "dependencies": ["feat-013", "feat-018"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-021",
+      "name": "字幕时间轴 + 列表 + 编辑",
+      "description": "SubtitleList.swift List + ForEach;双击 Text 进入 TextEditor 编辑;拖动 start_ms/end_ms 调整(Slider 或步进器);合并/拆分按钮。编辑后 re-export SRT 与编辑一致。前置:feat-018。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/SubtitleList.swift",
+      "dependencies": ["feat-018"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-022",
+      "name": "区域框选(鼠标画 Rectangle)→ 重新跑流水线",
+      "description": "RegionPicker.swift 用 DragGesture 在 Image 上画 Rectangle;输出新 Region,重新发 start_job 给 Python;进度条显示重新跑。前置:feat-021。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/RegionPicker.swift",
+      "dependencies": ["feat-021"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-023",
+      "name": "引擎选择(SettingsView + UserDefaults)",
+      "description": "SettingsView.swift Picker 选 vision / mock;@AppStorage(\"default_engine\") 持久化;PipelineClient 启动时读取。前置:feat-016。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/SettingsView.swift",
+      "dependencies": ["feat-016"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-024",
+      "name": "SRT 导出(NSSavePanel)",
+      "description": "NSSavePanel 保存 SRT;调 Python 端 SrtExporter.format() 经 IPC 或 Swift 端直接调 sublift.export 模块(双方案 feat-024 内选一);导出后 NSWorkspace.open 验证。前置:feat-021。",
+      "module": "apps/sublift-mac/Sources/SubLiftMac/UI/MainWindow.swift",
+      "dependencies": ["feat-021"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-025",
+      "name": ".app 打包 + Developer ID 公证 spike",
+      "description": "SwiftPM .build/release/SubLiftMac.app;嵌入 Python.framework + sublift 包;codesign --deep --options=runtime;xcrun notarytool submit --wait;xcrun stapler staple。验证另一台 Mac 下载 Gatekeeper 不拦截。产出 docs/spikes/notarization-phase2.md。前置:feat-019, feat-024。",
+      "module": "apps/sublift-mac/, docs/spikes/notarization-phase2.md",
+      "dependencies": ["feat-019", "feat-024"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-026",
+      "name": "文档收尾(ARCHITECTURE/REQUIREMENTS/DECISIONS/README)",
+      "description": "docs/ARCHITECTURE.md 加 macOS 端工程章节、双工程图;docs/REQUIREMENTS.md §3.4 状态推进、§8 Phase 2 验收;docs/DECISIONS.md 增 ADR-0005(GUI 架构 = SwiftUI 壳 + Python UDS 子进程)、ADR-0006(抽帧双方案 = AVFoundation + 系统 ffmpeg);README.md 加 GUI 截图 + .app 安装段;docs/design/macos-gui.md GUI 模块设计。前置:feat-025。",
+      "module": "docs/ARCHITECTURE.md, docs/REQUIREMENTS.md, docs/DECISIONS.md, README.md, docs/design/macos-gui.md",
+      "dependencies": ["feat-025"],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}
