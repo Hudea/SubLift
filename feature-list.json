@@ -61,7 +61,7 @@
           "id": "export",
           "name": "字幕导出",
           "description": "串联层：将 SubtitleEntry 列表导出为字幕文件。定义 Exporter Protocol，Phase 1 实现 SRT，ASS/VTT 仅留接口占位。",
-          "status": "not-started",
+          "status": "done",
           "covers": [
             "feat-010"
           ]

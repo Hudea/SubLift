@@ -2,22 +2,22 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-03
-- **当前功能：** feat-009 完成，准备 feat-010（字幕导出 export）
-- **分支：** main（commit da22b75，feat-009 改动未提交）
-- **说明：** Phase 1 实现进行中。三能力模块 + pipeline 全部就位，端到端闭环可跑。下一步 export。
+- **最后更新：** 2026-07-04
+- **当前功能：** feat-010 完成（字幕导出 SRT + ASS/VTT 占位），准备 feat-004（文档收尾）与 CLI 接入
+- **分支：** main（feat-010 改动未提交）
+- **说明：** Phase 1 代码层全部就位（三能力模块 + pipeline + export），仅剩 feat-004 文档与 CLI 接入/端到端验收门。
 
 ## 进行中
 
-- feat-010：字幕导出 export（待开始）
+- feat-010 改动未提交（等待用户确认提交）
 
 ## 近期完成（最近 5 个）
 
-- [x] feat-009：端到端编排与时间轴 pipeline（打轴+去重+串联三子任务）；82 单测全绿，StubExtractor+MockOcrEngine 闭环验证
-- [x] feat-008：OCR 引擎模块（MockOcrEngine 固定+序列双模式 + VisionOcrEngine PyObjC 桥接，默认 zh-Hans+en-US 双语识别）；39 单测 + 3 Vision integration（含中英文真实识别）全绿
-- [x] feat-007：字幕区域检测模块（BottomCropDetector 比例模式 + FixedRegionDetector 手动模式）；9 单测全绿
-- [x] feat-006：帧采样模块（FfmpegExtractor + Protocol @runtime_checkable）；19 单测 + 3 integration 全绿
-- [x] feat-005：工具链配置细化（ruff 扩展 RUF/SIM/ANN、mypy 覆盖 tests、pytest coverage+markers）；12 测试全绿
+- [x] feat-010：字幕导出（SrtExporter format+export 双方法 + ASS/VTT 占位）；26 新单测全绿，详见 phase1.json
+- [x] feat-009：端到端编排与时间轴 pipeline（打轴+去重+串联三子任务）；82 单测全绿，端到端实测 91.3% 召回/0 误检
+- [x] feat-008：OCR 引擎模块（Mock + Vision PyObjC，默认 zh-Hans+en-US 双语）
+- [x] feat-007：字幕区域检测模块（BottomCrop + FixedRegion）
+- [x] feat-006：帧采样模块（FfmpegExtractor + Protocol @runtime_checkable）
 
 ## 阻塞项 / 风险
 

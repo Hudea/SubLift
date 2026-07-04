@@ -16,7 +16,9 @@
       "name": "包结构骨架",
       "description": "创建 src/sublift/ 包结构（含 __init__.py、__main__.py、cli.py、models.py、config.py 及 pipeline/detector/extractor/ocr/export 子包），均为空实现或最小桩。前置：feat-001。验收：uv run python -m sublift 退出 0；ruff/mypy 对空实现无错。",
       "module": "src/sublift/",
-      "dependencies": ["feat-001"],
+      "dependencies": [
+        "feat-001"
+      ],
       "status": "done",
       "evidence": "uv run python -m sublift 退出 0（打印 help）；uv run sublift --help 退出 0；uv run ruff check . 通过；uv run mypy src 通过（17 source files）；uv run pytest 通过（0 tests）。已建骨架：__init__.py（__version__）、__main__.py、cli.py（argparse + extract 子命令桩）、models.py（BoundingBox/Region/Frame/OcrResult/SubtitleEntry）、config.py（Config）；子包 base.py + __init__.py：detector/extractor/ocr/export/pipeline。"
     },
@@ -25,7 +27,9 @@
       "name": "init.sh 环境检查",
       "description": "补全 init.sh：检出 uv/python/ffmpeg，运行 ruff/mypy/pytest 验证。前置：feat-002。验收：./init.sh 退出 0；能检出 uv/ffmpeg/python。",
       "module": "init.sh",
-      "dependencies": ["feat-002"],
+      "dependencies": [
+        "feat-002"
+      ],
       "status": "done",
       "evidence": "./init.sh 退出 0；检出 uv(/opt/homebrew/bin/uv)、python3、ffmpeg(/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg)；python 版本 3.12 via uv；uv sync 成功；ruff check . / mypy src 通过；pytest 无测试用例 SKIP（退出码 5 容忍）。"
     },
@@ -34,7 +38,9 @@
       "name": "项目文档与架构填充",
       "description": "完善 README.md（项目简介、安装、CLI 用法、依赖说明）；填充 docs/ARCHITECTURE.md（模块职责、数据流、技术栈、分层原则，与 docs/plans/phase1.md 一致）；补全 AGENTS.md 验证命令段（pytest/ruff/mypy）。前置：feat-010。验收：README 含 install/usage 段；ARCHITECTURE 含模块职责与数据流；AGENTS.md 验证命令段非空。",
       "module": "README.md, docs/ARCHITECTURE.md, AGENTS.md",
-      "dependencies": ["feat-010"],
+      "dependencies": [
+        "feat-010"
+      ],
       "status": "not-started",
       "evidence": "",
       "subtasks": [
@@ -57,7 +63,9 @@
       "name": "工具链配置细化",
       "description": "在 pyproject.toml 中细化 ruff（lint 规则扩展）、mypy（strict 级别确认）、pytest（markers/coverage）配置，并补一个最小冒烟测试让 init.sh 的 pytest 不再 SKIP。前置：feat-001。验收：uv run ruff check .、uv run mypy src、uv run pytest 全绿且 pytest 收集到至少 1 个测试。",
       "module": "pyproject.toml, tests/",
-      "dependencies": ["feat-001"],
+      "dependencies": [
+        "feat-001"
+      ],
       "status": "done",
       "evidence": "uv run ruff check . 通过（规则扩展为 E/F/W/I/UP/B/RUF/SIM/ANN，忽略 RUF001/002/003 中文标点误报与 ANN401）；uv run mypy src tests 通过（18 source files，strict）；uv run pytest 通过（12 tests，coverage 40%）；./init.sh 退出 0（pytest 不再 SKIP）。新增 tests/test_smoke.py 覆盖 models 与 cli 参数解析。"
     },
@@ -66,7 +74,9 @@
       "name": "帧采样模块（extractor）",
       "description": "定义 Extractor Protocol + Frame 模型（feat-007），实现 ffmpeg_extractor（feat-008），通过 subprocess 调 ffmpeg 按 fps 抽帧并转为 PIL.Image。前置：feat-002。阻塞项：依赖系统 ffmpeg。验收：合成短视频抽帧；断言帧数与时间戳正确。",
       "module": "src/sublift/extractor/",
-      "dependencies": ["feat-002"],
+      "dependencies": [
+        "feat-002"
+      ],
       "status": "done",
       "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（20 source files）；uv run pytest 通过（19 tests，含 4 Protocol 单测，integration 跳过）；uv run pytest -m integration 通过（3 ffmpeg 抽帧测试：3秒视频1fps得3帧时间戳[0,1000,2000]、尺寸320x240、2fps得6帧）。Extractor Protocol 加 @runtime_checkable；FfmpegExtractor 用 ffprobe 取分辨率 + rawvideo pipe 抽帧转 PIL.Image。./init.sh 退出 0。",
       "subtasks": [
@@ -85,7 +95,9 @@
       "name": "字幕区域检测模块（detector）",
       "description": "定义 Detector Protocol + Region/BoundingBox 类型（feat-009），实现下部裁剪默认实现（feat-010），默认裁剪画面下部 30%，支持配置比例与手动指定区域。前置：feat-002。验收：给定帧尺寸断言裁剪区域正确。",
       "module": "src/sublift/detector/",
-      "dependencies": ["feat-002"],
+      "dependencies": [
+        "feat-002"
+      ],
       "status": "done",
       "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（23 source files）；uv run pytest 通过（28 tests，含 9 detector 单测，纯单测无 integration）。Detector Protocol 加 @runtime_checkable。实现两个类：BottomCropDetector（比例模式，默认 0.3，crop_h=int(h*ratio)，box=(0,h-crop_h,w,crop_h)）与 FixedRegionDetector（手动模式，原样返回 BoundingBox，忽略帧尺寸）。不 clamp 越界（由下游负责）；ratio=0.0 允许（返回 height=0）。./init.sh 退出 0。",
       "subtasks": [
@@ -104,7 +116,9 @@
       "name": "OCR 引擎模块（ocr）",
       "description": "定义 OcrEngine Protocol + OcrResult 类型（feat-011），实现 MockOcrEngine 测试用（feat-012），实现 VisionOcrEngine 通过 PyObjC 调 VNRecognizeTextRequest（feat-013）。前置：feat-002。阻塞项：Vision 仅 macOS 可用、CI 不可用。验收：Mock 单测返回固定文本/置信度；macOS 上真实帧识别出文本（集成测试可手动，CI 跳过）。",
       "module": "src/sublift/ocr/",
-      "dependencies": ["feat-002"],
+      "dependencies": [
+        "feat-002"
+      ],
       "status": "done",
       "evidence": "uv sync --extra vision 安装 pyobjc-framework-Vision/Quartz 12.2.1，import Vision/Quartz 成功。uv run ruff check . 通过；uv run mypy src tests 通过（26 source files）；uv run pytest 通过（39 tests，含 11 ocr 测试：6 Mock 单测 + 1 Vision Protocol 单测 + 1 降级 monkeypatch 单测 + 3 Vision 集成测试 skip）；uv run pytest -m integration 通过（3 Vision 集成测试：英文 'Hello' 识别成功、中文 '你好世界' 识别成功（验证默认 zh-Hans+en-US 语言设置生效）、空白图返回 OcrResult('',0.0)）。OcrEngine Protocol 加 @runtime_checkable 且 image 类型从 object 改为 Image.Image。MockOcrEngine 支持固定模式（text+confidence）与序列模式（sequence list 按调用顺序返回，越界 IndexError）。VisionOcrEngine 模块级 try/except 导入设 _VISION_AVAILABLE 标志，不可用时 __init__ 抛 RuntimeError 提示 'uv sync --extra vision'；recognize 流程 PIL.Image→convert('RGB')→tobytes→CGDataProviderCreateWithData+CGImageCreate→VNImageRequestHandler→VNRecognizeTextRequest→setRecognitionLanguages_(['zh-Hans','en-US'] 默认，可通过 recognition_languages 参数覆盖)→performRequests_error_→results 多 observation 合并为 '\\n'.join texts confidence 取均值，无结果返回 OcrResult('',0.0)。关键修复：VNRecognizeTextRequest 默认 recognitionLanguages 仅 en_US 无法识别中文，必须显式 setRecognitionLanguages_；默认 ['zh-Hans','en-US'] 覆盖 SubLift 核心场景。./init.sh 退出 0（默认 uv sync 不装 vision，集成测试自动 skip）。",
       "subtasks": [
@@ -127,7 +141,11 @@
       "name": "端到端编排与时间轴（pipeline）",
       "description": "实现 SubtitleEntry 模型（feat-014）、端到端编排 core.py（feat-015，组合 extractor→detector→ocr→timeline→dedupe）、变化点状态机 timeline.py（feat-016）、去重合并 dedupe.py（feat-017）。前置：feat-006、feat-007、feat-008。验收：Mock OCR + 合成帧跑通闭环，产出 SubtitleEntry 列表；timeline/dedupe 单测覆盖出现/持续/消失/合并/抖动场景。",
       "module": "src/sublift/pipeline/, src/sublift/models.py",
-      "dependencies": ["feat-006", "feat-007", "feat-008"],
+      "dependencies": [
+        "feat-006",
+        "feat-007",
+        "feat-008"
+      ],
       "status": "done",
       "evidence": "子任务1（打轴）+ 子任务2（去重）+ 子任务3（串联）全部完成。uv run ruff check . 通过；uv run mypy src tests 通过（33 source files）；uv run pytest 通过（82 passed + 4 skipped vision）；./init.sh 退出 0。新增依赖 numpy 2.5.0 + opencv-python-headless 5.0.0.93。config.py 新增 SignatureConfig（block_size_ratio=0.08, adaptive_c=12, hash_size=8）、ChangePointConfig（presence_threshold=0.01, hysteresis_frames=2, change_threshold=10, enable_ssim_verify=False 默认关接口就位）、sample_fps=5.0。pipeline/signature.py：双信号帧签名——信号A 前景占比（cv2.adaptiveThreshold + THRESH_BINARY_INV + 2x2 形态学开运算），信号B dHash（9x8 降采样 64bit），compute_ssim numpy 回退。pipeline/changepoint.py：三态状态机 EMPTY⇄STABLE→STABLE_PRIME + 迟滞确认 + 时间戳回溯 + 候选/稳定确认双阶段 + SSIM hook（默认关）。pipeline/timeline.py：TimelineSegment + TimelineBuilder.consume(StateEvent) → list[TimelineSegment]。pipeline/dedupe.py：merge_entries 3-pass（合并→过滤→合并），归一化移除所有空白，抖动消除 A→B(短)→A→A。pipeline/core.py：Pipeline 类（extractor/detector/ocr 依赖注入），run() 串联七组件——首帧 detector 定 Region 一次性，逐帧 crop+compute_signature+changepoint.process，事件驱动 TimelineBuilder，OCR 后置（每段代表帧调一次），confidence_threshold 过滤低置信度，merge_entries 最终清理；只缓存事件触发帧（anchor_frames）控制内存。测试覆盖：test_signature 10、test_changepoint 9、test_timeline 7、test_dedupe 16、test_pipeline 5（空场景/单段/两段/dedupe 生效/confidence 过滤，StubExtractor+MockOcrEngine 闭环，不依赖 ffmpeg/Vision）。HURDLES 记录 dHash 对中文判别力不足（待完整 pipeline 跑通后评估，首选方案加 pixel-diff 互补信号）。端到端实测基线：debug/Zootopia_clip_hardsub1.mkv 00:01:00~00:02:00 窗口 5fps，23 实际段正确识别 21 段，召回/精确率 91.3%，0 误检；缺陷：2 段 OCR 空文本（锚帧落过渡画面）+ 1 段合并 4 段（dHash 漏检），详见 docs/HURDLES.md。",
       "subtasks": [
@@ -154,9 +172,11 @@
       "name": "字幕导出（export）",
       "description": "定义 Exporter Protocol（feat-018），实现 SRT exporter（feat-019），ASS/VTT 留接口占位（feat-020）。前置：feat-009。验收：SRT 单测生成符合格式 SRT；时间码与序号正确；ASS/VTT 占位 mypy 通过。",
       "module": "src/sublift/export/",
-      "dependencies": ["feat-009"],
-      "status": "not-started",
-      "evidence": "",
+      "dependencies": [
+        "feat-009"
+      ],
+      "status": "done",
+      "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（37 source files）；uv run pytest 通过（108 passed + 4 skipped vision，较 feat-009 新增 26 export 测试）；./init.sh 退出 0（8/8 通过）。exporter 接口采用 format+export 双方法：format(entries)->str 纯函数返回格式化字符串，export(entries, Path)->None 写文件内部调 format。Exporter Protocol 加 @runtime_checkable（与 Extractor/Detector/OcrEngine 一致）。SrtExporter 实现：_format_timestamp(ms) 用 divmod 纯算术转 HH:MM:SS,mmm（逗号分隔毫秒），小时可超 24 不回绕；_validate 校验 start/end 非负且 end>=start，越界抛 ValueError；format 序号从 1 开始，条目间 \n\n 分隔，末尾保留 \n，空列表返回空字符串；export 用 write_text(encoding=utf-8)。text 含 \n 原样多行输出。AssExporter/VttExporter 占位，format/export 均抛 NotImplementedError。测试覆盖：时间码格式（0/999/1000/3661500/86400000ms + 负值）、SRT 格式（空列表/单条目/多条目/序号/末尾换行）、文本多行、越界（负值/end<start/相等合法）、export 写文件（tmp_path fixture）、占位抛错、Protocol isinstance 判定。附带修复 scripts/test_pipeline_e2e.py 的 4 个 ruff 错误（I001+E501×2+RUF059，feat-009 遗留基线问题）。",
       "subtasks": [
         {
           "name": "Exporter Protocol",
