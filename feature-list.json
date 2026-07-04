@@ -84,7 +84,7 @@
         {
           "id": "phase2.foundation",
           "name": "Phase 2 基础架构",
-          "description": "双工程布局（apps/macos/ SwiftUI + 现有 src/sublift/ Python）；SwiftPM Package.swift；Python UDS 子进程骨架；IPC 协议 + MsgPack 序列化；Python bridge 包装 Phase 1 Pipeline。覆盖 feat-012~016。",
+          "description": "双工程布局（apps/macos/ SwiftUI + 现有 src/sublift/ Python）；SwiftPM Package.swift；Python UDS 子进程骨架；IPC 协议 7 类消息 schema（JSON 序列化）；Python bridge 包装 Phase 1 Pipeline。覆盖 feat-012~016。",
           "status": "in-progress",
           "covers": ["feat-012", "feat-013", "feat-014", "feat-015", "feat-016"]
         },

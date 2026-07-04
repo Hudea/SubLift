@@ -23,12 +23,11 @@ Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
 - **理由**：SRT 格式极简（序号 + `HH:MM:SS,mmm --> HH:MM:SS,mmm` + 文本 + 空行），无理由走 IPC 往返；且避免引入「为导出再发 IPC 请求」的状态机分支。
 - **影响**：`apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift` 新增；不调 Python 导出。更新 `docs/phases/phase2.json` feat-024 描述。
 
-### ADR-0007c Swift 端 MsgPack：手写编解码，不引第三方库（feat-015）
+### ADR-0007c/d MsgPack 评估与撤销（独立决策，2026-07-05）
 
-- **背景**：plan §4.2 原指定用 `swift-msgpack` 库，但未验证维护状态、Codable 支持、SwiftPM 可用性，且会成为 feat-025 公证的第三方依赖风险点。
-- **决策**：Swift 端手写 MsgPack 编解码。5 类消息（start_job/frame/cancel_job/progress/entries/log/done）字段固定，用 `Data` + 固定字节序手写 pack/unpack，双向单测覆盖。
-- **理由**：零第三方依赖，公证风险最小，符合 AGENTS.md「低耦合」原则。MsgPack 协议本身简单（nil/bool/int/str/bin/array/map 各 1 字节类型 tag + 长度 + 负载），手写成本低于评估一个库的成本。
-- **影响**：`apps/macos/Sources/SubLiftMac/Core/MsgPack.swift` 新增；`apps/macos/Tests/` 增编解码单测。更新 `docs/plans/phase2.md` §4.2 与 `docs/phases/phase2.json` feat-015 描述。
+- **背景**：feat-015 原计划在 IPC 层引入 MsgPack 替换 JSON（plan §4.2）。评估两个 Swift MsgPack 库后，发现都有嵌套解码 bug（详见 HURDLES）。
+- **决策**：**不引入 MsgPack，继续用 JSON**（ADR-0007c 撤销引入，ADR-0007d 确认 JSON 为最终方案）。
+- **影响**：此决策**独立于 feat-015 任务范围**。feat-015 仍需定义 7 类消息的 JSON schema + 双向单测，只是序列化层用 JSON 而非 MsgPack。feat-015 因此从「MsgPack 序列化」重定义为「IPC 协议 7 类消息 schema（JSON 序列化）」。
 
 ---
 

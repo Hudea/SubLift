@@ -165,10 +165,11 @@ SubLift/
 ### 4.2 协议实现
 
 - **传输层**:Unix Domain Socket(`/tmp/sublift-<pid>.sock`)
-- **序列化**:MsgPack(Python `msgpack`,Swift 端**手写编解码**,按 ADR-0007c,不引第三方库)
-- **消息分帧**:4 字节大端长度前缀 + MsgPack body
-- **Server 端**:`asyncio.start_unix_server` + `msgpack.unpackb`
-- **Client 端**:`DispatchSourceRead` + 手写 `MsgPack.pack/unpack`(`MsgPack.swift`)
+- **序列化**:JSON(按 ADR-0007c/d,MsgPack 评估后撤销,详见 HURDLES)
+- **消息分帧**:4 字节大端长度前缀 + UTF-8 JSON body
+- **Server 端**:`asyncio.start_unix_server` + `json.loads`
+- **Client 端**:`DispatchSourceRead` + `JSONSerialization`(feat-014 已实现)
+- **消息 schema**:feat-015 在 `src/sublift/ipc/protocol.py`(Python) + `apps/macos/.../Core/Messages.swift`(Swift Codable)集中定义 7 类消息
 - **错误处理**:socket 断开 → 弹窗报错,用户重新拖入(MVP 不做自动重启)
 
 ### 4.3 进程启动

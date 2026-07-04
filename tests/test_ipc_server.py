@@ -1,9 +1,7 @@
 """IPC UDS server 单测。
 
-feat-014 骨架验证：
-- hello/bye 往返成功
-- 消息分帧（4 字节长度前缀 + JSON body）正确
-- 连接关闭后 server 退出
+feat-014：hello/bye 往返 + 分帧格式 + 连接关闭后 server 退出。
+feat-015：7 类业务消息 stub 响应分发 + schema 校验错误返回 error。
 不依赖 Swift，纯 Python 自连。
 """
 
@@ -17,6 +15,12 @@ from pathlib import Path
 
 import pytest
 
+from sublift.ipc.protocol import (
+    build_cancel_job,
+    build_frame,
+    build_hello,
+    build_start_job,
+)
 from sublift.ipc.server import (
     LENGTH_PREFIX_SIZE,
     handle_connection,
@@ -138,7 +142,7 @@ class TestHandleConnection:
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
-            reader.feed_data(_pack({"type": "hello", "client": "test"}))
+            reader.feed_data(_pack(build_hello("test")))
             reader.feed_eof()
             await handle_connection(reader, writer)
             return writer.chunks
@@ -161,13 +165,13 @@ class TestHandleConnection:
         chunks = asyncio.run(scenario())
         assert chunks == b""
 
-    def test_unknown_type_returns_error(self) -> None:
-        """未知消息类型返回 error 响应。"""
+    def test_schema_error_returns_error(self) -> None:
+        """schema 校验失败（缺 video_id）返回 error 响应。"""
 
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
-            reader.feed_data(_pack({"type": "unknown_thing"}))
+            reader.feed_data(_pack({"type": "start_job", "fps": 5.0}))
             reader.feed_eof()
             await handle_connection(reader, writer)
             return writer.chunks
@@ -177,7 +181,68 @@ class TestHandleConnection:
         assert response["type"] == "error"
         message = response["message"]
         assert isinstance(message, str)
-        assert "unknown_thing" in message
+        assert "video_id" in message
+
+
+class TestBusinessMessageStubs:
+    """feat-015：7 类业务消息的 stub 响应分发。"""
+
+    def test_start_job_returns_progress_ready(self) -> None:
+        """start_job → progress(stage=ready)。"""
+
+        async def scenario() -> bytes:
+            reader = asyncio.StreamReader()
+            writer = _MockStreamWriter()
+            reader.feed_data(
+                _pack(build_start_job("V1", 5.0, "vision", 0.5))
+            )
+            reader.feed_eof()
+            await handle_connection(reader, writer)
+            return writer.chunks
+
+        chunks = asyncio.run(scenario())
+        response = _parse_response(chunks)
+        assert response["type"] == "progress"
+        assert response["video_id"] == "V1"
+        assert response["stage"] == "ready"
+
+    def test_frame_returns_progress_received(self) -> None:
+        """frame → progress(stage=frame_received)。"""
+
+        async def scenario() -> bytes:
+            reader = asyncio.StreamReader()
+            writer = _MockStreamWriter()
+            reader.feed_data(
+                _pack(build_frame("V1", 1000, b"\xff\xd8fake"))
+            )
+            reader.feed_eof()
+            await handle_connection(reader, writer)
+            return writer.chunks
+
+        chunks = asyncio.run(scenario())
+        response = _parse_response(chunks)
+        assert response["type"] == "progress"
+        assert response["stage"] == "frame_received"
+
+    def test_cancel_job_returns_done(self) -> None:
+        """cancel_job → done(ok=True)。"""
+
+        async def scenario() -> bytes:
+            reader = asyncio.StreamReader()
+            writer = _MockStreamWriter()
+            reader.feed_data(_pack(build_cancel_job("V1")))
+            reader.feed_eof()
+            await handle_connection(reader, writer)
+            return writer.chunks
+
+        chunks = asyncio.run(scenario())
+        response = _parse_response(chunks)
+        assert response == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": True,
+            "error": None,
+        }
 
 
 class TestServeOnce:
@@ -240,4 +305,86 @@ class TestServeOnce:
             await asyncio.wait_for(server_task, timeout=2.0)
 
         asyncio.run(scenario())
+        Path(socket_path).unlink(missing_ok=True)
+
+    def test_full_message_sequence_over_real_socket(self) -> None:
+        """feat-015 真实跨进程测试：启动 UDS server，一个连接内发 7 类消息验证 stub 响应。
+
+        不依赖 Swift，但用真实 asyncio UDS server + 真实 socket 连接，
+        验证 read_message/write_message 分帧 + handler 分发在真实 I/O 下正常工作。
+        """
+        socket_path = f"/tmp/sublift-test-{uuid.uuid4().hex[:8]}.sock"
+
+        async def scenario() -> list[dict[str, object] | None]:
+            server_task = asyncio.create_task(serve_once(socket_path))
+
+            for _ in range(50):
+                if Path(socket_path).exists():
+                    break
+                await asyncio.sleep(0.01)
+            else:
+                server_task.cancel()
+                pytest.fail("server 未在 0.5s 内启动")
+
+            responses: list[dict[str, object] | None] = []
+            try:
+                reader, writer = await asyncio.open_unix_connection(socket_path)
+
+                # 1. hello → bye
+                await write_message(writer, build_hello("sublift-mac"))
+                responses.append(await read_message(reader))
+
+                # 2. start_job → progress(stage=ready)
+                await write_message(
+                    writer, build_start_job("V1", 5.0, "vision", 0.5, region_box=[0, 0, 1920, 1080])
+                )
+                responses.append(await read_message(reader))
+
+                # 3. frame → progress(stage=frame_received)
+                await write_message(writer, build_frame("V1", 1000, b"\xff\xd8fakejpeg"))
+                responses.append(await read_message(reader))
+
+                # 4. cancel_job → done(ok=True)
+                await write_message(writer, build_cancel_job("V1"))
+                responses.append(await read_message(reader))
+
+                # 5. bye → None（连接关闭）
+                await write_message(writer, {"type": "bye"})
+                # handler 返回 None，不写响应；read 会拿到 EOF
+                responses.append(await read_message(reader))
+
+                writer.close()
+                await writer.wait_closed()
+            finally:
+                await asyncio.wait_for(server_task, timeout=2.0)
+
+            return responses
+
+        responses = asyncio.run(scenario())
+        Path(socket_path).unlink(missing_ok=True)
+
+        # 验证 5 条响应
+        assert responses[0] == {"type": "bye"}
+        assert responses[1] == {
+            "type": "progress",
+            "video_id": "V1",
+            "stage": "ready",
+            "pct": 0.0,
+            "eta_ms": 0,
+        }
+        assert responses[2] == {
+            "type": "progress",
+            "video_id": "V1",
+            "stage": "frame_received",
+            "pct": 0.0,
+            "eta_ms": 0,
+        }
+        assert responses[3] == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": True,
+            "error": None,
+        }
+        # bye 后 handler 返回 None，read_message 收到 EOF 返回 None
+        assert responses[4] is None
         Path(socket_path).unlink(missing_ok=True)

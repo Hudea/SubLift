@@ -2,12 +2,9 @@ import Foundation
 
 /// Pipeline IPC 客户端：负责启动 Python 子进程并经 UDS 通信。
 ///
-/// feat-014 阶段实现骨架：
-/// - 启动 Python 子进程 (`python -m sublift.ipc.server --socket <path>`)
-/// - 经 Unix Domain Socket 连接
-/// - 发送 hello / 接收 bye 验证通道可用
-///
-/// feat-015 将 JSON 替换为 MsgPack；feat-016 将接入 Pipeline 帧流。
+/// feat-014：启动 Python 子进程 + UDS 连接 + hello/bye 握手。
+/// feat-015：新增 Codable 消息编解码重载（packMessage/unpackMessage 泛型版本）。
+/// feat-016：将接入 Pipeline 帧流。
 public final class PipelineClient {
     /// 消息分帧：4 字节大端无符号整数表示 body 长度。
     static let lengthPrefixSize = 4
@@ -38,6 +35,18 @@ public final class PipelineClient {
         return data
     }
 
+    /// 把 Codable 消息打包成分帧字节流（feat-015 新增）。
+    public static func packMessage<T: Encodable>(_ message: T) throws -> Data {
+        let body = try JSONEncoder().encode(message)
+        var data = Data(capacity: lengthPrefixSize + body.count)
+        var length = UInt32(body.count).bigEndian
+        withUnsafeBytes(of: &length) { ptr in
+            data.append(contentsOf: ptr)
+        }
+        data.append(body)
+        return data
+    }
+
     /// 从分帧字节流解析一条消息。
     /// - Parameter data: 完整的分帧字节（长度前缀 + body）
     /// - Returns: 解析后的消息字典；data 为空时返回 nil
@@ -59,6 +68,34 @@ public final class PipelineClient {
 
         let body = data.subdata(in: bodyStart..<bodyEnd)
         return try JSONSerialization.jsonObject(with: body) as? [String: Any]
+    }
+
+    /// 从分帧字节流解析一条 Codable 消息（feat-015 新增）。
+    /// - Parameters:
+    ///   - data: 完整的分帧字节（长度前缀 + body）
+    ///   - type: 目标 Codable 类型
+    /// - Returns: 解析后的消息；data 为空时返回 nil
+    public static func unpackMessage<T: Decodable>(
+        _ data: Data,
+        as type: T.Type
+    ) throws -> T? {
+        guard !data.isEmpty else { return nil }
+        guard data.count >= lengthPrefixSize else {
+            throw PipelineClientError.incompleteLengthPrefix
+        }
+
+        let length = data.subdata(in: 0..<lengthPrefixSize).withUnsafeBytes { ptr in
+            ptr.load(as: UInt32.self).bigEndian
+        }
+
+        let bodyStart = lengthPrefixSize
+        let bodyEnd = bodyStart + Int(length)
+        guard data.count >= bodyEnd else {
+            throw PipelineClientError.incompleteBody
+        }
+
+        let body = data.subdata(in: bodyStart..<bodyEnd)
+        return try JSONDecoder().decode(type, from: body)
     }
 
     // MARK: - 子进程管理（feat-014 骨架，跨进程验证留待手动测试）
@@ -98,6 +135,31 @@ public final class PipelineClient {
             unlink(socketPath)
             socketPath = ""
         }
+    }
+
+    // MARK: - 消息收发（feat-015 暴露，feat-016 bridge 会使用）
+
+    /// 发送一条字典消息并读取响应（兼容 hello/bye 等控制消息）。
+    /// - Parameter message: 消息字典
+    /// - Returns: 响应消息字典；连接关闭时返回 nil
+    public func request(_ message: [String: Any]) throws -> [String: Any]? {
+        let packed = try Self.packMessage(message)
+        try writeAll(packed)
+        return try readMessage()
+    }
+
+    /// 发送一条 Codable 消息并读取响应，解码为指定类型。
+    /// - Parameters:
+    ///   - message: 待发送的消息
+    ///   - responseType: 期望的响应类型
+    /// - Returns: 解码后的响应；连接关闭时返回 nil
+    public func request<S: Encodable, R: Decodable>(
+        _ message: S,
+        expecting responseType: R.Type
+    ) throws -> R? {
+        let packed = try Self.packMessage(message)
+        try writeAll(packed)
+        return try readMessageDecoded(as: responseType)
     }
 
     // MARK: - Private
@@ -187,6 +249,29 @@ public final class PipelineClient {
 
         let bodyData = Data(bodyBytes)
         return try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+    }
+
+    /// 从 socket 读取一条分帧消息并解码为指定类型。
+    private func readMessageDecoded<T: Decodable>(as type: T.Type) throws -> T? {
+        var lengthBytes = [UInt8](repeating: 0, count: Self.lengthPrefixSize)
+        let readResult = lengthBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard readResult == Self.lengthPrefixSize else { return nil }
+
+        let length = UInt32(lengthBytes[0]) << 24
+            | UInt32(lengthBytes[1]) << 16
+            | UInt32(lengthBytes[2]) << 8
+            | UInt32(lengthBytes[3])
+
+        var bodyBytes = [UInt8](repeating: 0, count: Int(length))
+        let bodyResult = bodyBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard bodyResult == Int(length) else { return nil }
+
+        let bodyData = Data(bodyBytes)
+        return try JSONDecoder().decode(type, from: bodyData)
     }
 
     /// 把 Data 全部写入 socket。

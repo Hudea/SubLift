@@ -2,22 +2,23 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-04
-- **当前功能：** Phase 2 macOS GUI 进行中;feat-014(Python UDS service 启动骨架)已完成
+- **最后更新：** 2026-07-05
+- **当前功能：** Phase 2 macOS GUI;feat-015(IPC 协议 7 类消息 schema)已完成
 - **分支：** apps/macos-gui
-- **说明：** Python UDS server + Swift PipelineClient 骨架落地,hello/bye 跨进程往返验证通过。下一任务 feat-015(IPC 协议 + MsgPack 序列化)。ADR-0007c 已定 Swift 手写 MsgPack(不引第三方库),分帧 4 字节大端长度前缀保持稳定。
+- **说明：** feat-015 落地：7 类 IPC 消息 JSON schema（Python protocol.py + Swift Messages.swift Codable struct）+ server.py handler stub 响应分发 + 跨语言 fixture 单测。顺带改 Phase 1 SubtitleEntry 加 confidence。下一任务 feat-016（Python bridge 包装 Pipeline，接入 run_frames）。
 
 ## 进行中
 
-- (无,等待开始 feat-015)
+- (无,等待开始 feat-016)
 
 ## 近期完成（最近 5 个）
 
-- [x] feat-014：Python UDS service 启动骨架(server.py 184 行 + PipelineClient.swift 225 行,10 Python 测试 + 8 Swift 测试,跨进程往返验证通过)
-- [x] feat-013：双工程结构 + Package.swift(apps/macos/ SwiftUI 工程,swift build + test 全绿,Python 116 passed 无回归)
+- [x] feat-015：IPC 协议 7 类消息 schema(JSON 序列化)。Python protocol.py(215 行) + Swift Messages.swift(245 行) + server.py handler stub 分发 + 48 Python + 18 Swift 单测。顺带改 Phase 1 SubtitleEntry 加 confidence(默认 1.0,向后兼容)。全量验证 177 passed + 29 passed。
+- [x] feat-015(MsgPack 评估):两个 Swift MsgPack 库都有嵌套解码 bug,跨语言测试暴露;决策继续用 JSON(ADR-0007c/d)。注:此为决策性产物,7 类消息 schema 定义重开为 feat-015 实质任务
+- [x] feat-014：Python UDS service 启动骨架(server.py 184 行 + PipelineClient.swift 221 行,10 Python + 9 Swift 测试,跨进程握手验证通过)
+- [x] feat-013：双工程结构 + Package.swift(apps/macos/ SwiftUI 工程,swift build + test 全绿,Python 无回归)
 - [x] feat-012：AVFoundation 抽帧 spike(apps/macos/spikes/avf-spike/,6 素材实测,evidence 见 phase2.json)
 - [x] feat-011：CLI 接入 + 端到端验收(--engine 参数,8 CLI 单测,1080p 视频跑通,性能 16x 实时)
-- [x] feat-004：文档收尾(3 份 design 文档 + README + ARCHITECTURE)
 
 ## 阻塞项 / 风险
 
@@ -28,8 +29,8 @@
 
 ## 近期决策
 
-- ADR-0007：Phase 2 GUI 三项设计决策(run_frames 帧流接入 / Swift 端 SRT 导出 / Swift 手写 MsgPack,2026-07-04)
-- ADR-0004：任务粒度调整 22→10 粗任务,subtasks 字段承载细节,feat-004 置末
-- ADR-0001：Phase 1 模块布局 = 三能力模块(detector/extractor/ocr) + 串联层(pipeline/export) + 入口层(cli)
+- ADR-0007c/d(独立决策):MsgPack 评估后撤销,继续用 JSON;不影响 feat-015 任务范围(7 类消息 schema 仍需定义)
+- ADR-0007:Phase 2 GUI 三项设计决策(run_frames 帧流接入 / Swift 端 SRT)
+- ADR-0004:任务粒度调整 22→10 粗任务,subtasks 字段承载细节,feat-004 置末
 
 > 完整决策记录见 `docs/DECISIONS.md`

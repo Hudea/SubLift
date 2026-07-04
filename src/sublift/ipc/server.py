@@ -2,8 +2,9 @@
 
 Swift GUI 端通过 `Process` 启动本模块作为子进程，经 Unix Domain Socket 通信。
 消息分帧：4 字节大端无符号长度前缀 + UTF-8 JSON body。
-feat-014 阶段实现最小骨架：接收一个连接，读取 `hello`，回复 `bye`，关闭连接后退出。
-feat-015 将 JSON 替换为 MsgPack；feat-016 将 handler 接入 Pipeline。
+feat-014：hello/bye 骨架握手验证通道可用。
+feat-015：handler 扩展为 9 类消息分发（7 业务 + 2 控制），业务消息返回 stub 响应。
+feat-016：将 handler 接入 Pipeline（stub 换成真实 Pipeline 调用）。
 """
 
 from __future__ import annotations
@@ -16,6 +17,19 @@ import struct
 import sys
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
+
+from sublift.ipc.protocol import (
+    MSG_CANCEL_JOB,
+    MSG_FRAME,
+    MSG_HELLO,
+    MSG_START_JOB,
+    ProtocolError,
+    build_bye,
+    build_done,
+    build_error,
+    build_progress,
+    validate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,12 +94,10 @@ async def handle_connection(
 ) -> None:
     """处理单个连接：读取消息，调用 handler，写回响应，直到 handler 返回 None。
 
-    默认 handler 实现 hello/bye 骨架：收到 `hello` 回 `bye`，收到 `bye` 关闭连接。
-
     Args:
         reader: StreamReader。
         writer: StreamWriter。
-        handler: 消息处理回调，返回响应字典或 None（关闭连接）。None 时用默认骨架 handler。
+        handler: 消息处理回调，返回响应字典或 None（关闭连接）。None 时用默认分发 handler。
     """
     if handler is None:
         handler = _default_handler
@@ -115,7 +127,11 @@ async def handle_connection(
 
 
 async def _default_handler(message: dict[str, Any]) -> dict[str, Any] | None:
-    """feat-014 骨架 handler：hello → bye，bye → None（关闭）。
+    """默认消息分发 handler。
+
+    feat-015：9 类消息分发（7 业务 stub + 2 控制握手）。
+    业务消息先经 protocol.validate() 校验 schema，再返回 stub 响应。
+    feat-016 将把 stub 换成真实 Pipeline 调用。
 
     Args:
         message: 接收到的消息。
@@ -124,11 +140,30 @@ async def _default_handler(message: dict[str, Any]) -> dict[str, Any] | None:
         响应消息字典，或 None 表示关闭连接。
     """
     msg_type = message.get("type")
-    if msg_type == "hello":
-        return {"type": "bye"}
+
+    if msg_type == MSG_HELLO:
+        return build_bye()
     if msg_type == "bye":
         return None
-    return {"type": "error", "message": f"unknown type: {msg_type!r}"}
+
+    try:
+        validate(message)
+    except ProtocolError as e:
+        return build_error(str(e))
+
+    if msg_type == MSG_START_JOB:
+        video_id = message["video_id"]
+        return build_progress(video_id, "ready", 0.0, 0)
+    if msg_type == MSG_FRAME:
+        video_id = message["video_id"]
+        return build_progress(video_id, "frame_received", 0.0, 0)
+    if msg_type == MSG_CANCEL_JOB:
+        video_id = message["video_id"]
+        return build_done(video_id, ok=True)
+    if msg_type == "bye":
+        return None
+
+    return build_error(f"unknown type: {msg_type!r}")
 
 
 async def serve_once(socket_path: str) -> None:
@@ -158,7 +193,7 @@ def build_parser() -> argparse.ArgumentParser:
     """构造命令行参数解析器。"""
     parser = argparse.ArgumentParser(
         prog="sublift.ipc.server",
-        description="SubLift IPC UDS server（feat-014 骨架）。",
+        description="SubLift IPC UDS server。",
     )
     parser.add_argument(
         "--socket",

@@ -127,6 +127,7 @@ class Pipeline:
                         start_ms=seg.start_ms,
                         end_ms=seg.end_ms if seg.end_ms is not None else seg.start_ms,
                         text="",
+                        confidence=0.0,
                     )
                 )
                 continue
@@ -135,12 +136,18 @@ class Pipeline:
             ocr_result = self._ocr.recognize(crop_image)
 
             text = ocr_result.text
+            confidence = ocr_result.confidence
             if ocr_result.confidence < self._config.confidence_threshold:
                 text = ""
 
             end_ms = seg.end_ms if seg.end_ms is not None else seg.start_ms
             entries.append(
-                SubtitleEntry(start_ms=seg.start_ms, end_ms=end_ms, text=text)
+                SubtitleEntry(
+                    start_ms=seg.start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                    confidence=confidence,
+                )
             )
 
         return entries

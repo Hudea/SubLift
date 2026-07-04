@@ -88,4 +88,27 @@
 - **影响评估**：这是当前 OCR 质量低的主因，前 6 条（无英文标题干扰）CER=0% 证明 OCR 引擎本身精度足够。调准区域后预计字符准确率可大幅提升。
 - **相关文件**：`src/sublift/detector/bottom_crop.py`、`src/sublift/config.py`（`region_bottom_ratio=0.3`）、`debug/cli_comparison.txt`（逐条对比证据）
 
+---
+
+### Swift MsgPack 库在嵌套 array of map 解码时崩溃
+- **日期**：2026-07-05
+- **状态**：已绕过（feat-015 决定继续用 JSON，见 ADR-0007d）
+- **关联 feature**：feat-015（IPC 协议 + MsgPack 序列化）
+- **现象**：feat-015 尝试把 IPC 序列化层从 JSON 换成 MsgPack。引入 Swift MsgPack 库后，单语言 roundtrip 测试全过，但跨语言测试（Python `msgpack.packb` → Swift decode）暴露两个库都有 bug：
+  - `nnabeyang/swift-msgpack` 1.2.0：解码 `entries` 消息（`array of map` 嵌套结构）时 `MsgPackDecoder.swift:362` fatal error（`Unexpectedly found nil while unwrapping an Optional value`）；解码 `start_job` 的 `confidence_threshold` 字段（fixstr(20) key）时 key 被误读为整数 116。
+  - `fumoboy007/msgpack-swift` 2.0.6：解码 `entries` 消息（`array of Codable struct`）时报 `extraBytesAtEndOfMessage(18)`，array 内的 map 解码后多出 18 字节未消费。
+- **排查路径**：
+  1. `nnabeyang/swift-msgpack`：先发现 `decodeToDict`（AnyCodable 路径）对嵌套 array 崩溃；切到 Codable struct 路径同样失败（`DecodingError.keyNotFound: Key 'confidence' not found`，`confidence` 是 10 字符 fixstr key 在嵌套 map 里丢失）
+  2. 用独立 SwiftPM 工程复现，确认非工程配置问题，是库本身的解码器 bug
+  3. 换 `fumoboy007/msgpack-swift`（Codable-based、有 msgpack-c 参考实现对比测试、声称 spec compliant），单层 map 解码正常，但嵌套 `array of Codable struct` 仍失败
+  4. 单独解码 `SubtitleItem`（单层 map）成功，确认问题在 `array of struct` 这一层
+- **根本原因**：两个 Swift MsgPack 库的 Codable 解码器在处理「map 内嵌 array 内嵌 map」结构时都有 bug。Python `msgpack` 生成的字节是标准合规的（`msgpack.unpackb` 能正确解码），但 Swift 端解码器在嵌套容器回溯时偏移了读指针。
+- **解决方案**：feat-015 暂不引入 MsgPack，继续用 JSON。JSON 跨语言兼容性有保证，且：
+  - 控制消息（start_job/progress/done）消息体小，JSON 开销可忽略
+  - `frame` 消息的 `jpeg_bytes` 用 base64 编码膨胀 33%，但 5 fps 下吞吐量可接受
+  - `entries` 消息批量推字幕，JSON 完全够用
+- **后续**：ADR-0007c 修订版撤销；ADR-0007d 记录「继续用 JSON」决策。如未来需要 MsgPack，可考虑手写编解码（针对 7 类消息有限 schema，比通用库可控）。
+- **教训**：**跨语言兼容性测试不可省略**。单语言 roundtrip 测试会掩盖库 bug——Swift encode → Swift decode 用相同的（可能有 bug 的）编码/解码逻辑，两边对称错误互相抵消。只有用 Python 生成的字节喂给 Swift 解码，才能暴露解码器的不对称 bug。
+- **相关文件**：`docs/DECISIONS.md`（ADR-0007c 修订、ADR-0007d）、`docs/phases/phase2.json`（feat-015 evidence）
+
 
