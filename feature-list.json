@@ -12,7 +12,7 @@
           "id": "foundation",
           "name": "项目骨架与工具链",
           "description": "pyproject.toml + uv 初始化、包结构、init.sh 环境检查、README/ARCHITECTURE/AGENTS 文档、ruff/mypy/pytest 配置细化。是所有后续功能块的基座。",
-          "status": "in-progress",
+          "status": "done",
           "covers": [
             "feat-001",
             "feat-002",

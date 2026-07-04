@@ -41,8 +41,8 @@
       "dependencies": [
         "feat-010"
       ],
-      "status": "not-started",
-      "evidence": "",
+      "status": "done",
+      "evidence": "uv run ruff check . 通过；uv run mypy src tests 通过（37 source files）；uv run pytest 通过（108 passed + 4 skipped）；./init.sh 退出 0（8/8 通过）。docs/design/ 新增 3 份设计文档：pipeline.md（打轴与编排：双信号帧签名/三态状态机/时间轴构建/去重 3-pass/Pipeline 编排/配置参数表/已知限制）、ocr.md（OcrEngine Protocol/VisionOcrEngine PyObjC 桥接/setRecognitionLanguages_ 关键约束/优雅降级/MockOcrEngine/跨平台演进指引）、extractor.md（Extractor Protocol/FfmpegExtractor ffprobe+rawvideo pipe/流式迭代/系统依赖）。README.md 填充：项目简介/特性/环境要求/安装/使用（CLI 接入进行中标注）/CLI 参数表/开发指引/技术栈。docs/ARCHITECTURE.md 填充：设计原则/分层架构/模块布局/数据流（引用各 design 文档）/核心数据模型/Protocol 总览/技术栈/配置/已知限制/架构决策引用。AGENTS.md 验证命令段已在 feat-005 完成，本次无需改动。",
       "subtasks": [
         {
           "name": "README.md",
