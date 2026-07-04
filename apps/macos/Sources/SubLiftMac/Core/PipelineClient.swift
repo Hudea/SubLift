@@ -1,0 +1,221 @@
+import Foundation
+
+/// Pipeline IPC 客户端：负责启动 Python 子进程并经 UDS 通信。
+///
+/// feat-014 阶段实现骨架：
+/// - 启动 Python 子进程 (`python -m sublift.ipc.server --socket <path>`)
+/// - 经 Unix Domain Socket 连接
+/// - 发送 hello / 接收 bye 验证通道可用
+///
+/// feat-015 将 JSON 替换为 MsgPack；feat-016 将接入 Pipeline 帧流。
+public final class PipelineClient {
+    /// 消息分帧：4 字节大端无符号整数表示 body 长度。
+    static let lengthPrefixSize = 4
+
+    /// Python 子进程。
+    private var process: Process?
+    /// UDS socket 路径。
+    private(set) var socketPath: String = ""
+    /// 已连接的 socket 文件描述符。
+    private var socketFD: Int32 = -1
+
+    public init() {}
+
+    // MARK: - 消息编解码（纯函数，便于单测）
+
+    /// 把消息字典打包成分帧字节流：4 字节大端长度前缀 + UTF-8 JSON body。
+    public static func packMessage(_ message: [String: Any]) throws -> Data {
+        let body = try JSONSerialization.data(
+            withJSONObject: message,
+            options: [.sortedKeys]
+        )
+        var data = Data(capacity: lengthPrefixSize + body.count)
+        var length = UInt32(body.count).bigEndian
+        withUnsafeBytes(of: &length) { ptr in
+            data.append(contentsOf: ptr)
+        }
+        data.append(body)
+        return data
+    }
+
+    /// 从分帧字节流解析一条消息。
+    /// - Parameter data: 完整的分帧字节（长度前缀 + body）
+    /// - Returns: 解析后的消息字典；data 为空时返回 nil
+    public static func unpackMessage(_ data: Data) throws -> [String: Any]? {
+        guard !data.isEmpty else { return nil }
+        guard data.count >= lengthPrefixSize else {
+            throw PipelineClientError.incompleteLengthPrefix
+        }
+
+        let length = data.subdata(in: 0..<lengthPrefixSize).withUnsafeBytes { ptr in
+            ptr.load(as: UInt32.self).bigEndian
+        }
+
+        let bodyStart = lengthPrefixSize
+        let bodyEnd = bodyStart + Int(length)
+        guard data.count >= bodyEnd else {
+            throw PipelineClientError.incompleteBody
+        }
+
+        let body = data.subdata(in: bodyStart..<bodyEnd)
+        return try JSONSerialization.jsonObject(with: body) as? [String: Any]
+    }
+
+    // MARK: - 子进程管理（feat-014 骨架，跨进程验证留待手动测试）
+
+    /// 启动 Python 子进程并连接 UDS。
+    /// - Parameter pythonExecutable: Python 解释器路径（开发期默认 `.venv/bin/python`）
+    /// - Returns: 是否成功握手（发 hello 收 bye）
+    @discardableResult
+    public func start(pythonExecutable: String? = nil) throws -> Bool {
+        let resolvedPath = pythonExecutable ?? Self.defaultPythonPath
+        let socketPath = makeSocketPath()
+        self.socketPath = socketPath
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: resolvedPath)
+        process.arguments = ["-m", "sublift.ipc.server", "--socket", socketPath]
+        try process.run()
+        self.process = process
+
+        // 等待 socket 文件出现（最多 2 秒）
+        try waitForSocket(at: socketPath, timeout: 2.0)
+
+        // 连接 socket 并握手
+        socketFD = try connectUDS(path: socketPath)
+        return try handshake()
+    }
+
+    /// 停止子进程并清理资源。
+    public func stop() {
+        if socketFD >= 0 {
+            close(socketFD)
+            socketFD = -1
+        }
+        process?.terminate()
+        process = nil
+        if !socketPath.isEmpty {
+            unlink(socketPath)
+            socketPath = ""
+        }
+    }
+
+    // MARK: - Private
+
+    /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
+    /// TODO(feat-025): 打包时改为 embedded Python.framework 路径。
+    static let defaultPythonPath: String = {
+        let projectRoot = Bundle.main.bundlePath
+        return projectRoot + "/../../.venv/bin/python"
+    }()
+
+    private func makeSocketPath() -> String {
+        let tempDir = NSTemporaryDirectory()
+        return (tempDir as NSString).appendingPathComponent(
+            "sublift-\(UUID().uuidString.prefix(8)).sock"
+        )
+    }
+
+    private func waitForSocket(at path: String, timeout: TimeInterval) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if FileManager.default.fileExists(atPath: path) { return }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        throw PipelineClientError.serverStartTimeout
+    }
+
+    private func connectUDS(path: String) throws -> Int32 {
+        let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw PipelineClientError.socketCreateFailed(errno)
+        }
+
+        var addr = sockaddr_un()
+        addr.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = path.utf8CString
+        withUnsafeMutablePointer(to: &addr.sun_path) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: pathBytes.count) { dest in
+                pathBytes.withUnsafeBufferPointer { src in
+                    _ = memcpy(dest, src.baseAddress, src.count)
+                }
+            }
+        }
+
+        let result = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                connect(fd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+        guard result == 0 else {
+            close(fd)
+            throw PipelineClientError.socketConnectFailed(errno)
+        }
+        return fd
+    }
+
+    /// 握手：发 hello 收 bye。
+    private func handshake() throws -> Bool {
+        let hello: [String: Any] = ["type": "hello", "client": "sublift-mac"]
+        let packed = try Self.packMessage(hello)
+        try writeAll(packed)
+
+        guard let response = try readMessage() else {
+            return false
+        }
+        return (response["type"] as? String) == "bye"
+    }
+
+    /// 从 socket 读取一条分帧消息。
+    private func readMessage() throws -> [String: Any]? {
+        var lengthBytes = [UInt8](repeating: 0, count: Self.lengthPrefixSize)
+        let readResult = lengthBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard readResult == Self.lengthPrefixSize else { return nil }
+
+        let length = UInt32(lengthBytes[0]) << 24
+            | UInt32(lengthBytes[1]) << 16
+            | UInt32(lengthBytes[2]) << 8
+            | UInt32(lengthBytes[3])
+
+        var bodyBytes = [UInt8](repeating: 0, count: Int(length))
+        let bodyResult = bodyBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard bodyResult == Int(length) else { return nil }
+
+        let bodyData = Data(bodyBytes)
+        return try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+    }
+
+    /// 把 Data 全部写入 socket。
+    private func writeAll(_ data: Data) throws {
+        try data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) in
+            var sent = 0
+            while sent < data.count {
+                let n = send(
+                    socketFD,
+                    ptr.baseAddress?.advanced(by: sent),
+                    data.count - sent,
+                    0
+                )
+                guard n > 0 else {
+                    throw PipelineClientError.socketWriteFailed(errno)
+                }
+                sent += n
+            }
+        }
+    }
+}
+
+// MARK: - Errors
+
+public enum PipelineClientError: Error, Equatable {
+    case incompleteLengthPrefix
+    case incompleteBody
+    case serverStartTimeout
+    case socketCreateFailed(Int32)
+    case socketConnectFailed(Int32)
+    case socketWriteFailed(Int32)
+}
