@@ -9,6 +9,9 @@ struct SubLiftMacApp: App {
         WindowGroup {
             ContentView()
         }
+        Settings {
+            SettingsView()
+        }
     }
 }
 
@@ -28,7 +31,7 @@ struct ContentView: View {
     @StateObject private var editor = SubtitleEditor()
     @StateObject private var metadataLoader = VideoMetadataLoader()
     @StateObject private var regionModel = RegionSelectionModel()
-    @State private var useMockEngine = false
+    @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @State private var showFfmpegMissingAlert = false
 
     var body: some View {
@@ -187,7 +190,7 @@ struct ContentView: View {
                 Button {
                     extractor.extract(
                         videoURL: url,
-                        engine: useMockEngine ? "mock" : "vision",
+                        engine: defaultEngine,
                         regionBox: regionModel.regionBoxForIPC()
                     )
                 } label: {
@@ -201,9 +204,13 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                 }
 
-                Toggle("Mock 引擎", isOn: $useMockEngine)
-                    .toggleStyle(.checkbox)
-                    .disabled(extractor.isRunning)
+                Picker("", selection: $defaultEngine) {
+                    Text("Apple Vision").tag(OcrEngineName.vision)
+                    Text("Mock 引擎").tag(OcrEngineName.mock)
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                .disabled(extractor.isRunning)
 
                 Spacer()
 

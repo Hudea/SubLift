@@ -36,7 +36,7 @@ final class SubtitleExtractor: ObservableObject {
     func extract(
         videoURL: URL,
         fps: Int = 5,
-        engine: String = "vision",
+        engine: OcrEngineName = .vision,
         regionBox: RegionBox? = nil
     ) {
         guard !isRunning else { return }
@@ -61,7 +61,7 @@ final class SubtitleExtractor: ObservableObject {
     private func runExtract(
         videoURL: URL,
         fps: Int,
-        engine: String,
+        engine: OcrEngineName,
         regionBox: RegionBox?
     ) async {
         do {
@@ -70,7 +70,7 @@ final class SubtitleExtractor: ObservableObject {
             status = .startingServer
             // IPC 调用是同步阻塞的，放到 detached task 里跑，让 main actor 能刷新 UI
             _ = try await runDetached { [client] in
-                try client.start(engine: engine)
+                try client.start(engine: engine.rawValue)
             }
             defer {
                 let client = self.client
@@ -86,7 +86,7 @@ final class SubtitleExtractor: ObservableObject {
             let startMsg = StartJobMessage(
                 videoId: videoId,
                 fps: Double(fps),
-                engine: .vision,
+                engine: engine,
                 confidenceThreshold: 0.5,
                 regionBox: regionBox,
                 durationMs: durationMs

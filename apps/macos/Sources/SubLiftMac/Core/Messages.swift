@@ -26,8 +26,9 @@ public enum MessageType: String, Codable {
 
 /// OCR 引擎标识，与 Python `ENGINES` 集合对齐。
 /// paddle 留待 Phase 3 跨平台实现。
-public enum OcrEngineName: String, Codable {
+public enum OcrEngineName: String, Codable, CaseIterable {
     case vision
+    case mock
 }
 
 // MARK: - LogLevel

@@ -290,9 +290,9 @@ feat-012 (AVF spike) ─┐
 
 ### 8.3 Phase 2c(编辑 + 导出,feat-021~024)
 
-- [ ] 字幕双击改文本、拖动改时间、合并/拆分生效
+- [x] 字幕双击改文本、合并/拆分生效（时间码调整按用户要求留待后续）
 - [x] Vision 检测字幕候选框、用户多选后提取使用合并 region_box（feat-022 done；Zootopia OCR 改善 benchmark 待补）
-- [ ] SettingsView 引擎切换持久化
+- [x] SettingsView 引擎切换持久化
 - [ ] SRT 导出可用 IINA/VLC 加载
 
 ### 8.4 Phase 2d(收尾 + 公证,feat-025~026)

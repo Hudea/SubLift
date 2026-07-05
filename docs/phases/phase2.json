@@ -119,8 +119,8 @@
       "description": "SettingsView.swift Picker 选 vision / mock;@AppStorage(\"default_engine\") 持久化;PipelineClient 启动时读取。前置:feat-016。",
       "module": "apps/macos/Sources/SubLiftMac/UI/SettingsView.swift",
       "dependencies": ["feat-016"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "feat-023 引擎选择落地：在 Messages.swift 的 OcrEngineName 中添加了 mock。新建 SettingsView 使用 @AppStorage(\"default_engine\")。根据建议，在 ContentView 提取按钮旁将 Toggle 替换为 Picker，双向绑定 defaultEngine，直观且支持记忆持久化。SubLiftMacApp 中注册了 Settings 视图。端到端 swift test 和 pytest 均全绿通过。"
     },
     {
       "id": "feat-024",
