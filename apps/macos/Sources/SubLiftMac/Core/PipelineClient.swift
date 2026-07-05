@@ -176,8 +176,19 @@ public final class PipelineClient {
     /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
     /// TODO(feat-025): 打包时改为 embedded Python.framework 路径。
     static let defaultPythonPath: String = {
-        let projectRoot = Bundle.main.bundlePath
-        return projectRoot + "/../../.venv/bin/python"
+        // 从 bundlePath 开始向上查找 .venv/bin/python
+        // - release: .build/release/ → 需上溯 3 级到项目根
+        // - debug: 同上
+        var currentURL = URL(fileURLWithPath: Bundle.main.bundlePath)
+        for _ in 0..<6 {
+            let candidate = currentURL.appendingPathComponent(".venv/bin/python")
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate.path
+            }
+            currentURL = currentURL.deletingLastPathComponent()
+        }
+        // 回退：旧逻辑
+        return Bundle.main.bundlePath + "/../../.venv/bin/python"
     }()
 
     private func makeSocketPath() -> String {
