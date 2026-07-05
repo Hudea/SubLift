@@ -18,6 +18,8 @@ from unittest.mock import patch
 import pytest
 from PIL import Image
 
+from sublift.detector.bottom_crop import BottomCropDetector
+from sublift.detector.fixed_region import FixedRegionDetector
 from sublift.ipc.bridge import MAX_JPEG_BYTES, BridgeHandler
 from sublift.ipc.protocol import (
     build_cancel_job,
@@ -68,6 +70,36 @@ class TestStartJob:
         response = _run(bridge, msg)
         assert response is not None
         assert response["type"] == "error"
+
+    def test_start_job_with_region_box_uses_fixed_detector(self) -> None:
+        bridge = _make_handler()
+        msg = build_start_job(
+            "V1", 5.0, "vision", 0.5, region_box=[0, 800, 1920, 200]
+        )
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert isinstance(bridge._pipeline._detector, FixedRegionDetector)
+
+    def test_start_job_without_region_box_uses_bottom_crop(self) -> None:
+        bridge = _make_handler()
+        msg = build_start_job("V1", 5.0, "vision", 0.5)
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert isinstance(bridge._pipeline._detector, BottomCropDetector)
+
+    def test_start_job_with_region_box_runs_pipeline(self) -> None:
+        bridge = _make_handler()
+        _run(
+            bridge,
+            build_start_job(
+                "V1", 5.0, "vision", 0.5, region_box=[0, 100, 320, 120]
+            ),
+        )
+        jpeg = _make_jpeg(width=320, height=240)
+        _run(bridge, build_frame("V1", 0, jpeg))
+        response = _run(bridge, build_finalize("V1"))
+        assert response is not None
+        assert response["type"] == "entries"
 
     def test_start_job_vision_unavailable_returns_done_error(self) -> None:
         """VisionOcrEngine 构造失败时应返回 done(ok=False)。"""

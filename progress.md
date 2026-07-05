@@ -3,33 +3,34 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-05
-- **当前功能：** Phase 2 macOS GUI;feat-021(字幕时间轴+列表+编辑)已完成
+- **当前功能：** Phase 2 macOS GUI;feat-022 已完成;下一任务 feat-023(引擎选择)
 - **分支：** apps/macos-gui
-- **说明：** feat-021 落地：SubtitleEntry(可编辑模型) + SubtitleEditor(ObservableObject) + SubtitleList(List+双击编辑+合并/拆分)。HSplitView 左右分栏。点击列表跳转视频 + 播放高亮(currentId 节流)。修复右侧列表点击卡顿(4 轮排查，见 HURDLES)。时间轴编辑已移除(用户决策)。下一任务 feat-022(区域框选)。
+- **说明：** feat-022 完整落地：Vision 候选框+预览多选+全宽 Y 带(022a);region_box 接入 start_job/bridge FixedRegionDetector(022b)。无选择时 nil 回退 bottom_crop。
 
 ## 进行中
 
-- (无,等待开始 feat-022)
+- (无,等待开始 feat-023)
 
 ## 近期完成（最近 5 个）
 
+- [x] feat-022：Vision 字幕区域检测 + 预览多选 + IPC 接线。111 Swift 测试全绿;bridge region_box 单测 3 条。
 - [x] feat-021：字幕时间轴 + 列表 + 编辑。SubtitleEntry(UUID+var) + SubtitleEditor(load/updateText/merge/split/currentId) + SubtitleList(List+双击编辑文本+合并/拆分)。HSplitView 布局。88 Swift 测试全绿。
 - [x] feat-020：拖拽导入 + 视频元数据解析。DropZone(.dropDestination) + VideoMetadataLoader(AVURLAsset/ffprobe 异步解析) + 元数据栏。73 Swift 测试全绿。
 - [x] feat-019：mkv 兜底 + 系统 ffmpeg 检测。FfmpegDetector+MjpegParser+FfmpegFrameSampler。mkv 端到端 47 条 7.2s，与 mp4 一致。59 Swift 测试全绿。
 - [x] feat-018：AVFoundation 抽帧 + IPC 帧流端到端。FrameSampler + SubtitleExtractor + entries 列表。120s 视频跑出 50 条字幕。49 Swift 测试全绿。
-- [x] feat-017：AVPlayer 视频预览 + 当前帧时间显示。VideoPreview + PlayerModel + VideoControlsView + TimeFormatter。43 Swift 测试全绿。
 
 ## 阻塞项 / 风险
 
 - [ ] **增量 OCR 改造（技术债）**：feat-018 采用流式抽帧 + 批量 OCR 务实方案。真增量（首条反馈 ≤10s）需重构 Pipeline 为滑动窗口模型：PixelDiffTimeliner 改为维护滚动状态，Pipeline 新增 process_frame() 增量接口，bridge.py 改为 push 模型。后续 Phase 2b 末或 Phase 3 处理。
 - [ ] **路由分发策略待研究**：feat-019 按扩展名分发（.mkv → ffmpeg，其他 → AVFoundation）。avi/flv/wmv 等冷门格式未覆盖。后续可改为「试 AVFoundation 失败再回退 ffmpeg」覆盖全格式，但需权衡 ~1s 失败延迟。
-- [ ] 字幕区域裁剪过宽（bottom_ratio=0.3，实际字幕在 80~87% 区域），英文新闻标题干扰 OCR → 准确率低，待调优
+- [ ] 字幕区域裁剪过宽 → feat-022 已接入提取；Zootopia 类样本 E2E OCR 改善待手动 benchmark
 - [ ] dHash 对中文判别力不足，漏分段 → 详见 HURDLES
 - [ ] OCR 锚帧落过渡画面，空文本 → 详见 HURDLES
 - [ ] feat-025 公证（embedded Python + hardened runtime）风险延后处理，先做 UI
 
 ## 近期决策
 
+- ADR-0008:feat-022 改为 Vision 候选框+用户多选;Y 由选中框推算,X 全宽;取消手动画框
 - ADR-0007c/d(独立决策):MsgPack 评估后撤销,继续用 JSON;不影响 feat-015 任务范围(7 类消息 schema 仍需定义)
 - ADR-0007:Phase 2 GUI 三项设计决策(run_frames 帧流接入 / Swift 端 SRT)
 - ADR-0004:任务粒度调整 22→10 粗任务,subtasks 字段承载细节,feat-004 置末

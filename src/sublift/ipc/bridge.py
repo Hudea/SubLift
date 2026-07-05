@@ -24,7 +24,9 @@ import logging
 from typing import Any
 
 from sublift.config import Config
+from sublift.detector.base import Detector
 from sublift.detector.bottom_crop import BottomCropDetector
+from sublift.detector.fixed_region import FixedRegionDetector
 from sublift.ipc.protocol import (
     MSG_CANCEL_JOB,
     MSG_FINALIZE,
@@ -37,7 +39,7 @@ from sublift.ipc.protocol import (
     build_progress,
     validate,
 )
-from sublift.models import Frame
+from sublift.models import BoundingBox, Frame
 from sublift.ocr.base import OcrEngine
 from sublift.pipeline.core import Pipeline
 
@@ -54,6 +56,17 @@ STAGE_READY = "ready"
 STAGE_FRAME_RECEIVED = "frame_received"
 STAGE_PROCESSING = "processing"
 STAGE_DONE = "done"
+
+
+def _build_detector(
+    region_box: list[int] | None,
+    config: Config,
+) -> Detector:
+    """按 start_job.region_box 选择检测器；无区域时回退下部裁剪。"""
+    if region_box is not None:
+        x, y, width, height = region_box
+        return FixedRegionDetector(BoundingBox(x=x, y=y, width=width, height=height))
+    return BottomCropDetector(bottom_ratio=config.region_bottom_ratio)
 
 
 class BridgeHandler:
@@ -146,11 +159,10 @@ class BridgeHandler:
             logger.exception("OCR 引擎构造失败")
             return build_done(self._video_id, ok=False, error=str(e))
 
+        detector = _build_detector(message.get("region_box"), config)
         # Pipeline 构造：帧流模式不需要 extractor
         self._pipeline = Pipeline(
-            detector=BottomCropDetector(
-                bottom_ratio=config.region_bottom_ratio
-            ),
+            detector=detector,
             ocr=ocr,
             config=config,
         )

@@ -33,10 +33,20 @@ final class SubtitleExtractor: ObservableObject {
         }
     }
 
-    func extract(videoURL: URL, fps: Int = 5, engine: String = "vision") {
+    func extract(
+        videoURL: URL,
+        fps: Int = 5,
+        engine: String = "vision",
+        regionBox: RegionBox? = nil
+    ) {
         guard !isRunning else { return }
         currentTask = Task { [weak self] in
-            await self?.runExtract(videoURL: videoURL, fps: fps, engine: engine)
+            await self?.runExtract(
+                videoURL: videoURL,
+                fps: fps,
+                engine: engine,
+                regionBox: regionBox
+            )
         }
     }
 
@@ -48,7 +58,12 @@ final class SubtitleExtractor: ObservableObject {
 
     // MARK: - Private
 
-    private func runExtract(videoURL: URL, fps: Int, engine: String) async {
+    private func runExtract(
+        videoURL: URL,
+        fps: Int,
+        engine: String,
+        regionBox: RegionBox?
+    ) async {
         do {
             let startTime = Date()
 
@@ -73,7 +88,7 @@ final class SubtitleExtractor: ObservableObject {
                 fps: Double(fps),
                 engine: .vision,
                 confidenceThreshold: 0.5,
-                regionBox: nil,
+                regionBox: regionBox,
                 durationMs: durationMs
             )
             _ = try await runDetached { [client] in

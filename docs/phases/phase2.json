@@ -94,12 +94,24 @@
     },
     {
       "id": "feat-022",
-      "name": "区域框选(鼠标画 Rectangle)→ 重新跑流水线",
-      "description": "RegionPicker.swift 用 DragGesture 在 Image 上画 Rectangle;输出新 Region,重新发 start_job 给 Python;进度条显示重新跑。前置:feat-021。",
-      "module": "apps/macos/Sources/SubLiftMac/UI/RegionPicker.swift",
+      "name": "Vision 字幕区域检测 + 预览叠加 + 用户多选",
+      "description": "加载视频后对代表帧跑 Vision 文字检测框;预览彩色叠加编号候选框;用户多选字幕框;按选中框推算 Y 区间、X 全宽合并 region_box 并接入 start_job/bridge(FixedRegionDetector);无选择回退 BottomCropDetector。不做手动画框(ADR-0008)。前置:feat-021。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/VisionTextDetector.swift, apps/macos/Sources/SubLiftMac/Core/RegionSelectionModel.swift, apps/macos/Sources/SubLiftMac/UI/RegionOverlay.swift, src/sublift/ipc/bridge.py",
       "dependencies": ["feat-021"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "subtasks": [
+        {
+          "name": "预览叠加 + 用户多选（Swift）",
+          "description": "VisionTextDetector + RegionSelectionModel + RegionOverlay + RegionCandidateList;代表帧检测;彩色编号框;多选;全宽 Y 带合并预览。",
+          "status": "done"
+        },
+        {
+          "name": "IPC + bridge 接线（feat-022b）",
+          "description": "mergedRegion→region_box[Int] 传入 SubtitleExtractor.start_job;bridge 按 region_box 选 FixedRegionDetector,否则 BottomCropDetector;无选择时 region_box=nil 允许提取并回退默认;frame.regionBox 保持 nil。",
+          "status": "done"
+        }
+      ],
+      "evidence": "feat-022 完整落地(022a 预览多选 + 022b IPC 接线):\n\n022a:\n- VisionTextDetector + RegionSelectionModel + RegionOverlay + RegionCandidateList\n- 代表帧 Vision 检测;彩色编号框;多选;mergedRegion(X全宽,Y选中区间)\n\n022b:\n- RegionMerger.regionBoxFromMergedRegion + RegionSelectionModel.regionBoxForIPC()\n- SubtitleExtractor.extract(regionBox:) → StartJobMessage.regionBox\n- ContentView 提取按钮传入 regionModel.regionBoxForIPC();无选择传 nil\n- bridge._build_detector():region_box→FixedRegionDetector,否则 BottomCropDetector\n\n验证:\n- swift test 98 swift-testing+13 XCTest=111 全绿\n- pytest test_ipc_bridge 20 passed(含 region_box detector 3 测)\n- ./init.sh 8/8 通过\n\n手动验收:拖入视频→多选字幕框→提取;region_box 传入 Python 裁剪识别。无选择时回退 bottom_ratio=0.3。"
     },
     {
       "id": "feat-023",

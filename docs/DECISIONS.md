@@ -5,6 +5,19 @@
 
 ---
 
+## ADR-0008 feat-022 字幕区域：Vision 候选框 + 用户多选（2026-07-05）
+
+- **背景**：feat-022 原计划为用户在预览上手动画矩形并重新跑流水线。用户反馈手动画框负担高、画错易导致识别失败；HURDLES 已记录 `bottom_ratio=0.3` 裁太宽问题，方案 3 为 Vision 自适应区域检测。
+- **决策**：
+  1. **取消手动画框**；改为代表帧上 **Vision 自动检测全部文字候选框**，预览以**彩色编号框**叠加展示。
+  2. 用户**多选**哪些候选框属于字幕（可排除新闻标题等误检）；支持多行字幕对应多框。
+  3. **区域推算**：**Y** 取选中框 min~max（加 padding）；**X MVP 固定全宽**（`x=0, width=video_width`）。
+  4. 检测与预览叠加在 **Swift 端**用 `VNRecognizeTextRequest` 实现（feat-022a）；合并后的 `region_box` 接入 `start_job` + `bridge` `FixedRegionDetector`（feat-022b，已完成）。
+- **理由**：兼顾自动化与用户可控；比纯启发式合并更抗误检；比手动画框更低门槛。X 全宽避免裁掉长字幕行。
+- **影响**：`RegionPicker`(手画) 改为 `RegionOverlay`+`RegionCandidateList`；`docs/phases/phase2.json` feat-022 重写；`docs/plans/phase2.md` 区域相关段落已同步（§6.2/§6.3/§7/§8.3/§9）。
+
+---
+
 ## ADR-0007 Phase 2 GUI 三项设计决策（2026-07-04）
 
 Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：

@@ -78,27 +78,27 @@
     {
       "id": "phase2",
       "name": "Phase 2 - macOS GUI",
-      "description": "交付可分发的 macOS .app：SwiftUI 壳 + Python UDS 子进程（Python 核心零修改）。AVFoundation 抽帧 + 系统 ffmpeg 兜底 mkv。包含拖拽导入、视频预览、字幕编辑、区域框选、SRT 导出、引擎选择。设计细节见 docs/plans/phase2.md，细粒度任务见 docs/phases/phase2.json。",
+      "description": "交付可分发的 macOS .app：SwiftUI 壳 + Python UDS 子进程（Python 核心零修改）。AVFoundation 抽帧 + 系统 ffmpeg 兜底 mkv。包含拖拽导入、视频预览、字幕编辑、Vision 字幕区域检测+预览多选、SRT 导出、引擎选择。设计细节见 docs/plans/phase2.md，细粒度任务见 docs/phases/phase2.json。",
       "detail_file": "docs/phases/phase2.json",
       "features": [
         {
           "id": "phase2.foundation",
           "name": "Phase 2 基础架构",
           "description": "双工程布局（apps/macos/ SwiftUI + 现有 src/sublift/ Python）；SwiftPM Package.swift；Python UDS 子进程骨架；IPC 协议 7 类消息 schema（JSON 序列化）；Python bridge 包装 Phase 1 Pipeline。覆盖 feat-012~016。",
-          "status": "in-progress",
+          "status": "done",
           "covers": ["feat-012", "feat-013", "feat-014", "feat-015", "feat-016"]
         },
         {
           "id": "phase2.preview",
           "name": "视频预览与抽帧",
           "description": "AVPlayer 视频预览；AVFoundation 抽帧（mp4/mov/H.264/HEVC 优先）；系统 ffmpeg 兜底 mkv；拖拽导入 + 元数据解析。覆盖 feat-017~020。",
-          "status": "not-started",
+          "status": "done",
           "covers": ["feat-017", "feat-018", "feat-019", "feat-020"]
         },
         {
           "id": "phase2.editor",
           "name": "字幕编辑与导出",
-          "description": "字幕时间轴 + 列表 + 编辑（双击改文本/拖动改时间/合并/拆分）；区域框选重跑流水线；引擎选择 + UserDefaults 持久化；SRT 导出（NSSavePanel）。覆盖 feat-021~024。",
+          "description": "字幕时间轴 + 列表 + 编辑（双击改文本/合并/拆分）；Vision 字幕区域检测 + 预览多选；引擎选择 + UserDefaults 持久化；SRT 导出（NSSavePanel）。覆盖 feat-021~024。",
           "status": "in-progress",
           "covers": ["feat-021", "feat-022", "feat-023", "feat-024"]
         },

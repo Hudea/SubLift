@@ -27,6 +27,7 @@ struct ContentView: View {
     @StateObject private var extractor = SubtitleExtractor()
     @StateObject private var editor = SubtitleEditor()
     @StateObject private var metadataLoader = VideoMetadataLoader()
+    @StateObject private var regionModel = RegionSelectionModel()
     @State private var useMockEngine = false
     @State private var showFfmpegMissingAlert = false
 
@@ -36,15 +37,13 @@ struct ContentView: View {
                 HSplitView {
                     // 左侧：预览 + 控制 + 元数据 + 提取
                     VStack(spacing: 0) {
-                        if playerModel.loadFailed {
-                            unsupportedPreview
-                        } else {
-                            VideoPreview(model: playerModel)
-                        }
+                        previewSection
                         Divider()
                         VideoControlsView(model: playerModel)
                         Divider()
                         metadataBar
+                        Divider()
+                        RegionCandidateList(model: regionModel)
                         Divider()
                         extractionBar(url: url)
                     }
@@ -73,6 +72,7 @@ struct ContentView: View {
         .onChange(of: videoURL) { newURL in
             playerModel.url = newURL
             editor.clear()
+            regionModel.clear()
             if let url = newURL {
                 Task { await metadataLoader.load(url: url) }
             } else {
@@ -91,11 +91,44 @@ struct ContentView: View {
         .onChange(of: playerModel.currentMs) { newMs in
             editor.updateCurrent(atMs: newMs)
         }
+        .onChange(of: metadataLoader.metadata) { meta in
+            guard let meta, let url = videoURL else { return }
+            let sampleSeconds = max(1.0, Double(meta.durationMs) / 2000.0)
+            Task {
+                await regionModel.detect(
+                    url: url,
+                    videoWidth: meta.width,
+                    videoHeight: meta.height,
+                    sampleSeconds: sampleSeconds
+                )
+            }
+        }
         .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
             Button("确定", role: .cancel) { }
         } message: {
             Text("mkv 视频需要 ffmpeg 支持。请先安装：\nbrew install ffmpeg\n\n安装后重新打开视频。")
         }
+    }
+
+    // MARK: - 预览（叠加 Vision 候选框）
+
+    @ViewBuilder
+    private var previewSection: some View {
+        let width = metadataLoader.metadata?.width ?? 0
+        let height = metadataLoader.metadata?.height ?? 0
+
+        PreviewRegionContainer(
+            regionModel: regionModel,
+            videoWidth: width,
+            videoHeight: height
+        ) {
+            if playerModel.loadFailed {
+                unsupportedPreview
+            } else {
+                VideoPreview(model: playerModel)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - 元数据栏
@@ -152,7 +185,11 @@ struct ContentView: View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button {
-                    extractor.extract(videoURL: url, engine: useMockEngine ? "mock" : "vision")
+                    extractor.extract(
+                        videoURL: url,
+                        engine: useMockEngine ? "mock" : "vision",
+                        regionBox: regionModel.regionBoxForIPC()
+                    )
                 } label: {
                     Label("提取字幕", systemImage: "text.viewfinder")
                 }

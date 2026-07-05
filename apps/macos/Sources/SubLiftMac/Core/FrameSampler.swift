@@ -31,6 +31,15 @@ enum FrameSampler {
         case encodeJPEGFailed
     }
 
+    /// 抽取指定时间点的单帧（用于预览检测 / 静态预览）。
+    static func captureFrameAt(url: URL, seconds: Double) async -> CGImage? {
+        if url.pathExtension.lowercased() == "mkv" {
+            return FfmpegFrameSampler.captureFrameAt(url: url, seconds: seconds)
+                .flatMap { $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+        }
+        return await captureFrameWithAVFoundation(url: url, seconds: seconds)
+    }
+
     /// 估算总帧数（用于进度条）。按扩展名路由。
     static func estimateFrameCount(url: URL, fps: Int) async -> Int {
         if url.pathExtension.lowercased() == "mkv" {
@@ -97,6 +106,23 @@ enum FrameSampler {
         ] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { return nil }
         return mutableData as Data
+    }
+
+    // MARK: - AVFoundation 单帧
+
+    private static func captureFrameWithAVFoundation(url: URL, seconds: Double) async -> CGImage? {
+        await withCheckedContinuation { continuation in
+            Task.detached(priority: .userInitiated) {
+                let asset = AVURLAsset(url: url)
+                let generator = AVAssetImageGenerator(asset: asset)
+                generator.appliesPreferredTrackTransform = true
+                let time = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
+                generator.generateCGImagesAsynchronously(forTimes: [NSValue(time: time)]) {
+                    _, image, _, _, _ in
+                    continuation.resume(returning: image)
+                }
+            }
+        }
     }
 
     // MARK: - Private

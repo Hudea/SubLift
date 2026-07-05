@@ -26,7 +26,7 @@
   - AVFoundation 抽帧(mp4/mov/H.264/HEVC 优先,VideoToolbox 硬解)
   - 系统 ffmpeg 兜底(mkv 等 AVFoundation 不支持的格式;缺失则弹窗引导)
   - 字幕时间轴 + 列表 + 编辑(双击改文本、拖动改 start_ms/end_ms、合并/拆分)
-  - 区域框选(鼠标在画面画 Rectangle)→ 重新跑流水线
+  - Vision 字幕区域检测 + 预览彩色叠加 + 用户多选候选框 → 推算全宽 Y 带 → 接入提取流水线
   - SettingsView(vision / mock 引擎选择,UserDefaults 持久化)
   - SRT 导出(`NSSavePanel`)
 - **Python 端**
@@ -48,7 +48,7 @@
 - Phase 3 跨平台(Windows / Linux)
 - App Store 上架(仅 Developer ID 直链分发;App Store 阶段再开 App Sandbox)
 - iCloud / 账户系统
-- 区域框选多边形(仅 MVP 单矩形)
+- 用户手动画矩形 / 区域多边形（改为 Vision 候选框多选，见 ADR-0008）
 
 ### 1.4 验收门
 
@@ -59,7 +59,7 @@
 - [ ] 字幕条目双击改文本、拖动改 start_ms/end_ms、合并/拆分生效
 - [ ] re-export SRT 与编辑后一致
 - [ ] SettingsView 切换 vision/mock,重启后保持
-- [ ] 区域框选新区域后重新跑流水线,列表更新
+- [ ] Vision 检测字幕候选框、用户多选后提取使用合并区域，列表更新
 
 #### 工具链
 - [ ] `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿(Python 端无回归)
@@ -83,7 +83,7 @@ SubLift/
           MainWindow.swift               # 三栏主窗口
           DropZone.swift                 # 拖拽导入
           VideoPreview.swift             # AVPlayerLayer 预览
-          RegionPicker.swift             # 区域框选
+          RegionOverlay.swift            # Vision 候选框预览叠加
           SubtitleList.swift             # 字幕列表 + 编辑
           SettingsView.swift             # 引擎选择
         Core/
@@ -221,7 +221,7 @@ Phase 1 `Extractor` Protocol 是「视频文件 → 帧迭代器」。Phase 2 �
 | **feat-019** | mkv 兜底 + 系统 ffmpeg 检测 | feat-018 | 拖入 mkv → 检测 ffmpeg → 抽帧 → IPC 跑通;缺失 ffmpeg 时弹窗引导 `brew install` |
 | **feat-020** | 拖拽导入(DropZone)+ 视频元数据解析 | feat-013, feat-018 | 拖入 mp4/mkv → 显示文件名/分辨率/时长/编码 |
 | **feat-021** | 字幕时间轴 + 列表 + 编辑(双击改文本/拖动改时间/合并/拆分) | feat-018 | 编辑后 re-export SRT 与编辑一致 |
-| **feat-022** | 区域框选(鼠标画 Rectangle)→ 重新跑流水线 | feat-021 | 框选新区域 → IPC 端用新 Region → 列表更新 |
+| **feat-022** | Vision 字幕区域检测 + 预览多选 → 接入提取 | feat-021 | 022a:彩色候选框多选+全宽 Y 预览;022b:start_job.region_box→FixedRegionDetector;无选择回退 bottom_crop |
 | **feat-023** | 引擎选择(SettingsView + UserDefaults) | feat-016 | 切换 vision/mock,持久化,重启后保持 |
 | **feat-024** | SRT 导出(`NSSavePanel`) | feat-021 | 导出 SRT 可在 IINA/VLC 正常加载 |
 | **feat-025** | `.app` 打包 + Developer ID 公证 spike | feat-019, feat-024 | 签名 + notarytool 上传 + Gatekeeper 通过;spike 报告 `docs/spikes/notarization-phase2.md` |
@@ -244,7 +244,7 @@ feat-012 (AVF spike) ─┐
                        │              └─ feat-018 (AVF + IPC 帧流 E2E) ─┐
                        │                                              ├─ feat-019 (mkv 兜底)
                        │                                              ├─ feat-021 (编辑)
-                       │                                              │      ├─ feat-022 (区域框选)
+                       │                                              │      ├─ feat-022 (Vision 区域检测+多选)
                        │                                              │      └─ feat-024 (SRT 导出)
                        │                                              │
                        │                                              └─ feat-025 (公证 spike)
@@ -255,7 +255,7 @@ feat-012 (AVF spike) ─┐
 
 - **Phase 2a 基础架构**(feat-012~016):双工程、UDS + MsgPack、Python bridge 把 Phase 1 Pipeline 接入
 - **Phase 2b 预览 + 抽帧**(feat-017~020):AVPlayer 预览、AVFoundation 抽帧、DropZone、mkv 兜底
-- **Phase 2c 编辑 + 导出**(feat-021~024):字幕编辑、区域框选、引擎选择、SRT 导出
+- **Phase 2c 编辑 + 导出**(feat-021~024):字幕编辑、Vision 字幕区域检测+预览多选、引擎选择、SRT 导出
 - **Phase 2d 收尾 + 公证**(feat-025~026):公证 spike、文档收尾、ADR 落定
 
 ## 7. 关键技术约束
@@ -269,7 +269,7 @@ feat-012 (AVF spike) ─┐
 | App Sandbox 关闭 | 法务 / App Store 上架 | MVP 不上 App Store,App Store 阶段再开 sandbox + 重做 IPC |
 | Apple Developer ID | $99/年付费账号 | CI 需 `APPLE_CERTIFICATE` / `APPLE_API_KEY` 等 secret 流转 |
 | macOS 13/14 行为差异 | AVFoundation 容器解析可能与 macOS 15 不同 | feat-012 spike 覆盖 13/14/15 三版本 |
-| 区域框选 UI | SwiftUI 自定义绘图较复杂 | MVP 简版(单矩形 DragGesture);多边形 v2 |
+| 字幕区域检测 UI | Vision 候选框叠加+多选;坐标换算 | ADR-0008:取消手画;Swift Vision 检测+RegionOverlay 彩色框;全宽 Y 带;无选择回退 bottom_crop |
 
 ## 8. 阶段验收门
 
@@ -291,7 +291,7 @@ feat-012 (AVF spike) ─┐
 ### 8.3 Phase 2c(编辑 + 导出,feat-021~024)
 
 - [ ] 字幕双击改文本、拖动改时间、合并/拆分生效
-- [ ] 区域框选新区域重新跑流水线
+- [x] Vision 检测字幕候选框、用户多选后提取使用合并 region_box（feat-022 done；Zootopia OCR 改善 benchmark 待补）
 - [ ] SettingsView 引擎切换持久化
 - [ ] SRT 导出可用 IINA/VLC 加载
 
@@ -313,7 +313,7 @@ feat-012 (AVF spike) ─┐
 | embedded Python + 公证不可行 | Phase 2 路线需重定 | feat-012/025 spike 早验证 | 待 spike |
 | ffmpeg 缺失需用户安装 | mkv 用户体验差 | 启动时检测 + 弹窗引导 | MVP 取舍 |
 | 10 秒首帧反馈难达 | 验收不通过 | Python 常驻 + 预热 + 降级 fps | 待 feat-018 benchmark |
-| 区域框选 UI 难用 | F23 体验差 | MVP 简版(单矩形) | MVP 取舍 |
+| Vision 区域误检/漏检 | 裁剪带不准影响 OCR | 用户多选候选框排除误检;无选择回退 bottom_crop | feat-022 已落地;启发式待调优 |
 | SwiftUI 与 Python 类型同步 | IPC schema 双写易错 | MsgPack 集中定义 + 双向手写序列化 | feat-015 设计 |
 | 跨平台演化(Phase 3) | UI 壳需可换 | UDS 边界是天然 API;Tauri 可平替 | 已留路 |
 | App Store 上架 | 需开 sandbox + 改 IPC | Phase 2 后置 | 已声明 |

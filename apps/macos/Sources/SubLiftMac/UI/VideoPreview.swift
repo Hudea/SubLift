@@ -201,7 +201,7 @@ final class PlayerModel: ObservableObject {
 // MARK: - VideoPreview (NSViewRepresentable)
 
 /// SwiftUI ↔ AVPlayerLayer 桥接。
-/// feat-017：播放预览；feat-022 将在此 layer 上叠加区域框选 Rectangle。
+/// feat-017：播放预览；feat-022 在 PreviewRegionContainer 上叠加 Vision 候选框。
 struct VideoPreview: NSViewRepresentable {
     @ObservedObject var model: PlayerModel
 
