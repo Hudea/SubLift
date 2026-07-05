@@ -13,6 +13,7 @@ import SwiftUI
 struct SubtitleList: View {
     @ObservedObject var editor: SubtitleEditor
     let onSeek: (Int) -> Void
+    let onExport: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -34,6 +35,12 @@ struct SubtitleList: View {
             Text("字幕（\(editor.entries.count) 条）")
                 .font(.headline)
             Spacer()
+            Button {
+                onExport()
+            } label: {
+                Label("导出 SRT", systemImage: "square.and.arrow.down")
+            }
+            .disabled(editor.entries.isEmpty)
             Button {
                 if let id = editor.selectedId, let idx = editor.entries.firstIndex(where: { $0.id == id }) {
                     editor.split(at: idx)

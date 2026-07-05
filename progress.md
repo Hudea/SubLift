@@ -5,13 +5,15 @@
 - **最后更新：** 2026-07-05
 - **当前功能：** Phase 2 macOS GUI
 - **分支：** apps/macos-gui
-- **说明：** 准备开始 feat-024（SRT 导出）。
+- **说明：** feat-024（SRT 导出）已完成。等待决定下一个任务（建议 feat-025 .app 打包 + 公证 spike，或先推进 feat-026 文档收尾）。
 
 ## 进行中
 
-- feat-024：SRT 导出（Swift 端直接格式化 + NSSavePanel）
+- 无
 
 ## 近期完成（最近 5 个）
+
+- [x] feat-024：SRT 导出（Swift 端直接格式化 + NSSavePanel）。117 Swift 测试全绿（含真实文件 I/O 测试），`./init.sh` 8/8 通过。
 
 - [x] feat-023：引擎选择。增加 SettingsView 并使用 `@AppStorage`，同时在 ContentView 的提取按钮旁放置 Picker 用于快速切换。
 

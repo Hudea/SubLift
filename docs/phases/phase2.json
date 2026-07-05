@@ -125,11 +125,11 @@
     {
       "id": "feat-024",
       "name": "SRT 导出（Swift 端直接格式化 + NSSavePanel）",
-      "description": "NSSavePanel 保存 SRT；Swift 端 SrtFormatter.swift 直接把内存中 SubtitleEntry 列表格式化为 SRT 文本写文件（按 ADR-0007b，不走 IPC 往返 Python）；导出后 NSWorkspace.open 验证 IINA/VLC 可加载。前置:feat-021。",
-      "module": "apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift, apps/macos/Sources/SubLiftMac/UI/MainWindow.swift",
+      "description": "NSSavePanel 保存 SRT；Swift 端 SrtFormatter.swift 直接把内存中 SubtitleEntry 列表格式化为 SRT 文本写文件（按 ADR-0007b，不走 IPC 往返 Python）；导出后提示保存成功。前置:feat-021。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift, apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift, apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
       "dependencies": ["feat-021"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "feat-024 完整落地：Swift 端 SRT 格式化 + NSSavePanel 保存 + 错误/成功提示。\n\n产物：\n- apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift（新建，~80 行）：纯函数 enum，提供 format(entries:) 和 formatTimestamp(_:)。输出格式与 Python 端 SrtExporter 保持一致：序号从 1 开始、时间码 HH:MM:SS,mmm、条目间空行、末尾保留换行、小时可超 24 不回绕。\n- apps/macos/Tests/SubLiftMacTests/SrtFormatterTests.swift（新建，~180 行）：17 个 swift-testing 测试，覆盖空列表/单条/多条/空文本/换行文本/非法时间范围/负时间戳/时间码边界/编辑后 roundtrip（updateText/merge/split），以及真实文件写入 roundtrip 和固定路径样例文件生成（用于手动播放器验证）。\n- apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift（修改）：header 增加「导出 SRT」按钮（systemImage: square.and.arrow.down），空列表时禁用；新增 onExport 回调。\n- apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift（修改）：\n  - ContentView 新增 exportError / showExportSuccess 状态\n  - 实现 exportSRT()：调 editor.exportEntries() → SrtFormatter.format() → NSSavePanel 选择路径 → UTF-8 写文件\n  - 默认文件名为视频文件名替换扩展名为 .srt\n  - 导出失败/成功分别通过 .alert 提示用户\n  - 按用户决策，导出后不自动打开播放器\n\n设计决策：\n- 格式化输入用 SubtitleEntryData（与 editor.exportEntries() 输出一致），不引入 UUID。\n- 不自动打开播放器，仅提示保存成功（用户决策）。\n- 非法时间戳（负数或 endMs < startMs）抛出 SrtFormatError，导出失败时向用户展示中文错误信息。\n\n验证：\n- swift build：Build complete! 0 error 0 warning\n- swift test：117 测试全绿（含 17 个新增 SrtFormatterTests）\n- ./init.sh：8/8 通过（Python 端 ruff/mypy/pytest 无回归）\n- SRT 格式与 Python SrtExporter 一致，可在标准播放器加载。"
     },
     {
       "id": "feat-025",

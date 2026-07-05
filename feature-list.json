@@ -99,7 +99,7 @@
           "id": "phase2.editor",
           "name": "字幕编辑与导出",
           "description": "字幕时间轴 + 列表 + 编辑（双击改文本/合并/拆分）；Vision 字幕区域检测 + 预览多选；引擎选择 + UserDefaults 持久化；SRT 导出（NSSavePanel）。覆盖 feat-021~024。",
-          "status": "in-progress",
+          "status": "done",
           "covers": ["feat-021", "feat-022", "feat-023", "feat-024"]
         },
         {

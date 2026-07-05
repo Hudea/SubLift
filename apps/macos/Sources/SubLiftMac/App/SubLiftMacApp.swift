@@ -33,6 +33,8 @@ struct ContentView: View {
     @StateObject private var regionModel = RegionSelectionModel()
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @State private var showFfmpegMissingAlert = false
+    @State private var exportError: String?
+    @State private var showExportSuccess = false
 
     var body: some View {
         Group {
@@ -53,13 +55,17 @@ struct ContentView: View {
                     .frame(minWidth: 400)
 
                     // 右侧：字幕列表 + 编辑
-                    SubtitleList(editor: editor) { ms in
-                        if playerModel.loadFailed {
-                            playerModel.fallbackSeek(toMs: ms)
-                        } else {
-                            playerModel.seek(toMs: ms)
-                        }
-                    }
+                    SubtitleList(
+                        editor: editor,
+                        onSeek: { ms in
+                            if playerModel.loadFailed {
+                                playerModel.fallbackSeek(toMs: ms)
+                            } else {
+                                playerModel.seek(toMs: ms)
+                            }
+                        },
+                        onExport: exportSRT
+                    )
                         .frame(minWidth: 360)
                 }
             } else {
@@ -110,6 +116,21 @@ struct ContentView: View {
             Button("确定", role: .cancel) { }
         } message: {
             Text("mkv 视频需要 ffmpeg 支持。请先安装：\nbrew install ffmpeg\n\n安装后重新打开视频。")
+        }
+        .alert("导出失败", isPresented: Binding(
+            get: { exportError != nil },
+            set: { if !$0 { exportError = nil } }
+        )) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            if let exportError {
+                Text(exportError)
+            }
+        }
+        .alert("导出成功", isPresented: $showExportSuccess) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text("SRT 字幕已保存。")
         }
     }
 
@@ -302,5 +323,32 @@ struct ContentView: View {
         if panel.runModal() == .OK {
             videoURL = panel.url
         }
+    }
+
+    private func exportSRT() {
+        let entries = editor.exportEntries()
+        guard !entries.isEmpty else { return }
+
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "srt")!]
+        panel.nameFieldStringValue = defaultSRTFilename()
+        panel.canCreateDirectories = true
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        do {
+            let srt = try SrtFormatter.format(entries: entries)
+            try srt.write(to: url, atomically: true, encoding: .utf8)
+            showExportSuccess = true
+        } catch let error as SrtFormatError {
+            exportError = error.localizedDescription
+        } catch {
+            exportError = "保存文件失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func defaultSRTFilename() -> String {
+        guard let videoURL else { return "subtitle.srt" }
+        return videoURL.deletingPathExtension().appendingPathExtension("srt").lastPathComponent
     }
 }
