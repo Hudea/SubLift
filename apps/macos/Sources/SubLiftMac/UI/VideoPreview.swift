@@ -28,6 +28,7 @@ final class PlayerModel: ObservableObject {
     private var timeObserverToken: Any?
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
+    private var pendingSeekMs: Int?
 
     deinit {
         if let token = timeObserverToken {
@@ -47,6 +48,7 @@ final class PlayerModel: ObservableObject {
         }
         statusObservation?.invalidate()
         rateObservation?.invalidate()
+        pendingSeekMs = nil
 
         let item = AVPlayerItem(url: url)
         let newPlayer: AVPlayer
@@ -70,6 +72,7 @@ final class PlayerModel: ObservableObject {
     private func unload() {
         player?.pause()
         player?.replaceCurrentItem(with: nil)
+        pendingSeekMs = nil
         currentMs = 0
         durationMs = 0
         isPlaying = false
@@ -85,7 +88,10 @@ final class PlayerModel: ObservableObject {
             forInterval: interval,
             queue: .main
         ) { [weak self] time in
-            self?.currentMs = Int(CMTimeGetSeconds(time) * 1000)
+            guard let self else { return }
+            if self.pendingSeekMs == nil {
+                self.currentMs = Int(CMTimeGetSeconds(time) * 1000)
+            }
         }
 
         // 播放速率变化 → isPlaying
@@ -138,6 +144,7 @@ final class PlayerModel: ObservableObject {
     /// - Parameter ms: 目标毫秒位置
     func fallbackSeek(toMs ms: Int) {
         guard loadFailed, let url = url else { return }
+        pendingSeekMs = nil
         currentMs = ms
 
         // 节流：避免拖动进度条时频繁 spawn ffmpeg
@@ -150,7 +157,7 @@ final class PlayerModel: ObservableObject {
             let secs = Double(ms) / 1000.0
             let image = FfmpegFrameSampler.captureFrameAt(url: url, seconds: secs)
 
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 self?.fallbackPreview = image
             }
         }
@@ -167,8 +174,27 @@ final class PlayerModel: ObservableObject {
     /// 跳转到指定毫秒位置。
     func seek(toMs ms: Int) {
         let target = CMTime(seconds: Double(ms) / 1000.0, preferredTimescale: 600)
-        player?.seek(to: target)
+        pendingSeekMs = ms
         currentMs = ms
+        guard let player else {
+            pendingSeekMs = nil
+            return
+        }
+        player.seek(
+            to: target,
+            toleranceBefore: .zero,
+            toleranceAfter: .zero
+        ) { [weak self] finished in
+            DispatchQueue.main.async {
+                guard let self, self.pendingSeekMs == ms else { return }
+                self.pendingSeekMs = nil
+                if finished {
+                    self.currentMs = ms
+                } else {
+                    self.currentMs = Int(CMTimeGetSeconds(player.currentTime()) * 1000)
+                }
+            }
+        }
     }
 }
 

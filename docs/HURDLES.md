@@ -111,4 +111,37 @@
 - **教训**：**跨语言兼容性测试不可省略**。单语言 roundtrip 测试会掩盖库 bug——Swift encode → Swift decode 用相同的（可能有 bug 的）编码/解码逻辑，两边对称错误互相抵消。只有用 Python 生成的字节喂给 Swift 解码，才能暴露解码器的不对称 bug。
 - **相关文件**：`docs/DECISIONS.md`（ADR-0007c 修订、ADR-0007d）、`docs/phases/phase2.json`（feat-015 evidence）
 
+---
 
+### feat-021 右侧字幕列表点击卡顿与双重高亮
+- **日期**：2026-07-05
+- **状态**：已修复（交互模型修正完成，feat-021 整体仍在进行中）
+- **关联 feature**：feat-021（字幕时间轴 + 列表 + 编辑）
+- **现象**：右侧字幕列表点击不跟手，点击与蓝色选中框出现之间有延迟；播放时出现浅蓝/深蓝两个高亮框不同步。
+- **排查路径**：
+  1. **10Hz 全列表重绘**：`PlayerModel.currentMs` 每 0.1s 发布，`SubtitleList` 直接 `@ObservedObject` 订阅 `PlayerModel` 会让右侧列表随播放时间整体 invalidation。修正为 `SubtitleList(editor:onSeek:)`，列表只接收 seek 回调，不再观察播放器。
+  2. **双状态视觉混淆**：`selectedId`（编辑选中）与 `currentId`（播放位置）是两个概念。蓝色系统选中框只保留给 `selectedId`；`currentId` 改为行左侧灰色细条，移除 `play.circle.fill`，避免被误解为第二个播放按钮/蓝框。
+  3. **点击后状态仍可能短暂不同步**：点击行时 `selectedId` 立即变蓝，但 AVPlayer seek 是异步的；旧的 periodic time observer 可能在 seek 完成前回写旧 `currentMs`，让播放位置细条短暂停在旧行。修正：选中变化时立即 `editor.updateCurrent(atMs: entry.startMs)`，`PlayerModel.seek` 增加 `pendingSeekMs`，seek 未完成前忽略旧 time observer，完成后再确认 `currentMs`。
+  4. **点击区域不稳定**：`List` 默认 row inset 会让蓝色 selection 背景大于 SwiftUI 内容视图；同时文本上的双击编辑手势会吃掉部分单击。修正：行使用 `.listRowInsets(EdgeInsets())`，把 padding 放到 `SubtitleRow` 内部，让 row 内容视图覆盖整块蓝色区域；文本双击改为 `simultaneousGesture`，不阻断单击选中。
+  5. **mkv 静态预览 seek 路径错误**：AVPlayer 失败进入 fallback 预览后，字幕列表点击仍调用普通 `seek`。修正：`ContentView` 在 `playerModel.loadFailed` 时走 `fallbackSeek(toMs:)`，同步更新静态预览时间点。
+  6. **合并/拆分后状态悬空**：`merge(at:)` 保留第一条 `id`，若选中/当前播放命中被合并任一条则指向合并条目；`split(at:)` 保留原 `id` 给前半段；新增状态修正避免 `selectedId/currentId` 指向不存在条目。
+- **当前实现**：`ContentView` 仍监听 `playerModel.currentMs`，但只调用 `editor.updateCurrent(atMs:)`；`SubtitleList` 只观察 `SubtitleEditor`。点击选中后立即同步当前播放细条，并通过 `onSeek(entry.startMs)` 跳转视频；整块 row selection 区域都参与点击命中。
+- **验证**：`./init.sh` 通过；默认 `swift test` 在授权用户级 SwiftPM/Clang 缓存写入后通过（13 XCTest + 88 swift-testing）；`swift build -c release` 通过且当前无 warning。
+- **相关文件**：`apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift`、`apps/macos/Sources/SubLiftMac/UI/VideoPreview.swift`、`apps/macos/Sources/SubLiftMac/Core/SubtitleEditor.swift`、`apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift`、`apps/macos/Tests/SubLiftMacTests/SubtitleEditorTests.swift`
+
+---
+
+### 普通 uv sync 修剪 Vision extra 导致 GUI OCR 启动失败
+- **日期**：2026-07-05
+- **状态**：已修复
+- **关联 feature**：Phase 2 macOS GUI（Vision 默认引擎）
+- **现象**：`swift build -c release && .build/release/SubLiftMac` 后，点击 Vision OCR 路径报错：`RuntimeError: Apple Vision 不可用... No module named 'objc'`。
+- **排查路径**：
+  1. `pyproject.toml` 中 `pyobjc-framework-Vision/Quartz` 属于 optional dependency group `vision`。
+  2. 旧版 `init.sh` 运行普通 `uv sync`；uv 会让 `.venv` 精确匹配当前依赖集，未带 extra 时可能卸载/修剪 `pyobjc-*`。
+  3. 只把同步阶段改成 `uv sync --extra vision` 还不够；后续 `uv run ...` 若不带 `--extra vision`，仍可能按默认依赖集重新同步并修剪 optional extra。
+  4. 当前 `.venv` 一度出现 `pyobjc_core` dist-info 存在但 `site-packages/objc` 目录缺失的半残状态，需强制重装 `pyobjc-core` 修复。
+- **根本原因**：GUI 默认使用 Vision 引擎，但标准初始化路径未固定 `vision` extra；uv 的精确同步语义会移除未声明在当前 extra 集中的包。
+- **解决方案**：`init.sh` 中依赖同步和所有 `uv run` 验证命令统一带 `--extra vision`；并执行 `uv sync --extra vision --reinstall-package pyobjc-core` 修复本地半残安装。
+- **验证**：`./init.sh` 通过；`.venv/bin/python -c 'import objc, Vision, Quartz'` 通过，随后再次运行 `./init.sh` 后直接导入仍通过。
+- **相关文件**：`init.sh`、`pyproject.toml`

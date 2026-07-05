@@ -54,7 +54,7 @@ final class SubtitleExtractor: ObservableObject {
 
             status = .startingServer
             // IPC 调用是同步阻塞的，放到 detached task 里跑，让 main actor 能刷新 UI
-            try await runDetached { [client] in
+            _ = try await runDetached { [client] in
                 try client.start(engine: engine)
             }
             defer {

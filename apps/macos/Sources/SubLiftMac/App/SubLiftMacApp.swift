@@ -25,30 +25,40 @@ struct ContentView: View {
     @State private var videoURL: URL?
     @StateObject private var playerModel = PlayerModel()
     @StateObject private var extractor = SubtitleExtractor()
+    @StateObject private var editor = SubtitleEditor()
     @StateObject private var metadataLoader = VideoMetadataLoader()
     @State private var useMockEngine = false
     @State private var showFfmpegMissingAlert = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
             if let url = videoURL {
-                VStack(spacing: 0) {
-                    if playerModel.loadFailed {
-                        unsupportedPreview
-                    } else {
-                        VideoPreview(model: playerModel)
+                HSplitView {
+                    // 左侧：预览 + 控制 + 元数据 + 提取
+                    VStack(spacing: 0) {
+                        if playerModel.loadFailed {
+                            unsupportedPreview
+                        } else {
+                            VideoPreview(model: playerModel)
+                        }
+                        Divider()
+                        VideoControlsView(model: playerModel)
+                        Divider()
+                        metadataBar
+                        Divider()
+                        extractionBar(url: url)
                     }
-                    Divider()
-                    VideoControlsView(model: playerModel)
-                    Divider()
-                    metadataBar
-                    Divider()
-                    extractionBar(url: url)
-                }
-                .frame(maxHeight: .infinity)
+                    .frame(minWidth: 400)
 
-                if !extractor.entries.isEmpty {
-                    entriesList
+                    // 右侧：字幕列表 + 编辑
+                    SubtitleList(editor: editor) { ms in
+                        if playerModel.loadFailed {
+                            playerModel.fallbackSeek(toMs: ms)
+                        } else {
+                            playerModel.seek(toMs: ms)
+                        }
+                    }
+                        .frame(minWidth: 360)
                 }
             } else {
                 emptyState
@@ -62,6 +72,7 @@ struct ContentView: View {
         }
         .onChange(of: videoURL) { newURL in
             playerModel.url = newURL
+            editor.clear()
             if let url = newURL {
                 Task { await metadataLoader.load(url: url) }
             } else {
@@ -71,6 +82,14 @@ struct ContentView: View {
                FfmpegDetector.detect() == nil {
                 showFfmpegMissingAlert = true
             }
+        }
+        .onChange(of: extractor.status) { newStatus in
+            if case .done = newStatus, !extractor.entries.isEmpty {
+                editor.load(extractor.entries)
+            }
+        }
+        .onChange(of: playerModel.currentMs) { newMs in
+            editor.updateCurrent(atMs: newMs)
         }
         .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
             Button("确定", role: .cancel) { }
@@ -125,42 +144,6 @@ struct ContentView: View {
         .font(.system(.caption, design: .monospaced))
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-    }
-
-    // MARK: - entries 列表（只读，feat-021 才做编辑）
-
-    private var entriesList: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("识别结果（\(extractor.entries.count) 条）")
-                    .font(.headline)
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-
-            Divider()
-
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(Array(extractor.entries.enumerated()), id: \.offset) { _, entry in
-                        HStack(alignment: .top, spacing: 8) {
-                            Text("\(TimeFormatter.formatMs(entry.startMs))")
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 110, alignment: .leading)
-                            Text(entry.text)
-                                .textSelection(.enabled)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 2)
-                    }
-                }
-                .padding(.vertical, 4)
-            }
-            .frame(maxHeight: 160)
-        }
-        .background(Color(nsColor: .textBackgroundColor))
     }
 
     // MARK: - 提取栏

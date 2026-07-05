@@ -3,21 +3,21 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-05
-- **当前功能：** Phase 2 macOS GUI;feat-020(拖拽导入+元数据解析)已完成
+- **当前功能：** Phase 2 macOS GUI;feat-021(字幕时间轴+列表+编辑)已完成
 - **分支：** apps/macos-gui
-- **说明：** feat-020 落地：DropZone(.dropDestination) + VideoMetadata(文件名/分辨率/时长/编码/大小) + 元数据栏。整个窗口支持拖拽。下一任务 feat-021（字幕时间轴+列表+编辑）。
+- **说明：** feat-021 落地：SubtitleEntry(可编辑模型) + SubtitleEditor(ObservableObject) + SubtitleList(List+双击编辑+合并/拆分)。HSplitView 左右分栏。点击列表跳转视频 + 播放高亮(currentId 节流)。修复右侧列表点击卡顿(4 轮排查，见 HURDLES)。时间轴编辑已移除(用户决策)。下一任务 feat-022(区域框选)。
 
 ## 进行中
 
-- (无,等待开始 feat-021)
+- (无,等待开始 feat-022)
 
 ## 近期完成（最近 5 个）
 
-- [x] feat-020：拖拽导入 + 视频元数据解析。DropZone(.dropDestination) + VideoMetadataLoader(AVURLAsset/ffprobe 异步解析) + 元数据栏(文件名/分辨率/时长/编码/大小)。73 Swift 测试全绿。
-- [x] feat-019：mkv 兜底 + 系统 ffmpeg 检测。FfmpegDetector+MjpegParser(纯函数切帧)+FfmpegFrameSampler。FrameSampler 按扩展名路由。mkv 预览 ffmpeg seek 逐帧。59 Swift 测试全绿。mkv 端到端 47 条字幕 7.2s，与 mp4 结果一致。
-- [x] feat-018：AVFoundation 抽帧 + IPC 帧流端到端。FrameSampler（AVAssetReader + JPEG q=85）+ SubtitleExtractor（@MainActor 协调器，IPC 调用 Task.detached 不阻塞 UI）+ entries 只读列表。真实 Vision OCR 120s 视频跑出 50 条字幕。49 Swift 测试全绿。
-- [x] feat-017：AVPlayer 视频预览 + 当前帧时间显示。VideoPreview.swift（NSViewRepresentable+AVPlayerLayer，为 feat-022 叠加层留路）+ PlayerModel + VideoControlsView + TimeFormatter。43 Swift 测试全绿。
-- [x] feat-016：Python bridge 接入 Pipeline。run_frames() + BridgeHandler(269行) + finalize 消息 + 安全限制。198 Python + 33 Swift 测试全绿。Swift→Python 完整 Pipeline 跨进程跑通。
+- [x] feat-021：字幕时间轴 + 列表 + 编辑。SubtitleEntry(UUID+var) + SubtitleEditor(load/updateText/merge/split/currentId) + SubtitleList(List+双击编辑文本+合并/拆分)。HSplitView 布局。88 Swift 测试全绿。
+- [x] feat-020：拖拽导入 + 视频元数据解析。DropZone(.dropDestination) + VideoMetadataLoader(AVURLAsset/ffprobe 异步解析) + 元数据栏。73 Swift 测试全绿。
+- [x] feat-019：mkv 兜底 + 系统 ffmpeg 检测。FfmpegDetector+MjpegParser+FfmpegFrameSampler。mkv 端到端 47 条 7.2s，与 mp4 一致。59 Swift 测试全绿。
+- [x] feat-018：AVFoundation 抽帧 + IPC 帧流端到端。FrameSampler + SubtitleExtractor + entries 列表。120s 视频跑出 50 条字幕。49 Swift 测试全绿。
+- [x] feat-017：AVPlayer 视频预览 + 当前帧时间显示。VideoPreview + PlayerModel + VideoControlsView + TimeFormatter。43 Swift 测试全绿。
 
 ## 阻塞项 / 风险
 
