@@ -31,8 +31,11 @@ enum FrameSampler {
         case encodeJPEGFailed
     }
 
-    /// 估算总帧数（用于进度条）。
+    /// 估算总帧数（用于进度条）。按扩展名路由。
     static func estimateFrameCount(url: URL, fps: Int) async -> Int {
+        if url.pathExtension.lowercased() == "mkv" {
+            return await FfmpegFrameSampler.estimateFrameCount(url: url, fps: fps)
+        }
         let asset = AVURLAsset(url: url)
         let cmDuration = try? await asset.load(.duration)
         guard let cmDuration = cmDuration else { return 0 }
@@ -41,14 +44,25 @@ enum FrameSampler {
         return Int(duration * Double(fps))
     }
 
+    /// 抽帧入口：按文件扩展名路由到 AVFoundation 或 ffmpeg。
+    ///
+    /// - .mkv → FfmpegFrameSampler（AVFoundation 不支持 mkv 容器）
+    /// - 其他 → AVAssetReader（mp4/mov 全支持）
+    /// - Returns: (SampledFrame?, Error?) —— error 非 nil 时表示失败，frame 为 nil 且 error 为 nil 时表示结束
+    static func sample(url: URL, config: Config = .default) -> AsyncStream<(SampledFrame?, Error?)> {
+        if url.pathExtension.lowercased() == "mkv" {
+            return FfmpegFrameSampler.sample(url: url, config: config)
+        }
+        return sampleWithAVAssetReader(url: url, config: config)
+    }
+
     /// 用 AVAssetReader 抽帧，返回 AsyncStream。
     ///
     /// 基于 PTS 跳采样：每帧 PTS ≥ nextTargetMs 时取，然后 nextTargetMs += 1000/fps。
-    /// - Parameters:
-    ///   - url: 视频文件 URL
-    ///   - config: 抽帧参数
-    /// - Returns: (SampledFrame?, Error?) —— error 非 nil 时表示失败，frame 为 nil 且 error 为 nil 时表示结束
-    static func sample(url: URL, config: Config = .default) -> AsyncStream<(SampledFrame?, Error?)> {
+    static func sampleWithAVAssetReader(
+        url: URL,
+        config: Config = .default
+    ) -> AsyncStream<(SampledFrame?, Error?)> {
         AsyncStream { continuation in
             Task.detached(priority: .userInitiated) {
                 do {

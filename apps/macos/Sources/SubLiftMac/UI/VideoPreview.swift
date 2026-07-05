@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Combine
 import SwiftUI
 
@@ -10,6 +11,9 @@ final class PlayerModel: ObservableObject {
     @Published private(set) var durationMs: Int = 0
     @Published private(set) var isPlaying: Bool = false
     @Published private(set) var player: AVPlayer?
+    @Published private(set) var loadFailed: Bool = false
+    /// mkv 等 AVPlayer 不支持的格式：用 ffmpeg 抽首帧作为静态预览。
+    @Published private(set) var fallbackPreview: NSImage?
 
     var url: URL? {
         didSet {
@@ -54,6 +58,8 @@ final class PlayerModel: ObservableObject {
             player = newPlayer
         }
 
+        loadFailed = false
+        fallbackPreview = nil
         observePlayer(newPlayer)
         observeItem(item)
 
@@ -67,6 +73,7 @@ final class PlayerModel: ObservableObject {
         currentMs = 0
         durationMs = 0
         isPlaying = false
+        fallbackPreview = nil
     }
 
     // MARK: - 观察器
@@ -91,15 +98,65 @@ final class PlayerModel: ObservableObject {
 
     private func observeItem(_ item: AVPlayerItem) {
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
-            guard item.status == .readyToPlay else { return }
-            let secs = CMTimeGetSeconds(item.duration)
             DispatchQueue.main.async {
-                if secs.isFinite {
-                    self?.durationMs = Int(secs * 1000)
+                if item.status == .readyToPlay {
+                    self?.loadFailed = false
+                    self?.fallbackPreview = nil
+                    let secs = CMTimeGetSeconds(item.duration)
+                    if secs.isFinite {
+                        self?.durationMs = Int(secs * 1000)
+                    }
+                } else if item.status == .failed {
+                    self?.loadFailed = true
+                    // AVPlayer 失败时（如 mkv），用 ffmpeg 兜底预览
+                    self?.startFallbackMode()
                 }
             }
         }
     }
+
+    // MARK: - ffmpeg 兜底预览模式（mkv）
+
+    /// 进入 ffmpeg 兜底模式：用 ffprobe 取时长，ffmpeg 抽首帧。
+    private func startFallbackMode() {
+        guard let url = url,
+              FfmpegDetector.detect() != nil else { return }
+
+        // 用 ffprobe 取时长
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let durationMs = FfmpegFrameSampler.probeDurationMs(url: url)
+            let firstFrame = FfmpegFrameSampler.captureFrameAt(url: url, seconds: 0)
+
+            DispatchQueue.main.async {
+                self?.durationMs = durationMs
+                self?.fallbackPreview = firstFrame
+            }
+        }
+    }
+
+    /// ffmpeg 兜底模式下的 seek：用 ffmpeg 抽指定时间点的帧。
+    /// - Parameter ms: 目标毫秒位置
+    func fallbackSeek(toMs ms: Int) {
+        guard loadFailed, let url = url else { return }
+        currentMs = ms
+
+        // 节流：避免拖动进度条时频繁 spawn ffmpeg
+        fallbackSeekTask?.cancel()
+        fallbackSeekTask = Task.detached(priority: .userInitiated) { [weak self] in
+            // 间隔 100ms，避免拖动时每帧都 spawn
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            if Task.isCancelled { return }
+
+            let secs = Double(ms) / 1000.0
+            let image = FfmpegFrameSampler.captureFrameAt(url: url, seconds: secs)
+
+            await MainActor.run {
+                self?.fallbackPreview = image
+            }
+        }
+    }
+
+    private var fallbackSeekTask: Task<Void, Never>?
 
     // MARK: - 播放控制
 
@@ -171,17 +228,25 @@ struct VideoControlsView: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // fallback 模式下禁用播放/暂停（mkv 不支持播放）
             Button(action: { model.togglePlay() }) {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
                     .frame(width: 20)
             }
             .buttonStyle(.borderless)
             .keyboardShortcut(.space, modifiers: [])
+            .disabled(model.loadFailed)
 
             Slider(
                 value: Binding(
                     get: { Double(model.currentMs) },
-                    set: { model.seek(toMs: Int($0)) }
+                    set: { ms in
+                        if model.loadFailed {
+                            model.fallbackSeek(toMs: Int(ms))
+                        } else {
+                            model.seek(toMs: Int(ms))
+                        }
+                    }
                 ),
                 in: 0...Double(max(model.durationMs, 1))
             )

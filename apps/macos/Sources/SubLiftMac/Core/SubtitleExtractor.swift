@@ -63,7 +63,8 @@ final class SubtitleExtractor: ObservableObject {
             }
 
             let durationMs = await estimateDurationMs(url: videoURL)
-            let totalFrames = max(1, Int(Double(fps) * Double(durationMs) / 1000.0))
+            let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
+            let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
 
             // 1. start_job
@@ -98,11 +99,11 @@ final class SubtitleExtractor: ObservableObject {
                     try client.request(frameMsg, expecting: ProgressMessage.self)
                 }
                 frameCount += 1
-                let pct = min(Double(frameCount) / Double(totalFrames), 1.0)
+                let pct = min(Double(frameCount) / Double(totalFramesSafe), 1.0)
                 status = .sampling(
                     progress: pct,
                     frameCount: frameCount,
-                    totalFrames: totalFrames
+                    totalFrames: totalFramesSafe
                 )
             }
 
@@ -135,6 +136,11 @@ final class SubtitleExtractor: ObservableObject {
     }
 
     private func estimateDurationMs(url: URL) async -> Int {
+        if url.pathExtension.lowercased() == "mkv" {
+            // mkv 用 ffprobe 取时长（AVURLAsset.duration 对 mkv 不可靠）
+            let frames = await FrameSampler.estimateFrameCount(url: url, fps: 1)
+            return frames * 1000
+        }
         let asset = AVURLAsset(url: url)
         let cmDuration = try? await asset.load(.duration)
         guard let cmDuration = cmDuration else { return 0 }

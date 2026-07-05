@@ -26,12 +26,17 @@ struct ContentView: View {
     @StateObject private var playerModel = PlayerModel()
     @StateObject private var extractor = SubtitleExtractor()
     @State private var useMockEngine = false
+    @State private var showFfmpegMissingAlert = false
 
     var body: some View {
         VStack(spacing: 0) {
             if let url = videoURL {
                 VStack(spacing: 0) {
-                    VideoPreview(model: playerModel)
+                    if playerModel.loadFailed {
+                        unsupportedPreview
+                    } else {
+                        VideoPreview(model: playerModel)
+                    }
                     Divider()
                     VideoControlsView(model: playerModel)
                     Divider()
@@ -49,6 +54,15 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 480)
         .onChange(of: videoURL) { newURL in
             playerModel.url = newURL
+            if let url = newURL, url.pathExtension.lowercased() == "mkv",
+               FfmpegDetector.detect() == nil {
+                showFfmpegMissingAlert = true
+            }
+        }
+        .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
+            Button("确定", role: .cancel) { }
+        } message: {
+            Text("mkv 视频需要 ffmpeg 支持。请先安装：\nbrew install ffmpeg\n\n安装后重新打开视频。")
         }
     }
 
@@ -142,6 +156,34 @@ struct ContentView: View {
                 .foregroundStyle(.green)
         case .error(let msg):
             Text(msg).foregroundStyle(.red)
+        }
+    }
+
+    // MARK: - 不支持的预览（mkv 等 AVPlayer 无法播放的格式）
+
+    private var unsupportedPreview: some View {
+        ZStack {
+            Color.black
+
+            if let image = playerModel.fallbackPreview {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                ProgressView("正在提取预览帧...")
+                    .tint(.white)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            if playerModel.fallbackPreview != nil {
+                Text("静态预览（拖动进度条查看，mkv 不支持播放）")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+                    .padding(6)
+                    .background(Color.black.opacity(0.5))
+                    .padding(.bottom, 4)
+            }
         }
     }
 
