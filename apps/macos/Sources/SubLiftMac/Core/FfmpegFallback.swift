@@ -189,6 +189,84 @@ enum FfmpegFrameSampler {
         return Int(secs * 1000)
     }
 
+    /// 用 ffprobe 获取视频分辨率。
+    /// - Parameter url: 视频文件 URL
+    /// - Returns: (width, height)；失败返回 nil
+    static func probeDimensions(url: URL) -> (Int, Int)? {
+        guard let ffmpegPath = FfmpegDetector.detect() else { return nil }
+        let ffprobePath = (ffmpegPath as NSString).deletingLastPathComponent + "/ffprobe"
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffprobePath)
+        process.arguments = [
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height",
+            "-of", "csv=s=x:p=0",
+            url.path,
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+
+        let parts = output.split(separator: "x")
+        guard parts.count == 2,
+              let w = Int(parts[0]),
+              let h = Int(parts[1]) else { return nil }
+        return (w, h)
+    }
+
+    /// 用 ffprobe 获取视频编码名称。
+    /// - Parameter url: 视频文件 URL
+    /// - Returns: 编码名称（如 "h264"、"hevc"）；失败返回 nil
+    static func probeCodec(url: URL) -> String? {
+        guard let ffmpegPath = FfmpegDetector.detect() else { return nil }
+        let ffprobePath = (ffmpegPath as NSString).deletingLastPathComponent + "/ffprobe"
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: ffprobePath)
+        process.arguments = [
+            "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=codec_name",
+            "-of", "csv=p=0",
+            url.path,
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+
+        guard process.terminationStatus == 0 else { return nil }
+
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        guard let output = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+
+        return output.isEmpty ? nil : output
+    }
+
     /// spawn ffmpeg 抽帧，返回 AsyncStream。
     ///
     /// 命令：`ffmpeg -i <input> -vf fps=<fps> -f image2pipe -vcodec mjpeg -`

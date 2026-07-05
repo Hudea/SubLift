@@ -25,6 +25,7 @@ struct ContentView: View {
     @State private var videoURL: URL?
     @StateObject private var playerModel = PlayerModel()
     @StateObject private var extractor = SubtitleExtractor()
+    @StateObject private var metadataLoader = VideoMetadataLoader()
     @State private var useMockEngine = false
     @State private var showFfmpegMissingAlert = false
 
@@ -40,6 +41,8 @@ struct ContentView: View {
                     Divider()
                     VideoControlsView(model: playerModel)
                     Divider()
+                    metadataBar
+                    Divider()
                     extractionBar(url: url)
                 }
                 .frame(maxHeight: .infinity)
@@ -52,8 +55,18 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 480)
+        .dropDestination(for: URL.self) { items, _ in
+            guard let url = items.first else { return false }
+            videoURL = url
+            return true
+        }
         .onChange(of: videoURL) { newURL in
             playerModel.url = newURL
+            if let url = newURL {
+                Task { await metadataLoader.load(url: url) }
+            } else {
+                metadataLoader.clear()
+            }
             if let url = newURL, url.pathExtension.lowercased() == "mkv",
                FfmpegDetector.detect() == nil {
                 showFfmpegMissingAlert = true
@@ -64,6 +77,54 @@ struct ContentView: View {
         } message: {
             Text("mkv 视频需要 ffmpeg 支持。请先安装：\nbrew install ffmpeg\n\n安装后重新打开视频。")
         }
+    }
+
+    // MARK: - 元数据栏
+
+    private var metadataBar: some View {
+        HStack(spacing: 16) {
+            if let meta = metadataLoader.metadata {
+                Label {
+                    Text(meta.fileName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } icon: {
+                    Image(systemName: "film")
+                }
+
+                Divider()
+                    .frame(height: 14)
+
+                Label(VideoMetadata.formatResolution(width: meta.width, height: meta.height), systemImage: "aspectratio")
+
+                Divider()
+                    .frame(height: 14)
+
+                Label(TimeFormatter.formatMs(meta.durationMs), systemImage: "clock")
+
+                Divider()
+                    .frame(height: 14)
+
+                Label(meta.codec, systemImage: "cpu")
+
+                Divider()
+                    .frame(height: 14)
+
+                Label(VideoMetadata.formatFileSize(meta.fileSize), systemImage: "doc")
+
+                Spacer()
+            } else {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("解析元数据...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .font(.system(.caption, design: .monospaced))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
     }
 
     // MARK: - entries 列表（只读，feat-021 才做编辑）
