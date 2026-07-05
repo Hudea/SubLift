@@ -7,14 +7,17 @@
 
 ### 1.1 Phase 2 目标
 
-交付**可分发的 macOS `.app`**:从拖入视频到看到第一条识别结果 ≤ 10 秒,
+交付**可在开发者环境构建运行的 macOS GUI**:从拖入视频到看到第一条识别结果 ≤ 10 秒,
 字幕条目可在 UI 中编辑并重新导出为 SRT;Python 算法核心零修改,
-通过 UDS + MsgPack 与 SwiftUI 壳通信。
+通过 UDS + JSON 与 SwiftUI 壳通信。
+
+> 注意:Phase 2 **不做独立 `.app` 分发包与 Apple 公证**(feat-025 已跳过,见 ADR-0009)。
+> 用户可通过 SwiftPM 自行构建运行;打包/公证作为后续可选工作。
 
 ```
-[SwiftUI 主进程] ──UDS+MsgPack──> [Python 子进程]
-   (UI / 抽帧 / 编辑)              (Phase 1 Pipeline + Vision)
-```
+[SwiftUI 主进程] ──UDS+JSON──> [Python 子进程]
+   (UI / 抽帧 / 编辑)             (Phase 1 Pipeline + Vision)
+ ```
 
 ### 1.2 在范围内
 
@@ -25,18 +28,13 @@
   - AVPlayer 视频预览
   - AVFoundation 抽帧(mp4/mov/H.264/HEVC 优先,VideoToolbox 硬解)
   - 系统 ffmpeg 兜底(mkv 等 AVFoundation 不支持的格式;缺失则弹窗引导)
-  - 字幕时间轴 + 列表 + 编辑(双击改文本、拖动改 start_ms/end_ms、合并/拆分)
+  - 字幕时间轴 + 列表 + 编辑(双击改文本、合并/拆分)
   - Vision 字幕区域检测 + 预览彩色叠加 + 用户多选候选框 → 推算全宽 Y 带 → 接入提取流水线
   - SettingsView(vision / mock 引擎选择,UserDefaults 持久化)
   - SRT 导出(`NSSavePanel`)
 - **Python 端**
-  - `src/sublift/ipc/` 新模块:UDS server + MsgPack 协议 + bridge 把 Phase 1 Pipeline 包成 IPC handler
+  - `src/sublift/ipc/` 新模块:UDS server + JSON 协议 + bridge 把 Phase 1 Pipeline 包成 IPC handler
   - **Phase 1 核心模块(`pipeline/` / `extractor/` / `detector/` / `ocr/` / `export/` / `models.py` / `config.py`)零修改**
-- **打包 / 分发**
-  - SwiftPM `.build/release/SubLiftMac.app`
-  - embedded Python.framework + sublift 包
-  - `codesign --deep --options=runtime` + `xcrun notarytool` + `xcrun stapler`
-  - Developer ID 公证
 
 ### 1.3 不在范围内(MVP 后置 / 后续 Phase)
 
@@ -46,6 +44,7 @@
 - 配置文件 `sublift.toml`
 - 字幕翻译 / 实时直播 / 软字幕提取
 - Phase 3 跨平台(Windows / Linux)
+- 独立 `.app` 分发包与 Apple 公证（feat-025 已跳过，见 ADR-0009）
 - App Store 上架(仅 Developer ID 直链分发;App Store 阶段再开 App Sandbox)
 - iCloud / 账户系统
 - 用户手动画矩形 / 区域多边形（改为 Vision 候选框多选，见 ADR-0008）
@@ -53,19 +52,17 @@
 ### 1.4 验收门
 
 #### 功能
-- [ ] `.app` 通过 Developer ID + notarization + Gatekeeper 实测(feat-025 spike)
 - [ ] 1080p / 5fps / mp4 / Vision 引擎,拖入到首条识别结果 ≤ 10s
 - [ ] mkv 通过系统 ffmpeg 兜底跑通
-- [ ] 字幕条目双击改文本、拖动改 start_ms/end_ms、合并/拆分生效
+- [ ] 字幕条目双击改文本、合并/拆分生效
 - [ ] re-export SRT 与编辑后一致
 - [ ] SettingsView 切换 vision/mock,重启后保持
 - [ ] Vision 检测字幕候选框、用户多选后提取使用合并区域，列表更新
 
 #### 工具链
-- [ ] `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿(Python 端无回归)
-- [ ] `xcodebuild test` 全绿(Swift 端至少 IPC 单测 + UI smoke)
-- [ ] `./init.sh` 退出 0
-- [ ] `apps/macos/scripts/test_gui_e2e.sh` 端到端冒烟通过
+- [x] `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿(Python 端无回归)
+- [x] `swift test` 全绿(Swift 端 IPC 单测 + UI smoke)
+- [x] `./init.sh` 退出 0
 
 ## 2. 模块布局
 
@@ -74,37 +71,46 @@ SubLift/
   apps/                                  # NEW: macOS 端工程根
     macos/                              # NEW: SwiftUI 壳工程
       Package.swift                      # SwiftPM 入口(macOS 13+)
-      project.yml                        # xcodegen 配置(spike 后定)
       Sources/SubLiftMac/
         App/
-          SubLiftMacApp.swift            # @main 入口
-          AppDelegate.swift
+          SubLiftMacApp.swift            # @main 入口 + ContentView 组合
         UI/
-          MainWindow.swift               # 三栏主窗口
-          DropZone.swift                 # 拖拽导入
-          VideoPreview.swift             # AVPlayerLayer 预览
-          RegionOverlay.swift            # Vision 候选框预览叠加
-          SubtitleList.swift             # 字幕列表 + 编辑
+          DropZone.swift                 # 拖拽导入包装
+          VideoPreview.swift             # AVPlayerLayer 预览 + 控制条
+          RegionOverlay.swift            # Vision 候选框预览叠加 + 候选列表
+          SubtitleList.swift             # 字幕列表 + 编辑 + 导出按钮
           SettingsView.swift             # 引擎选择
+          TimeFormatter.swift            # 毫秒格式化工具
         Core/
-          PipelineClient.swift           # UDS + MsgPack 客户端
-          FrameSampler.swift             # AVFoundation 抽帧
-          FfmpegFallback.swift           # 系统 ffmpeg 兜底
-          RegionDetector.swift           # 框选 → Region
-          SubtitleEditor.swift           # 编辑模型
-        Resources/
-          Info.plist                     # 不开 sandbox + UDS 权限
-          entitlements.plist
-      Tests/                             # XCTest
-        IPCTests.swift
-        UISmokeTests.swift
-      scripts/
-        test_gui_e2e.sh                  # 端到端冒烟
+          PipelineClient.swift           # UDS + JSON 客户端
+          Messages.swift                 # IPC 消息 Codable 定义
+          FrameSampler.swift             # AVFoundation 抽帧 + JPEG 编码
+          FfmpegFallback.swift           # 系统 ffmpeg 检测 / MJPEG 切帧 / mkv 兜底
+          SubtitleExtractor.swift        # 抽帧 + IPC 端到端协调
+          SubtitleEditor.swift           # 字幕编辑模型
+          SubtitleEntry.swift            # 可编辑字幕条目模型
+          SrtFormatter.swift             # Swift 端 SRT 格式化
+          VisionTextDetector.swift       # Vision 文字候选框检测
+          RegionSelectionModel.swift     # 候选框多选与区域合并
+          VideoCoordinateMapper.swift    # 像素/视图/Vision 坐标换算
+          VideoMetadata.swift            # 视频元数据加载与格式化
+      Tests/SubLiftMacTests/             # swift-testing + XCTest
+        PipelineClientTests.swift        # JSON 分帧纯函数
+        PipelineClientIntegrationTests.swift  # 真实 Python 子进程集成
+        MessagesTests.swift              # IPC 消息 roundtrip
+        FrameSamplerTests.swift          # JPEG 编码
+        FfmpegFallbackTests.swift        # MJPEG 切帧
+        RegionGeometryTests.swift        # 坐标换算与区域合并
+        SubtitleEditorTests.swift        # 字幕编辑模型
+        SrtFormatterTests.swift          # SRT 格式化
+        TimeFormatterTests.swift         # 时间格式化
+        VideoMetadataTests.swift         # 元数据格式化
+        SmokeTests.swift                 # 编译占位
   src/sublift/                           # 现有(基本不动)
     ipc/                                 # NEW: Python 端 IPC server
       __init__.py
       server.py                          # UDS server 入口
-      protocol.py                        # MsgPack schema 常量与编解码
+      protocol.py                        # JSON schema 常量与编解码
       bridge.py                          # 把 Phase 1 Pipeline 包成 IPC handler
     # 以下模块 Phase 2 零修改:
     pipeline/  extractor/  detector/  ocr/  export/
@@ -143,12 +149,12 @@ SubLift/
    ↓
 [PipelineClient.on_entries] → @Published entries
    ↓
-[SubtitleList 显示 + 编辑](双击改文本 / 拖动改时间 / 合并 / 拆分)
-   ↓
-[NSSavePanel] → 调用 SrtExporter.export()
+[SubtitleList 显示 + 编辑](双击改文本 / 合并 / 拆分)
+    ↓
+[NSSavePanel] → Swift 端 SrtFormatter.format() 写文件
 ```
 
-## 4. IPC 协议(UDS + MsgPack)
+## 4. IPC 协议(UDS + JSON)
 
 ### 4.1 消息类型
 
@@ -214,20 +220,20 @@ Phase 1 `Extractor` Protocol 是「视频文件 → 帧迭代器」。Phase 2 �
 | **feat-012** | AVFoundation 抽帧 spike | — | 6 个测试素材(mp4-h264, mp4-hevc-8bit, mp4-hevc-10bit, mov-h264, mov-hevc, mkv-h264)跑通;mkv 触发 -11828 时切 ffmpeg;spike 报告 `docs/spikes/avf-phase2.md` |
 | **feat-013** | 双工程结构 + Package.swift | feat-012 | `swift build` 编译空 SwiftUI app 成功 |
 | **feat-014** | Python UDS service 启动骨架 | feat-013 | Swift 启动 Python 子进程,hello 消息往返 |
-| **feat-015** | IPC 协议 + MsgPack 序列化 | feat-014 | `start_job` / `frame` / `entries` / `progress` / `done` 五类消息序列化通过单测 |
+| **feat-015** | IPC 协议 + JSON 序列化 | feat-014 | `start_job` / `frame` / `entries` / `progress` / `done` 五类消息序列化通过单测 |
 | **feat-016** | Python bridge 包装 Phase 1 Pipeline | feat-015 | Swift 送 JPEG 帧流 → Python 端 Pipeline 跑通,收到 `entries` 消息 |
 | **feat-017** | 视频预览(AVPlayer)+ 当前帧时间显示 | feat-013 | 播放本地视频,显示当前帧时间戳(ms) |
 | **feat-018** | AVFoundation 抽帧 + IPC 帧流端到端 | feat-012, feat-016, feat-017 | 5 fps 抽 1080p mp4 5s,Python 端 Pipeline 跑通,首条结果返回 UI;首条识别结果 ≤ 10s benchmark 记录 |
 | **feat-019** | mkv 兜底 + 系统 ffmpeg 检测 | feat-018 | 拖入 mkv → 检测 ffmpeg → 抽帧 → IPC 跑通;缺失 ffmpeg 时弹窗引导 `brew install` |
 | **feat-020** | 拖拽导入(DropZone)+ 视频元数据解析 | feat-013, feat-018 | 拖入 mp4/mkv → 显示文件名/分辨率/时长/编码 |
-| **feat-021** | 字幕时间轴 + 列表 + 编辑(双击改文本/拖动改时间/合并/拆分) | feat-018 | 编辑后 re-export SRT 与编辑一致 |
+| **feat-021** | 字幕时间轴 + 列表 + 编辑(双击改文本/合并/拆分) | feat-018 | 编辑后 re-export SRT 与编辑一致 |
 | **feat-022** | Vision 字幕区域检测 + 预览多选 → 接入提取 | feat-021 | 022a:彩色候选框多选+全宽 Y 预览;022b:start_job.region_box→FixedRegionDetector;无选择回退 bottom_crop |
 | **feat-023** | 引擎选择(SettingsView + UserDefaults) | feat-016 | 切换 vision/mock,持久化,重启后保持 |
 | **feat-024** | SRT 导出(`NSSavePanel`) | feat-021 | 导出 SRT 可在 IINA/VLC 正常加载 |
-| **feat-025** | `.app` 打包 + Developer ID 公证 spike | feat-019, feat-024 | 签名 + notarytool 上传 + Gatekeeper 通过;spike 报告 `docs/spikes/notarization-phase2.md` |
-| **feat-026** | 文档收尾(ARCHITECTURE/REQUIREMENTS/DECISIONS/README) | feat-025 | 反映新工程,ADR-0005/0006 落定 |
+| **feat-025** | `.app` 打包 + Developer ID 公证 spike | feat-019, feat-024 | **已跳过**(ADR-0009):不做 embedded Python、codesign、notarytool、Gatekeeper 验证 |
+| **feat-026** | 文档收尾(ARCHITECTURE/REQUIREMENTS/DECISIONS/README/design) | feat-024 | 反映新工程,ADR-0005/0006 落定;README 不含 `.app` 安装段 |
 
-**合计 15 个粗任务(含 2 个 spike 报告)。**
+**合计 14 个粗任务(含 1 个已跳过的 spike)。
 
 ### 6.2 执行顺序
 
@@ -235,7 +241,7 @@ Phase 1 `Extractor` Protocol 是「视频文件 → 帧迭代器」。Phase 2 �
 feat-012 (AVF spike) ─┐
                        ├─ feat-013 (双工程 + SwiftPM)
                        │       ├─ feat-014 (UDS 骨架)
-                       │       │      └─ feat-015 (IPC + MsgPack)
+                       │       │      └─ feat-015 (IPC + JSON)
                        │       │             └─ feat-016 (Python bridge)
                        │       │                    └─ feat-023 (引擎选择)
                        │       ├─ feat-017 (AVPlayer 预览)
@@ -247,27 +253,26 @@ feat-012 (AVF spike) ─┐
                        │                                              │      ├─ feat-022 (Vision 区域检测+多选)
                        │                                              │      └─ feat-024 (SRT 导出)
                        │                                              │
-                       │                                              └─ feat-025 (公证 spike)
-                       │                                                     └─ feat-026 (文档)
+                       │                                              └─ feat-026 (文档收尾)
+                       │
+                       └─ feat-025 (公证 spike) —— 已跳过
 ```
 
 ### 6.3 里程碑切分
 
-- **Phase 2a 基础架构**(feat-012~016):双工程、UDS + MsgPack、Python bridge 把 Phase 1 Pipeline 接入
+- **Phase 2a 基础架构**(feat-012~016):双工程、UDS + JSON、Python bridge 把 Phase 1 Pipeline 接入
 - **Phase 2b 预览 + 抽帧**(feat-017~020):AVPlayer 预览、AVFoundation 抽帧、DropZone、mkv 兜底
 - **Phase 2c 编辑 + 导出**(feat-021~024):字幕编辑、Vision 字幕区域检测+预览多选、引擎选择、SRT 导出
-- **Phase 2d 收尾 + 公证**(feat-025~026):公证 spike、文档收尾、ADR 落定
+- **Phase 2d 文档收尾**(feat-026):ADR-0005/0006 落定、架构/需求/README/design 文档更新
 
 ## 7. 关键技术约束
 
 | 约束 | 说明 | 缓解 |
 |---|---|---|
-| 公证可行性 | embedded Python + hardened runtime 在 macOS 13+ 公开案例有限 | feat-012 / feat-025 双 spike 验证;失败则降级 PySide6 |
 | ffmpeg 缺失体验 | mkv 必须有 ffmpeg 才能处理 | 启动时 `which ffmpeg` 检测 + 弹窗引导;UI 禁用 mkv 拖入 |
 | 10 秒首帧反馈 | Python 进程冷启动 + Vision 初始化 + ffmpeg/AVF 抽帧流水线 | Python 进程常驻 + 预热 Vision + 并行抽帧与 OCR;降级 fps=3 |
 | JPEG q=85 对 OCR 精度 | 字幕边缘轻微模糊可能影响识别 | feat-018 spike:q=85 vs PNG 对 Vision CER 对比 |
 | App Sandbox 关闭 | 法务 / App Store 上架 | MVP 不上 App Store,App Store 阶段再开 sandbox + 重做 IPC |
-| Apple Developer ID | $99/年付费账号 | CI 需 `APPLE_CERTIFICATE` / `APPLE_API_KEY` 等 secret 流转 |
 | macOS 13/14 行为差异 | AVFoundation 容器解析可能与 macOS 15 不同 | feat-012 spike 覆盖 13/14/15 三版本 |
 | 字幕区域检测 UI | Vision 候选框叠加+多选;坐标换算 | ADR-0008:取消手画;Swift Vision 检测+RegionOverlay 彩色框;全宽 Y 带;无选择回退 bottom_crop |
 
@@ -275,45 +280,42 @@ feat-012 (AVF spike) ─┐
 
 ### 8.1 Phase 2a(基础架构,feat-012~016)
 
-- [ ] `swift build` 成功
-- [ ] Python UDS 子进程可被 Swift launch 并 hello/bye
-- [ ] 5 类消息序列化 Python + Swift 双向单测通过
-- [ ] Python bridge 跑通 Phase 1 Pipeline
-- [ ] Python 端 `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿
+- [x] `swift build` 成功
+- [x] Python UDS 子进程可被 Swift launch 并 hello/bye
+- [x] 5 类消息序列化 Python + Swift 双向单测通过
+- [x] Python bridge 跑通 Phase 1 Pipeline
+- [x] Python 端 `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿
 
 ### 8.2 Phase 2b(预览 + 抽帧,feat-017~020)
 
-- [ ] AVPlayer 播放本地视频,显示当前帧时间
-- [ ] 5 fps 抽 1080p mp4 5s,IPC 帧流 Python 端收到
-- [ ] mkv 走 ffmpeg 兜底
-- [ ] DropZone 显示元数据
+- [x] AVPlayer 播放本地视频,显示当前帧时间
+- [x] 5 fps 抽 1080p mp4 5s,IPC 帧流 Python 端收到
+- [x] mkv 走 ffmpeg 兜底
+- [x] DropZone 显示元数据
 
 ### 8.3 Phase 2c(编辑 + 导出,feat-021~024)
 
 - [x] 字幕双击改文本、合并/拆分生效（时间码调整按用户要求留待后续）
 - [x] Vision 检测字幕候选框、用户多选后提取使用合并 region_box（feat-022 done；Zootopia OCR 改善 benchmark 待补）
 - [x] SettingsView 引擎切换持久化
-- [ ] SRT 导出可用 IINA/VLC 加载
+- [x] SRT 导出可用 IINA/VLC 加载
 
-### 8.4 Phase 2d(收尾 + 公证,feat-025~026)
+### 8.4 Phase 2d(文档收尾,feat-026)
 
-- [ ] `.app` 通过 Developer ID + notarytool + Gatekeeper
-- [ ] `xcodebuild test` 全绿
-- [ ] `apps/macos/scripts/test_gui_e2e.sh` 通过
+- [ ] `swift test` 全绿(Swift 端 IPC 单测 + UI smoke)
 - [ ] `docs/ARCHITECTURE.md` 加 macOS 端工程章节
 - [ ] `docs/REQUIREMENTS.md` §3.4 状态推进
 - [ ] `docs/DECISIONS.md` 增 ADR-0005(GUI 架构)、ADR-0006(抽帧双方案)
-- [ ] `README.md` 加 GUI 截图 + `.app` 安装段
-- [ ] `docs/design/macos-gui.md` GUI 模块设计(与 `phase1.md` design 平齐)
+- [ ] `README.md` 加 GUI 用法段(不含 `.app` 分发)
+- [ ] `docs/design/macos-gui.md` GUI 模块设计(与 Phase 1 design 文档平齐)
 
 ## 9. 风险与权衡
 
 | 风险 | 影响 | 缓解 | 状态 |
 |---|---|---|---|
-| embedded Python + 公证不可行 | Phase 2 路线需重定 | feat-012/025 spike 早验证 | 待 spike |
 | ffmpeg 缺失需用户安装 | mkv 用户体验差 | 启动时检测 + 弹窗引导 | MVP 取舍 |
 | 10 秒首帧反馈难达 | 验收不通过 | Python 常驻 + 预热 + 降级 fps | 待 feat-018 benchmark |
 | Vision 区域误检/漏检 | 裁剪带不准影响 OCR | 用户多选候选框排除误检;无选择回退 bottom_crop | feat-022 已落地;启发式待调优 |
-| SwiftUI 与 Python 类型同步 | IPC schema 双写易错 | MsgPack 集中定义 + 双向手写序列化 | feat-015 设计 |
+| SwiftUI 与 Python 类型同步 | IPC schema 双写易错 | JSON 集中定义 + 双向手写序列化 | feat-015 已落地 |
 | 跨平台演化(Phase 3) | UI 壳需可换 | UDS 边界是天然 API;Tauri 可平替 | 已留路 |
 | App Store 上架 | 需开 sandbox + 改 IPC | Phase 2 后置 | 已声明 |

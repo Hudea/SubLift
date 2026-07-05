@@ -106,14 +106,14 @@
           "id": "phase2.distribution",
           "name": "打包与公证",
           "description": ".app 打包（SwiftPM .build/release）；embedded Python.framework；Developer ID + codesign + notarytool + stapler；另一台 Mac Gatekeeper 验证。覆盖 feat-025。",
-          "status": "not-started",
+          "status": "blocked",
           "covers": ["feat-025"]
         },
         {
           "id": "phase2.docs",
           "name": "文档收尾",
-          "description": "ARCHITECTURE 加 macOS 端工程章节；REQUIREMENTS 状态推进；DECISIONS 增 ADR-0005/0006；README 加 GUI 截图 + .app 安装段；macos-gui.md 设计文档。覆盖 feat-026。",
-          "status": "not-started",
+          "description": "ARCHITECTURE 加 macOS 端工程章节；REQUIREMENTS 状态推进；DECISIONS 增 ADR-0005/0006；README 加 GUI 用法段（不含.app 分发）；macos-gui.md 设计文档。覆盖 feat-026。",
+          "status": "done",
           "covers": ["feat-026"]
         }
       ]

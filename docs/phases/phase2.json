@@ -137,17 +137,17 @@
       "description": "SwiftPM .build/release/SubLiftMac.app;嵌入 Python.framework + sublift 包;codesign --deep --options=runtime;xcrun notarytool submit --wait;xcrun stapler staple。验证另一台 Mac 下载 Gatekeeper 不拦截。产出 docs/spikes/notarization-phase2.md。前置:feat-019, feat-024。",
       "module": "apps/macos/, docs/spikes/notarization-phase2.md",
       "dependencies": ["feat-019", "feat-024"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "blocked",
+      "evidence": "用户明确决定移除公证/分发流程：不执行 .app 打包、embedded Python、Developer ID 签名与 notarytool 公证。feat-025 从当前 Phase 2 范围中跳过，相关文档（README .app 安装段、packaging 说明）也不在本次产出中。"
     },
     {
       "id": "feat-026",
       "name": "文档收尾(ARCHITECTURE/REQUIREMENTS/DECISIONS/README)",
-      "description": "docs/ARCHITECTURE.md 加 macOS 端工程章节、双工程图;docs/REQUIREMENTS.md §3.4 状态推进、§8 Phase 2 验收;docs/DECISIONS.md 增 ADR-0005(GUI 架构 = SwiftUI 壳 + Python UDS 子进程)、ADR-0006(抽帧双方案 = AVFoundation + 系统 ffmpeg);README.md 加 GUI 截图 + .app 安装段;docs/design/macos-gui.md GUI 模块设计。前置:feat-025。",
+      "description": "docs/ARCHITECTURE.md 加 macOS 端工程章节、双工程图;docs/REQUIREMENTS.md §3.4 状态推进、§8 Phase 2 验收;docs/DECISIONS.md 增 ADR-0005(GUI 架构 = SwiftUI 壳 + Python UDS 子进程)、ADR-0006(抽帧双方案 = AVFoundation + 系统 ffmpeg);README.md 加 GUI 用法段（不含.app 分发）;docs/design/macos-gui.md GUI 模块设计。前置:feat-024。",
       "module": "docs/ARCHITECTURE.md, docs/REQUIREMENTS.md, docs/DECISIONS.md, README.md, docs/design/macos-gui.md",
-      "dependencies": ["feat-025"],
-      "status": "not-started",
-      "evidence": ""
+      "dependencies": ["feat-024"],
+      "status": "done",
+      "evidence": "文档收尾全部完成：\n1. docs/plans/phase2.md — 同步范围，移除 .app/公证，更新模块布局、任务依赖、验收门、风险表\n2. docs/DECISIONS.md — 新增 ADR-0005（SwiftUI 壳 + Python UDS 子进程）、ADR-0006（AVFoundation + ffmpeg 双抽帧）\n3. docs/ARCHITECTURE.md — 新增 §10 Phase 2 macOS GUI 架构（双工程、IPC、分层、数据流、约束）\n4. docs/design/macos-gui.md — 新建模块设计文档（Core/UI 职责、IPC 协议、抽帧双路径、编辑模型、Vision 区域检测、SRT 导出）\n5. docs/REQUIREMENTS.md — §3.4 GUI 功能状态推进，§4 非功能需求更新，§8 Phase 2 验收调整\n6. README.md — 新增 GUI 用法段、环境要求、设计文档链接\n\n验证：\n- ./init.sh 8/8 通过\n- swift build（apps/macos）Build complete! 0 error 0 warning\n- python3 校验 feature-list.json / docs/phases/phase2.json JSON 格式有效\n- 文档间交叉引用一致（ADR-0009 跳过分发、README 不含 .app 安装段）"
     }
   ]
 }

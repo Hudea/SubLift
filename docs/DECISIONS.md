@@ -5,6 +5,19 @@
 
 ---
 
+## ADR-0009 移除 Phase 2 .app 打包与 notarization 流程（2026-07-06）
+
+- **背景**：feat-025 原计划把 SwiftUI 工程打包为可分发 `.app`，并完成 Developer ID 签名 + `notarytool` 公证，使 Gatekeeper 放行。该流程需要 Apple Developer Program 会员、Developer ID 证书、embedded Python 运行时以及 hardened runtime 适配。
+- **决策**：**跳过 feat-025**，不做 `.app` 打包、embedded Python、签名与公证。Phase 2 当前范围止于「可在开发者环境通过 SwiftPM 构建并运行」的 macOS GUI，不产出面向终端用户的独立 `.app` 分发包。
+- **理由**：用户明确决定移除该流程；当前阶段优先完成 GUI 功能与文档收尾，避免引入证书、公证、embedded Python 等分发侧阻塞。
+- **影响**：
+  - `docs/phases/phase2.json` 中 feat-025 状态改为 `blocked`，并注明跳过原因；feat-026 依赖从 feat-025 改为 feat-024。
+  - `feature-list.json` 中 `phase2.distribution` 状态改为 `blocked`。
+  - `README.md` 与相关文档不再包含 `.app` 安装 / 分发段，仅描述 SwiftPM 构建运行方式。
+  - 未来如需分发，可重新开启 feat-025 或作为独立 release 工程处理。
+
+---
+
 ## ADR-0008 feat-022 字幕区域：Vision 候选框 + 用户多选（2026-07-05）
 
 - **背景**：feat-022 原计划为用户在预览上手动画矩形并重新跑流水线。用户反馈手动画框负担高、画错易导致识别失败；HURDLES 已记录 `bottom_ratio=0.3` 裁太宽问题，方案 3 为 Vision 自适应区域检测。
@@ -41,6 +54,42 @@ Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
 - **背景**：feat-015 原计划在 IPC 层引入 MsgPack 替换 JSON（plan §4.2）。评估两个 Swift MsgPack 库后，发现都有嵌套解码 bug（详见 HURDLES）。
 - **决策**：**不引入 MsgPack，继续用 JSON**（ADR-0007c 撤销引入，ADR-0007d 确认 JSON 为最终方案）。
 - **影响**：此决策**独立于 feat-015 任务范围**。feat-015 仍需定义 7 类消息的 JSON schema + 双向单测，只是序列化层用 JSON 而非 MsgPack。feat-015 因此从「MsgPack 序列化」重定义为「IPC 协议 7 类消息 schema（JSON 序列化）」。
+
+---
+
+## ADR-0006 Phase 2 抽帧双方案：AVFoundation 主路径 + 系统 ffmpeg 兜底（2026-07-03）
+
+- **背景**：Phase 2 GUI 需要从视频抽帧后通过 IPC 送 Python Pipeline。AVFoundation 是 macOS 原生方案，可利用 VideoToolbox 硬解且无需额外依赖；但 feat-012 spike 证明 AVFoundation 无法打开 mkv 容器（报错 `-11828` / `-12847`），而 SubLift 需要支持 mkv 输入。
+- **决策**：
+  1. **主路径**：mp4 / mov / H.264 / HEVC 走 `AVAssetReader` + `AVAssetReaderTrackOutput`，`CVPixelBuffer` → `CGImage` → JPEG q=0.85。
+  2. **兜底路径**：`.mkv` 及 AVFoundation 拒绝的容器走系统 `ffmpeg`，命令 `ffmpeg -i input -vf fps=5 -f image2pipe -vcodec mjpeg -`，stdout 为 MJPEG 流，按 SOI/EOI marker 切帧。
+  3. **运行时检测**：启动时 `which ffmpeg` 检测，缺失弹窗引导 `brew install ffmpeg`，UI 禁用 mkv 拖入。
+- **理由**：AVFoundation 覆盖 macOS 最常见格式且零额外依赖；ffmpeg 是 mkv 的通用解。按扩展名路由简单可靠，避免 AVFoundation 失败后再回退的 ~1s 延迟。
+- **影响**：
+  - `apps/macos/Sources/SubLiftMac/Core/FrameSampler.swift` 负责 AVFoundation 路径。
+  - `apps/macos/Sources/SubLiftMac/Core/FfmpegFallback.swift` 负责 ffmpeg 检测、MJPEG 切帧、mkv 抽帧与元数据探测。
+  - `apps/macos/Sources/SubLiftMac/Core/VideoMetadata.swift` 对 mp4/mov 用 AVURLAsset，对 mkv 用 ffprobe。
+  - `docs/plans/phase2.md` §5 更新为双方案描述。
+
+---
+
+## ADR-0005 Phase 2 GUI 架构：SwiftUI 壳 + Python UDS 子进程（2026-07-03）
+
+- **背景**：Phase 1 已交付可运行的 CLI Pipeline（Python）。Phase 2 需要 macOS GUI，目标是复用 Phase 1 算法核心，避免重写。
+- **决策**：
+  1. **双工程布局**：`apps/macos/` 新建 SwiftUI 工程，`src/sublift/` Python 工程保持不变。
+  2. **进程边界**：SwiftUI 主进程作为 UI 壳，通过 **Unix Domain Socket (UDS)** 与本机启动的 Python 子进程通信。
+  3. **Phase 1 核心零修改**：`pipeline/` / `extractor/` / `detector/` / `ocr/` / `export/` / `models.py` / `config.py` 不改动；新增 `src/sublift/ipc/` 模块把 Pipeline 包装为 IPC handler。
+  4. **序列化**：JSON（4 字节大端长度前缀分帧），见 ADR-0007c/d。
+- **理由**：
+  - 复用已验证的 Python 算法核心，降低 GUI 阶段风险。
+  - UDS 是本地进程间通信的轻量方案，不依赖网络，Swift 与 Python 都原生支持。
+  - 明确的分层边界为 Phase 3 跨平台留路：核心算法与 UI 壳解耦，未来可用 Tauri/Electron 替换 SwiftUI 而不动 Python 核心。
+- **影响**：
+  - `apps/macos/Sources/SubLiftMac/Core/PipelineClient.swift` 负责启动 Python 子进程与 UDS 通信。
+  - `src/sublift/ipc/server.py` / `protocol.py` / `bridge.py` 负责 Python 端 IPC 服务。
+  - `Pipeline.run_frames()` 新增（ADR-0007a），让 bridge 可以注入 Swift 送来的 JPEG 帧流。
+  - `docs/ARCHITECTURE.md` 增加 Phase 2 章节描述双工程 + IPC。
 
 ---
 
