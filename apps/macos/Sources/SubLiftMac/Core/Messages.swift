@@ -12,6 +12,7 @@ public enum MessageType: String, Codable {
     // Swift → Python
     case startJob = "start_job"
     case frame
+    case finalize
     case cancelJob = "cancel_job"
 
     // Python → Swift
@@ -24,9 +25,9 @@ public enum MessageType: String, Codable {
 // MARK: - Engine
 
 /// OCR 引擎标识，与 Python `ENGINES` 集合对齐。
+/// paddle 留待 Phase 3 跨平台实现。
 public enum OcrEngineName: String, Codable {
     case vision
-    case paddle
 }
 
 // MARK: - LogLevel
@@ -80,6 +81,7 @@ public struct StartJobMessage: Codable {
     public let engine: OcrEngineName
     public let confidenceThreshold: Double
     public let regionBox: RegionBox?
+    public let durationMs: Int
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -88,6 +90,7 @@ public struct StartJobMessage: Codable {
         case engine
         case confidenceThreshold = "confidence_threshold"
         case regionBox = "region_box"
+        case durationMs = "duration_ms"
     }
 
     public init(
@@ -95,7 +98,8 @@ public struct StartJobMessage: Codable {
         fps: Double,
         engine: OcrEngineName,
         confidenceThreshold: Double,
-        regionBox: RegionBox? = nil
+        regionBox: RegionBox? = nil,
+        durationMs: Int = 0
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -103,6 +107,7 @@ public struct StartJobMessage: Codable {
         self.engine = engine
         self.confidenceThreshold = confidenceThreshold
         self.regionBox = regionBox
+        self.durationMs = durationMs
     }
 }
 
@@ -148,6 +153,22 @@ public struct CancelJobMessage: Codable {
 
     public init(videoId: String) {
         self.type = .cancelJob
+        self.videoId = videoId
+    }
+}
+
+/// 帧流结束，开始跑 Pipeline。
+public struct FinalizeMessage: Codable {
+    public let type: MessageType
+    public let videoId: String
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case videoId = "video_id"
+    }
+
+    public init(videoId: String) {
+        self.type = .finalize
         self.videoId = videoId
     }
 }

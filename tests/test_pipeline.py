@@ -70,7 +70,7 @@ def _make_pipeline(
     detector = FixedRegionDetector(region)
     if config is None:
         config = Config()
-    return Pipeline(extractor=extractor, detector=detector, ocr=ocr, config=config)
+    return Pipeline(detector=detector, ocr=ocr, config=config, extractor=extractor)
 
 
 class TestPipelineEmpty:

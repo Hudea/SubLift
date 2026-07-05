@@ -1,13 +1,14 @@
 """SubLift IPC 消息协议 schema（JSON 序列化）。
 
-7 类业务消息 + 2 类握手控制消息，字段名 Python/Swift 双端对齐。
+8 类业务消息 + 2 类握手控制消息，字段名 Python/Swift 双端对齐。
 分帧由 server.py 的 read_message/write_message 负责（4 字节大端长度前缀 + UTF-8 JSON body），
 本模块只管消息体 schema：构造、校验、字段常量。
 
-消息总览（plan §4.1）：
+消息总览（plan §4.1 + feat-016 扩展）：
     Swift → Python:
         start_job   启动提取任务
         frame       推送一帧 JPEG
+        finalize    帧流结束，开始跑 Pipeline
         cancel_job  取消任务
     Python → Swift:
         progress    进度通知
@@ -28,6 +29,7 @@ type VideoId = str
 # 消息类型常量（Swift 端 MessageType enum 对齐）
 MSG_START_JOB = "start_job"
 MSG_FRAME = "frame"
+MSG_FINALIZE = "finalize"
 MSG_CANCEL_JOB = "cancel_job"
 MSG_PROGRESS = "progress"
 MSG_ENTRIES = "entries"
@@ -37,8 +39,8 @@ MSG_HELLO = "hello"
 MSG_BYE = "bye"
 MSG_ERROR = "error"
 
-# engine 合法值
-ENGINES = frozenset({"vision", "paddle"})
+# engine 合法值（paddle 留待 Phase 3 跨平台实现）
+ENGINES = frozenset({"vision"})
 
 # log level 合法值
 LOG_LEVELS = frozenset({"debug", "info", "warn", "error"})
@@ -69,15 +71,17 @@ def build_start_job(
     engine: str,
     confidence_threshold: float,
     region_box: list[int] | None = None,
+    duration_ms: int = 0,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
 
     Args:
         video_id: 任务标识（Swift 端 UUID.uuidString）。
         fps: 采样帧率。
-        engine: OCR 引擎名（"vision" / "paddle"）。
+        engine: OCR 引擎名（目前仅 "vision"）。
         confidence_threshold: OCR 置信度阈值。
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
+        duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
     """
     return {
         "type": MSG_START_JOB,
@@ -86,6 +90,7 @@ def build_start_job(
         "engine": engine,
         "confidence_threshold": confidence_threshold,
         "region_box": region_box,
+        "duration_ms": duration_ms,
     }
 
 
@@ -117,6 +122,11 @@ def build_frame(
 def build_cancel_job(video_id: VideoId) -> dict[str, Any]:
     """构造 cancel_job 消息。"""
     return {"type": MSG_CANCEL_JOB, "video_id": video_id}
+
+
+def build_finalize(video_id: VideoId) -> dict[str, Any]:
+    """构造 finalize 消息：通知 Python 帧流结束，开始跑 Pipeline。"""
+    return {"type": MSG_FINALIZE, "video_id": video_id}
 
 
 def build_progress(
@@ -227,11 +237,13 @@ def validate(message: dict[str, Any]) -> None:
             raise ProtocolError(f"engine 非法: {message['engine']!r}")
         _require_float(message, "confidence_threshold")
         _optional_region_box(message)
+        if "duration_ms" in message:
+            _require_int(message, "duration_ms")
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")
         _optional_region_box(message)
-    elif msg_type == MSG_CANCEL_JOB:
+    elif msg_type in (MSG_FINALIZE, MSG_CANCEL_JOB):
         pass
     elif msg_type == MSG_PROGRESS:
         _require_str(message, "stage")

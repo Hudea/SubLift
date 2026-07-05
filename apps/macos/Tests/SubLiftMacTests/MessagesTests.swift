@@ -15,7 +15,8 @@ struct MessagesTests {
             fps: 5.0,
             engine: .vision,
             confidenceThreshold: 0.5,
-            regionBox: [10, 20, 100, 200]
+            regionBox: [10, 20, 100, 200],
+            durationMs: 60000
         )
         let data = try MessageCodec.encode(msg)
         let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
@@ -25,6 +26,7 @@ struct MessagesTests {
         #expect(decoded.engine == .vision)
         #expect(decoded.confidenceThreshold == 0.5)
         #expect(decoded.regionBox == [10, 20, 100, 200])
+        #expect(decoded.durationMs == 60000)
     }
 
     @Test
@@ -32,13 +34,14 @@ struct MessagesTests {
         let msg = StartJobMessage(
             videoId: "V1",
             fps: 5.0,
-            engine: .paddle,
+            engine: .vision,
             confidenceThreshold: 0.8
         )
         let data = try MessageCodec.encode(msg)
         let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
 
         #expect(decoded.regionBox == nil)
+        #expect(decoded.durationMs == 0)
     }
 
     @Test
@@ -98,6 +101,26 @@ struct MessagesTests {
 
         #expect(decoded.videoId == "UUID-ABCD")
         #expect(decoded.type == .cancelJob)
+    }
+
+    @Test
+    func finalizeRoundtrip() throws {
+        let msg = FinalizeMessage(videoId: "UUID-ABCD")
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: FinalizeMessage.self)
+
+        #expect(decoded.videoId == "UUID-ABCD")
+        #expect(decoded.type == .finalize)
+    }
+
+    @Test
+    func finalizeFieldTypeIsFinalize() throws {
+        let msg = FinalizeMessage(videoId: "V1")
+        let data = try MessageCodec.encode(msg)
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["type"] as? String == "finalize")
+        #expect(json["video_id"] as? String == "V1")
     }
 
     // MARK: - Response Messages (Python → Swift)
@@ -227,6 +250,7 @@ struct MessagesTests {
     func messageTypeRawValues() {
         #expect(MessageType.startJob.rawValue == "start_job")
         #expect(MessageType.cancelJob.rawValue == "cancel_job")
+        #expect(MessageType.finalize.rawValue == "finalize")
         #expect(MessageType.hello.rawValue == "hello")
         #expect(MessageType.bye.rawValue == "bye")
         #expect(MessageType.error.rawValue == "error")
@@ -240,7 +264,6 @@ struct MessagesTests {
     @Test
     func ocrEngineRawValues() {
         #expect(OcrEngineName.vision.rawValue == "vision")
-        #expect(OcrEngineName.paddle.rawValue == "paddle")
     }
 
     @Test

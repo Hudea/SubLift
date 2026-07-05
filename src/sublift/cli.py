@@ -89,7 +89,7 @@ def _run_extract(
         confidence_threshold=confidence,
     )
 
-    pipeline = Pipeline(extractor, detector, ocr, config)
+    pipeline = Pipeline(detector=detector, ocr=ocr, config=config, extractor=extractor)
 
     print(f"提取字幕：{video}")
     print(f"采样率：{fps}fps  引擎：{engine}  置信度阈值：{confidence}")

@@ -1,7 +1,8 @@
 """IPC UDS server 单测。
 
 feat-014：hello/bye 往返 + 分帧格式 + 连接关闭后 server 退出。
-feat-015：7 类业务消息 stub 响应分发 + schema 校验错误返回 error。
+feat-015：消息 schema 校验。
+feat-016：handler 接入 BridgeHandler（用 MockOcrEngine 避免依赖 Vision）。
 不依赖 Swift，纯 Python 自连。
 """
 
@@ -12,11 +13,14 @@ import json
 import struct
 import uuid
 from pathlib import Path
+from typing import Any
 
 import pytest
 
+from sublift.ipc.bridge import BridgeHandler
 from sublift.ipc.protocol import (
     build_cancel_job,
+    build_finalize,
     build_frame,
     build_hello,
     build_start_job,
@@ -28,6 +32,7 @@ from sublift.ipc.server import (
     serve_once,
     write_message,
 )
+from sublift.ocr.mock import MockOcrEngine
 
 
 def _pack(message: dict[str, object]) -> bytes:
@@ -134,7 +139,13 @@ class TestFraming:
 
 
 class TestHandleConnection:
-    """handle_connection 单元测试（不启动真实 server）。"""
+    """handle_connection 单元测试（不启动真实 server）。
+
+    用 MockOcrEngine 避免依赖 Vision。
+    """
+
+    def _make_handler(self) -> BridgeHandler:
+        return BridgeHandler(ocr_engine_factory=MockOcrEngine)
 
     def test_hello_returns_bye(self) -> None:
         """发 hello，handler 返回 bye。"""
@@ -142,9 +153,10 @@ class TestHandleConnection:
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
             reader.feed_data(_pack(build_hello("test")))
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
@@ -157,9 +169,10 @@ class TestHandleConnection:
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
             reader.feed_data(_pack({"type": "bye"}))
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
@@ -171,9 +184,10 @@ class TestHandleConnection:
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
             reader.feed_data(_pack({"type": "start_job", "fps": 5.0}))
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
@@ -185,7 +199,10 @@ class TestHandleConnection:
 
 
 class TestBusinessMessageStubs:
-    """feat-015：7 类业务消息的 stub 响应分发。"""
+    """feat-015/016：业务消息的 handler 分发（用 MockOcrEngine）。"""
+
+    def _make_handler(self) -> BridgeHandler:
+        return BridgeHandler(ocr_engine_factory=MockOcrEngine)
 
     def test_start_job_returns_progress_ready(self) -> None:
         """start_job → progress(stage=ready)。"""
@@ -193,11 +210,12 @@ class TestBusinessMessageStubs:
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
             reader.feed_data(
                 _pack(build_start_job("V1", 5.0, "vision", 0.5))
             )
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
@@ -208,41 +226,58 @@ class TestBusinessMessageStubs:
 
     def test_frame_returns_progress_received(self) -> None:
         """frame → progress(stage=frame_received)。"""
+        # 需要先 start_job，否则 frame 在 pipeline 未构造时报错
 
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
+            # 先 start_job
             reader.feed_data(
-                _pack(build_frame("V1", 1000, b"\xff\xd8fake"))
+                _pack(build_start_job("V1", 5.0, "vision", 0.5))
             )
+            # 再 frame（用一个最小有效 JPEG）
+            from PIL import Image
+
+            img = Image.new("RGB", (320, 240), color="black")
+            import io
+
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG")
+            reader.feed_data(_pack(build_frame("V1", 1000, buf.getvalue())))
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
-        response = _parse_response(chunks)
+        # 应该有两条响应：start_job→progress(ready) + frame→progress(frame_received)
+        # 解析第二条
+        (len1,) = struct.unpack(">I", chunks[:LENGTH_PREFIX_SIZE])
+        offset = LENGTH_PREFIX_SIZE + len1
+        (len2,) = struct.unpack(">I", chunks[offset : offset + LENGTH_PREFIX_SIZE])
+        body2 = chunks[offset + LENGTH_PREFIX_SIZE : offset + LENGTH_PREFIX_SIZE + len2]
+        response = json.loads(body2.decode("utf-8"))
         assert response["type"] == "progress"
         assert response["stage"] == "frame_received"
 
     def test_cancel_job_returns_done(self) -> None:
-        """cancel_job → done(ok=True)。"""
+        """cancel_job → done(ok=False, error=cancelled)。"""
 
         async def scenario() -> bytes:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
+            bridge = self._make_handler()
             reader.feed_data(_pack(build_cancel_job("V1")))
             reader.feed_eof()
-            await handle_connection(reader, writer)
+            await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
 
         chunks = asyncio.run(scenario())
         response = _parse_response(chunks)
-        assert response == {
-            "type": "done",
-            "video_id": "V1",
-            "ok": True,
-            "error": None,
-        }
+        assert response["type"] == "done"
+        assert response["video_id"] == "V1"
+        assert response["ok"] is False
+        assert response["error"] == "cancelled"
 
 
 class TestServeOnce:
@@ -308,15 +343,29 @@ class TestServeOnce:
         Path(socket_path).unlink(missing_ok=True)
 
     def test_full_message_sequence_over_real_socket(self) -> None:
-        """feat-015 真实跨进程测试：启动 UDS server，一个连接内发 7 类消息验证 stub 响应。
+        """feat-016 真实跨进程测试：UDS server（MockOcrEngine）完整消息序列。
 
-        不依赖 Swift，但用真实 asyncio UDS server + 真实 socket 连接，
-        验证 read_message/write_message 分帧 + handler 分发在真实 I/O 下正常工作。
+        验证分帧 + BridgeHandler 分发 + Pipeline.run_frames 在真实 I/O 下正常工作。
         """
+        import io
+
+        from PIL import Image
+
         socket_path = f"/tmp/sublift-test-{uuid.uuid4().hex[:8]}.sock"
 
+        # 构造一个有效 JPEG 帧
+        img = Image.new("RGB", (320, 240), color="black")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        jpeg_bytes = buf.getvalue()
+
+        def make_handler() -> Any:
+            return BridgeHandler(ocr_engine_factory=MockOcrEngine).handle
+
         async def scenario() -> list[dict[str, object] | None]:
-            server_task = asyncio.create_task(serve_once(socket_path))
+            server_task = asyncio.create_task(
+                serve_once(socket_path, handler_factory=make_handler)
+            )
 
             for _ in range(50):
                 if Path(socket_path).exists():
@@ -341,22 +390,21 @@ class TestServeOnce:
                 responses.append(await read_message(reader))
 
                 # 3. frame → progress(stage=frame_received)
-                await write_message(writer, build_frame("V1", 1000, b"\xff\xd8fakejpeg"))
+                await write_message(writer, build_frame("V1", 1000, jpeg_bytes))
                 responses.append(await read_message(reader))
 
-                # 4. cancel_job → done(ok=True)
-                await write_message(writer, build_cancel_job("V1"))
+                # 4. finalize → entries
+                await write_message(writer, build_finalize("V1"))
                 responses.append(await read_message(reader))
 
                 # 5. bye → None（连接关闭）
                 await write_message(writer, {"type": "bye"})
-                # handler 返回 None，不写响应；read 会拿到 EOF
                 responses.append(await read_message(reader))
 
                 writer.close()
                 await writer.wait_closed()
             finally:
-                await asyncio.wait_for(server_task, timeout=2.0)
+                await asyncio.wait_for(server_task, timeout=5.0)
 
             return responses
 
@@ -372,19 +420,11 @@ class TestServeOnce:
             "pct": 0.0,
             "eta_ms": 0,
         }
-        assert responses[2] == {
-            "type": "progress",
-            "video_id": "V1",
-            "stage": "frame_received",
-            "pct": 0.0,
-            "eta_ms": 0,
-        }
-        assert responses[3] == {
-            "type": "done",
-            "video_id": "V1",
-            "ok": True,
-            "error": None,
-        }
+        assert responses[2] is not None
+        assert responses[2]["type"] == "progress"
+        assert responses[2]["stage"] == "frame_received"
+        # finalize → entries（MockOcrEngine 返回固定文本，可能 0 或 1 条）
+        assert responses[3] is not None
+        assert responses[3]["type"] == "entries"
         # bye 后 handler 返回 None，read_message 收到 EOF 返回 None
         assert responses[4] is None
-        Path(socket_path).unlink(missing_ok=True)

@@ -15,6 +15,7 @@ from sublift.ipc.protocol import (
     MSG_CANCEL_JOB,
     MSG_DONE,
     MSG_ENTRIES,
+    MSG_FINALIZE,
     MSG_FRAME,
     MSG_HELLO,
     MSG_LOG,
@@ -26,6 +27,7 @@ from sublift.ipc.protocol import (
     build_done,
     build_entries,
     build_error,
+    build_finalize,
     build_frame,
     build_hello,
     build_log,
@@ -51,6 +53,7 @@ class TestBuildAndValidate:
             build_frame(VIDEO_ID, 1000, b"\xff\xd8\xff\xe0fakejpeg"),
             build_frame(VIDEO_ID, 1000, b"\xff\xd8", region_box=[0, 0, 1920, 1080]),
             build_cancel_job(VIDEO_ID),
+            build_finalize(VIDEO_ID),
             build_progress(VIDEO_ID, "ready", 0.0, 0),
             build_entries(
                 VIDEO_ID,
@@ -69,6 +72,7 @@ class TestBuildAndValidate:
             "frame-no-region",
             "frame-with-region",
             "cancel_job",
+            "finalize",
             "progress",
             "entries",
             "log",
@@ -90,6 +94,7 @@ class TestStartJob:
             "engine": "vision",
             "confidence_threshold": 0.5,
             "region_box": [10, 20, 100, 200],
+            "duration_ms": 0,
         }
 
     def test_start_job_region_box_none(self) -> None:
@@ -162,6 +167,19 @@ class TestFrame:
         }
         with pytest.raises(ProtocolError, match="ts_ms"):
             validate(msg)
+
+
+class TestFinalize:
+    def test_finalize_fields(self) -> None:
+        msg = build_finalize(VIDEO_ID)
+        assert msg == {"type": MSG_FINALIZE, "video_id": VIDEO_ID}
+
+    def test_finalize_validate(self) -> None:
+        validate(build_finalize(VIDEO_ID))
+
+    def test_finalize_missing_video_id(self) -> None:
+        with pytest.raises(ProtocolError, match="video_id"):
+            validate({"type": MSG_FINALIZE})
 
 
 class TestCancelJob:

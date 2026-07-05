@@ -3,19 +3,19 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-05
-- **当前功能：** Phase 2 macOS GUI;feat-015(IPC 协议 7 类消息 schema)已完成
+- **当前功能：** Phase 2 macOS GUI;feat-016(Python bridge 接入 Pipeline)已完成
 - **分支：** apps/macos-gui
-- **说明：** feat-015 落地：7 类 IPC 消息 JSON schema（Python protocol.py + Swift Messages.swift Codable struct）+ server.py handler stub 响应分发 + 跨语言 fixture 单测。顺带改 Phase 1 SubtitleEntry 加 confidence。下一任务 feat-016（Python bridge 包装 Pipeline，接入 run_frames）。
+- **说明：** feat-016 落地：Pipeline.run_frames() + bridge.py(BridgeHandler) + finalize 消息 + 安全限制(MAX_FRAMES/MAX_JPEG_BYTES)。Swift→Python 端到端跨进程跑通字幕提取（start_job→frame×N→finalize→entries）。下一任务 feat-017（视频预览 AVPlayer）。
 
 ## 进行中
 
-- (无,等待开始 feat-016)
+- (无,等待开始 feat-017)
 
 ## 近期完成（最近 5 个）
 
-- [x] feat-015：IPC 协议 7 类消息 schema(JSON 序列化)。Python protocol.py(215 行) + Swift Messages.swift(245 行) + server.py handler stub 分发 + 48 Python + 18 Swift 单测。顺带改 Phase 1 SubtitleEntry 加 confidence(默认 1.0,向后兼容)。全量验证 177 passed + 29 passed。
-- [x] feat-015(MsgPack 评估):两个 Swift MsgPack 库都有嵌套解码 bug,跨语言测试暴露;决策继续用 JSON(ADR-0007c/d)。注:此为决策性产物,7 类消息 schema 定义重开为 feat-015 实质任务
-- [x] feat-014：Python UDS service 启动骨架(server.py 184 行 + PipelineClient.swift 221 行,10 Python + 9 Swift 测试,跨进程握手验证通过)
+- [x] feat-016：Python bridge 接入 Pipeline。run_frames() + BridgeHandler(269行) + finalize 消息 + 安全限制。198 Python + 33 Swift 测试全绿。Swift→Python 完整 Pipeline 跨进程跑通。
+- [x] feat-015：IPC 协议 7 类消息 schema(JSON 序列化)。Python protocol.py + Swift Messages.swift + server.py handler stub + 48 Python + 18 Swift 单测。顺带改 Phase 1 SubtitleEntry 加 confidence。
+- [x] feat-014：Python UDS service 启动骨架(server.py + PipelineClient.swift,跨进程握手验证通过)
 - [x] feat-013：双工程结构 + Package.swift(apps/macos/ SwiftUI 工程,swift build + test 全绿,Python 无回归)
 - [x] feat-012：AVFoundation 抽帧 spike(apps/macos/spikes/avf-spike/,6 素材实测,evidence 见 phase2.json)
 - [x] feat-011：CLI 接入 + 端到端验收(--engine 参数,8 CLI 单测,1080p 视频跑通,性能 16x 实时)

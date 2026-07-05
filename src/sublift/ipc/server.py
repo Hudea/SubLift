@@ -4,7 +4,7 @@ Swift GUI 端通过 `Process` 启动本模块作为子进程，经 Unix Domain S
 消息分帧：4 字节大端无符号长度前缀 + UTF-8 JSON body。
 feat-014：hello/bye 骨架握手验证通道可用。
 feat-015：handler 扩展为 9 类消息分发（7 业务 + 2 控制），业务消息返回 stub 响应。
-feat-016：将 handler 接入 Pipeline（stub 换成真实 Pipeline 调用）。
+feat-016：handler 接入真实 Pipeline（bridge.BridgeHandler）。
 """
 
 from __future__ import annotations
@@ -17,19 +17,6 @@ import struct
 import sys
 from collections.abc import Awaitable, Callable
 from typing import Any, Protocol
-
-from sublift.ipc.protocol import (
-    MSG_CANCEL_JOB,
-    MSG_FRAME,
-    MSG_HELLO,
-    MSG_START_JOB,
-    ProtocolError,
-    build_bye,
-    build_done,
-    build_error,
-    build_progress,
-    validate,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +84,13 @@ async def handle_connection(
     Args:
         reader: StreamReader。
         writer: StreamWriter。
-        handler: 消息处理回调，返回响应字典或 None（关闭连接）。None 时用默认分发 handler。
+        handler: 消息处理回调，返回响应字典或 None（关闭连接）。None 时用默认 BridgeHandler。
     """
     if handler is None:
-        handler = _default_handler
+        from sublift.ipc.bridge import BridgeHandler
+
+        bridge = BridgeHandler()
+        handler = bridge.handle
     peer = writer.get_extra_info("peername")
     logger.debug("UDS 连接已建立: %s", peer)
 
@@ -126,57 +116,28 @@ async def handle_connection(
         logger.debug("UDS 连接已关闭: %s", peer)
 
 
-async def _default_handler(message: dict[str, Any]) -> dict[str, Any] | None:
-    """默认消息分发 handler。
-
-    feat-015：9 类消息分发（7 业务 stub + 2 控制握手）。
-    业务消息先经 protocol.validate() 校验 schema，再返回 stub 响应。
-    feat-016 将把 stub 换成真实 Pipeline 调用。
-
-    Args:
-        message: 接收到的消息。
-
-    Returns:
-        响应消息字典，或 None 表示关闭连接。
-    """
-    msg_type = message.get("type")
-
-    if msg_type == MSG_HELLO:
-        return build_bye()
-    if msg_type == "bye":
-        return None
-
-    try:
-        validate(message)
-    except ProtocolError as e:
-        return build_error(str(e))
-
-    if msg_type == MSG_START_JOB:
-        video_id = message["video_id"]
-        return build_progress(video_id, "ready", 0.0, 0)
-    if msg_type == MSG_FRAME:
-        video_id = message["video_id"]
-        return build_progress(video_id, "frame_received", 0.0, 0)
-    if msg_type == MSG_CANCEL_JOB:
-        video_id = message["video_id"]
-        return build_done(video_id, ok=True)
-    if msg_type == "bye":
-        return None
-
-    return build_error(f"unknown type: {msg_type!r}")
-
-
-async def serve_once(socket_path: str) -> None:
-    """监听 UDS，处理单个连接后退出。
-
-    feat-014 骨架行为：接受一个连接，hello/bye 往返一次，关闭并退出。
-    feat-016 将改为持续监听。
+async def serve_once(
+    socket_path: str,
+    *,
+    handler_factory: Callable[[], Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]]]
+    | None = None,
+) -> None:
+    """监听 UDS，持续接受连接并处理。
 
     Args:
         socket_path: UDS 路径。
+        handler_factory: 可选的 handler 工厂函数，每次连接创建一个新 handler。
+            None 时用默认 BridgeHandler。
     """
+    if handler_factory is None:
+        from sublift.ipc.bridge import BridgeHandler
+
+        default_bridge = BridgeHandler()
+        handler_factory = lambda: default_bridge.handle  # noqa: E731
+
     server = await asyncio.start_unix_server(
-        lambda r, w: handle_connection(r, w), path=socket_path
+        lambda r, w: handle_connection(r, w, handler=handler_factory()),
+        path=socket_path,
     )
     logger.info("UDS server 监听中: %s", socket_path)
     try:
@@ -206,6 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="日志级别（默认 INFO）",
     )
+    parser.add_argument(
+        "--engine",
+        default="vision",
+        choices=["vision", "mock"],
+        help="OCR 引擎（默认 vision，测试可用 mock）",
+    )
     return parser
 
 
@@ -224,8 +191,19 @@ def main(argv: list[str] | None = None) -> None:
         stream=sys.stderr,
     )
 
+    # 根据 --engine 参数选择 OCR 引擎工厂
+    if args.engine == "mock":
+        from sublift.ipc.bridge import BridgeHandler
+        from sublift.ocr.mock import MockOcrEngine
+
+        handler_factory = lambda: BridgeHandler(  # noqa: E731
+            ocr_engine_factory=MockOcrEngine
+        ).handle
+    else:
+        handler_factory = None  # 默认用 VisionOcrEngine
+
     try:
-        asyncio.run(serve_once(args.socket))
+        asyncio.run(serve_once(args.socket, handler_factory=handler_factory))
     except KeyboardInterrupt:
         logger.info("收到中断信号，退出")
 

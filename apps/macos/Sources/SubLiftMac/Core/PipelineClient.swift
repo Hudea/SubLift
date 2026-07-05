@@ -98,20 +98,29 @@ public final class PipelineClient {
         return try JSONDecoder().decode(type, from: body)
     }
 
-    // MARK: - 子进程管理（feat-014 骨架，跨进程验证留待手动测试）
+    // MARK: - 子进程管理
 
     /// 启动 Python 子进程并连接 UDS。
-    /// - Parameter pythonExecutable: Python 解释器路径（开发期默认 `.venv/bin/python`）
+    /// - Parameters:
+    ///   - pythonExecutable: Python 解释器路径（开发期默认 `.venv/bin/python`）
+    ///   - engine: OCR 引擎（"vision" 或 "mock"，默认 "vision"）
     /// - Returns: 是否成功握手（发 hello 收 bye）
     @discardableResult
-    public func start(pythonExecutable: String? = nil) throws -> Bool {
+    public func start(
+        pythonExecutable: String? = nil,
+        engine: String = "vision"
+    ) throws -> Bool {
         let resolvedPath = pythonExecutable ?? Self.defaultPythonPath
         let socketPath = makeSocketPath()
         self.socketPath = socketPath
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: resolvedPath)
-        process.arguments = ["-m", "sublift.ipc.server", "--socket", socketPath]
+        process.arguments = [
+            "-m", "sublift.ipc.server",
+            "--socket", socketPath,
+            "--engine", engine,
+        ]
         try process.run()
         self.process = process
 
