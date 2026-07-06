@@ -52,6 +52,9 @@ htmlcov/
 .coverage.*
 .pytest_cache/
 
+# CLI 输出（临时生成）
+output.srt
+
 # Type checkers
 .mypy_cache/
 
@@ -82,3 +85,5 @@ playground.xcworkspace
 
 # Swift Package Manager
 # Package.resolved
+.build/
+.swiftpm/

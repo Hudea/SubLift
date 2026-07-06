@@ -48,8 +48,9 @@ class OcrResult:
 
 @dataclass(frozen=True)
 class SubtitleEntry:
-    """字幕条目，含起止时间与文本。"""
+    """字幕条目，含起止时间、文本与置信度。"""
 
     start_ms: int
     end_ms: int
     text: str
+    confidence: float = 1.0

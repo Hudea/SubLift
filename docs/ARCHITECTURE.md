@@ -129,11 +129,84 @@ video
 
 端到端实测基线（Zootopia clip, 1080p, 5fps）：打轴召回率 72.4%/精确率 100%，OCR 字符准确率 22.5%（主因是区域裁剪过宽，前 6 条无干扰时 CER=0%），性能 16x 实时。
 
-## 10. 架构决策
+## 10. Phase 2 macOS GUI 架构
+
+Phase 2 在 Phase 1 CLI 核心之上叠加 macOS GUI，采用 **SwiftUI 壳 + Python UDS 子进程** 的双工程布局（ADR-0005）。
+
+### 10.1 双工程布局
+
+```
+SubLift/
+  src/sublift/            # Phase 1 Python 核心（零修改）
+    ipc/                  # 新增：UDS server / protocol / bridge
+    pipeline/             # 串联层
+    extractor/            # 能力模块：帧采样
+    detector/             # 能力模块：字幕区域检测
+    ocr/                  # 能力模块：OCR
+    export/               # 串联层：字幕导出
+  apps/macos/             # 新增：SwiftUI 壳工程
+    Package.swift
+    Sources/SubLiftMac/
+      App/
+        SubLiftMacApp.swift
+      Core/               # 业务逻辑与 IPC 客户端
+      UI/                 # SwiftUI 视图
+    Tests/SubLiftMacTests/
+```
+
+### 10.2 进程间通信
+
+| 项 | 说明 |
+|---|---|
+| 传输 | Unix Domain Socket（本地 socket 文件） |
+| 分帧 | 4 字节大端长度前缀 + UTF-8 JSON body |
+| Swift 端 | `PipelineClient` 启动 `python -m sublift.ipc.server --socket <path>`，通过 BSD socket 收发 |
+| Python 端 | `asyncio.start_unix_server` + `src/sublift/ipc/bridge.py` 处理业务消息 |
+| 消息类型 | `start_job` / `frame` / `finalize` / `cancel_job` / `progress` / `entries` / `log` / `done` |
+
+### 10.3 Swift 端分层
+
+| 层 | 文件示例 | 职责 |
+|---|---|---|
+| App | `SubLiftMacApp.swift` | `@main` 入口、`ContentView` 组合、状态管理 |
+| Core | `PipelineClient.swift`、`FrameSampler.swift`、`SubtitleExtractor.swift`、`SubtitleEditor.swift`、`SrtFormatter.swift` | IPC 客户端、抽帧、提取协调、编辑模型、导出格式化 |
+| UI | `VideoPreview.swift`、`SubtitleList.swift`、`RegionOverlay.swift`、`SettingsView.swift` | 视频预览、字幕列表、区域候选框、设置 |
+
+### 10.4 GUI 数据流
+
+```
+用户拖入视频
+  ↓
+DropZone → VideoMetadata.load(url)
+  ↓
+FrameSampler.sample(url:fps:) ──┬── AVFoundation (mp4/mov/H.264/HEVC)
+                                 └── ffmpeg fallback (.mkv)
+  ↓ (ts_ms, jpegData)
+PipelineClient.sendFrame(...)
+  ↓ UDS + JSON
+ipc.bridge.BridgeHandler ──缓冲帧──→ Pipeline.run_frames()
+  ↓
+entries 消息 → SubtitleEditor.load(entries)
+  ↓
+SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
+```
+
+### 10.5 关键约束
+
+- **Phase 1 核心零修改**：`pipeline/` / `extractor/` / `detector/` / `ocr/` / `export/` / `models.py` / `config.py` 在 Phase 2 不改动。
+- **平台 API 隔离**：Apple Vision 在 GUI 端仅用于字幕区域候选框检测（`VisionTextDetector.swift`），OCR 仍由 Python 端 `ocr/vision.py` 执行。
+- **无分发包**：Phase 2 不做独立 `.app` 打包与 Apple 公证（ADR-0009），GUI 通过 `swift run SubLiftMac` 在开发者环境运行。
+
+## 11. 架构决策
 
 完整决策记录见 [DECISIONS.md](DECISIONS.md)，要点：
 
 - **ADR-0001**：分层架构 = 三能力模块 + 串联层 + 入口层
 - **ADR-0002**：Apple Vision 经 PyObjC 桥接，不引入 Swift helper
-- **ADR-0003**：打轴采用像素差异驱动（Architecture 2），OCR 后置
+- **ADR-0003**：打轴采用像素差异驱动，OCR 后置
 - **ADR-0004**：任务粒度合并为 10 个粗任务，subtasks 字段承载细节
+- **ADR-0005**：Phase 2 GUI 架构 = SwiftUI 壳 + Python UDS 子进程
+- **ADR-0006**：Phase 2 抽帧双方案 = AVFoundation 主路径 + 系统 ffmpeg 兜底
+- **ADR-0007**：Pipeline `run_frames()`、Swift 端 SRT、JSON 替代 MsgPack
+- **ADR-0008**：Vision 候选框 + 用户多选替代手动画框
+- **ADR-0009**：跳过 Phase 2 `.app` 打包与 notarization

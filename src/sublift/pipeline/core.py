@@ -1,11 +1,12 @@
 """端到端编排：extractor → detector → signature → changepoint → timeline → ocr → dedupe。
 
-Pipeline 串联七个组件，输入 video_path，输出 list[SubtitleEntry]。
+Pipeline 串联七个组件，输入 video_path 或帧流，输出 list[SubtitleEntry]。
 OCR 后置：timeline 全部构建后，每段只调一次 OCR（段首代表帧）。
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -35,18 +36,20 @@ class Pipeline:
 
     def __init__(
         self,
-        extractor: Extractor,
         detector: Detector,
         ocr: OcrEngine,
         config: Config = DEFAULT_CONFIG,
+        *,
+        extractor: Extractor | None = None,
     ) -> None:
         """初始化流水线。
 
         Args:
-            extractor: 帧采样器（调用方注入，用 config.sample_fps 配置）。
             detector: 字幕区域检测器（首帧一次性确定 Region）。
             ocr: OCR 引擎（每段代表帧调用一次）。
             config: 提取流程配置。
+            extractor: 帧采样器，文件模式必填（run() 调用）。
+                帧流模式（run_frames()）不需要，可不传。
         """
         self._extractor = extractor
         self._detector = detector
@@ -54,16 +57,34 @@ class Pipeline:
         self._config = config
 
     def run(self, video_path: Path) -> list[SubtitleEntry]:
-        """执行端到端字幕提取。
+        """执行端到端字幕提取（文件模式）。
 
         Args:
             video_path: 视频文件路径。
 
         Returns:
             清理后的字幕条目列表。
-        """
-        frames = self._extractor.extract(video_path)
 
+        Raises:
+            RuntimeError: 未传 extractor。
+        """
+        if self._extractor is None:
+            raise RuntimeError("文件模式 run() 需要 extractor，请在构造 Pipeline 时传入")
+        frames = self._extractor.extract(video_path)
+        return self.run_frames(frames)
+
+    def run_frames(self, frames: Iterator[Frame]) -> list[SubtitleEntry]:
+        """执行端到端字幕提取（帧流模式，ADR-0007a）。
+
+        与 run() 共享内部编排逻辑，但帧来源是外部迭代器而非 extractor。
+        用于 IPC bridge（Swift 端推送 JPEG 帧）。
+
+        Args:
+            frames: 帧迭代器。
+
+        Returns:
+            清理后的字幕条目列表。
+        """
         region = None
         changepoint = ChangePointDetector(config=self._config.change_point)
         builder = TimelineBuilder()
@@ -127,6 +148,7 @@ class Pipeline:
                         start_ms=seg.start_ms,
                         end_ms=seg.end_ms if seg.end_ms is not None else seg.start_ms,
                         text="",
+                        confidence=0.0,
                     )
                 )
                 continue
@@ -135,12 +157,18 @@ class Pipeline:
             ocr_result = self._ocr.recognize(crop_image)
 
             text = ocr_result.text
+            confidence = ocr_result.confidence
             if ocr_result.confidence < self._config.confidence_threshold:
                 text = ""
 
             end_ms = seg.end_ms if seg.end_ms is not None else seg.start_ms
             entries.append(
-                SubtitleEntry(start_ms=seg.start_ms, end_ms=end_ms, text=text)
+                SubtitleEntry(
+                    start_ms=seg.start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                    confidence=confidence,
+                )
             )
 
         return entries

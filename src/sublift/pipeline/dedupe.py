@@ -61,6 +61,7 @@ def _merge_adjacent(
                 start_ms=last.start_ms,
                 end_ms=current.end_ms,
                 text=last.text,
+                confidence=max(last.confidence, current.confidence),
             )
         else:
             result.append(current)
