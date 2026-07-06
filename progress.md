@@ -4,13 +4,13 @@
 
 - **最后更新：** 2026-07-06
 - **当前 Phase：** Phase 3 - 优化与基本可用
-- **当前功能：** feat-028 Benchmark 基线录入（not-started，下一步）
-- **分支：** main
-- **说明：** Phase 3 规划已建立，目标限定为三项：benchmark 优化、增量处理与前台进度优化、打轴检测优化。OCR 区域裁剪、ASS/VTT、PaddleOCR、.app 打包等明确后置。
+- **当前功能：** feat-029 增量处理架构（not-started，下一步）
+- **分支：** benchmark
+- **说明：** Phase 3 规划已建立，目标限定为三项：benchmark 优化、增量处理与前台进度优化、打轴检测优化。OCR 区域裁剪、ASS/VTT、PaddleOCR、.app 打包等明确后置。feat-028 基线入库已跳过，基线以会话跑测形式记于 docs/benchmarks/baseline.md。
 
 ## 进行中
 
-- [ ] feat-028：使用当前 benchmark 诊断口径对现有素材跑通基线录入，固化报告与对比口径。
+- 无
 
 ## 近期完成（最近 5 个）
 
@@ -22,6 +22,7 @@
 
 ## 阻塞项 / 风险
 
+- [ ] **feat-028 跳过**：基线入库不做，下游 feat-029/031 若需对比可临时跑 manifest。
 - [ ] **patrol 过切分**：7 组 GT 被切成两条检测段（OCR 噪声差异导致 dedupe 无法合并）。patrol 阈值 0.92 过敏感，后续可调到 0.88~0.90 或加 dedupe 模糊合并。详见 `docs/HURDLES.md`。
 - [ ] **短字幕漏检**：`<=1200ms` 的 GT 只命中 7/16，主因是 hysteresis_frames=2 吃掉 40%+ 时长 + 单字字幕前景占比不足。后续可 hysteresis=1 + 降 presence_threshold，但需配合 patrol 阈值调优避免 FP。详见 `docs/HURDLES.md`。
 - [ ] **Phase 3 范围控制**：用户明确先不规划具体实现方法，需在每个 feat 启动时重新评估技术方案，避免范围发散。
@@ -30,6 +31,7 @@
 
 ## 近期决策
 
+- feat-028 跳过：基线不入库，需对比时临时跑 manifest。
 - benchmark 诊断报告后续作为唯一优化口径：打轴看 timing，识别看 recognition，产品可用性看 e2e。
 - feat-031 SSIM patrol 记为推荐配置（`enable_ssim_patrol=True, interval=3, threshold=0.92`），当前默认开启。F1 +15.6pp 但未达 95% 目标。
 - feat-031 属于项目打轴优化，不归入 benchmark 优化；规划顺序为 trace 归因 → SSIM patrol 补强连续字幕 CHANGE → 短字幕 IN/OUT 专项。
