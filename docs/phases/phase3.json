@@ -1,0 +1,62 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 3 - 优化与基本可用",
+  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率。具体实现方法不在本阶段规划，由各任务启动时再定。",
+  "plan_file": "docs/plans/phase3.md",
+  "features": [
+    {
+      "id": "feat-027",
+      "name": "Benchmark 框架",
+      "description": "定义端到端核心指标（segment recall/precision/F1、CER、WER、速度），实现 ground truth 加载与字幕条目对齐，提供一键运行的 benchmark 入口，输出 JSON/CSV + Markdown 报告。",
+      "module": "benchmark/",
+      "dependencies": [],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-028",
+      "name": "Benchmark 基线录入",
+      "description": "使用 feat-027 框架对现有素材（至少包含 Zootopia clip）跑通 benchmark，记录当前基线数值到版本控制，作为后续优化对比依据。",
+      "module": "benchmark/reports/",
+      "dependencies": ["feat-027"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-029",
+      "name": "增量处理架构",
+      "description": "把当前批量处理模式改为边收帧边处理。允许重构 pipeline/ 与 ipc/bridge.py，使首条字幕反馈时间显著缩短。具体实现方法（push 模型、常驻 server、并行抽帧等）由任务启动时评估。",
+      "module": "src/sublift/pipeline/, src/sublift/ipc/bridge.py",
+      "dependencies": ["feat-028"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-030",
+      "name": "前台进度显示与取消",
+      "description": "CLI 提取输出阶段进度/进度条；GUI 提取显示百分比和当前阶段；取消按钮在提取过程中生效。进度必须对应真实处理阶段。",
+      "module": "src/sublift/cli.py, apps/macos/Sources/SubLiftMac/",
+      "dependencies": ["feat-029"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-031",
+      "name": "打轴检测优化",
+      "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。在 benchmark 数据集上 segment F1 从当前 91.3% 提升到 ≥ 95%，precision 不下降。具体算法方案由任务启动时评估。",
+      "module": "src/sublift/pipeline/signature.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/timeline.py",
+      "dependencies": ["feat-028"],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-032",
+      "name": "Phase 3 文档收尾",
+      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构与打轴优化结果。",
+      "module": "docs/",
+      "dependencies": ["feat-030", "feat-031"],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

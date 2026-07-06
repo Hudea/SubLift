@@ -117,6 +117,42 @@
           "covers": ["feat-026"]
         }
       ]
+    },
+    {
+      "id": "phase3",
+      "name": "Phase 3 - 优化与基本可用",
+      "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，使项目从功能跑通进入基本可用。具体实现方法不在本阶段规划，见 docs/plans/phase3.md，细粒度任务见 docs/phases/phase3.json。",
+      "detail_file": "docs/phases/phase3.json",
+      "features": [
+        {
+          "id": "phase3.benchmark",
+          "name": "Benchmark 优化",
+          "description": "定义 segment recall/precision/F1、CER、WER、速度等核心指标；实现 ground truth 加载与对齐；提供一键运行入口；输出 JSON/CSV + Markdown 报告；记录当前基线。覆盖 feat-027~028。",
+          "status": "in-progress",
+          "covers": ["feat-027", "feat-028"]
+        },
+        {
+          "id": "phase3.incremental",
+          "name": "增量处理与前台进度优化",
+          "description": "把批量处理改为边收帧边处理，缩短首条字幕反馈时间；CLI/GUI 显示真实阶段进度；支持取消操作。允许重构 pipeline/ 与 ipc/bridge.py。覆盖 feat-029~030。",
+          "status": "not-started",
+          "covers": ["feat-029", "feat-030"]
+        },
+        {
+          "id": "phase3.timeline",
+          "name": "打轴检测优化",
+          "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。在 benchmark 数据集上 segment F1 从当前 91.3% 提升到 ≥ 95%，precision 不下降。覆盖 feat-031。",
+          "status": "not-started",
+          "covers": ["feat-031"]
+        },
+        {
+          "id": "phase3.docs",
+          "name": "文档收尾",
+          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构与打轴优化结果。覆盖 feat-032。",
+          "status": "not-started",
+          "covers": ["feat-032"]
+        }
+      ]
     }
   ]
 }
