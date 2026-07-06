@@ -171,6 +171,34 @@ public final class PipelineClient {
         return try readMessageDecoded(as: responseType)
     }
 
+    /// 发送一条 Codable 消息并读取响应，支持在主响应前接收增量 push_entry。
+    /// - Parameters:
+    ///   - message: 待发送的消息
+    ///   - responseType: 期望的主响应类型
+    ///   - onPushEntry: 增量 push_entry 回调，在主响应前调用
+    /// - Returns: 解码后的主响应；连接关闭时返回 nil
+    public func requestStreaming<S: Encodable, R: Decodable>(
+        _ message: S,
+        expecting responseType: R.Type,
+        onPushEntry: ((SubtitleEntryData) -> Void)? = nil
+    ) throws -> R? {
+        let packed = try Self.packMessage(message)
+        try writeAll(packed)
+        // 循环读取，push_entry 分发给回调，直到收到主响应类型
+        while true {
+            guard let dict = try readMessageAny() else { return nil }
+            if dict["type"] as? String == "push_entry" {
+                let bodyData = try JSONSerialization.data(withJSONObject: dict)
+                if let pushMsg = try? JSONDecoder().decode(PushEntryMessage.self, from: bodyData) {
+                    onPushEntry?(pushMsg.entry)
+                }
+                continue
+            }
+            let bodyData = try JSONSerialization.data(withJSONObject: dict)
+            return try JSONDecoder().decode(responseType, from: bodyData)
+        }
+    }
+
     // MARK: - Private
 
     /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
@@ -292,6 +320,29 @@ public final class PipelineClient {
 
         let bodyData = Data(bodyBytes)
         return try JSONDecoder().decode(type, from: bodyData)
+    }
+
+    /// 从 socket 读取一条分帧消息，返回原始字典（用于流式模式判断类型）。
+    private func readMessageAny() throws -> [String: Any]? {
+        var lengthBytes = [UInt8](repeating: 0, count: Self.lengthPrefixSize)
+        let readResult = lengthBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard readResult == Self.lengthPrefixSize else { return nil }
+
+        let length = UInt32(lengthBytes[0]) << 24
+            | UInt32(lengthBytes[1]) << 16
+            | UInt32(lengthBytes[2]) << 8
+            | UInt32(lengthBytes[3])
+
+        var bodyBytes = [UInt8](repeating: 0, count: Int(length))
+        let bodyResult = bodyBytes.withUnsafeMutableBufferPointer { ptr in
+            recv(socketFD, ptr.baseAddress, ptr.count, Int32(MSG_WAITALL))
+        }
+        guard bodyResult == Int(length) else { return nil }
+
+        let bodyData = Data(bodyBytes)
+        return try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
     }
 
     /// 把 Data 全部写入 socket。

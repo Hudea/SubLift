@@ -18,6 +18,7 @@ public enum MessageType: String, Codable {
     // Python → Swift
     case progress
     case entries
+    case pushEntry = "push_entry"
     case log
     case done
 }
@@ -202,11 +203,39 @@ public struct EntriesMessage: Codable {
     public let type: MessageType
     public let videoId: String
     public let entries: [SubtitleEntryData]
+    public let isFinal: Bool?
 
     enum CodingKeys: String, CodingKey {
         case type
         case videoId = "video_id"
         case entries
+        case isFinal = "is_final"
+    }
+
+    public init(videoId: String, entries: [SubtitleEntryData], isFinal: Bool? = nil) {
+        self.type = .entries
+        self.videoId = videoId
+        self.entries = entries
+        self.isFinal = isFinal
+    }
+}
+
+/// 增量单条字幕（feat-029）。
+public struct PushEntryMessage: Codable {
+    public let type: MessageType
+    public let videoId: String
+    public let entry: SubtitleEntryData
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case videoId = "video_id"
+        case entry
+    }
+
+    public init(videoId: String, entry: SubtitleEntryData) {
+        self.type = .pushEntry
+        self.videoId = videoId
+        self.entry = entry
     }
 }
 

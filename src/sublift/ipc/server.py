@@ -1,10 +1,11 @@
 """SubLift IPC UDS server。
 
 Swift GUI 端通过 `Process` 启动本模块作为子进程，经 Unix Domain Socket 通信。
-消息分帧：4 字节大端无符号长度前缀 + UTF-8 JSON body。
+消息分帧：4 字节大端长度前缀 + UTF-8 JSON body。
 feat-014：hello/bye 骨架握手验证通道可用。
 feat-015：handler 扩展为 9 类消息分发（7 业务 + 2 控制），业务消息返回 stub 响应。
 feat-016：handler 接入真实 Pipeline（bridge.BridgeHandler）。
+feat-029：handler 支持 push 回调，允许在返回主响应前推送增量消息（push_entry）。
 """
 
 from __future__ import annotations
@@ -23,6 +24,9 @@ logger = logging.getLogger(__name__)
 # 消息分帧：4 字节大端无符号整数表示 JSON body 长度
 LENGTH_PREFIX_SIZE = 4
 MAX_MESSAGE_BYTES = 64 * 1024 * 1024  # 64 MiB 上限，防止异常大帧 OOM
+
+# push 回调类型：handler 可在返回主响应前调用它推送增量消息
+PushCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class StreamWriter(Protocol):
@@ -77,14 +81,19 @@ async def handle_connection(
     reader: asyncio.StreamReader,
     writer: StreamWriter,
     *,
-    handler: Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]] | None = None,
+    handler: Callable[[dict[str, Any], PushCallback], Awaitable[dict[str, Any] | None]]
+    | None = None,
 ) -> None:
     """处理单个连接：读取消息，调用 handler，写回响应，直到 handler 返回 None。
+
+    handler 接收 push 回调，可在返回主响应前推送增量消息（feat-029 push_entry）。
+    所有写入在 event loop 单线程中串行，无竞态。
 
     Args:
         reader: StreamReader。
         writer: StreamWriter。
-        handler: 消息处理回调，返回响应字典或 None（关闭连接）。None 时用默认 BridgeHandler。
+        handler: 消息处理回调，接收消息和 push 回调，返回响应字典或 None。
+            None 时用默认 BridgeHandler。
     """
     if handler is None:
         from sublift.ipc.bridge import BridgeHandler
@@ -94,13 +103,16 @@ async def handle_connection(
     peer = writer.get_extra_info("peername")
     logger.debug("UDS 连接已建立: %s", peer)
 
+    async def push(msg: dict[str, Any]) -> None:
+        await write_message(writer, msg)
+
     try:
         while True:
             message = await read_message(reader)
             if message is None:
                 break
 
-            response = await handler(message)
+            response = await handler(message, push)
             if response is not None:
                 await write_message(writer, response)
 
@@ -119,7 +131,9 @@ async def handle_connection(
 async def serve_once(
     socket_path: str,
     *,
-    handler_factory: Callable[[], Callable[[dict[str, Any]], Awaitable[dict[str, Any] | None]]]
+    handler_factory: Callable[
+        [], Callable[[dict[str, Any], PushCallback], Awaitable[dict[str, Any] | None]]
+    ]
     | None = None,
 ) -> None:
     """监听 UDS，持续接受连接并处理。

@@ -23,6 +23,8 @@ final class SubtitleExtractor: ObservableObject {
 
     private var client = PipelineClient()
     private var currentTask: Task<Void, Never>?
+    private var _cancelled = false
+    private var _videoId = ""
 
     var isRunning: Bool {
         switch status {
@@ -41,6 +43,8 @@ final class SubtitleExtractor: ObservableObject {
         enableSsimPatrol: Bool = false
     ) {
         guard !isRunning else { return }
+        _cancelled = false
+        entries = []
         currentTask = Task { [weak self] in
             await self?.runExtract(
                 videoURL: videoURL,
@@ -53,8 +57,16 @@ final class SubtitleExtractor: ObservableObject {
     }
 
     func cancel() {
+        _cancelled = true
         currentTask?.cancel()
-        Task.detached { [client] in client.stop() }
+        let client = self.client
+        let vid = self._videoId
+        Task.detached {
+            if !vid.isEmpty {
+                _ = try? client.request(CancelJobMessage(videoId: vid), expecting: DoneMessage.self)
+            }
+            client.stop()
+        }
         status = .idle
     }
 
@@ -84,6 +96,7 @@ final class SubtitleExtractor: ObservableObject {
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
             let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
+            self._videoId = videoId
 
             // 1. start_job
             let startMsg = StartJobMessage(
@@ -99,10 +112,11 @@ final class SubtitleExtractor: ObservableObject {
                 try client.request(startMsg, expecting: ProgressMessage.self)
             }
 
-            // 2. 流式抽帧 + 发 frame
+            // 2. 流式抽帧 + 发 frame，使用 requestStreaming 接收增量 push_entry
             let config = FrameSampler.Config(fps: fps)
             var frameCount = 0
             for await (frame, error) in FrameSampler.sample(url: videoURL, config: config) {
+                if _cancelled { throw CancellationError() }
                 if let error = error { throw error }
                 guard let frame = frame else { continue }
                 try Task.checkCancellation()
@@ -114,8 +128,12 @@ final class SubtitleExtractor: ObservableObject {
                     jpegBytes: base64,
                     regionBox: nil
                 )
-                _ = try await runDetached { [client] in
-                    try client.request(frameMsg, expecting: ProgressMessage.self)
+                _ = try await runDetached { [client, weak self] in
+                    try client.requestStreaming(frameMsg, expecting: ProgressMessage.self) { entry in
+                        Task { @MainActor in
+                            self?.entries.append(entry)
+                        }
+                    }
                 }
                 frameCount += 1
                 let pct = min(Double(frameCount) / Double(totalFramesSafe), 1.0)
@@ -126,14 +144,16 @@ final class SubtitleExtractor: ObservableObject {
                 )
             }
 
-            // 3. finalize
+            if _cancelled { throw CancellationError() }
+
+            // 3. finalize → entries(is_final=true) 全量替换
             status = .processing
             let finalizeMsg = FinalizeMessage(videoId: videoId)
             let response = try await runDetached { [client] in
-                try client.request(finalizeMsg, expecting: EntriesMessage.self)
+                try client.requestStreaming(finalizeMsg, expecting: EntriesMessage.self)
             }
 
-            // 4. 拿到 entries
+            // 4. 用最终 entries 替换增量
             let resultEntries = response?.entries ?? []
             self.entries = resultEntries
 

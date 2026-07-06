@@ -202,3 +202,26 @@
   3. **短字幕专用路径**：`hysteresis_frames=1` + 降低 `presence_threshold`，但需配合 patrol 阈值调优避免 FP 增长
 - **影响评估**：过切分使 precision 从潜在 94.9% 降到 91.1%（-3.8pp），但不影响 recall；短字幕漏检贡献了主要 FN（8/15 no_overlap）。两者均为 feat-031 后续迭代方向，不影响当前优化成果的可用性。
 - **相关文件**：`src/sublift/pipeline/changepoint.py`（patrol 阈值）、`src/sublift/pipeline/dedupe.py`（`_merge_adjacent` 归一化）、`src/sublift/config.py`（`ChangePointConfig`）、`debug/Zootopia_clip_1080p_优化 3.srt`（验证产物）
+
+---
+
+### bridge 批量缓冲全帧导致内存随视频时长线性增长
+- **日期**：2026-07-06
+- **状态**：待解决（feat-029 增量处理架构的前置障碍）
+- **关联 feature**：feat-029（增量处理架构）
+- **现象**：GUI 提取长视频时内存占用随帧数线性增长，2 分钟 1080p clip ~3.6GB，10 分钟 ~18GB，长视频必 OOM。`bridge.py` 用 `MAX_FRAMES=60000` / `MAX_TOTAL_PIXELS` 硬上限兜底挡崩，但这是权宜之计，非正常设计。
+- **排查路径**：
+  1. 读 `bridge.py` `_handle_frame`：每帧解码成 PIL.Image 后 `self._frames.append(Frame(...))`，全部驻留内存
+  2. 读 `_handle_finalize`：`await asyncio.to_thread(self._pipeline.run_frames, iter(self._frames))` —— 把攒完的列表包装成迭代器一次性交给 Pipeline
+  3. 读 `core.py` `run_frames`：Pipeline 本身接收 `Iterator[Frame]`，内部逐帧过 changepoint → timeline，流式能力本就具备
+  4. 读 `core.py` 内部缓存：`anchor_frames` dict 只存 IN/CHANGE 事件时刻的代表帧，数量 ≈ 字幕段数（几十到几百），可忽略
+- **根本原因**：bridge 把本可流式的 Pipeline 退化成"先攒完再批量处理"模式。Pipeline 的 `run_frames` 接收 `Iterator[Frame]` 本来支持逐帧推进，但 bridge 硬把帧先攒成 `list[Frame]` 再 `iter(list)` 交出去，导致：
+  - 内存随视频时长线性增长（每帧 1080p RGB ~6MB × 帧数）
+  - 首条字幕要等全片处理完才出现（finalize 后才返回 entries）
+  - 长视频必然 OOM，硬上限是兜底而非解决方案
+- **解决方案方向**（feat-029 待设计）：
+  1. **bridge 边收帧边推进 Pipeline**：`_handle_frame` 收到帧后立即喂给 Pipeline，不攒列表
+  2. **打轴流式 + OCR 段闭合触发**：changepoint/timeline 本就是逐帧的；OCR 在段闭合（OUT/CHANGE 事件）时立即调用，产出该条字幕并 push 给 Swift
+  3. **Pipeline 改 push 模型**：从 `run_frames(iterator) -> list[entries]` 改为 `feed(frame) -> entry | None`（或回调），每帧返回新闭合的段
+- **影响评估**：当前批量模式对短 clip（<2 分钟）凑合可用，但作为产品形态不合格。feat-029 的核心就是把 bridge 的批量缓冲改掉。
+- **相关文件**：`src/sublift/ipc/bridge.py`（`_handle_frame` / `_handle_finalize`）、`src/sublift/pipeline/core.py`（`run_frames`）、`src/sublift/pipeline/changepoint.py`（状态机本就逐帧）

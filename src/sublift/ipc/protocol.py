@@ -33,6 +33,7 @@ MSG_FINALIZE = "finalize"
 MSG_CANCEL_JOB = "cancel_job"
 MSG_PROGRESS = "progress"
 MSG_ENTRIES = "entries"
+MSG_PUSH_ENTRY = "push_entry"
 MSG_LOG = "log"
 MSG_DONE = "done"
 MSG_HELLO = "hello"
@@ -161,17 +162,45 @@ def build_progress(
 def build_entries(
     video_id: VideoId,
     entries: list[dict[str, Any]],
+    *,
+    is_final: bool = False,
 ) -> dict[str, Any]:
     """构造 entries 消息。
 
     Args:
         video_id: 任务标识。
         entries: 字幕条目列表，每项含 start_ms/end_ms/text/confidence。
+        is_final: 是否为 finalize 后的最终结果（feat-029）。
+            True 表示全量替换之前的增量 push_entry；False（默认）用于
+            批量模式或与旧客户端兼容。
     """
-    return {
+    msg: dict[str, Any] = {
         "type": MSG_ENTRIES,
         "video_id": video_id,
         "entries": entries,
+    }
+    if is_final:
+        msg["is_final"] = True
+    return msg
+
+
+def build_push_entry(
+    video_id: VideoId,
+    entry: dict[str, Any],
+) -> dict[str, Any]:
+    """构造 push_entry 消息（feat-029 增量推送）。
+
+    段闭合 OCR 完成后立即推送单条 raw entry，Swift 端 append 显示。
+    finalize 时 build_entries(is_final=True) 全量替换。
+
+    Args:
+        video_id: 任务标识。
+        entry: 单条字幕条目，含 start_ms/end_ms/text/confidence。
+    """
+    return {
+        "type": MSG_PUSH_ENTRY,
+        "video_id": video_id,
+        "entry": entry,
     }
 
 
@@ -259,6 +288,10 @@ def validate(message: dict[str, Any]) -> None:
         _require_int(message, "eta_ms")
     elif msg_type == MSG_ENTRIES:
         _require_entries(message)
+        if "is_final" in message and message["is_final"] is not None:
+            _require_bool(message, "is_final")
+    elif msg_type == MSG_PUSH_ENTRY:
+        _require_single_entry(message)
     elif msg_type == MSG_LOG:
         _require_str(message, "level")
         if message["level"] not in LOG_LEVELS:
@@ -325,14 +358,26 @@ def _require_entries(message: dict[str, Any]) -> None:
     if not isinstance(entries, list):
         raise ProtocolError(f"entries 非列表: {entries!r}")
     for i, e in enumerate(entries):
-        if not isinstance(e, dict):
-            raise ProtocolError(f"entries[{i}] 非字典: {e!r}")
-        for field in ("start_ms", "end_ms"):
-            if field not in e or not isinstance(e[field], int) or isinstance(e[field], bool):
-                raise ProtocolError(f"entries[{i}].{field} 缺失或非整数: {e.get(field)!r}")
-        if "text" not in e or not isinstance(e["text"], str):
-            raise ProtocolError(f"entries[{i}].text 缺失或非字符串: {e.get('text')!r}")
-        if "confidence" not in e or not isinstance(e["confidence"], (int, float)) or isinstance(
-            e["confidence"], bool
-        ):
-            raise ProtocolError(f"entries[{i}].confidence 缺失或非数值: {e.get('confidence')!r}")
+        _validate_entry(e, i)
+
+
+def _require_single_entry(message: dict[str, Any]) -> None:
+    """校验 push_entry 消息的 entry 字段（单条）。"""
+    if "entry" not in message:
+        raise ProtocolError("entry 缺失")
+    _validate_entry(message["entry"], 0)
+
+
+def _validate_entry(e: Any, i: int) -> None:
+    """校验单条 entry 字段。"""
+    if not isinstance(e, dict):
+        raise ProtocolError(f"entries[{i}] 非字典: {e!r}")
+    for field in ("start_ms", "end_ms"):
+        if field not in e or not isinstance(e[field], int) or isinstance(e[field], bool):
+            raise ProtocolError(f"entries[{i}].{field} 缺失或非整数: {e.get(field)!r}")
+    if "text" not in e or not isinstance(e["text"], str):
+        raise ProtocolError(f"entries[{i}].text 缺失或非字符串: {e.get('text')!r}")
+    if "confidence" not in e or not isinstance(e["confidence"], (int, float)) or isinstance(
+        e["confidence"], bool
+    ):
+        raise ProtocolError(f"entries[{i}].confidence 缺失或非数值: {e.get('confidence')!r}")

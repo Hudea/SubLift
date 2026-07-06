@@ -224,8 +224,8 @@ class TestBusinessMessageStubs:
         assert response["video_id"] == "V1"
         assert response["stage"] == "ready"
 
-    def test_frame_returns_progress_received(self) -> None:
-        """frame → progress(stage=frame_received)。"""
+    def test_frame_returns_progress_processing(self) -> None:
+        """frame → progress(stage=processing)。"""
         # 需要先 start_job，否则 frame 在 pipeline 未构造时报错
 
         async def scenario() -> bytes:
@@ -250,7 +250,7 @@ class TestBusinessMessageStubs:
             return writer.chunks
 
         chunks = asyncio.run(scenario())
-        # 应该有两条响应：start_job→progress(ready) + frame→progress(frame_received)
+        # 应该有两条响应：start_job→progress(ready) + frame→progress(processing)
         # 解析第二条
         (len1,) = struct.unpack(">I", chunks[:LENGTH_PREFIX_SIZE])
         offset = LENGTH_PREFIX_SIZE + len1
@@ -258,7 +258,7 @@ class TestBusinessMessageStubs:
         body2 = chunks[offset + LENGTH_PREFIX_SIZE : offset + LENGTH_PREFIX_SIZE + len2]
         response = json.loads(body2.decode("utf-8"))
         assert response["type"] == "progress"
-        assert response["stage"] == "frame_received"
+        assert response["stage"] == "processing"
 
     def test_cancel_job_returns_done(self) -> None:
         """cancel_job → done(ok=False, error=cancelled)。"""
@@ -389,7 +389,7 @@ class TestServeOnce:
                 )
                 responses.append(await read_message(reader))
 
-                # 3. frame → progress(stage=frame_received)
+                # 3. frame → progress(stage=processing)
                 await write_message(writer, build_frame("V1", 1000, jpeg_bytes))
                 responses.append(await read_message(reader))
 
@@ -422,7 +422,7 @@ class TestServeOnce:
         }
         assert responses[2] is not None
         assert responses[2]["type"] == "progress"
-        assert responses[2]["stage"] == "frame_received"
+        assert responses[2]["stage"] == "processing"
         # finalize → entries（MockOcrEngine 返回固定文本，可能 0 或 1 条）
         assert responses[3] is not None
         assert responses[3]["type"] == "entries"
