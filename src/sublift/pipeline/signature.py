@@ -142,6 +142,49 @@ def compute_ssim(
     return float(ssim_map.mean())
 
 
+def compute_foreground_ssim(
+    current: np.ndarray,
+    anchor: np.ndarray,
+    signature_config: SignatureConfig | None = None,
+    *,
+    use_mask: bool = True,
+    window_size: int = 7,
+) -> float:
+    """计算当前帧与锚帧的前景结构相似度（feat-031b patrol 用）。
+
+    与 ``compute_ssim`` 的区别：本函数优先在二值化前景 mask 上算 SSIM，
+    而非 raw crop。这样能屏蔽背景画面变化，只关注字幕前景结构差异，
+    对连续中文字幕切换（dHash 漏检的典型场景）更敏感。
+
+    Args:
+        current: 当前帧字幕带图像。
+        anchor: 锚帧字幕带图像。
+        signature_config: 签名计算配置（复用其 block_size / adaptive_c），
+            None 用默认值。
+        use_mask: True 时在二值化 mask 上算 SSIM；False 时退化为 raw
+            crop SSIM（等价于 ``compute_ssim``）。
+        window_size: SSIM 滑动窗口大小。
+
+    Returns:
+        SSIM 值（0.0~1.0）。值越低表示字幕前景结构差异越大。
+    """
+    if signature_config is None:
+        signature_config = SignatureConfig()
+
+    g1 = _to_gray(current)
+    g2 = _to_gray(anchor)
+
+    if g1.shape != g2.shape:
+        g2 = cv2.resize(g2, (g1.shape[1], g1.shape[0]), interpolation=cv2.INTER_AREA)
+
+    if use_mask:
+        _, b1 = _compute_foreground_ratio(g1, signature_config)
+        _, b2 = _compute_foreground_ratio(g2, signature_config)
+        return compute_ssim(b1, b2, window_size)
+
+    return compute_ssim(g1, g2, window_size)
+
+
 def _to_gray(image: np.ndarray) -> np.ndarray:
     """转灰度图。已是灰度则原样返回。"""
     if len(image.shape) == 3:

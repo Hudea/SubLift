@@ -37,7 +37,8 @@ final class SubtitleExtractor: ObservableObject {
         videoURL: URL,
         fps: Int = 5,
         engine: OcrEngineName = .vision,
-        regionBox: RegionBox? = nil
+        regionBox: RegionBox? = nil,
+        enableSsimPatrol: Bool = false
     ) {
         guard !isRunning else { return }
         currentTask = Task { [weak self] in
@@ -45,7 +46,8 @@ final class SubtitleExtractor: ObservableObject {
                 videoURL: videoURL,
                 fps: fps,
                 engine: engine,
-                regionBox: regionBox
+                regionBox: regionBox,
+                enableSsimPatrol: enableSsimPatrol
             )
         }
     }
@@ -62,7 +64,8 @@ final class SubtitleExtractor: ObservableObject {
         videoURL: URL,
         fps: Int,
         engine: OcrEngineName,
-        regionBox: RegionBox?
+        regionBox: RegionBox?,
+        enableSsimPatrol: Bool
     ) async {
         do {
             let startTime = Date()
@@ -89,7 +92,8 @@ final class SubtitleExtractor: ObservableObject {
                 engine: engine,
                 confidenceThreshold: 0.5,
                 regionBox: regionBox,
-                durationMs: durationMs
+                durationMs: durationMs,
+                enableSsimPatrol: enableSsimPatrol ? true : nil
             )
             _ = try await runDetached { [client] in
                 try client.request(startMsg, expecting: ProgressMessage.self)

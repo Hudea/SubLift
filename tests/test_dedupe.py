@@ -89,6 +89,54 @@ class TestFilterShort:
         assert result == [_entry(0, 1000, "你好")]
 
 
+class TestFilterEmpty:
+    """过滤空文本段。"""
+
+    def test_filter_empty_text(self) -> None:
+        """text 为空字符串 → 丢弃。"""
+        entries = [_entry(0, 1000, "")]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert result == []
+
+    def test_filter_whitespace_only(self) -> None:
+        """text 仅含空白 → 丢弃。"""
+        entries = [_entry(0, 1000, "   \n\t  ")]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert result == []
+
+    def test_keep_nonempty_around_empty(self) -> None:
+        """空段两侧的有效段不合并（文本不同），仅空段被丢弃。"""
+        entries = [
+            _entry(0, 1000, "你好"),
+            _entry(1000, 2000, ""),
+            _entry(2000, 3000, "再见"),
+        ]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert result == [
+            _entry(0, 1000, "你好"),
+            _entry(2000, 3000, "再见"),
+        ]
+
+    def test_empty_between_same_then_merge(self) -> None:
+        """空段两侧相同段：空段丢弃后两侧变相邻 → 合并。"""
+        entries = [
+            _entry(0, 1000, "你好"),
+            _entry(1000, 2000, ""),
+            _entry(2000, 3000, "你好"),
+        ]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert result == [_entry(0, 3000, "你好")]
+
+    def test_all_empty(self) -> None:
+        """全部为空段 → 返回空列表。"""
+        entries = [
+            _entry(0, 1000, ""),
+            _entry(1000, 2000, "  "),
+        ]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert result == []
+
+
 class TestJitterElimination:
     """抖动消除：A→B(短)→A → A。"""
 

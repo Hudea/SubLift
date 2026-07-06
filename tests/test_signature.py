@@ -10,6 +10,7 @@ import numpy as np
 from sublift.config import SignatureConfig
 from sublift.pipeline.signature import (
     compute_dhash,
+    compute_foreground_ssim,
     compute_signature,
     hamming_distance,
 )
@@ -115,3 +116,43 @@ class TestDHashDirect:
         """有梯度的图像 dHash 应非 0。"""
         gradient = np.tile(np.arange(0, 40, dtype=np.uint8), (40, 1))
         assert compute_dhash(gradient) > 0
+
+
+class TestForegroundSsim:
+    """compute_foreground_ssim 测试（feat-031b）。"""
+
+    def test_identical_images_ssim_one(self) -> None:
+        """相同图像前景 SSIM 应为 1.0。"""
+        img = _text_like_image()
+        ssim = compute_foreground_ssim(img, img)
+        assert ssim > 0.999
+
+    def test_different_text_lower_ssim(self) -> None:
+        """不同位置字幕的 SSIM 应低于相同字幕。"""
+        img_a = _text_like_image(rect=(20, 20, 100, 40))
+        img_b = _text_like_image(rect=(200, 20, 100, 40))
+        same = compute_foreground_ssim(img_a, img_a)
+        diff = compute_foreground_ssim(img_a, img_b)
+        assert diff < same
+        assert diff < 1.0
+
+    def test_mask_mode_lower_than_raw_for_background_change(self) -> None:
+        """背景变化但字幕相同时，mask 模式 SSIM 应高于 raw 模式。
+
+        mask 模式只看二值化前景结构，背景亮度漂移不影响；raw 模式
+        会受背景影响。这验证了 patrol 用 mask 的正确性。
+        """
+        img_a = _text_like_image()
+        img_b = img_a.copy()
+        img_b[:, :, 0] = np.clip(img_b[:, :, 0].astype(int) + 40, 0, 255).astype(np.uint8)
+
+        ssim_mask = compute_foreground_ssim(img_a, img_b, use_mask=True)
+        ssim_raw = compute_foreground_ssim(img_a, img_b, use_mask=False)
+        assert ssim_mask > ssim_raw
+
+    def test_text_shift_detected(self) -> None:
+        """字幕位置左右移动应被 SSIM 检测到（SSIM < 1）。"""
+        img_a = _text_like_image(rect=(60, 30, 200, 40))
+        img_b = _text_like_image(rect=(80, 30, 200, 40))
+        ssim = compute_foreground_ssim(img_a, img_b)
+        assert ssim < 0.95

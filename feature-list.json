@@ -142,7 +142,7 @@
           "id": "phase3.timeline",
           "name": "打轴检测优化",
           "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。在 benchmark 数据集上 segment F1 从当前 91.3% 提升到 ≥ 95%，precision 不下降。覆盖 feat-031。",
-          "status": "not-started",
+          "status": "done",
           "covers": ["feat-031"]
         },
         {

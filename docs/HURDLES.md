@@ -20,7 +20,7 @@
 
 ### dHash 对中文文本内容变化判别力不足，导致 timeline 漏分段
 - **日期**：2026-07-03
-- **状态**：未解决（端到端实测确认，待优先级评估）
+- **状态**：部分缓解（feat-031b SSIM patrol 已实现，merged_into_neighbor FN 减少约 70%）
 - **现象**：用 `scripts/test_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
   - "能不顾他们惊人的差异"
   - "彻底化解偏见和刻板印象"
@@ -35,11 +35,15 @@
   2. 确认 dHash 计算正确：9×8 降采样后比较相邻像素亮度梯度，64bit
   3. 分析根因：9×8 降采样把汉字笔画细节平均掉，两句长度相近的中文字幕在 9×8 网格上结构几乎同构，dHash 距离 < 10
 - **根本原因**：dHash 设计初衷是检测"通用场景/结构变化"（对整体亮度漂移免疫、对结构变化敏感），但对"文本内容变化"这种**高频局部细节差异**判别力不足。降采样到 9×8 丢失了汉字笔画的高频信息，使不同文本的哈希趋同。
-- **待评估方案**：
-  1. **加 pixel-diff 补充信号（首选）**：在 signature 里除 dHash 外，加一个与锚帧的全分辨率像素差异比例（变化像素占比）。dHash 检测结构变化，pixel-diff 检测内容变化，两信号 OR 触发 CHANGE。改动小，最可能有效——pixel-diff 对全分辨率敏感，中文笔画差异不会丢失。这正好是最初设计提案中的方案，被参考实现的 dHash 覆盖了，但两者实为互补关系。
-  2. **加大 hash_size**（16×16=256bit）：保留更多细节，但仍是降采样，对中文笔画效果有限。
-  3. **换 pHash/aHash**：不同哈希算法，但本质问题（降采样丢高频）相同。
-- **相关文件**：`src/sublift/pipeline/signature.py`（dHash 计算）、`src/sublift/pipeline/changepoint.py`（CHANGE 事件触发）、`scripts/test_timeline.py`（实测脚本）、`debug/timeline_compare_result.txt`（比对结果）
+- **解决方案（feat-031b）**：引入 SSIM patrol 机制。在 STABLE 状态下，dHash 未触发时周期性比较锚帧与当前帧的二值化前景 mask SSIM。当 SSIM 显示结构变化明显时（< `ssim_patrol_threshold`）生成 CHANGE 候选，经稳定确认后触发 CHANGE 事件。patrol 与 dHash 候选共享稳定确认流程，但 trigger_reason 区分。
+- **验证结果（feat-031d）**：在 Zootopia clip（1080p, 5fps, region_box 精准对齐）上对比：
+  - baseline（patrol 关闭）：F1=65.0%, recall=60.9%, precision=69.7%, FN=47（全 merged）
+  - optimized（patrol 启用）：F1=80.6%, recall=90.8%, precision=72.5%, FN=15（14 merged + 1 boundary）
+  - merged_into_neighbor 减少 33 条（-70%），段 33 类合并漏检已消除
+  - precision 不下降（+2.7pp），patrol 未引入新误检
+- **参数落定**：F1 提升 +15.6pp ≥ 3pp 且 precision 不下降，但未达 95% 目标。patrol 记为推荐配置（`enable_ssim_patrol=True, interval=3, threshold=0.92`），默认保持关闭。
+- **残留问题**：短字幕（<1.5s）召回率仍偏低（24%→60%），主要属于 IN/OUT 或采样不足，SSIM patrol 不能完全解决。
+- **相关文件**：`src/sublift/pipeline/signature.py`（`compute_foreground_ssim`）、`src/sublift/pipeline/changepoint.py`（`_handle_patrol_path`）、`src/sublift/config.py`（patrol 配置）、`scripts/run_trace.py --compare-baseline`、`debug/reports/feat031_comparison.md`
 
 ---
 
@@ -145,3 +149,56 @@
 - **解决方案**：`init.sh` 中依赖同步和所有 `uv run` 验证命令统一带 `--extra vision`；并执行 `uv sync --extra vision --reinstall-package pyobjc-core` 修复本地半残安装。
 - **验证**：`./init.sh` 通过；`.venv/bin/python -c 'import objc, Vision, Quartz'` 通过，随后再次运行 `./init.sh` 后直接导入仍通过。
 - **相关文件**：`init.sh`、`pyproject.toml`
+
+---
+
+### SSIM patrol 过切分与短字幕漏检（feat-031 残留）
+- **日期**：2026-07-06
+- **状态**：未解决（feat-031 初步优化已收尾，留作后续迭代）
+- **关联 feature**：feat-031（打轴检测优化）
+- **现象**：patrol 默认开启后（优化 3），整体 F1 从 79.5% 提升到 86.7%，precision 91.1%，但暴露两个残留问题：
+
+  **问题 1：patrol 过切分导致重复命中**
+  7 组 GT 被切成两条检测段（gap=0ms，归一化文本因 OCR 噪声不等，dedupe 无法合并）：
+
+  | GT | GT 文本 | det#1 | det#2 | 切分原因 |
+  |---|---|---|---|---|
+  | #19 | 跟胡尼克，一位平凡的狐狸 | #12 (792ms) | #13 (792ms) | 英文水印干扰 |
+  | #21 | 一起揭穿了杨咩咩市长的阴谋 | #14 (791ms) | #15 (1000ms) | 英文水印干扰 |
+  | #46 | 在ZPD，搭档合作是成功的基石 | #39 (2208ms) | #40 (4208ms) | 标点"，"vs"。" |
+  | #50 | 这个家伙一直在利用船坞 | #44 (2583ms) | #45 (584ms) | 英文水印干扰 |
+  | #52 | 行动由霍队长和阿杜队长带领 | #47 (1792ms) | #48 (2000ms) | 英文水印尾缀 |
+  | #55 | 留守中间的是斑宝兄弟 -斑宝 | #51 (1792ms) | #52 (1625ms) | 英文水印尾缀 |
+  | #79 | 反正你们得离开，不能进来 | #70 (1625ms) | #71 (791ms) | 标点"。"vs"，" |
+
+  根因：patrol 在同一句字幕内部触发了 CHANGE（二值化 mask 局部波动），产生的两段 OCR 文本因噪声/标点差异归一化后不等，`dedupe._merge_adjacent` 无法合并。
+
+  **问题 2：短字幕/闪现字幕漏检**
+  `<=1200ms` 的 GT 只命中 7/16（43.8%）。漏检列表：
+
+  | GT# | 时长 | 文本 | FN 类型 |
+  |---|---|---|---|
+  | #2 | 1125ms | （前情提要…） | merged_into_neighbor |
+  | #5 | 1000ms | （前情蹄要…） | merged_into_neighbor |
+  | #15 | 1000ms | 砰 | no_overlap |
+  | #16 | 875ms | 不寻常的拍档… | no_overlap |
+  | #17 | 1125ms | （动物方城市新闻台） | no_overlap |
+  | #26 | 1125ms | （动物方城市警察学校） | merged_into_neighbor |
+  | #59 | 833ms | （哈，胡） | no_overlap |
+  | #68 | 1167ms | 嘿 -来了 | merged_into_neighbor |
+  | #69 | 1083ms | 哈啰 | no_overlap |
+
+  根因：`hysteresis_frames=2`（400ms@5fps）的迟滞吃掉了短字幕大部分时长；单字字幕（"砰"）前景占比低，难以达到 `presence_threshold`。
+- **排查路径**：
+  1. 用 `scripts/run_trace.py --compare-baseline` 对比确认 patrol 将 merged_into_neighbor 从 47 降到 14，但引入了 7 组过切分
+  2. 用 `scripts/scan_params.py` 扫描确认 `min_duration_ms` 对打轴无影响（只影响 dedupe），`hysteresis=1` 略提升短字幕（+4pp）但会引入 FP
+  3. 7 组过切分中归一化文本全部不等（OCR 噪声/标点差异），dedupe 无法合并
+- **根本原因**：
+  - 过切分：patrol 阈值 `0.92` 对同一句字幕内部的二值化 mask 局部波动过于敏感；CHANGE 候选确认后产生两段，OCR 文本因噪声不等导致 dedupe 失效
+  - 短字幕：采样率 5fps + 迟滞 2 帧 = 400ms 迟滞窗口，对 `<=1000ms` 的字幕吃掉了 40%+ 时长；单字字幕前景占比不足
+- **待评估方案**（后续迭代）：
+  1. **patrol 阈值调优**：`ssim_patrol_threshold` 从 0.92 调到 0.88~0.90，降低敏感度减少过切分
+  2. **dedupe 模糊合并**：归一化后做编辑距离比较，距离/长度 < 比例（如 0.2）时合并，解决标点/噪声差异
+  3. **短字幕专用路径**：`hysteresis_frames=1` + 降低 `presence_threshold`，但需配合 patrol 阈值调优避免 FP 增长
+- **影响评估**：过切分使 precision 从潜在 94.9% 降到 91.1%（-3.8pp），但不影响 recall；短字幕漏检贡献了主要 FN（8/15 no_overlap）。两者均为 feat-031 后续迭代方向，不影响当前优化成果的可用性。
+- **相关文件**：`src/sublift/pipeline/changepoint.py`（patrol 阈值）、`src/sublift/pipeline/dedupe.py`（`_merge_adjacent` 归一化）、`src/sublift/config.py`（`ChangePointConfig`）、`debug/Zootopia_clip_1080p_优化 3.srt`（验证产物）

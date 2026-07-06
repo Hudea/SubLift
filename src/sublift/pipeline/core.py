@@ -26,6 +26,8 @@ from sublift.pipeline.timeline import TimelineBuilder, TimelineSegment
 if TYPE_CHECKING:
     from PIL import Image
 
+    from sublift.diagnostics.trace import TraceRecorder
+
 
 class Pipeline:
     """字幕提取流水线编排器。
@@ -41,6 +43,7 @@ class Pipeline:
         config: Config = DEFAULT_CONFIG,
         *,
         extractor: Extractor | None = None,
+        trace_recorder: TraceRecorder | None = None,
     ) -> None:
         """初始化流水线。
 
@@ -50,11 +53,14 @@ class Pipeline:
             config: 提取流程配置。
             extractor: 帧采样器，文件模式必填（run() 调用）。
                 帧流模式（run_frames()）不需要，可不传。
+            trace_recorder: 可选打轴决策 trace 记录器（feat-031a）。
+                注入后 ``ChangePointDetector`` 会逐帧记录决策上下文。
         """
         self._extractor = extractor
         self._detector = detector
         self._ocr = ocr
         self._config = config
+        self._trace_recorder = trace_recorder
 
     def run(self, video_path: Path) -> list[SubtitleEntry]:
         """执行端到端字幕提取（文件模式）。
@@ -86,7 +92,10 @@ class Pipeline:
             清理后的字幕条目列表。
         """
         region = None
-        changepoint = ChangePointDetector(config=self._config.change_point)
+        changepoint = ChangePointDetector(
+            config=self._config.change_point,
+            trace_recorder=self._trace_recorder,
+        )
         builder = TimelineBuilder()
         anchor_frames: dict[int, Frame] = {}
         last_timestamp_ms = 0

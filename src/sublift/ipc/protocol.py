@@ -72,6 +72,7 @@ def build_start_job(
     confidence_threshold: float,
     region_box: list[int] | None = None,
     duration_ms: int = 0,
+    enable_ssim_patrol: bool | None = None,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
 
@@ -82,8 +83,10 @@ def build_start_job(
         confidence_threshold: OCR 置信度阈值。
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
+        enable_ssim_patrol: 可选 SSIM 巡逻开关（feat-031b）。None 不传（用
+            Config 默认值 False）；True 显式启用 patrol；False 显式关闭。
     """
-    return {
+    msg: dict[str, Any] = {
         "type": MSG_START_JOB,
         "video_id": video_id,
         "fps": fps,
@@ -92,6 +95,9 @@ def build_start_job(
         "region_box": region_box,
         "duration_ms": duration_ms,
     }
+    if enable_ssim_patrol is not None:
+        msg["enable_ssim_patrol"] = enable_ssim_patrol
+    return msg
 
 
 def build_frame(
@@ -239,6 +245,8 @@ def validate(message: dict[str, Any]) -> None:
         _optional_region_box(message)
         if "duration_ms" in message:
             _require_int(message, "duration_ms")
+        if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
+            _require_bool(message, "enable_ssim_patrol")
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")

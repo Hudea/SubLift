@@ -22,15 +22,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum, auto
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from sublift.config import ChangePointConfig
 from sublift.pipeline.signature import (
     FrameSignature,
+    compute_foreground_ssim,
     compute_ssim,
     hamming_distance,
 )
+
+if TYPE_CHECKING:
+    from sublift.diagnostics.trace import TraceRecorder, TriggerReason, VetoReason
 
 
 class State(Enum):
@@ -91,6 +96,7 @@ class ChangePointDetector:
     """
 
     config: ChangePointConfig = field(default_factory=ChangePointConfig)
+    trace_recorder: TraceRecorder | None = field(default=None)
 
     _state: State = field(default=State.EMPTY, init=False)
     _anchor_signature: FrameSignature | None = field(default=None, init=False)
@@ -102,6 +108,8 @@ class ChangePointDetector:
     _first_presence_ms: int | None = field(default=None, init=False)
     _first_absence_ms: int | None = field(default=None, init=False)
     _change_candidate_ms: int | None = field(default=None, init=False)
+    _patrol_counter: int = field(default=0, init=False)
+    """自上次 patrol 以来经过的帧数（feat-031b）。"""
 
     def process(
         self,
@@ -112,19 +120,49 @@ class ChangePointDetector:
 
         Args:
             signature: 当前帧的签名。
-            crop: 当前帧的裁剪图像（用于 SSIM 验证），可选。
+            crop: 当前帧的裁剪图像（用于 SSIM 验证/patrol），可选。
 
         Returns:
             发生状态变化时返回 StateEvent，否则 None。
         """
-        event: StateEvent | None = None
         if self._state == State.EMPTY:
-            event = self._process_empty(signature)
+            event = self._process_empty(signature, crop)
         else:
             event = self._process_stable(signature, crop)
 
         self._last_signature = signature
         return event
+
+    def _trace(
+        self,
+        signature: FrameSignature,
+        *,
+        event: StateEvent | None,
+        trigger_reason: TriggerReason,
+        veto_reason: VetoReason,
+        distance: int | None = None,
+        ssim: float | None = None,
+    ) -> None:
+        """记录一帧的决策上下文到 trace_recorder（如启用）。"""
+        if self.trace_recorder is None:
+            return
+        recorder: TraceRecorder = self.trace_recorder
+        has_subtitle = signature.foreground_ratio >= self.config.presence_threshold
+        anchor_dhash = self._anchor_signature.dhash if self._anchor_signature else None
+        recorder.record(
+            timestamp_ms=signature.timestamp_ms,
+            foreground_ratio=signature.foreground_ratio,
+            has_subtitle=has_subtitle,
+            dhash=signature.dhash,
+            anchor_dhash=anchor_dhash,
+            distance=distance,
+            ssim=ssim,
+            state=self._state.name,
+            event_type=event.event_type.name if event else None,
+            candidate_change_ms=self._change_candidate_ms,
+            trigger_reason=trigger_reason,
+            veto_reason=veto_reason,
+        )
 
     def reset(self) -> None:
         """重置检测器状态。"""
@@ -138,17 +176,24 @@ class ChangePointDetector:
         self._first_presence_ms = None
         self._first_absence_ms = None
         self._change_candidate_ms = None
+        self._patrol_counter = 0
 
     @property
     def current_state(self) -> State:
         """获取当前状态。"""
         return self._state
 
-    def _process_empty(self, signature: FrameSignature) -> StateEvent | None:
+    def _process_empty(
+        self,
+        signature: FrameSignature,
+        crop: np.ndarray | None = None,
+    ) -> StateEvent | None:
         """处理 EMPTY 状态。
 
         迁移条件：连续 N 帧前景占比 >= 阈值 → STABLE。
         """
+        from sublift.diagnostics.trace import TriggerReason, VetoReason
+
         has_subtitle = signature.foreground_ratio >= self.config.presence_threshold
 
         if has_subtitle:
@@ -161,16 +206,36 @@ class ChangePointDetector:
                 start_ms = self._first_presence_ms or signature.timestamp_ms
                 self._state = State.STABLE
                 self._anchor_signature = signature
+                self._anchor_crop = crop
                 self._stable_start_ms = start_ms
                 self._consecutive_presence = 0
                 self._first_presence_ms = None
-                return StateEvent(
+                event = StateEvent(
                     event_type=EventType.IN,
                     timestamp_ms=start_ms,
                 )
+                self._trace(
+                    signature,
+                    event=event,
+                    trigger_reason=TriggerReason.PRESENCE_RISE,
+                    veto_reason=VetoReason.NONE,
+                )
+                return event
+            self._trace(
+                signature,
+                event=None,
+                trigger_reason=TriggerReason.NONE,
+                veto_reason=VetoReason.HYSTERESIS_NOT_MET,
+            )
         else:
             self._consecutive_presence = 0
             self._first_presence_ms = None
+            self._trace(
+                signature,
+                event=None,
+                trigger_reason=TriggerReason.NONE,
+                veto_reason=VetoReason.NONE,
+            )
 
         return None
 
@@ -196,12 +261,22 @@ class ChangePointDetector:
         if self._anchor_signature is not None:
             return self._handle_content_change(signature, crop)
 
+        from sublift.diagnostics.trace import TriggerReason, VetoReason
+
+        self._trace(
+            signature,
+            event=None,
+            trigger_reason=TriggerReason.NONE,
+            veto_reason=VetoReason.NONE,
+        )
         return None
 
     def _handle_disappearance(
         self, signature: FrameSignature
     ) -> StateEvent | None:
         """处理字幕消失。"""
+        from sublift.diagnostics.trace import TriggerReason, VetoReason
+
         if self._consecutive_absence == 0:
             self._first_absence_ms = signature.timestamp_ms
         self._consecutive_absence += 1
@@ -215,10 +290,23 @@ class ChangePointDetector:
             self._change_candidate_ms = None
             self._anchor_signature = None
             self._anchor_crop = None
-            return StateEvent(
+            event = StateEvent(
                 event_type=EventType.OUT,
                 timestamp_ms=end_ms,
             )
+            self._trace(
+                signature,
+                event=event,
+                trigger_reason=TriggerReason.PRESENCE_FALL,
+                veto_reason=VetoReason.NONE,
+            )
+            return event
+        self._trace(
+            signature,
+            event=None,
+            trigger_reason=TriggerReason.NONE,
+            veto_reason=VetoReason.HYSTERESIS_NOT_MET,
+        )
         return None
 
     def _handle_content_change(
@@ -226,17 +314,24 @@ class ChangePointDetector:
         signature: FrameSignature,
         crop: np.ndarray | None,
     ) -> StateEvent | None:
-        """处理字幕内容变化（含候选/稳定确认双阶段 + 可选 SSIM 验证）。"""
+        """处理字幕内容变化（含候选/稳定确认双阶段 + 可选 SSIM 验证/patrol）。"""
+        from sublift.diagnostics.trace import TriggerReason, VetoReason
+
         assert self._anchor_signature is not None
         distance = hamming_distance(signature.dhash, self._anchor_signature.dhash)
 
         if distance <= self.config.change_threshold:
-            if self._change_candidate_ms is not None:
-                self._change_candidate_ms = None
-            return None
+            return self._handle_patrol_path(signature, crop, distance)
 
         if self._is_ssim_vetoed(crop):
             self._change_candidate_ms = None
+            self._trace(
+                signature,
+                event=None,
+                trigger_reason=TriggerReason.DHASH_EXCEEDS,
+                veto_reason=VetoReason.SSIM_VETOED,
+                distance=distance,
+            )
             return None
 
         if self._change_candidate_ms is None:
@@ -249,13 +344,121 @@ class ChangePointDetector:
             self._anchor_signature = signature
             self._anchor_crop = crop
             self._stable_start_ms = change_ms
-            return StateEvent(
+            event = StateEvent(
                 event_type=EventType.CHANGE,
                 timestamp_ms=change_ms,
                 prev_end_ms=change_ms,
             )
+            self._trace(
+                signature,
+                event=event,
+                trigger_reason=TriggerReason.DHASH_EXCEEDS,
+                veto_reason=VetoReason.NONE,
+                distance=distance,
+            )
+            return event
 
+        self._trace(
+            signature,
+            event=None,
+            trigger_reason=TriggerReason.DHASH_EXCEEDS,
+            veto_reason=VetoReason.UNSTABLE_CONTENT,
+            distance=distance,
+        )
         return None
+
+    def _handle_patrol_path(
+        self,
+        signature: FrameSignature,
+        crop: np.ndarray | None,
+        distance: int,
+    ) -> StateEvent | None:
+        """dHash 未触发时的处理路径（feat-031b）。
+
+        - 若 patrol 启用且存在未确认候选，走稳定确认流程
+        - 周期性 patrol 检查 SSIM 结构变化，产生新候选
+        - patrol 未启用时退化为原逻辑（返回 None）
+        """
+        from sublift.diagnostics.trace import TriggerReason, VetoReason
+
+        self._patrol_counter += 1
+
+        if (
+            self.config.enable_ssim_patrol
+            and self._change_candidate_ms is not None
+            and self._is_new_content_stable(signature)
+        ):
+            change_ms = self._change_candidate_ms
+            self._change_candidate_ms = None
+            self._patrol_counter = 0
+            self._state = State.STABLE_PRIME
+            self._anchor_signature = signature
+            self._anchor_crop = crop
+            self._stable_start_ms = change_ms
+            event = StateEvent(
+                event_type=EventType.CHANGE,
+                timestamp_ms=change_ms,
+                prev_end_ms=change_ms,
+            )
+            self._trace(
+                signature,
+                event=event,
+                trigger_reason=TriggerReason.SSIM_PATROL,
+                veto_reason=VetoReason.NONE,
+                distance=distance,
+            )
+            return event
+
+        patrol_ssim = self._maybe_patrol(signature, crop)
+        if (
+            patrol_ssim is not None
+            and patrol_ssim < self.config.ssim_patrol_threshold
+            and self._change_candidate_ms is None
+        ):
+            self._change_candidate_ms = signature.timestamp_ms
+            self._trace(
+                signature,
+                event=None,
+                trigger_reason=TriggerReason.SSIM_PATROL,
+                veto_reason=VetoReason.UNSTABLE_CONTENT,
+                distance=distance,
+                ssim=patrol_ssim,
+            )
+            return None
+
+        self._trace(
+            signature,
+            event=None,
+            trigger_reason=TriggerReason.NONE,
+            veto_reason=VetoReason.DISTANCE_BELOW_THRESHOLD,
+            distance=distance,
+            ssim=patrol_ssim,
+        )
+        return None
+
+    def _maybe_patrol(
+        self,
+        signature: FrameSignature,
+        crop: np.ndarray | None,
+    ) -> float | None:
+        """周期性 SSIM 巡逻，返回 SSIM 值或 None（未到巡逻帧）。
+
+        当 SSIM < threshold 时表示检测到结构变化，调用方据此产生候选。
+        """
+        if not self.config.enable_ssim_patrol:
+            return None
+        if self._patrol_counter < self.config.ssim_patrol_interval:
+            return None
+        if self._anchor_crop is None or crop is None:
+            return None
+
+        self._patrol_counter = 0
+        return compute_foreground_ssim(
+            crop,
+            self._anchor_crop,
+            use_mask=self.config.ssim_patrol_use_mask,
+            window_size=self.config.ssim_window_size,
+        )
 
     def _is_ssim_vetoed(self, crop: np.ndarray | None) -> bool:
         """SSIM 验证是否否决当前 dHash 变化候选。"""

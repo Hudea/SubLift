@@ -47,6 +47,27 @@ class ChangePointConfig:
     ssim_window_size: int = 7
     """SSIM 滑动窗口大小，必须为奇数。"""
 
+    enable_ssim_patrol: bool = True
+    """是否启用 SSIM 巡逻（feat-031b）。
+
+    在 STABLE 状态下主动比较当前帧与锚帧的前景结构，当 dHash 未触发
+    但 SSIM 显示结构变化明显时生成 CHANGE 候选。默认开启（对比验证
+    precision 不下降，F1 提升 +15.6pp）。
+    """
+
+    ssim_patrol_interval: int = 3
+    """SSIM 巡逻间隔（帧数），每 N 帧执行一次巡逻。"""
+
+    ssim_patrol_threshold: float = 0.92
+    """SSIM 巡逻阈值，前景 SSIM < 此值视为字幕结构变化。"""
+
+    ssim_patrol_use_mask: bool = True
+    """巡逻时是否优先比较二值化前景 mask（而非 raw crop）。
+
+    True 时对锚帧与当前帧分别做自适应二值化，在二值图上算 SSIM，
+    能屏蔽背景画面变化，只看字幕前景结构差异。
+    """
+
 
 @dataclass(frozen=True)
 class Config:

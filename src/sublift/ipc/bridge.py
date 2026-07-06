@@ -23,7 +23,7 @@ import io
 import logging
 from typing import Any
 
-from sublift.config import Config
+from sublift.config import ChangePointConfig, Config
 from sublift.detector.base import Detector
 from sublift.detector.bottom_crop import BottomCropDetector
 from sublift.detector.fixed_region import FixedRegionDetector
@@ -148,9 +148,16 @@ class BridgeHandler:
         if self._duration_ms > 0 and self._fps > 0:
             self._est_total_frames = int(self._duration_ms / 1000 * self._fps)
 
+        cp_config = ChangePointConfig()
+        if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
+            cp_config = ChangePointConfig(
+                enable_ssim_patrol=bool(message["enable_ssim_patrol"])
+            )
+
         config = Config(
             sample_fps=self._fps,
             confidence_threshold=confidence_threshold,
+            change_point=cp_config,
         )
 
         try:

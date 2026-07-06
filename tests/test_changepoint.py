@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import numpy as np
+
 from sublift.config import ChangePointConfig
 from sublift.pipeline.changepoint import (
     ChangePointDetector,
@@ -219,3 +221,160 @@ class TestReset:
         detector.reset()
         current: State = detector.current_state
         assert current == State.EMPTY
+
+
+def _text_image(rect_x: int = 60) -> np.ndarray:
+    """造带暗色字幕矩形的亮背景图（模拟字幕带）。
+
+    rect_x 控制字幕水平位置，用于构造 SSIM 差异。
+    """
+    img = np.full((80, 320, 3), 200, dtype=np.uint8)
+    img[30:70, rect_x : rect_x + 200] = 30
+    return img
+
+
+class TestSsimPatrol:
+    """SSIM 巡逻测试（feat-031b）。
+
+    patrol 在 dHash 未触发时主动比较前景结构，检测连续字幕切换。
+    需要传真实 crop 图像（numpy 合成），因为 SSIM 在二值图上计算。
+    """
+
+    def test_patrol_disabled_no_change(self) -> None:
+        """patrol 关闭时，dHash 未触发 → 无 CHANGE。"""
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=100,
+                enable_ssim_patrol=False,
+            )
+        )
+        img_a = _text_image(60)
+        img_b = _text_image(200)
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img_a)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img_a)
+        event = detector.process(_sig(400, 0.05, dhash=0b10101010), img_b)
+        assert event is None
+
+    def test_patrol_triggers_change_on_structure_diff(self) -> None:
+        """patrol 启用时，dHash 未触发但 SSIM 显示结构变化 → CHANGE。"""
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=100,
+                enable_ssim_patrol=True,
+                ssim_patrol_interval=1,
+                ssim_patrol_threshold=0.95,
+            )
+        )
+        img_a = _text_image(60)
+        img_b = _text_image(200)
+
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img_a)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img_a)
+
+        events: list[StateEvent] = []
+        for ts in range(400, 1200, 200):
+            ev = detector.process(_sig(ts, 0.05, dhash=0b10101010), img_b)
+            if ev is not None:
+                events.append(ev)
+
+        change_events = [e for e in events if e.event_type == EventType.CHANGE]
+        assert len(change_events) >= 1
+
+    def test_patrol_interval_respected(self) -> None:
+        """patrol 间隔生效：间隔=3 时前 2 帧不巡逻。"""
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=100,
+                enable_ssim_patrol=True,
+                ssim_patrol_interval=3,
+                ssim_patrol_threshold=0.95,
+            )
+        )
+        img_a = _text_image(60)
+        img_b = _text_image(200)
+
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img_a)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img_a)
+
+        event = detector.process(_sig(400, 0.05, dhash=0b10101010), img_b)
+        assert event is None
+
+    def test_patrol_no_change_on_identical_structure(self) -> None:
+        """patrol 启用但结构相同时 → 无 CHANGE。"""
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=100,
+                enable_ssim_patrol=True,
+                ssim_patrol_interval=1,
+                ssim_patrol_threshold=0.95,
+            )
+        )
+        img = _text_image(60)
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img)
+        event = detector.process(_sig(400, 0.05, dhash=0b10101010), img)
+        assert event is None
+
+    def test_patrol_candidate_requires_stable_confirmation(self) -> None:
+        """patrol 产生候选后需稳定确认才触发 CHANGE。
+
+        构造：第 3 帧 SSIM 变化产生候选，第 4 帧仍变化（未稳定），
+        第 5 帧恢复稳定结构 → 确认 CHANGE。
+        """
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=100,
+                enable_ssim_patrol=True,
+                ssim_patrol_interval=1,
+                ssim_patrol_threshold=0.95,
+            )
+        )
+        img_a = _text_image(60)
+        img_b = _text_image(200)
+
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img_a)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img_a)
+
+        ev = detector.process(_sig(400, 0.05, dhash=0b10101010), img_b)
+        assert ev is None
+
+        ev = detector.process(_sig(600, 0.05, dhash=0b10101010), img_b)
+        change_events = []
+        if ev is not None and ev.event_type == EventType.CHANGE:
+            change_events.append(ev)
+
+        assert len(change_events) == 1
+
+    def test_patrol_coexists_with_dhash(self) -> None:
+        """patrol 与 dHash 候选可共存（dHash 触发优先）。
+
+        dHash 超阈值时走 dHash 路径，不走 patrol。需要 2 帧稳定确认。
+        """
+        detector = ChangePointDetector(
+            config=ChangePointConfig(
+                hysteresis_frames=2,
+                change_threshold=5,
+                enable_ssim_patrol=True,
+                ssim_patrol_interval=1,
+                ssim_patrol_threshold=0.95,
+            )
+        )
+        img_a = _text_image(60)
+        img_b = _text_image(200)
+
+        detector.process(_sig(0, 0.05, dhash=0b10101010), img_a)
+        detector.process(_sig(200, 0.05, dhash=0b10101010), img_a)
+
+        events: list[StateEvent] = []
+        for ts in (400, 600):
+            ev = detector.process(_sig(ts, 0.05, dhash=0b01010101), img_b)
+            if ev is not None:
+                events.append(ev)
+
+        change_events = [e for e in events if e.event_type == EventType.CHANGE]
+        assert len(change_events) == 1

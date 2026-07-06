@@ -146,11 +146,36 @@ OCR 返回 `confidence < config.confidence_threshold` 时，text 置空（保留
 | `enable_ssim_verify` | False | SSIM 两级验证开关（接口就位，MVP 关闭） |
 | `ssim_threshold` | 0.95 | SSIM 相似度阈值 |
 | `ssim_window_size` | 7 | SSIM 滑动窗口大小（奇数） |
+| `enable_ssim_patrol` | False | SSIM 巡逻开关（feat-031b，推荐开启） |
+| `ssim_patrol_interval` | 3 | SSIM 巡逻间隔（帧数） |
+| `ssim_patrol_threshold` | 0.92 | SSIM 巡逻阈值，前景 SSIM < 此值视为结构变化 |
+| `ssim_patrol_use_mask` | True | 巡逻时优先比较二值化前景 mask（屏蔽背景变化） |
+
+## SSIM 巡逻机制（feat-031b）
+
+SSIM patrol 解决 dHash 对中文短句/相似布局判别力不足的问题。在 STABLE
+状态下，dHash 未触发时（`distance <= change_threshold`），周期性比较
+当前帧与锚帧的前景结构：
+
+1. 每 `ssim_patrol_interval` 帧执行一次巡逻
+2. 对锚帧与当前帧分别做自适应二值化，在二值图上算 SSIM（`use_mask=True`）
+3. 当 SSIM < `ssim_patrol_threshold` 时，产生 CHANGE 候选
+4. 候选经 `_is_new_content_stable` 稳定确认后触发 CHANGE 事件
+
+patrol 与 dHash 候选共享 `_change_candidate_ms`，但 `trigger_reason` 区分。
+patrol 与 `enable_ssim_verify` 方向相反（verify 防 FP，patrol 防 FN），可
+同时启用。
+
+**推荐配置**：`enable_ssim_patrol=True, interval=3, threshold=0.92`。
+在 Zootopia clip 上 F1 从 65.0% 提升到 80.6%（+15.6pp），recall 从 60.9%
+提升到 90.8%，precision 不下降。默认关闭以保持向后兼容，建议生产环境
+显式开启。
 
 ## 已知限制
 
-- **dHash 对中文判别力不足**：9×8 降采样丢失汉字笔画高频信息，两句长度相近的中文字幕 dHash 距离可能 < 阈值，导致漏分段。详见 `docs/HURDLES.md`。首选待评估方案：加 pixel-diff 互补信号。
+- **dHash 对中文判别力不足**：9×8 降采样丢失汉字笔画高频信息，两句长度相近的中文字幕 dHash 距离可能 < 阈值，导致漏分段。详见 `docs/HURDLES.md`。**已通过 SSIM patrol 部分缓解**（feat-031b），merged_into_neighbor FN 减少约 70%。
+- **短字幕漏检**：duration < 1.5s 的短字幕召回率仍偏低（~60%），主要属于 IN/OUT 或采样不足，SSIM patrol 不能解决。详见 `docs/HURDLES.md`。
 - **OCR 锚帧过渡画面空文本**：锚帧（IN/CHANGE 事件触发帧）可能落在字幕淡入/切换瞬间，Vision 识别不出文字。详见 `docs/HURDLES.md`。首选待评估方案：锚帧延后 N 帧。
 - **字幕区域裁剪过宽**：`bottom_ratio=0.3` 是通用默认值，未针对实际视频校准。裁剪过宽会把画面上方英文标题/新闻栏误纳入，Vision 误识别为字幕，导致 OCR 字符准确率低。详见 `docs/HURDLES.md`。首选待评估方案：调小 bottom_ratio 或加 CLI 区域参数。
 
-端到端实测基线（Zootopia clip, 1080p, 5fps）：打轴召回率 72.4%/精确率 100%，OCR 字符准确率 22.5%（主因是区域裁剪过宽，前 6 条无干扰时 CER=0%）。
+端到端实测基线（Zootopia clip, 1080p, 5fps, region_box 精准对齐）：打轴 F1 65.0%（baseline）/ 80.6%（patrol 启用）。

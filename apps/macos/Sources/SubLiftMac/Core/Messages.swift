@@ -83,6 +83,7 @@ public struct StartJobMessage: Codable {
     public let confidenceThreshold: Double
     public let regionBox: RegionBox?
     public let durationMs: Int
+    public let enableSsimPatrol: Bool?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -92,6 +93,7 @@ public struct StartJobMessage: Codable {
         case confidenceThreshold = "confidence_threshold"
         case regionBox = "region_box"
         case durationMs = "duration_ms"
+        case enableSsimPatrol = "enable_ssim_patrol"
     }
 
     public init(
@@ -100,7 +102,8 @@ public struct StartJobMessage: Codable {
         engine: OcrEngineName,
         confidenceThreshold: Double,
         regionBox: RegionBox? = nil,
-        durationMs: Int = 0
+        durationMs: Int = 0,
+        enableSsimPatrol: Bool? = nil
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -109,6 +112,7 @@ public struct StartJobMessage: Codable {
         self.confidenceThreshold = confidenceThreshold
         self.regionBox = regionBox
         self.durationMs = durationMs
+        self.enableSsimPatrol = enableSsimPatrol
     }
 }
 
