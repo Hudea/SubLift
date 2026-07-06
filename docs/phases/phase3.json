@@ -7,11 +7,11 @@
     {
       "id": "feat-027",
       "name": "Benchmark 框架",
-      "description": "定义端到端核心指标（segment recall/precision/F1、CER、WER、速度），实现 ground truth 加载与字幕条目对齐，提供一键运行的 benchmark 入口，输出 JSON/CSV + Markdown 报告。",
+      "description": "定义端到端 benchmark 诊断体系：打轴精准度、识别准确率、端到端可用性与速度；实现 ground truth 加载、一对一时间对齐、case 分类、manifest 一键入口；输出 agent JSON、GT cases CSV、detection cases CSV、summary Markdown。",
       "module": "benchmark/",
       "dependencies": [],
-      "status": "in-progress",
-      "evidence": "进行中：新增 benchmark manifest 加载与脚本入口，支持用 JSON 记录 video/ground_truth/fps/engine/confidence/match_threshold/region_box/label/output_dir，并转换为 RunConfig；新增 benchmark/manifests/zootopia_cli_bottomcrop_5fps.json 示例；GUI 选区可通过 region_box [x,y,width,height] 传入 benchmark。验证：uv run pytest tests/test_benchmark_manifest.py 通过（2 passed）；uv run ruff check benchmark scripts/run_benchmark_manifest.py tests/test_benchmark_manifest.py 通过；uv run mypy benchmark scripts/run_benchmark_manifest.py 通过；uv run ruff check . 通过；uv run mypy src tests 通过（46 source files）；uv run pytest 通过（208 passed）；./init.sh 退出 0（8/8 通过）。"
+      "status": "done",
+      "evidence": "已完成：新增 benchmark/diagnostics.py，提供一对一 temporal_iou 匹配、GT/detection case 分类、timing/recognition/e2e 指标、gates、failure_clusters 与 agent payload；write_reports() 输出 .agent.json、.gt_cases.csv、.det_cases.csv、.summary.md 四件套；旧宽松对齐、segment/WER 指标链路和旧报告文件已移除。manifest 入口保持可用，GUI 选区仍通过 region_box [x,y,width,height] 传入 benchmark。新增 tests/test_benchmark_diagnostics.py 覆盖完美匹配、merge、split extra、false alarm、boundary miss、macro/micro CER、empty text、normalized exact match 与报告结构。验证：uv run ruff check . 通过；uv run mypy src tests 通过（54 source files）；uv run pytest 通过（270 passed）；./init.sh 退出 0（8/8 通过）。"
     },
     {
       "id": "feat-028",
@@ -43,7 +43,7 @@
     {
       "id": "feat-031",
       "name": "打轴检测优化",
-      "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。重点解决连续字幕切换漏检、相邻字幕合并、短字幕漏检。当前判断：连续字幕漏检主要发生在 STABLE 状态内，foreground_ratio 持续表示“有字幕”，IN/OUT 不会触发，只能依赖 CHANGE；现有 dHash 对中文短句/相似布局不够敏感，容易漏发 CHANGE，导致多条真实字幕被合并为一个长检测段。拟采用“先可观测、再算法补强”的顺序：先增加打轴决策 trace 解释 FN，再引入可配置的 SSIM patrol 补强 CHANGE 检测，最后单独评估短字幕的 presence/hysteresis 策略。验收：在 benchmark 数据集上 segment F1 提升到 ≥ 95%，precision 不下降，并记录改善场景。",
+      "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。重点解决连续字幕切换漏检、相邻字幕合并、短字幕漏检。当前判断：连续字幕漏检主要发生在 STABLE 状态内，foreground_ratio 持续表示“有字幕”，IN/OUT 不会触发，只能依赖 CHANGE；现有 dHash 对中文短句/相似布局不够敏感，容易漏发 CHANGE，导致多条真实字幕被合并为一个长检测段。拟采用“先可观测、再算法补强”的顺序：先增加打轴决策 trace 解释 FN，再引入可配置的 SSIM patrol 补强 CHANGE 检测，最后单独评估短字幕的 presence/hysteresis 策略。验收：在 benchmark 数据集上 timing_f1 提升到 ≥ 95%，timing_precision 不下降，并记录改善场景。",
       "module": "src/sublift/pipeline/signature.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/timeline.py",
       "dependencies": ["feat-028"],
       "status": "done",
@@ -70,7 +70,7 @@
         {
           "id": "feat-031d",
           "name": "对比验证与参数落定",
-          "description": "用 feat-028 基线 manifest 对比优化前后 segment recall/precision/F1、FN 类型分布和短字幕召回。只有在 F1 提升且 precision 不下降时，才将相关参数作为默认配置或推荐配置落定。",
+          "description": "用 feat-028 基线 manifest 对比优化前后 timing recall/precision/F1、FN 类型分布和短字幕召回。只有在 timing_f1 提升且 timing_precision 不下降时，才将相关参数作为默认配置或推荐配置落定。",
           "status": "done"
         }
       ]
