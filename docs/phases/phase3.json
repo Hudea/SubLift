@@ -19,8 +19,8 @@
       "description": "使用 feat-027 框架对现有素材（至少包含 Zootopia clip）跑通 benchmark，记录当前基线数值到版本控制，作为后续优化对比依据。",
       "module": "benchmark/reports/",
       "dependencies": ["feat-027"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "blocked",
+      "evidence": "用户决定不做：基线数值已以会话跑测形式记录于 docs/benchmarks/baseline.md，不另出 benchmark/reports 入库产物。后续若需对比可临时跑 manifest。"
     },
     {
       "id": "feat-029",

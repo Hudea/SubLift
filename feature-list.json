@@ -127,7 +127,7 @@
         {
           "id": "phase3.benchmark",
           "name": "Benchmark 优化",
-          "description": "定义打轴精准度、识别准确率、端到端可用性、速度等核心指标；实现 ground truth 加载与一对一对齐；提供一键运行入口；输出 agent 可读诊断报告；记录当前基线。覆盖 feat-027~028。",
+          "description": "定义打轴精准度、识别准确率、端到端可用性、速度等核心指标；实现 ground truth 加载与一对一对齐；提供一键运行入口；输出 agent 可读诊断报告；记录当前基线。覆盖 feat-027~028。注：feat-028 基线入库已跳过，基线以会话跑测形式记于 docs/benchmarks/baseline.md。",
           "status": "in-progress",
           "covers": ["feat-027", "feat-028"]
         },
