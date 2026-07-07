@@ -35,7 +35,7 @@ class RunConfig:
     region_box: tuple[int, int, int, int] | None = None
     label: str | None = None
     video_duration_seconds: float | None = None
-    output_dir: Path = field(default_factory=lambda: Path("benchmark/reports"))
+    output_dir: Path = field(default_factory=lambda: Path("debug/benchmark-reports"))
 
     @property
     def output_prefix(self) -> str:

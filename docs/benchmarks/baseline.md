@@ -99,7 +99,7 @@ GUI 选区路径只需要把 `region_box` 写入 manifest。坐标格式与 GUI 
   "match_threshold": 0.5,
   "region_box": [0, 842, 1920, 126],
   "label": "gui_region_8fps",
-  "output_dir": "benchmark/reports"
+  "output_dir": "debug/benchmark-reports"
 }
 ```
 
