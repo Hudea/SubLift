@@ -61,6 +61,57 @@ struct MessagesTests {
     }
 
     @Test
+    func startJobWithSubtitleProfile() throws {
+        let profile = SubtitleProfile(
+            yCenter: 950.0,
+            yTolerance: 30.0,
+            lineHeight: 60.0,
+            maxLines: 2,
+            scriptHint: "zh"
+        )
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            regionBox: [0, 800, 1920, 200],
+            durationMs: 60000,
+            subtitleProfile: profile
+        )
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
+
+        #expect(decoded.subtitleProfile != nil)
+        #expect(decoded.subtitleProfile?.yCenter == 950.0)
+        #expect(decoded.subtitleProfile?.yTolerance == 30.0)
+        #expect(decoded.subtitleProfile?.lineHeight == 60.0)
+        #expect(decoded.subtitleProfile?.maxLines == 2)
+        #expect(decoded.subtitleProfile?.scriptHint == "zh")
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let profileJson = try #require(json["subtitle_profile"] as? [String: Any])
+        #expect(profileJson["y_center"] as? Double == 950.0)
+        #expect(profileJson["max_lines"] as? Int == 2)
+    }
+
+    @Test
+    func startJobWithoutProfile() throws {
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5
+        )
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
+
+        #expect(decoded.subtitleProfile == nil)
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["subtitle_profile"] == nil)
+    }
+
+    @Test
     func frameRoundtrip() throws {
         let msg = FrameMessage(
             videoId: "UUID-ABCD",

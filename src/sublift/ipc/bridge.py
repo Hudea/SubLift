@@ -41,7 +41,7 @@ from sublift.ipc.protocol import (
     validate,
 )
 from sublift.ipc.server import PushCallback
-from sublift.models import BoundingBox, Frame
+from sublift.models import BoundingBox, Frame, SubtitleProfile
 from sublift.ocr.base import OcrEngine
 from sublift.pipeline.core import Pipeline
 
@@ -170,10 +170,17 @@ class BridgeHandler:
             return build_done(self._video_id, ok=False, error=str(e))
 
         detector = _build_detector(message.get("region_box"), config)
+
+        profile: SubtitleProfile | None = None
+        raw_profile = message.get("subtitle_profile")
+        if raw_profile is not None:
+            profile = SubtitleProfile.from_dict(raw_profile)
+
         self._pipeline = Pipeline(
             detector=detector,
             ocr=ocr,
             config=config,
+            profile=profile,
         )
         self._cancelled = False
 

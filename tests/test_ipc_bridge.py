@@ -25,6 +25,7 @@ from sublift.ipc.protocol import (
     build_finalize,
     build_frame,
     build_start_job,
+    build_subtitle_profile,
 )
 from sublift.ocr.mock import MockOcrEngine
 
@@ -101,6 +102,29 @@ class TestStartJob:
         assert response is not None
         assert response["type"] == "done"
         assert response["ok"] is False
+
+    def test_start_job_with_subtitle_profile_passes_to_pipeline(self) -> None:
+        """feat-033d：subtitle_profile 透传给 Pipeline。"""
+        bridge = _make_handler()
+        profile = build_subtitle_profile(
+            y_center=950.0, y_tolerance=30.0, line_height=60.0, max_lines=2
+        )
+        msg = build_start_job(
+            "V1", 5.0, "vision", 0.5, subtitle_profile=profile
+        )
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert bridge._pipeline._profile is not None
+        assert bridge._pipeline._profile.y_center == 950.0
+        assert bridge._pipeline._profile.max_lines == 2
+
+    def test_start_job_without_profile_pipeline_profile_none(self) -> None:
+        """无 subtitle_profile 时 Pipeline.profile 为 None（走旧路径）。"""
+        bridge = _make_handler()
+        msg = build_start_job("V1", 5.0, "vision", 0.5)
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert bridge._pipeline._profile is None
 
 
 class TestFrame:

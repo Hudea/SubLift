@@ -25,8 +25,9 @@ import numpy as np
 from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector.base import Detector
 from sublift.extractor.base import Extractor
-from sublift.models import BoundingBox, Frame, Region, SubtitleEntry
+from sublift.models import BoundingBox, Frame, Region, SubtitleEntry, SubtitleProfile
 from sublift.ocr.base import OcrEngine
+from sublift.ocr.selector import select_lines
 from sublift.pipeline.changepoint import ChangePointDetector, EventType
 from sublift.pipeline.dedupe import merge_entries
 from sublift.pipeline.signature import compute_signature
@@ -87,6 +88,7 @@ class Pipeline:
         *,
         extractor: Extractor | None = None,
         trace_recorder: TraceRecorder | None = None,
+        profile: SubtitleProfile | None = None,
     ) -> None:
         """初始化流水线。
 
@@ -98,12 +100,16 @@ class Pipeline:
                 帧流模式（run_frames()/feed()）不需要，可不传。
             trace_recorder: 可选打轴决策 trace 记录器（feat-031a）。
                 注入后 ``ChangePointDetector`` 会逐帧记录决策上下文。
+            profile: 可选目标字幕层约束（feat-033d）。非 None 时 ocr_segment
+                用 selector 从 per-line observations 筛选目标字幕行；
+                None 时走旧路径（OcrResult.text/confidence）。
         """
         self._extractor = extractor
         self._detector = detector
         self._ocr = ocr
         self._config = config
         self._trace_recorder = trace_recorder
+        self._profile = profile
 
         # 流式状态（feed/ocr_segment/finalize 共享）
         self._changepoint = ChangePointDetector(
@@ -216,8 +222,11 @@ class Pipeline:
         crop_image = self._crop_region(event.anchor_frame, self._region.box)
         ocr_result = self._ocr.recognize(crop_image)
 
-        text = ocr_result.text
-        confidence = ocr_result.confidence
+        if self._profile is not None and ocr_result.lines:
+            text, confidence = select_lines(ocr_result.lines, self._profile)
+        else:
+            text = ocr_result.text
+            confidence = ocr_result.confidence
         if confidence < self._config.confidence_threshold:
             text = ""
 

@@ -48,6 +48,42 @@ public enum LogLevel: String, Codable {
 /// 用数组而非 struct，保持 JSON 传输紧凑。
 public typealias RegionBox = [Int]
 
+// MARK: - SubtitleProfile
+
+/// 目标字幕层约束（feat-033b），与 Python `SubtitleProfile` 对齐。
+///
+/// 描述 ROI 内「相信哪一层文字」，与 `regionBox`（「看哪里」）正交。
+/// 所有 y 坐标为裁剪图内绝对像素（左上原点）。
+public struct SubtitleProfile: Codable, Equatable {
+    public let yCenter: Double
+    public let yTolerance: Double
+    public let lineHeight: Double
+    public let maxLines: Int
+    public let scriptHint: String
+
+    enum CodingKeys: String, CodingKey {
+        case yCenter = "y_center"
+        case yTolerance = "y_tolerance"
+        case lineHeight = "line_height"
+        case maxLines = "max_lines"
+        case scriptHint = "script_hint"
+    }
+
+    public init(
+        yCenter: Double,
+        yTolerance: Double,
+        lineHeight: Double,
+        maxLines: Int = 1,
+        scriptHint: String = "auto"
+    ) {
+        self.yCenter = yCenter
+        self.yTolerance = yTolerance
+        self.lineHeight = lineHeight
+        self.maxLines = maxLines
+        self.scriptHint = scriptHint
+    }
+}
+
 // MARK: - SubtitleEntryData
 
 /// 字幕条目，与 Python `SubtitleEntry` 对齐。
@@ -85,6 +121,7 @@ public struct StartJobMessage: Codable {
     public let regionBox: RegionBox?
     public let durationMs: Int
     public let enableSsimPatrol: Bool?
+    public let subtitleProfile: SubtitleProfile?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -95,6 +132,7 @@ public struct StartJobMessage: Codable {
         case regionBox = "region_box"
         case durationMs = "duration_ms"
         case enableSsimPatrol = "enable_ssim_patrol"
+        case subtitleProfile = "subtitle_profile"
     }
 
     public init(
@@ -104,7 +142,8 @@ public struct StartJobMessage: Codable {
         confidenceThreshold: Double,
         regionBox: RegionBox? = nil,
         durationMs: Int = 0,
-        enableSsimPatrol: Bool? = nil
+        enableSsimPatrol: Bool? = nil,
+        subtitleProfile: SubtitleProfile? = nil
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -114,6 +153,7 @@ public struct StartJobMessage: Codable {
         self.regionBox = regionBox
         self.durationMs = durationMs
         self.enableSsimPatrol = enableSsimPatrol
+        self.subtitleProfile = subtitleProfile
     }
 }
 

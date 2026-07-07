@@ -121,4 +121,84 @@ struct RegionGeometryTests {
         #expect(ninth == RegionBoxPalette.colors[0])
         #expect(wrapped == RegionBoxPalette.colors[0])
     }
+
+    // MARK: - SubtitleProfileBuilder (feat-033d)
+
+    @Test
+    func profileBuilder_singleLine() {
+        let rect = CGRect(x: 100, y: 940, width: 300, height: 50)
+        let regionBox: RegionBox = [0, 900, 1920, 180]
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [rect],
+            regionBox: regionBox
+        )
+        #expect(profile != nil)
+        // 中心 y = 940 + 25 = 965，减去 crop 原点 900 = 65
+        #expect(profile?.yCenter == 65.0)
+        #expect(profile?.lineHeight == 50.0)
+        #expect(profile?.maxLines == 1)
+        // 单行：maxDist=0, yTolerance = 0 + 50/2 = 25
+        #expect(profile?.yTolerance == 25.0)
+    }
+
+    @Test
+    func profileBuilder_doubleLine() {
+        let r1 = CGRect(x: 100, y: 920, width: 300, height: 45)
+        let r2 = CGRect(x: 100, y: 985, width: 300, height: 45)
+        let regionBox: RegionBox = [0, 900, 1920, 180]
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [r1, r2],
+            regionBox: regionBox
+        )
+        #expect(profile != nil)
+        #expect(profile?.maxLines == 2)
+        // r1.midY = 942.5, r2.midY = 1007.5, 均值 = 975, 减去 crop 原点 900 = 75
+        #expect(profile?.yCenter == 75.0)
+        // 双行：maxDist = 32.5, yTolerance = 32.5 + 45/2 = 55.0
+        // 两行中心到均值距离都是 32.5，加 lineHeight/2 余量保证两行都落在容差内
+        #expect(profile?.yTolerance == 55.0)
+    }
+
+    @Test
+    func profileBuilder_doubleLine_selects_both_lines() {
+        /// 端到端验证：用 Swift builder 对双行字幕的 profile 输出，selector 应同时选中两行。
+        /// 之前 yTolerance = lineHeight/2 时会漏选双行，见缺陷报告。
+        let r1 = CGRect(x: 100, y: 920, width: 300, height: 45)
+        let r2 = CGRect(x: 100, y: 985, width: 300, height: 45)
+        let regionBox: RegionBox = [0, 900, 1920, 180]
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [r1, r2],
+            regionBox: regionBox
+        )
+        #expect(profile != nil)
+
+        // 模拟 Python selector 的 y 轨道过滤逻辑
+        // crop-relative: r1.y=20 h=45 (center 42.5), r2.y=85 h=45 (center 107.5)
+        let yCenter = profile!.yCenter
+        let yTolerance = profile!.yTolerance
+        let center1 = 942.5 - 900  // 42.5
+        let center2 = 1007.5 - 900  // 107.5
+        #expect(abs(center1 - yCenter) <= yTolerance)
+        #expect(abs(center2 - yCenter) <= yTolerance)
+    }
+
+    @Test
+    func profileBuilder_nilWhenEmpty() {
+        let regionBox: RegionBox = [0, 900, 1920, 180]
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [],
+            regionBox: regionBox
+        )
+        #expect(profile == nil)
+    }
+
+    @Test
+    func profileBuilder_nilWhenNoRegionBox() {
+        let rect = CGRect(x: 100, y: 940, width: 300, height: 50)
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [rect],
+            regionBox: nil
+        )
+        #expect(profile == nil)
+    }
 }

@@ -94,6 +94,25 @@
 
 ---
 
+### 同一 ROI 内背景文字/伪文字被并入字幕
+- **日期**：2026-07-07
+- **状态**：已解决（feat-033 OCR 字幕层筛选已完成）
+- **现象**：GUI 已支持用户选择字幕候选框并生成 `region_box`，但 `region_box` 只是一个裁剪长条。如果长条内同时存在目标字幕、英文背景字、水印、标牌、装饰字体或被 Vision 误识别成文字的图案，当前 OCR 仍会把这些 observation 全部合并进字幕文本，导致错误文本、重复条目或同一句字幕被过切分。
+- **排查路径**：
+  1. 确认 GUI 当前传输的是全宽 ROI：用户选中的候选框会被合并为 `[x, y, width, height]`，表示"看哪里"。
+  2. 确认 Python 端 `VisionOcrEngine` 当前只返回合并后的 `OcrResult(text, confidence)`，未保留每行 observation 的 bbox。
+  3. 分析根因：系统缺少"字幕层"概念，无法表达 ROI 内哪一组文字才是目标字幕。
+- **根本原因**：`region_box` 只能限定 OCR 输入区域，不能限定 OCR 输出层。Vision 返回的是多条文字 observation，但当前实现过早把所有文字 `join` 成一个字符串，丢失了按 y 轨道、行高、中心性、脚本和时间稳定性筛选目标字幕层所需的信息。
+- **解决方案（feat-033）**：
+  1. **结构化 OCR observation**（feat-033a）：`OcrLine` dataclass 保留每行 text/confidence/bbox，`OcrResult.lines` 字段向后兼容。
+  2. **subtitle profile**（feat-033b）：`SubtitleProfile` 描述 y_center/y_tolerance/line_height/max_lines/script_hint，GUI 从选中候选框生成 crop-relative profile。
+  3. **字幕行 selector**（feat-033c）：纯函数 `select_lines` 按 y 轨道过滤 → 行高过滤 → max_lines 截断 → y 排序拼接。
+  4. **验证**（feat-033e）：PIL 合成含目标中文 + 背景英文的混合图，Vision OCR + selector 端到端验证只输出目标字幕行。
+- **影响评估**：已通过 PIL 合成 fixture 端到端验证，selector 能正确过滤背景英文。`persistent_text_policy`（跨段时序过滤水印/持久背景文字）跳过，留作后续迭代。
+- **相关文件**：`src/sublift/models.py`（OcrLine/SubtitleProfile）、`src/sublift/ocr/vision.py`（bbox 保留）、`src/sublift/ocr/selector.py`（纯函数 selector）、`src/sublift/ipc/protocol.py`（profile schema）、`src/sublift/pipeline/core.py`（ocr_segment 接入）、`apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift`（SubtitleProfileBuilder）、`apps/macos/Sources/SubLiftMac/Core/RegionSelectionModel.swift`（profile 生成）
+
+---
+
 ### Swift MsgPack 库在嵌套 array of map 解码时崩溃
 - **日期**：2026-07-05
 - **状态**：已绕过（feat-015 决定继续用 JSON，见 ADR-0007d）

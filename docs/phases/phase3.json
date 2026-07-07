@@ -76,11 +76,52 @@
       ]
     },
     {
+      "id": "feat-033",
+      "name": "OCR 字幕层筛选",
+      "description": "解决同一 ROI 内背景英文、标牌、水印、装饰性字体或误识别伪文字被并入字幕的问题。当前 GUI 传入的 region_box 只表示"看哪里"，无法表达"相信哪一层文字"。本任务引入 subtitle profile 概念，描述目标字幕层的稳定特征：y 轨道/中心线、行高、最多行数、脚本提示、中心性偏好、持久背景文字过滤策略。Vision OCR 需要保留 per-line observation（text、confidence、bbox），再由 selector 选择目标字幕行并合成文本。",
+      "module": "src/sublift/ocr/, src/sublift/pipeline/, src/sublift/ipc/, apps/macos/Sources/SubLiftMac/",
+      "dependencies": ["feat-028"],
+      "status": "done",
+      "evidence": "已完成。子任务 feat-033a/b/c/d/e 全部完成。\n\nfeat-033a 结构化 OCR observation：models.py 新增 OcrLine dataclass（text/confidence/bbox）+ OcrResult.lines 字段（默认空，向后兼容）。vision.py _collect_results 读取 obs.boundingBox()，通过 _vision_bbox_to_pixels 把 Vision 归一化 bbox（左下原点）转换为裁剪图内绝对像素 bbox（左上原点），与 Swift 端 VideoCoordinateMapper 同公式。4 个新模型测试 + 3 个 Vision 集成测试断言 lines/bbox。\n\nfeat-033b subtitle profile 数据契约：models.py 新增 SubtitleProfile dataclass（y_center/y_tolerance/line_height/max_lines/script_hint）+ from_dict 工厂。protocol.py build_start_job 加 subtitle_profile 可选参数 + build_subtitle_profile 辅助函数 + _validate_subtitle_profile 校验器（必填字段、数值范围、max_lines∈{1,2}、script_hint∈{zh,en,auto}、未知字段拒绝）。10 个新 IPC schema 测试。\n\nfeat-033c 字幕行 selector 纯函数：新增 src/sublift/ocr/selector.py，纯函数 select_lines(lines, profile) -> (text, confidence)。算法：y 轨道过滤 → 行高过滤（>=line_height*0.5）→ max_lines 截断（取置信度最高）→ y 排序 → \\n 拼接。9 个单测覆盖 4 场景（单行+背景英文、双行、水印过滤、空行）。\n\nfeat-033d Python 接入：pipeline/core.py __init__ 加 profile 参数，ocr_segment 里 profile 非空且 lines 非空时调 select_lines，否则走旧路径。bridge.py _handle_start_job 读 subtitle_profile 透传 Pipeline。2 个 Pipeline 接入测试 + 2 个 bridge 接入测试。\n\nfeat-033d Swift 接入：Messages.swift 新增 SubtitleProfile Codable struct + StartJobMessage.subtitleProfile 字段。VideoCoordinateMapper.swift 新增 SubtitleProfileBuilder.fromSelection（从选中候选框推算 crop-relative profile：y_center 减 region_box 原点 y、line_height 均值、max_lines 按 y 聚类判定）。RegionSelectionModel.subtitleProfileForIPC()。SubtitleExtractor.extract 透传 profile。SubLiftMacApp 调用 extract 时传 regionModel.subtitleProfileForIPC()。2 个 Messages roundtrip 测试 + 4 个 SubtitleProfileBuilder 测试。\n\nfeat-033e 端到端验证：PIL 合成含目标中文 + 背景英文的混合图，VisionOcrEngine 真实 OCR + selector 端到端验证。test_selector_filters_background_english：合成图「你好世界」+「CHAPTER ONE」，selector 根据 profile 只输出中文字幕行，背景英文被过滤。test_selector_no_profile_keeps_all：无 profile 时 OcrResult.text 包含所有行（旧路径兼容）。\n\npersistent_text_policy（跨段时序过滤水印/持久背景文字）本轮跳过，留作后续迭代。\n\n验证：uv run ruff check . 通过；uv run mypy src tests 通过（54 source files）；uv run pytest 通过（271 passed, 2 skipped）；swift test 通过（123 passed）；./init.sh 8/8 全绿。",
+      "subtasks": [
+        {
+          "id": "feat-033a",
+          "name": "结构化 OCR observation",
+          "description": "扩展 OCR 数据模型，保留 Vision 每行识别结果的 text、confidence、相对/绝对 bbox；保持现有 OcrEngine Protocol 的兼容迁移方案，避免一次性破坏 mock/测试。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033b",
+          "name": "subtitle profile 数据契约",
+          "description": "定义 GUI/Python 共享的 subtitle_profile schema。profile 不记录每句字幕宽度，而记录目标字幕层的 y_center、y_tolerance、line_height、max_lines、script_hint、horizontal_policy、persistent_text_policy 等稳定约束。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033c",
+          "name": "字幕行 selector",
+          "description": "新增纯函数 selector，在 ROI 内根据 profile 从 OCR observations 中选择目标字幕行；支持单行/双行字幕、字幕长短变化、背景文字过滤和按 y/x 排序拼接。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033d",
+          "name": "GUI profile 生成与 IPC 接入",
+          "description": "基于用户选中的候选框生成 subtitle_profile，并通过 start_job 传给 Python；无 profile 时保持现有 region_box 行为。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033e",
+          "name": "验证与 benchmark 对照",
+          "description": "构造同一 ROI 内含目标字幕、背景英文/水印/伪文字的样例或 fixture，验证 selector 只输出目标字幕；用 benchmark 对比 CER/WER 与重复条目变化。",
+          "status": "done"
+        }
+      ]
+    },
+    {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
-      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构与打轴优化结果。",
+      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化结果与 OCR 字幕层筛选规划。",
       "module": "docs/",
-      "dependencies": ["feat-030", "feat-031"],
+      "dependencies": ["feat-030", "feat-031", "feat-033"],
       "status": "not-started",
       "evidence": ""
     }

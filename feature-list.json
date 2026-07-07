@@ -146,9 +146,16 @@
           "covers": ["feat-031"]
         },
         {
+          "id": "phase3.ocr-layer",
+          "name": "OCR 字幕层筛选",
+          "description": "在已选 ROI 内进一步区分目标字幕层与背景文字/伪文字。保留 OCR per-line observation（文本、bbox、confidence），由 subtitle profile 描述目标字幕的 y 轨道、行高、行数、脚本提示与持久背景过滤策略。覆盖 feat-033。",
+          "status": "done",
+          "covers": ["feat-033"]
+        },
+        {
           "id": "phase3.docs",
           "name": "文档收尾",
-          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构与打轴优化结果。覆盖 feat-032。",
+          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 字幕层筛选规划。覆盖 feat-032。",
           "status": "not-started",
           "covers": ["feat-032"]
         }

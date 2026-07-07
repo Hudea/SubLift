@@ -14,7 +14,7 @@ from PIL import Image
 
 from sublift.config import Config
 from sublift.detector import FixedRegionDetector
-from sublift.models import BoundingBox, Frame, OcrResult
+from sublift.models import BoundingBox, Frame, OcrLine, OcrResult, SubtitleProfile
 from sublift.ocr.mock import MockOcrEngine
 from sublift.pipeline.core import Pipeline, SegmentEvent
 
@@ -372,3 +372,109 @@ class TestPipelineStreaming:
         for i in range(5):
             pipeline.feed(_blank_frame(i * 200))
         assert pipeline.processed_count == 5
+
+
+class TestPipelineProfileSelector:
+    """feat-033d：Pipeline 接入 subtitle_profile + selector。
+
+    MockOcrEngine 返回带 lines 的 OcrResult，Pipeline ocr_segment
+    根据 profile 筛选目标字幕行，过滤背景文字。
+    """
+
+    def _make_ocr_with_lines(
+        self,
+        target_text: str,
+        target_y: int,
+        target_height: int,
+        bg_text: str,
+        bg_y: int,
+        bg_height: int,
+    ) -> MockOcrEngine:
+        """构造带 lines 的 MockOcrEngine（sequence 模式，每次返回相同结果）。"""
+        result = OcrResult(
+            text=f"{target_text}\n{bg_text}",
+            confidence=0.85,
+            lines=[
+                OcrLine(
+                    text=target_text,
+                    confidence=0.9,
+                    bbox=BoundingBox(x=10, y=target_y, width=200, height=target_height),
+                ),
+                OcrLine(
+                    text=bg_text,
+                    confidence=0.7,
+                    bbox=BoundingBox(x=10, y=bg_y, width=150, height=bg_height),
+                ),
+            ],
+        )
+        return MockOcrEngine(sequence=[result])
+
+    def test_profile_filters_background(self) -> None:
+        """profile 只选中文字幕行，过滤背景英文。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _blank_frame(600),
+            _blank_frame(800),
+        ]
+        ocr = self._make_ocr_with_lines(
+            target_text="你好",
+            target_y=40,
+            target_height=30,
+            bg_text="TITLE",
+            bg_y=5,
+            bg_height=15,
+        )
+        profile = SubtitleProfile(
+            y_center=55.0,
+            y_tolerance=30.0,
+            line_height=25.0,
+            max_lines=1,
+        )
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+            profile=profile,
+        )
+        for frame in frames:
+            event = pipeline.feed(frame)
+            if event is not None:
+                pipeline.ocr_segment(event)
+        result = pipeline.finalize()
+
+        assert len(result) == 1
+        assert result[0].text == "你好"
+
+    def test_no_profile_keeps_all_lines(self) -> None:
+        """无 profile 时走旧路径，保留 OcrResult.text（含背景文字）。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _blank_frame(600),
+            _blank_frame(800),
+        ]
+        ocr = self._make_ocr_with_lines(
+            target_text="你好",
+            target_y=40,
+            target_height=30,
+            bg_text="TITLE",
+            bg_y=5,
+            bg_height=15,
+        )
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+        )
+        for frame in frames:
+            event = pipeline.feed(frame)
+            if event is not None:
+                pipeline.ocr_segment(event)
+        result = pipeline.finalize()
+
+        assert len(result) == 1
+        assert "你好" in result[0].text
+        assert "TITLE" in result[0].text

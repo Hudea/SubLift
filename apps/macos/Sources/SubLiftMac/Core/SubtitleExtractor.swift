@@ -39,7 +39,8 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int = 5,
         engine: OcrEngineName = .vision,
         regionBox: RegionBox? = nil,
-        enableSsimPatrol: Bool = false
+        enableSsimPatrol: Bool = false,
+        subtitleProfile: SubtitleProfile? = nil
     ) {
         guard !isRunning else { return }
         _cancelled = false
@@ -50,7 +51,8 @@ final class SubtitleExtractor: ObservableObject {
                 fps: fps,
                 engine: engine,
                 regionBox: regionBox,
-                enableSsimPatrol: enableSsimPatrol
+                enableSsimPatrol: enableSsimPatrol,
+                subtitleProfile: subtitleProfile
             )
         }
     }
@@ -72,7 +74,8 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int,
         engine: OcrEngineName,
         regionBox: RegionBox?,
-        enableSsimPatrol: Bool
+        enableSsimPatrol: Bool,
+        subtitleProfile: SubtitleProfile?
     ) async {
         do {
             let startTime = Date()
@@ -100,7 +103,8 @@ final class SubtitleExtractor: ObservableObject {
                 confidenceThreshold: 0.5,
                 regionBox: regionBox,
                 durationMs: durationMs,
-                enableSsimPatrol: enableSsimPatrol ? true : nil
+                enableSsimPatrol: enableSsimPatrol ? true : nil,
+                subtitleProfile: subtitleProfile
             )
             _ = try await runDetached { [client] in
                 try client.request(startMsg, expecting: ProgressMessage.self)

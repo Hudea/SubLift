@@ -33,6 +33,7 @@ from sublift.ipc.protocol import (
     build_log,
     build_progress,
     build_start_job,
+    build_subtitle_profile,
     validate,
 )
 
@@ -129,6 +130,98 @@ class TestStartJob:
     def test_region_box_non_int(self) -> None:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[1, 2, "3", 4])  # type: ignore[list-item]
         with pytest.raises(ProtocolError, match="region_box"):
+            validate(msg)
+
+
+class TestSubtitleProfile:
+    """subtitle_profile IPC schema 测试（feat-033b）。"""
+
+    def test_build_subtitle_profile(self) -> None:
+        profile = build_subtitle_profile(
+            y_center=950.0, y_tolerance=30.0, line_height=60.0, max_lines=2
+        )
+        assert profile == {
+            "y_center": 950.0,
+            "y_tolerance": 30.0,
+            "line_height": 60.0,
+            "max_lines": 2,
+            "script_hint": "auto",
+        }
+
+    def test_start_job_with_profile(self) -> None:
+        profile = build_subtitle_profile(y_center=100.0, y_tolerance=20.0, line_height=40.0)
+        msg = build_start_job(
+            VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=profile
+        )
+        assert msg["subtitle_profile"] == profile
+        validate(msg)
+
+    def test_start_job_without_profile(self) -> None:
+        """无 subtitle_profile 时消息不包含该字段。"""
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        assert "subtitle_profile" not in msg
+        validate(msg)
+
+    def test_profile_none_not_in_msg(self) -> None:
+        msg = build_start_job(
+            VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=None
+        )
+        assert "subtitle_profile" not in msg
+        validate(msg)
+
+    def test_profile_missing_y_center(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = {"y_tolerance": 20.0, "line_height": 40.0}
+        with pytest.raises(ProtocolError, match="y_center"):
+            validate(msg)
+
+    def test_profile_non_numeric_y_center(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = {
+            "y_center": "high",
+            "y_tolerance": 20.0,
+            "line_height": 40.0,
+        }
+        with pytest.raises(ProtocolError, match="y_center"):
+            validate(msg)
+
+    def test_profile_invalid_max_lines(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = {
+            "y_center": 100.0,
+            "y_tolerance": 20.0,
+            "line_height": 40.0,
+            "max_lines": 3,
+        }
+        with pytest.raises(ProtocolError, match="max_lines"):
+            validate(msg)
+
+    def test_profile_invalid_script_hint(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = {
+            "y_center": 100.0,
+            "y_tolerance": 20.0,
+            "line_height": 40.0,
+            "script_hint": "klingon",
+        }
+        with pytest.raises(ProtocolError, match="script_hint"):
+            validate(msg)
+
+    def test_profile_extra_field_rejected(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = {
+            "y_center": 100.0,
+            "y_tolerance": 20.0,
+            "line_height": 40.0,
+            "unknown_field": 123,
+        }
+        with pytest.raises(ProtocolError, match="未知字段"):
+            validate(msg)
+
+    def test_profile_non_dict(self) -> None:
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
+        msg["subtitle_profile"] = [1, 2, 3]
+        with pytest.raises(ProtocolError, match="subtitle_profile 非字典"):
             validate(msg)
 
 

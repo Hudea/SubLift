@@ -74,6 +74,7 @@ def build_start_job(
     region_box: list[int] | None = None,
     duration_ms: int = 0,
     enable_ssim_patrol: bool | None = None,
+    subtitle_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
 
@@ -86,6 +87,7 @@ def build_start_job(
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
         enable_ssim_patrol: 可选 SSIM 巡逻开关（feat-031b）。None 不传（用
             Config 默认值 False）；True 显式启用 patrol；False 显式关闭。
+        subtitle_profile: 可选目标字幕层约束（feat-033b）。None 不传，走旧路径。
     """
     msg: dict[str, Any] = {
         "type": MSG_START_JOB,
@@ -98,6 +100,8 @@ def build_start_job(
     }
     if enable_ssim_patrol is not None:
         msg["enable_ssim_patrol"] = enable_ssim_patrol
+    if subtitle_profile is not None:
+        msg["subtitle_profile"] = subtitle_profile
     return msg
 
 
@@ -276,6 +280,8 @@ def validate(message: dict[str, Any]) -> None:
             _require_int(message, "duration_ms")
         if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
             _require_bool(message, "enable_ssim_patrol")
+        if "subtitle_profile" in message and message["subtitle_profile"] is not None:
+            _validate_subtitle_profile(message["subtitle_profile"])
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")
@@ -381,3 +387,65 @@ def _validate_entry(e: Any, i: int) -> None:
         e["confidence"], bool
     ):
         raise ProtocolError(f"entries[{i}].confidence 缺失或非数值: {e.get('confidence')!r}")
+
+
+# profile 字段名常量（Swift 端 CodingKeys 对齐）
+PROFILE_FIELDS = frozenset(
+    {"y_center", "y_tolerance", "line_height", "max_lines", "script_hint"}
+)
+PROFILE_SCRIPT_HINTS = frozenset({"zh", "en", "auto"})
+
+
+def build_subtitle_profile(
+    y_center: float,
+    y_tolerance: float,
+    line_height: float,
+    max_lines: int = 1,
+    script_hint: str = "auto",
+) -> dict[str, Any]:
+    """构造 subtitle_profile 字典（feat-033b）。
+
+    Args:
+        y_center: 目标字幕层中心 y（裁剪图内绝对像素，左上原点）。
+        y_tolerance: y 容差，line 中心 y 落在 [y_center-y_tolerance, y_center+y_tolerance]
+            才被 selector 选中。
+        line_height: 期望行高（像素），用于过滤背景细小文字。
+        max_lines: 最多保留几行（1=单行字幕，2=双行字幕）。
+        script_hint: 脚本提示（"zh"/"en"/"auto"），软约束，目前 selector 不强制使用。
+    """
+    return {
+        "y_center": y_center,
+        "y_tolerance": y_tolerance,
+        "line_height": line_height,
+        "max_lines": max_lines,
+        "script_hint": script_hint,
+    }
+
+
+def _validate_subtitle_profile(profile: Any) -> None:
+    """校验 subtitle_profile 字段 schema（feat-033b）。"""
+    if not isinstance(profile, dict):
+        raise ProtocolError(f"subtitle_profile 非字典: {profile!r}")
+
+    for key in ("y_center", "y_tolerance", "line_height"):
+        if key not in profile:
+            raise ProtocolError(f"subtitle_profile.{key} 缺失")
+        val = profile[key]
+        if isinstance(val, bool) or not isinstance(val, (int, float)):
+            raise ProtocolError(f"subtitle_profile.{key} 非数值: {val!r}")
+
+    if "max_lines" in profile:
+        ml = profile["max_lines"]
+        if not isinstance(ml, int) or isinstance(ml, bool) or ml not in (1, 2):
+            raise ProtocolError(f"subtitle_profile.max_lines 非法（仅允许 1 或 2）: {ml!r}")
+
+    if "script_hint" in profile:
+        sh = profile["script_hint"]
+        if not isinstance(sh, str) or sh not in PROFILE_SCRIPT_HINTS:
+            raise ProtocolError(
+                f"subtitle_profile.script_hint 非法（仅允许 zh/en/auto）: {sh!r}"
+            )
+
+    extra = set(profile.keys()) - PROFILE_FIELDS
+    if extra:
+        raise ProtocolError(f"subtitle_profile 含未知字段: {extra!r}")

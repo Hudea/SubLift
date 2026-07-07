@@ -125,6 +125,80 @@ enum RegionMerger {
     }
 }
 
+/// feat-033d：从用户选中的候选框推算 SubtitleProfile。
+///
+/// 把全帧坐标的选中候选框转换为裁剪图内（crop-relative）的 profile：
+/// - y_center: 选中框中心 y 均值，减去 region_box 原点 y
+/// - line_height: 选中框高度均值
+/// - y_tolerance: 覆盖选中框中心 y 的实际跨度 + 单行抖动
+///   （双行字幕两行中心相距约一个行高，lineHeight/2 不够）
+/// - max_lines: 按选中框 y 分布聚类判定（简单版：唯一 y 个数，clamp 1...2）
+enum SubtitleProfileBuilder {
+
+    /// 从选中候选框 + region_box 生成 SubtitleProfile。
+    ///
+    /// - Parameters:
+    ///   - selectedRects: 用户选中的候选框（全帧像素坐标）
+    ///   - regionBox: region_box [x, y, width, height]（x 恒为 0，y 为裁剪原点）
+    /// - Returns: crop-relative 的 SubtitleProfile；选中为空或 regionBox 无效时返回 nil
+    static func fromSelection(
+        selectedRects: [CGRect],
+        regionBox: RegionBox?
+    ) -> SubtitleProfile? {
+        guard !selectedRects.isEmpty,
+              let regionBox,
+              regionBox.count == 4
+        else { return nil }
+
+        let cropOriginY = CGFloat(regionBox[1])
+
+        let midYs = selectedRects.map { $0.midY }
+        let centerYAvg = midYs.reduce(0, +) / CGFloat(midYs.count)
+        let yCenter = Double(centerYAvg - cropOriginY)
+
+        let heights = selectedRects.map { $0.height }
+        let heightAvg = heights.reduce(0, +) / CGFloat(heights.count)
+        let lineHeight = Double(heightAvg)
+
+        let yTolerance = _computeYTolerance(midYs: midYs, centerYAvg: centerYAvg, lineHeight: lineHeight)
+
+        let maxLines = _computeMaxLines(midYs: midYs, heightAvg: heightAvg)
+
+        return SubtitleProfile(
+            yCenter: yCenter,
+            yTolerance: yTolerance,
+            lineHeight: lineHeight,
+            maxLines: maxLines,
+            scriptHint: "auto"
+        )
+    }
+
+    /// y_tolerance = 选中框中心 y 到均值的最大距离 + lineHeight/2（单行抖动余量）。
+    /// 双行字幕两行中心相距约一个行高，均值居中，每行到均值距离 ≈ span/2，
+    /// 加 lineHeight/2 余量保证两行都落在容差内。
+    private static func _computeYTolerance(
+        midYs: [CGFloat],
+        centerYAvg: CGFloat,
+        lineHeight: Double
+    ) -> Double {
+        let maxDist = midYs.map { abs($0 - centerYAvg) }.max() ?? 0
+        return Double(maxDist) + lineHeight / 2.0
+    }
+
+    /// max_lines 按 y 中心聚类：相邻中心差 > heightAvg 视为不同行。
+    private static func _computeMaxLines(midYs: [CGFloat], heightAvg: CGFloat) -> Int {
+        let centers = midYs.sorted()
+        var clusters: [CGFloat] = []
+        for c in centers {
+            if let last = clusters.last, abs(c - last) <= heightAvg {
+                continue
+            }
+            clusters.append(c)
+        }
+        return max(1, min(2, clusters.count))
+    }
+}
+
 /// feat-022：候选框配色（按编号区分）。
 enum RegionBoxPalette {
     static let colors: [ColorComponents] = [

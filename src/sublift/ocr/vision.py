@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sublift.models import OcrResult
+from sublift.models import BoundingBox, OcrLine, OcrResult
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -93,7 +93,7 @@ class VisionOcrEngine:
         if not success:
             return OcrResult(text="", confidence=0.0)
 
-        return _collect_results(request)
+        return _collect_results(request, image.size)
 
 
 def _pil_to_cgimage(image: Image.Image) -> Any:
@@ -126,31 +126,60 @@ def _pil_to_cgimage(image: Image.Image) -> Any:
     )
 
 
-def _collect_results(request: Any) -> OcrResult:
-    """从 VNRecognizeTextRequest 收集识别结果。
+def _collect_results(request: Any, image_size: tuple[int, int]) -> OcrResult:
+    """从 VNRecognizeTextRequest 收集识别结果（feat-033a 保留 per-line bbox）。
 
     Args:
         request: 已执行的 VNRecognizeTextRequest。
+        image_size: 裁剪图尺寸 (width, height)，用于把 Vision 归一化 bbox
+            转换为裁剪图内绝对像素坐标。
 
     Returns:
-        合并后的 OcrResult。多行文本以 "\\n" 连接，置信度取均值；
-        无结果返回 OcrResult("", 0.0)。
+        合并后的 OcrResult。text 为各行 "\\n" 拼接，confidence 为均值；
+        lines 保留每行 text/confidence/bbox。无结果返回 OcrResult("", 0.0)。
     """
     observations: list[Any] = request.results()
     if not observations:
         return OcrResult(text="", confidence=0.0)
 
-    texts: list[str] = []
-    confidences: list[float] = []
+    w, h = image_size
+    lines: list[OcrLine] = []
     for obs in observations:
         candidates = obs.topCandidates_(1)
         if candidates:
             candidate = candidates[0]
-            texts.append(candidate.string())
-            confidences.append(float(candidate.confidence()))
+            bbox = _vision_bbox_to_pixels(obs.boundingBox(), w, h)
+            lines.append(
+                OcrLine(
+                    text=candidate.string(),
+                    confidence=float(candidate.confidence()),
+                    bbox=bbox,
+                )
+            )
 
-    if not texts:
+    if not lines:
         return OcrResult(text="", confidence=0.0)
 
+    texts = [ln.text for ln in lines]
+    confidences = [ln.confidence for ln in lines]
     avg_conf = sum(confidences) / len(confidences)
-    return OcrResult(text="\n".join(texts), confidence=avg_conf)
+    return OcrResult(text="\n".join(texts), confidence=avg_conf, lines=lines)
+
+
+def _vision_bbox_to_pixels(norm_bbox: Any, w: int, h: int) -> BoundingBox:
+    """Vision 归一化 bbox（左下原点）→ 裁剪图绝对像素 bbox（左上原点）。
+
+    与 Swift 端 VideoCoordinateMapper.visionNormalizedRectToVideoPixels 同公式：
+        y = (1 - origin.y - height) * h
+    """
+    rect = norm_bbox
+    x = int(rect.origin.x * w)
+    y = int((1.0 - rect.origin.y - rect.size.height) * h)
+    bw = int(rect.size.width * w)
+    bh = int(rect.size.height * h)
+    return BoundingBox(
+        x=max(0, min(x, w - 1)),
+        y=max(0, min(y, h - 1)),
+        width=max(1, min(bw, w)),
+        height=max(1, min(bh, h)),
+    )

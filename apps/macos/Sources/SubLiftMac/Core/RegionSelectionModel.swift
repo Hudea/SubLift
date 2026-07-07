@@ -153,4 +153,16 @@ final class RegionSelectionModel: ObservableObject {
             videoHeight: videoHeight
         )
     }
+
+    /// feat-033d：从选中候选框生成 SubtitleProfile；无选中或无 regionBox 时返回 nil。
+    func subtitleProfileForIPC() -> SubtitleProfile? {
+        let regionBox = regionBoxForIPC()
+        let selectedRects = candidates
+            .filter { selectedIds.contains($0.id) }
+            .map { $0.pixelRect }
+        return SubtitleProfileBuilder.fromSelection(
+            selectedRects: selectedRects,
+            regionBox: regionBox
+        )
+    }
 }

@@ -224,7 +224,8 @@ struct ContentView: View {
                         videoURL: url,
                         engine: defaultEngine,
                         regionBox: regionModel.regionBoxForIPC(),
-                        enableSsimPatrol: enableSsimPatrol
+                        enableSsimPatrol: enableSsimPatrol,
+                        subtitleProfile: regionModel.subtitleProfileForIPC()
                     )
                 } label: {
                     Label("提取字幕", systemImage: "text.viewfinder")
