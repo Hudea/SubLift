@@ -1,0 +1,11 @@
+{
+  "video": "debug/Zootopia_clip_1080p.mp4",
+  "ground_truth": "benchmark/fixtures/Zootopia_clip_1080p_gt.srt",
+  "fps": 5.0,
+  "engine": "vision",
+  "confidence": 0.5,
+  "match_threshold": 0.5,
+  "region_box": null,
+  "label": "cli_bottomcrop_5fps",
+  "output_dir": "debug/benchmark-reports"
+}

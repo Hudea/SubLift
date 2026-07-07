@@ -20,10 +20,10 @@
 ### 1.2 在范围内
 
 - **Benchmark 优化**
-  - 定义核心指标：segment recall/precision/F1、CER、WER、处理速度（× 实时）。
+  - 定义核心指标：打轴精准度、识别准确率、端到端可用性、处理速度（× 实时）。
   - ground truth 加载与字幕条目对齐。
   - 一键运行 benchmark 的入口脚本。
-  - 结构化报告（JSON/CSV + Markdown 摘要）。
+  - 结构化诊断报告（agent JSON/GT CSV/detection CSV/summary）。
   - 记录当前基线，作为后续优化对比依据。
 
 - **增量处理 + 前台进度显示优化**
@@ -34,7 +34,7 @@
 
 - **打轴检测优化**
   - 仅优化 `pipeline/` 中打轴相关模块（`signature` / `changepoint` / `timeline`）。
-  - 通过 benchmark 验证 segment F1 提升。
+  - 通过 benchmark 验证 `timing_f1` 提升，且 failure clusters 可解释。
 
 - **OCR 字幕层筛选**
   - 区分 `region_box` 与 `subtitle_profile`：前者表示“看哪里”，后者表示“相信 ROI 里的哪一层文字”。
@@ -58,8 +58,9 @@
 ### 2.1 Benchmark 优化
 
 - [ ] 一条命令即可对「视频 + ground truth SRT」输出完整指标。
-- [ ] 报告至少包含 segment recall/precision/F1、CER、WER、速度（× 实时）。
-- [ ] 记录当前基线（Zootopia clip 等现有素材）到 `benchmark/reports/` 或 `docs/benchmarks/`。
+- [ ] 报告至少包含 timing recall/precision/F1、边界误差、CER macro/micro、字符准确率、端到端可用召回、速度（× 实时）。
+- [ ] 报告输出 agent 可读 JSON 与逐条 GT/detection CSV，可直接定位漏检、合并、过切分、OCR 空文本和高 CER。
+- [ ] 记录当前基线（Zootopia clip 等现有素材）到 `debug/benchmark-reports/` 或 `docs/benchmarks/`。
 - [ ] benchmark 脚本通过 `./init.sh` 验证（不引入 lint/type/test 回归）。
 
 ### 2.2 增量处理 + 前台进度显示优化
@@ -71,7 +72,7 @@
 
 ### 2.3 打轴检测优化
 
-- [ ] 在 benchmark 数据集上，segment F1 从当前 91.3% 提升到 ≥ 95%。
+- [ ] 在 benchmark 数据集上，`timing_f1` 提升到 ≥ 95%。
 - [ ] precision 不下降（不出现新的误检）。
 - [ ] 记录具体改善了哪些场景（如相似中文文本漏分段）。
 
@@ -86,13 +87,14 @@
 
 | id | 任务 | 目标 | 依赖 | 验收 |
 |---|---|---|---|---|
-| **feat-027** | Benchmark 框架 | benchmark | — | 定义指标、ground truth 加载、一键运行、输出报告 |
+| **feat-027** | Benchmark 框架 | benchmark | — | 定义诊断指标、ground truth 加载、一键运行、输出诊断报告 |
 | **feat-028** | Benchmark 基线录入 | benchmark | feat-027 | 对现有素材跑通 benchmark，记录基线数值 |
 | **feat-029** | 增量处理架构 | incremental | feat-028 | Pipeline/IPC 支持边收帧边处理；首条反馈时间缩短 |
 | **feat-030** | 前台进度与取消 | incremental | feat-029 | CLI/GUI 显示阶段进度；取消按钮生效 |
-| **feat-031** | 打轴检测优化 | timeline | feat-028 | segment F1 ≥ 95%，precision 不下降 |
+| **feat-031** | 打轴检测优化 | timeline | feat-028 | `timing_f1` ≥ 95%，`timing_precision` 不下降 |
 | **feat-033** | OCR 字幕层筛选 | ocr-layer | feat-028 | 已选 ROI 内过滤背景文字/伪文字，只输出目标字幕层 |
-| **feat-032** | Phase 3 文档收尾 | docs | feat-030, feat-031, feat-033 | ARCHITECTURE/REQUIREMENTS/README/DECISIONS 更新 |
+| **feat-034** | 持久背景文字过滤 | ocr-layer | feat-033 | 跨段过滤 ticker / 水印等持久背景文字 |
+| **feat-032** | Phase 3 文档收尾 | docs | feat-030, feat-031, feat-033, feat-034 | ARCHITECTURE/REQUIREMENTS/README/DECISIONS 更新 |
 
 > 具体实现方法（如是否常驻 server、是否重构 Pipeline 为 push 模型、是否加 pixel-diff 信号等）
 > 不在本计划阶段定死，由各任务启动时根据实测和约束选择。
@@ -109,6 +111,8 @@ feat-027 (Benchmark 框架)
     │       └─ feat-031 (打轴检测优化)
     │
     └─ feat-033 (OCR 字幕层筛选)
+            │
+            ├─ feat-034 (持久背景文字过滤)
             │
             └─ feat-032 (文档收尾)
 ```
@@ -136,6 +140,7 @@ feat-027 (Benchmark 框架)
 
 - [ ] feat-027~028 完成：benchmark 可运行，基线已记录。
 - [ ] feat-029~030 完成：增量处理跑通，CLI/GUI 进度与取消可用。
-- [ ] feat-031 完成：segment F1 ≥ 95%。
+- [ ] feat-031 完成：`timing_f1` ≥ 95%。
 - [ ] feat-033 完成：已选 ROI 内的背景文字/伪文字不再并入目标字幕。
+- [ ] feat-034 完成：持久背景文字（ticker / 水印）可跨段识别并过滤。
 - [ ] feat-032 完成：文档更新，main 分支 `./init.sh` 8/8 通过。
