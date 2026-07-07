@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from sublift.models import BoundingBox, OcrLine, OcrResult
+from sublift.models import BoundingBox, OcrLine, OcrResult, PersistentTextPolicy, SubtitleProfile
 from sublift.ocr.base import OcrEngine
 from sublift.ocr.mock import MockOcrEngine
 from sublift.ocr.vision import VisionOcrEngine, is_vision_available
@@ -42,6 +42,51 @@ class TestOcrLineModel:
         assert result.text == "hello"
         assert result.confidence == 0.8
         assert result.lines == []
+
+
+class TestSubtitleProfileModel:
+    """SubtitleProfile / PersistentTextPolicy 数据模型测试（feat-033b / feat-034a）。"""
+
+    def test_profile_defaults(self) -> None:
+        profile = SubtitleProfile(y_center=100.0, y_tolerance=20.0, line_height=40.0)
+        assert profile.max_lines == 1
+        assert profile.script_hint == "auto"
+        assert profile.persistent_text_policy is None
+
+    def test_profile_from_dict_without_policy(self) -> None:
+        profile = SubtitleProfile.from_dict({
+            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
+        })
+        assert profile.persistent_text_policy is None
+
+    def test_profile_from_dict_with_policy(self) -> None:
+        profile = SubtitleProfile.from_dict({
+            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
+            "persistent_text_policy": {
+                "enabled": True, "min_repeat_segments": 2,
+                "min_distinct_texts": 5, "y_bin_ratio": 0.4,
+            },
+        })
+        assert profile.persistent_text_policy is not None
+        assert profile.persistent_text_policy.enabled is True
+        assert profile.persistent_text_policy.min_repeat_segments == 2
+        assert profile.persistent_text_policy.min_distinct_texts == 5
+        assert abs(profile.persistent_text_policy.y_bin_ratio - 0.4) < 1e-6
+
+    def test_profile_from_dict_policy_non_dict_returns_none(self) -> None:
+        """persistent_text_policy 不是 dict 时被视为 None（保守）。"""
+        profile = SubtitleProfile.from_dict({
+            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
+            "persistent_text_policy": None,
+        })
+        assert profile.persistent_text_policy is None
+
+    def test_persistent_policy_defaults(self) -> None:
+        policy = PersistentTextPolicy()
+        assert policy.enabled is True
+        assert policy.min_repeat_segments == 3
+        assert policy.min_distinct_texts == 4
+        assert abs(policy.y_bin_ratio - 0.5) < 1e-6
 
 
 class TestMockOcrEngine:

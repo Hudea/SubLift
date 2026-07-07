@@ -160,6 +160,23 @@ struct RegionGeometryTests {
     }
 
     @Test
+    func profileBuilder_defaultGeneratesPersistentPolicy() {
+        // feat-034e：SubtitleProfileBuilder.fromSelection 默认生成 persistent_text_policy
+        let rect = CGRect(x: 100, y: 940, width: 300, height: 50)
+        let regionBox: RegionBox = [0, 900, 1920, 180]
+        let profile = SubtitleProfileBuilder.fromSelection(
+            selectedRects: [rect],
+            regionBox: regionBox
+        )
+        #expect(profile?.persistentTextPolicy != nil)
+        let policy = profile?.persistentTextPolicy
+        #expect(policy?.enabled == true)
+        #expect(policy?.minRepeatSegments == 3)
+        #expect(policy?.minDistinctinctTexts == 4)
+        #expect(policy?.yBinRatio == 0.5)
+    }
+
+    @Test
     func profileBuilder_doubleLine_selects_both_lines() {
         /// 端到端验证：用 Swift builder 对双行字幕的 profile 输出，selector 应同时选中两行。
         /// 之前 yTolerance = lineHeight/2 时会漏选双行，见缺陷报告。

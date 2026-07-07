@@ -164,12 +164,17 @@ enum SubtitleProfileBuilder {
 
         let maxLines = _computeMaxLines(midYs: midYs, heightAvg: heightAvg)
 
+        // feat-034e：默认启用持久背景文字过滤（ticker / 水印）
+        // 用默认参数（min_repeat_segments=3, min_distinct_texts=4, y_bin_ratio=0.5）
+        let policy = PersistentTextPolicy()
+
         return SubtitleProfile(
             yCenter: yCenter,
             yTolerance: yTolerance,
             lineHeight: lineHeight,
             maxLines: maxLines,
-            scriptHint: "auto"
+            scriptHint: "auto",
+            persistentTextPolicy: policy
         )
     }
 

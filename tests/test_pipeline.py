@@ -14,7 +14,14 @@ from PIL import Image
 
 from sublift.config import Config
 from sublift.detector import FixedRegionDetector
-from sublift.models import BoundingBox, Frame, OcrLine, OcrResult, SubtitleProfile
+from sublift.models import (
+    BoundingBox,
+    Frame,
+    OcrLine,
+    OcrResult,
+    PersistentTextPolicy,
+    SubtitleProfile,
+)
 from sublift.ocr.mock import MockOcrEngine
 from sublift.pipeline.core import Pipeline, SegmentEvent
 
@@ -478,3 +485,202 @@ class TestPipelineProfileSelector:
         assert len(result) == 1
         assert "你好" in result[0].text
         assert "TITLE" in result[0].text
+
+
+class TestPipelineSegmentOcrLinesCache:
+    """feat-034b：Pipeline 缓存 per-segment OcrLine，与 _closed_entries 同 index 对齐。
+
+    persistent filter 在 finalize 阶段需要访问每段的 OcrLine 列表，
+    故 ocr_segment 必须把 ocr_result.lines 缓存起来。
+    """
+
+    def _make_ocr_with_lines(self, results: list[OcrResult]) -> MockOcrEngine:
+        return MockOcrEngine(sequence=results)
+
+    def test_lines_cached_and_aligned_with_entries(self) -> None:
+        """两段字幕，每段 OCR 返回不同 lines，缓存长度与 entries 对齐。"""
+        r1 = OcrResult(
+            text="你好\nTITLE",
+            confidence=0.85,
+            lines=[
+                OcrLine(text="你好", confidence=0.9,
+                        bbox=BoundingBox(x=10, y=40, width=200, height=30)),
+                OcrLine(text="TITLE", confidence=0.7,
+                        bbox=BoundingBox(x=10, y=5, width=150, height=15)),
+            ],
+        )
+        r2 = OcrResult(
+            text="世界\nTITLE",
+            confidence=0.82,
+            lines=[
+                OcrLine(text="世界", confidence=0.88,
+                        bbox=BoundingBox(x=10, y=40, width=200, height=30)),
+                OcrLine(text="TITLE", confidence=0.65,
+                        bbox=BoundingBox(x=10, y=5, width=150, height=15)),
+            ],
+        )
+        ocr = self._make_ocr_with_lines([r1, r2])
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _blank_frame(600),
+            _blank_frame(800),
+            _subtitle_frame_text_b(1000),
+            _subtitle_frame_text_b(1200),
+            _blank_frame(1400),
+            _blank_frame(1600),
+        ]
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+        )
+        for frame in frames:
+            event = pipeline.feed(frame)
+            if event is not None:
+                pipeline.ocr_segment(event)
+
+        # 闭合段数 == 2（两段独立字幕）
+        assert len(pipeline._closed_entries) == 2
+        assert len(pipeline._segment_ocr_lines) == 2
+        # 对齐：每段缓存的 lines 长度与 OcrResult.lines 一致
+        assert len(pipeline._segment_ocr_lines[0]) == 2
+        assert len(pipeline._segment_ocr_lines[1]) == 2
+        # 内容正确
+        assert pipeline._segment_ocr_lines[0][0].text == "你好"
+        assert pipeline._segment_ocr_lines[1][0].text == "世界"
+
+    def test_no_anchor_frame_caches_empty_lines(self) -> None:
+        """early return 路径（无 anchor frame）缓存空 list，保持对齐。"""
+        ocr = MockOcrEngine(text="你好", confidence=0.9)
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+        )
+        # 构造一个无 anchor 的 SegmentEvent（anchor_frame=None）
+        event = SegmentEvent(start_ms=0, end_ms=1000, anchor_frame=None)
+        entry = pipeline.ocr_segment(event)
+
+        assert entry.text == ""
+        assert entry.confidence == 0.0
+        assert len(pipeline._closed_entries) == 1
+        assert len(pipeline._segment_ocr_lines) == 1
+        assert pipeline._segment_ocr_lines[0] == []
+
+    def test_reset_clears_segment_ocr_lines(self) -> None:
+        """run_frames 触发 _reset_streaming_state，清空缓存。"""
+        # 固定模式 MockOcrEngine（每次 recognize 返回相同结果，可重复 run）
+        ocr = MockOcrEngine(text="你好", confidence=0.9)
+        frames = [_blank_frame(0), _subtitle_frame(200), _subtitle_frame(400), _blank_frame(600)]
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+        )
+        # 固定模式不返回 lines，缓存为空但长度与 entries 对齐
+        pipeline.run_frames(iter(frames))
+        assert len(pipeline._segment_ocr_lines) == 1
+        assert pipeline._segment_ocr_lines[0] == []
+
+        # 再次 run_frames，状态应被重置（旧缓存被清掉，新缓存重建）
+        pipeline.run_frames(iter(frames))
+        assert len(pipeline._segment_ocr_lines) == 1
+
+
+class TestPipelinePersistentFilter:
+    """feat-034d：Pipeline.finalize 接入 persistent_text_policy。
+
+    模拟 ticker 场景：4 段独立字幕，每段中文不同 + ticker 文本片段多变。
+    persistent filter 在 finalize 阶段剔除 ticker，只保留中文。
+    """
+
+    def _make_segment_ocr(
+        self, target: str, ticker: str
+    ) -> OcrResult:
+        """构造单段 OCR 结果（中文 + ticker，y 不同）。"""
+        return OcrResult(
+            text=f"{target}\n{ticker}",
+            confidence=0.85,
+            lines=[
+                OcrLine(text=target, confidence=0.9,
+                        bbox=BoundingBox(x=10, y=40, width=200, height=30)),
+                OcrLine(text=ticker, confidence=0.7,
+                        bbox=BoundingBox(x=10, y=70, width=150, height=20)),
+            ],
+        )
+
+    def test_finalize_filters_persistent_ticker(self) -> None:
+        """4 段独立字幕，ticker 在不同段出现不同片段，finalize 剔除 ticker。"""
+        results = [
+            self._make_segment_ocr("跟胡尼克", "UNLIKEL"),
+            self._make_segment_ocr("一位狐狸", "CONSPIRACY"),
+            self._make_segment_ocr("调查案子", "DISCOVER"),
+            self._make_segment_ocr("发现线索", "THE TRUTH"),
+        ]
+        ocr = MockOcrEngine(sequence=results)
+        # 构造 4 段独立字幕帧序列
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200), _subtitle_frame(400),
+            _blank_frame(600), _blank_frame(800),
+            _subtitle_frame_text_b(1000), _subtitle_frame_text_b(1200),
+            _blank_frame(1400), _blank_frame(1600),
+            _subtitle_frame(1800), _subtitle_frame(2000),
+            _blank_frame(2200), _blank_frame(2400),
+            _subtitle_frame_text_b(2600), _subtitle_frame_text_b(2800),
+            _blank_frame(3000), _blank_frame(3200),
+        ]
+        profile = SubtitleProfile(
+            y_center=55.0, y_tolerance=30.0, line_height=30.0, max_lines=1,
+            persistent_text_policy=PersistentTextPolicy(min_distinct_texts=4),
+        )
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+            profile=profile,
+        )
+        result = pipeline.run_frames(iter(frames))
+
+        # 4 段字幕都应保留，ticker 被剔除
+        assert len(result) == 4
+        texts = [e.text for e in result]
+        assert "跟胡尼克" in texts
+        assert "一位狐狸" in texts
+        assert "调查案子" in texts
+        assert "发现线索" in texts
+        # ticker 文本不应出现在任何段
+        for t in texts:
+            assert "UNLIKEL" not in t
+            assert "CONSPIRACY" not in t
+
+    def test_finalize_no_policy_zero_behavior_change(self) -> None:
+        """profile 无 persistent_text_policy 时，finalize 行为与旧路径一致。"""
+        r1 = self._make_segment_ocr("你好", "TICKER")
+        r2 = self._make_segment_ocr("世界", "TICKER")
+        ocr = MockOcrEngine(sequence=[r1, r2])
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200), _subtitle_frame(400),
+            _blank_frame(600), _blank_frame(800),
+            _subtitle_frame_text_b(1000), _subtitle_frame_text_b(1200),
+            _blank_frame(1400), _blank_frame(1600),
+        ]
+        profile_no_policy = SubtitleProfile(
+            y_center=55.0, y_tolerance=30.0, line_height=30.0, max_lines=1,
+        )
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(BoundingBox(x=0, y=0, width=320, height=80)),
+            ocr=ocr,
+            config=Config(min_duration_ms=0),
+            profile=profile_no_policy,
+        )
+        result = pipeline.run_frames(iter(frames))
+
+        # 无 persistent policy：selector 靠 max_lines=1 截断取置信度最高
+        # 中文 confidence=0.9 > ticker 0.7，只保留中文
+        assert len(result) == 2
+        assert result[0].text == "你好"
+        assert result[1].text == "世界"

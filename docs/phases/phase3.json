@@ -78,7 +78,7 @@
     {
       "id": "feat-033",
       "name": "OCR 字幕层筛选",
-      "description": "解决同一 ROI 内背景英文、标牌、水印、装饰性字体或误识别伪文字被并入字幕的问题。当前 GUI 传入的 region_box 只表示"看哪里"，无法表达"相信哪一层文字"。本任务引入 subtitle profile 概念，描述目标字幕层的稳定特征：y 轨道/中心线、行高、最多行数、脚本提示、中心性偏好、持久背景文字过滤策略。Vision OCR 需要保留 per-line observation（text、confidence、bbox），再由 selector 选择目标字幕行并合成文本。",
+      "description": "解决同一 ROI 内背景英文、标牌、水印、装饰性字体或误识别伪文字被并入字幕的问题。当前 GUI 传入的 region_box 只表示「看哪里」，无法表达「相信哪一层文字」。本任务引入 subtitle profile 概念，描述目标字幕层的稳定特征：y 轨道/中心线、行高、最多行数、脚本提示、中心性偏好、持久背景文字过滤策略。Vision OCR 需要保留 per-line observation（text、confidence、bbox），再由 selector 选择目标字幕行并合成文本。",
       "module": "src/sublift/ocr/, src/sublift/pipeline/, src/sublift/ipc/, apps/macos/Sources/SubLiftMac/",
       "dependencies": ["feat-028"],
       "status": "done",
@@ -119,11 +119,52 @@
     {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
-      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化结果与 OCR 字幕层筛选规划。",
+      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化结果、OCR 字幕层筛选与持久背景文字过滤。",
       "module": "docs/",
-      "dependencies": ["feat-030", "feat-031", "feat-033"],
+      "dependencies": ["feat-030", "feat-031", "feat-033", "feat-034"],
       "status": "not-started",
       "evidence": ""
+    },
+    {
+      "id": "feat-034",
+      "name": "持久背景文字过滤",
+      "description": "跨段时序统计识别持久背景文字（ticker / 水印），在 Pipeline.finalize 后处理剔除。单帧 selector（feat-033）对「同带同高、水平重叠」的 ticker 失效：y 轨道过滤失效（ticker 中心 y 与目标字幕重合）、行高过滤失效（ticker 行高接近目标）、单条 observation 合并（Vision 把水平相邻的中英文合并成一行）。本任务通过跨段时序统计解决：持久背景文字会在多段中以同 y 轨道、相同或不同文本片段重复出现。双条件算法：A 同文本指纹连续重复段数 ≥ K1（固定水印）；B 同 y_bin 不同文本数 ≥ M（ticker 文本片段多变）。判定为持久背景的行从对应段 entry.text 中剔除，重新合成。判定时机选 Pipeline.finalize 后处理：时序统计完整、不增加 push_entry 延迟、is_final 全量替换机制正好契合。",
+      "module": "src/sublift/ocr/, src/sublift/pipeline/, src/sublift/ipc/, apps/macos/Sources/SubLiftMac/",
+      "dependencies": ["feat-033"],
+      "status": "done",
+      "evidence": "已完成。子任务 feat-034a/b/c/d/e 全部完成。\n\nfeat-034a 数据契约与 schema：models.py 新增 PersistentTextPolicy dataclass（enabled/min_repeat_segments/min_distinct_texts/y_bin_ratio）+ SubtitleProfile.persistent_text_policy 字段 + from_dict 扩展。protocol.py PROFILE_FIELDS 加 persistent_text_policy + build_persistent_text_policy 辅助函数 + _validate_persistent_text_policy 嵌套校验器（数值范围、正整数、未知字段拒绝）。11 个新 IPC schema 测试。Swift SubtitleProfile Codable 加 persistentTextPolicy 字段 + PersistentTextPolicy struct。\n\nfeat-034b Pipeline 缓存 per-segment OcrLine：Pipeline 新增 _segment_ocr_lines 字段，ocr_segment 在 OCR 后缓存 ocr_result.lines（early return 路径缓存空 list），与 _closed_entries 严格同 index 对齐。reset/cancel 同步清理。3 个新单测（缓存对齐、early return 对齐、reset 清理）。\n\nfeat-034c persistent filter 纯函数：新增 src/sublift/ocr/persistent.py，纯函数 filter_persistent_text(entries, segment_lines, profile) -> list[SubtitleEntry]。双条件算法：A 非目标轨道上同指纹最长连续出现段数 ≥ K1；B 非目标轨道上同 y_bin 不同指纹数 ≥ M → 整个 y_bin 标记。target_bins 由 _filter_candidates 选出每段目标行的 y_bin 集合（排除目标轨道避免误伤多变/重复的目标字幕）。剔除持久行后用 _filter_candidates + _compose 重新合成 text/confidence。selector.py 重构出 _filter_candidates 和 _compose 子函数供 persistent.py 复用。12 个单测覆盖 7 场景（ticker、固定水印、双行字幕安全、短字幕安全、空段、policy disabled、纯水印段、长度不一致）。\n\nfeat-034d Pipeline.finalize 接入：finalize 在 merge_entries 之前调 filter_persistent_text，policy=None 或 disabled 时原样返回（零行为变化）。2 个 Pipeline 接入测试（ticker 剔除端到端、无 policy 行为不变）。\n\nfeat-034e Swift GUI 生成与端到端验证：Messages.swift 新增 PersistentTextPolicy Codable struct + SubtitleProfile.persistentTextPolicy 字段。SubtitleProfileBuilder.fromSelection 默认生成 policy（enabled=true 用默认参数）。3 个新 Swift 测试（policy roundtrip、无 policy nil、builder 默认生成 policy）。\n\n验证：uv run ruff check . 通过；uv run mypy src tests 通过（56 source files）；uv run pytest 通过（303 passed, 2 skipped）；swift test 通过（127 passed）；./init.sh 8/8 全绿。",
+      "subtasks": [
+        {
+          "id": "feat-034a",
+          "name": "数据契约与 schema",
+          "description": "PersistentTextPolicy dataclass（min_repeat_segments/min_distinct_texts/y_bin_ratio/enabled）+ SubtitleProfile.persistent_text_policy 字段 + from_dict 扩展。IPC PROFILE_FIELDS 加字段 + 嵌套 dict 校验器（数值范围、未知字段拒绝、enabled 默认 True）。Swift SubtitleProfile Codable 扩展。",
+          "status": "done"
+        },
+        {
+          "id": "feat-034b",
+          "name": "Pipeline 缓存 per-segment OcrLine",
+          "description": "Pipeline 新增 _segment_ocr_lines 字段，ocr_segment 缓存 ocr_result.lines（仅 profile 非空时），与 _closed_entries 严格同 index 对齐。early return 路径同样对齐（append 空 list）。reset/cancel 同步清理。",
+          "status": "done"
+        },
+        {
+          "id": "feat-034c",
+          "name": "persistent filter 纯函数",
+          "description": "新增 src/sublift/ocr/persistent.py 纯函数 filter_persistent_text(entries, segment_lines, profile) -> list[SubtitleEntry]。算法：按 y_bin 聚合所有段 lines；条件 A 同文本指纹最长连续段数 ≥ K1 → 标记该指纹为持久；条件 B 同 y_bin 不同文本指纹数 ≥ M → 标记整个 y_bin 为持久背景带；剔除被标记行后对每段重新 select_lines 合成 text/confidence。policy=None 或 enabled=False 时原样返回。selector 重构出可复用子函数避免重复实现。",
+          "status": "done"
+        },
+        {
+          "id": "feat-034d",
+          "name": "Pipeline.finalize 接入",
+          "description": "finalize 在 merge_entries 之前调 filter_persistent_text。policy=None 或 disabled 时走旧路径（零行为变化）。端到端 fixture：PIL 合成多帧「中文 + ticker」序列验证 ticker 被剔除、中文保留。",
+          "status": "done"
+        },
+        {
+          "id": "feat-034e",
+          "name": "Swift GUI 生成与端到端验证",
+          "description": "SubtitleProfileBuilder 默认生成 persistent_text_policy（enabled=true 用默认参数）。Swift Codable roundtrip 测试。端到端合成多帧序列跑 VisionOcrEngine + persistent filter，断言 ticker 剔除、中文保留。",
+          "status": "done"
+        }
+      ]
     }
   ]
 }

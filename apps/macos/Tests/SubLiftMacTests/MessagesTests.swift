@@ -95,6 +95,78 @@ struct MessagesTests {
     }
 
     @Test
+    func startJobWithPersistentTextPolicy() throws {
+        // feat-034e：profile 含 persistent_text_policy 的 roundtrip
+        let policy = PersistentTextPolicy(
+            enabled: true,
+            minRepeatSegments: 3,
+            minDistinctinctTexts: 4,
+            yBinRatio: 0.5
+        )
+        let profile = SubtitleProfile(
+            yCenter: 950.0,
+            yTolerance: 30.0,
+            lineHeight: 60.0,
+            maxLines: 1,
+            scriptHint: "auto",
+            persistentTextPolicy: policy
+        )
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            regionBox: [0, 800, 1920, 200],
+            durationMs: 60000,
+            subtitleProfile: profile
+        )
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
+
+        #expect(decoded.subtitleProfile?.persistentTextPolicy != nil)
+        let p = decoded.subtitleProfile?.persistentTextPolicy
+        #expect(p?.enabled == true)
+        #expect(p?.minRepeatSegments == 3)
+        #expect(p?.minDistinctinctTexts == 4)
+        #expect(p?.yBinRatio == 0.5)
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let profileJson = try #require(json["subtitle_profile"] as? [String: Any])
+        let policyJson = try #require(profileJson["persistent_text_policy"] as? [String: Any])
+        #expect(policyJson["enabled"] as? Bool == true)
+        #expect(policyJson["min_repeat_segments"] as? Int == 3)
+        #expect(policyJson["min_distinct_texts"] as? Int == 4)
+        #expect(policyJson["y_bin_ratio"] as? Double == 0.5)
+    }
+
+    @Test
+    func startJobWithoutPersistentPolicy() throws {
+        // feat-034e：profile 无 persistent_text_policy 时字段为 nil
+        let profile = SubtitleProfile(
+            yCenter: 950.0,
+            yTolerance: 30.0,
+            lineHeight: 60.0
+        )
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            regionBox: [0, 800, 1920, 200],
+            durationMs: 60000,
+            subtitleProfile: profile
+        )
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
+
+        #expect(decoded.subtitleProfile?.persistentTextPolicy == nil)
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let profileJson = try #require(json["subtitle_profile"] as? [String: Any])
+        #expect(profileJson["persistent_text_policy"] == nil)
+    }
+
+    @Test
     func startJobWithoutProfile() throws {
         let msg = StartJobMessage(
             videoId: "V1",

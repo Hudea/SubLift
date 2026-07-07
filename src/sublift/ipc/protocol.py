@@ -391,9 +391,21 @@ def _validate_entry(e: Any, i: int) -> None:
 
 # profile 字段名常量（Swift 端 CodingKeys 对齐）
 PROFILE_FIELDS = frozenset(
-    {"y_center", "y_tolerance", "line_height", "max_lines", "script_hint"}
+    {
+        "y_center",
+        "y_tolerance",
+        "line_height",
+        "max_lines",
+        "script_hint",
+        "persistent_text_policy",
+    }
 )
 PROFILE_SCRIPT_HINTS = frozenset({"zh", "en", "auto"})
+
+# persistent_text_policy 字段名常量（feat-034a）
+PERSISTENT_POLICY_FIELDS = frozenset(
+    {"enabled", "min_repeat_segments", "min_distinct_texts", "y_bin_ratio"}
+)
 
 
 def build_subtitle_profile(
@@ -402,8 +414,9 @@ def build_subtitle_profile(
     line_height: float,
     max_lines: int = 1,
     script_hint: str = "auto",
+    persistent_text_policy: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """构造 subtitle_profile 字典（feat-033b）。
+    """构造 subtitle_profile 字典（feat-033b / feat-034a）。
 
     Args:
         y_center: 目标字幕层中心 y（裁剪图内绝对像素，左上原点）。
@@ -412,18 +425,45 @@ def build_subtitle_profile(
         line_height: 期望行高（像素），用于过滤背景细小文字。
         max_lines: 最多保留几行（1=单行字幕，2=双行字幕）。
         script_hint: 脚本提示（"zh"/"en"/"auto"），软约束，目前 selector 不强制使用。
+        persistent_text_policy: 可选持久背景文字过滤策略（feat-034）。None 不传，
+            走纯单帧 selector；传 dict 时由 PersistentTextPolicy.from_dict 消费。
     """
-    return {
+    profile: dict[str, Any] = {
         "y_center": y_center,
         "y_tolerance": y_tolerance,
         "line_height": line_height,
         "max_lines": max_lines,
         "script_hint": script_hint,
     }
+    if persistent_text_policy is not None:
+        profile["persistent_text_policy"] = persistent_text_policy
+    return profile
+
+
+def build_persistent_text_policy(
+    enabled: bool = True,
+    min_repeat_segments: int = 3,
+    min_distinct_texts: int = 4,
+    y_bin_ratio: float = 0.5,
+) -> dict[str, Any]:
+    """构造 persistent_text_policy 字典（feat-034a）。
+
+    Args:
+        enabled: 是否启用持久背景过滤。False 时 filter 跳过。
+        min_repeat_segments: 条件 A 阈值（同文本连续重复段数）。
+        min_distinct_texts: 条件 B 阈值（同 y_bin 不同文本数）。
+        y_bin_ratio: y_bin 划分粒度，bin = line_height * 此值。
+    """
+    return {
+        "enabled": enabled,
+        "min_repeat_segments": min_repeat_segments,
+        "min_distinct_texts": min_distinct_texts,
+        "y_bin_ratio": y_bin_ratio,
+    }
 
 
 def _validate_subtitle_profile(profile: Any) -> None:
-    """校验 subtitle_profile 字段 schema（feat-033b）。"""
+    """校验 subtitle_profile 字段 schema（feat-033b / feat-034a）。"""
     if not isinstance(profile, dict):
         raise ProtocolError(f"subtitle_profile 非字典: {profile!r}")
 
@@ -446,6 +486,37 @@ def _validate_subtitle_profile(profile: Any) -> None:
                 f"subtitle_profile.script_hint 非法（仅允许 zh/en/auto）: {sh!r}"
             )
 
+    if "persistent_text_policy" in profile and profile["persistent_text_policy"] is not None:
+        _validate_persistent_text_policy(profile["persistent_text_policy"])
+
     extra = set(profile.keys()) - PROFILE_FIELDS
     if extra:
         raise ProtocolError(f"subtitle_profile 含未知字段: {extra!r}")
+
+
+def _validate_persistent_text_policy(policy: Any) -> None:
+    """校验 persistent_text_policy 字段 schema（feat-034a）。"""
+    if not isinstance(policy, dict):
+        raise ProtocolError(f"persistent_text_policy 非字典: {policy!r}")
+
+    if "enabled" in policy and not isinstance(policy["enabled"], bool):
+        raise ProtocolError(f"persistent_text_policy.enabled 非布尔: {policy['enabled']!r}")
+
+    for key in ("min_repeat_segments", "min_distinct_texts"):
+        if key in policy:
+            val = policy[key]
+            if not isinstance(val, int) or isinstance(val, bool) or val < 1:
+                raise ProtocolError(
+                    f"persistent_text_policy.{key} 非正整数: {val!r}"
+                )
+
+    if "y_bin_ratio" in policy:
+        ratio = policy["y_bin_ratio"]
+        if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or ratio <= 0:
+            raise ProtocolError(
+                f"persistent_text_policy.y_bin_ratio 非正数: {ratio!r}"
+            )
+
+    extra = set(policy.keys()) - PERSISTENT_POLICY_FIELDS
+    if extra:
+        raise ProtocolError(f"persistent_text_policy 含未知字段: {extra!r}")

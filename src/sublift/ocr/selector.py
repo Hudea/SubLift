@@ -31,25 +31,41 @@ def select_lines(
     Returns:
         (拼接文本, 置信度均值)。无匹配行返回 ("", 0.0)。
     """
+    candidates = _filter_candidates(lines, profile)
+    if not candidates:
+        return "", 0.0
+    return _compose(candidates, profile.max_lines)
+
+
+def _filter_candidates(
+    lines: list[OcrLine],
+    profile: SubtitleProfile,
+) -> list[OcrLine]:
+    """y 轨道 + 行高过滤（feat-033c / feat-034c 复用）。
+
+    返回通过 y 轨道和行高过滤的候选行（未截断、未排序）。
+    persistent filter 复用此函数在剔除持久背景行后重新筛选。
+    """
     candidates = [
         ln
         for ln in lines
         if abs(_center_y(ln) - profile.y_center) <= profile.y_tolerance
     ]
     if not candidates:
-        return "", 0.0
-
+        return []
     candidates = [
         ln for ln in candidates if ln.bbox.height >= profile.line_height * 0.5
     ]
+    return candidates
+
+
+def _compose(candidates: list[OcrLine], max_lines: int) -> tuple[str, float]:
+    """截断 + y 排序 + 拼接（feat-034c 从 select_lines 抽出复用）。"""
     if not candidates:
         return "", 0.0
-
-    if len(candidates) > profile.max_lines:
-        candidates = sorted(candidates, key=lambda ln: -ln.confidence)[: profile.max_lines]
-
+    if len(candidates) > max_lines:
+        candidates = sorted(candidates, key=lambda ln: -ln.confidence)[:max_lines]
     candidates.sort(key=lambda ln: ln.bbox.y)
-
     text = "\n".join(ln.text for ln in candidates)
     confidence = sum(ln.confidence for ln in candidates) / len(candidates)
     return text, confidence

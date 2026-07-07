@@ -60,6 +60,7 @@ public struct SubtitleProfile: Codable, Equatable {
     public let lineHeight: Double
     public let maxLines: Int
     public let scriptHint: String
+    public let persistentTextPolicy: PersistentTextPolicy?
 
     enum CodingKeys: String, CodingKey {
         case yCenter = "y_center"
@@ -67,6 +68,7 @@ public struct SubtitleProfile: Codable, Equatable {
         case lineHeight = "line_height"
         case maxLines = "max_lines"
         case scriptHint = "script_hint"
+        case persistentTextPolicy = "persistent_text_policy"
     }
 
     public init(
@@ -74,13 +76,48 @@ public struct SubtitleProfile: Codable, Equatable {
         yTolerance: Double,
         lineHeight: Double,
         maxLines: Int = 1,
-        scriptHint: String = "auto"
+        scriptHint: String = "auto",
+        persistentTextPolicy: PersistentTextPolicy? = nil
     ) {
         self.yCenter = yCenter
         self.yTolerance = yTolerance
         self.lineHeight = lineHeight
         self.maxLines = maxLines
         self.scriptHint = scriptHint
+        self.persistentTextPolicy = persistentTextPolicy
+    }
+}
+
+// MARK: - PersistentTextPolicy
+
+/// 持久背景文字过滤策略（feat-034a），与 Python `PersistentTextPolicy` 对齐。
+///
+/// 描述如何通过跨段时序统计识别并剔除持久背景文字（ticker / 水印）。
+/// 双条件算法：A 同文本连续重复段数 ≥ minRepeatSegments；B 同 y_bin
+/// 不同文本数 ≥ minDistinctinctTexts。详见 Python `ocr/persistent.py`。
+public struct PersistentTextPolicy: Codable, Equatable {
+    public let enabled: Bool
+    public let minRepeatSegments: Int
+    public let minDistinctinctTexts: Int
+    public let yBinRatio: Double
+
+    enum CodingKeys: String, CodingKey {
+        case enabled
+        case minRepeatSegments = "min_repeat_segments"
+        case minDistinctinctTexts = "min_distinct_texts"
+        case yBinRatio = "y_bin_ratio"
+    }
+
+    public init(
+        enabled: Bool = true,
+        minRepeatSegments: Int = 3,
+        minDistinctinctTexts: Int = 4,
+        yBinRatio: Double = 0.5
+    ) {
+        self.enabled = enabled
+        self.minRepeatSegments = minRepeatSegments
+        self.minDistinctinctTexts = minDistinctinctTexts
+        self.yBinRatio = yBinRatio
     }
 }
 

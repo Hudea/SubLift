@@ -25,8 +25,9 @@ import numpy as np
 from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector.base import Detector
 from sublift.extractor.base import Extractor
-from sublift.models import BoundingBox, Frame, Region, SubtitleEntry, SubtitleProfile
+from sublift.models import BoundingBox, Frame, OcrLine, Region, SubtitleEntry, SubtitleProfile
 from sublift.ocr.base import OcrEngine
+from sublift.ocr.persistent import filter_persistent_text
 from sublift.ocr.selector import select_lines
 from sublift.pipeline.changepoint import ChangePointDetector, EventType
 from sublift.pipeline.dedupe import merge_entries
@@ -120,6 +121,7 @@ class Pipeline:
         self._region: Region | None = None
         self._anchor_frames: dict[int, Frame] = {}
         self._closed_entries: list[SubtitleEntry] = []
+        self._segment_ocr_lines: list[list[OcrLine]] = []
         self._open_segment_start_ms: int | None = None
         self._processed_count = 0
         self._last_timestamp_ms = 0
@@ -198,10 +200,12 @@ class Pipeline:
         )
 
     def ocr_segment(self, event: SegmentEvent) -> SubtitleEntry:
-        """OCR 一个已闭合的段并缓存 raw entry。
+        """OCR 一个已闭合的段并缓存 raw entry + per-line observations。
 
         重操作（~几百 ms）：调用方应放到线程池，避免阻塞事件循环。
-        OCR 完成后 raw entry 缓存到内部列表，供 :meth:`finalize` dedupe。
+        OCR 完成后 raw entry 缓存到 ``_closed_entries``，per-line observations
+        缓存到 ``_segment_ocr_lines``（与 entries 同 index 对齐），供
+        :meth:`finalize` 做跨段 persistent filter 与 dedupe。
 
         Args:
             event: :meth:`feed` 返回的段闭合事件。
@@ -217,6 +221,7 @@ class Pipeline:
                 confidence=0.0,
             )
             self._closed_entries.append(entry)
+            self._segment_ocr_lines.append([])
             return entry
 
         crop_image = self._crop_region(event.anchor_frame, self._region.box)
@@ -237,10 +242,15 @@ class Pipeline:
             confidence=confidence,
         )
         self._closed_entries.append(entry)
+        self._segment_ocr_lines.append(list(ocr_result.lines))
         return entry
 
     def finalize(self) -> list[SubtitleEntry]:
-        """关闭末尾未闭合段（如有），OCR 之，全局 dedupe 返回最终列表。
+        """关闭末尾未闭合段（如有），OCR 之，跨段持久背景过滤，全局 dedupe。
+
+        当 profile 含 persistent_text_policy 且 enabled 时，在 dedupe 前先做
+        跨段时序过滤：识别在多段重复出现的持久背景文字（ticker / 水印）并剔除。
+        policy=None 或 disabled 时跳过，零行为变化。
 
         Returns:
             去重合并后的字幕条目列表。
@@ -261,8 +271,19 @@ class Pipeline:
                     self.ocr_segment(event)
             self._open_segment_start_ms = None
 
+        # 跨段持久背景文字过滤（feat-034d）
+        # policy=None 或 disabled 时原样返回，零行为变化
+        if self._profile is not None and self._profile.persistent_text_policy is not None:
+            filtered = filter_persistent_text(
+                self._closed_entries,
+                self._segment_ocr_lines,
+                self._profile,
+            )
+        else:
+            filtered = self._closed_entries
+
         return merge_entries(
-            self._closed_entries,
+            filtered,
             merge_gap_ms=self._config.merge_gap_ms,
             min_duration_ms=self._config.min_duration_ms,
         )
@@ -275,6 +296,7 @@ class Pipeline:
         self._region = None
         self._anchor_frames.clear()
         self._closed_entries.clear()
+        self._segment_ocr_lines.clear()
         self._open_segment_start_ms = None
         self._processed_count = 0
         self._last_timestamp_ms = 0
@@ -337,6 +359,7 @@ class Pipeline:
         self._region = None
         self._anchor_frames = {}
         self._closed_entries = []
+        self._segment_ocr_lines = []
         self._open_segment_start_ms = None
         self._processed_count = 0
         self._last_timestamp_ms = 0

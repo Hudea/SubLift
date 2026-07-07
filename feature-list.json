@@ -153,9 +153,16 @@
           "covers": ["feat-033"]
         },
         {
+          "id": "phase3.persistent-text",
+          "name": "持久背景文字过滤",
+          "description": "跨段时序统计识别持久背景文字（ticker / 水印），在 Pipeline.finalize 后处理剔除。双条件算法：A 同文本连续重复段数 ≥ K1；B 同 y 轨道不同文本数 ≥ M。解决 ticker 与目标字幕同带同高、单帧 selector 无法区分的场景。覆盖 feat-034。",
+          "status": "done",
+          "covers": ["feat-034"]
+        },
+        {
           "id": "phase3.docs",
           "name": "文档收尾",
-          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 字幕层筛选规划。覆盖 feat-032。",
+          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化、OCR 字幕层筛选与持久背景文字过滤。覆盖 feat-032。",
           "status": "not-started",
           "covers": ["feat-032"]
         }
