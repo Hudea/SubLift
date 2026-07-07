@@ -29,7 +29,7 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
                 "region_box": [0, 842, 1920, 126],
                 "label": "gui_region_8fps",
                 "video_duration_seconds": 254.272,
-                "output_dir": "benchmark/reports",
+                "output_dir": "debug/benchmark-reports",
             }
         ),
         encoding="utf-8",
@@ -45,7 +45,7 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
     assert config.region_box == (0, 842, 1920, 126)
     assert config.label == "gui_region_8fps"
     assert config.video_duration_seconds == 254.272
-    assert config.output_dir == repo / "benchmark/reports"
+    assert config.output_dir == repo / "debug/benchmark-reports"
 
 
 def test_load_run_config_rejects_invalid_region_box(tmp_path: Path) -> None:

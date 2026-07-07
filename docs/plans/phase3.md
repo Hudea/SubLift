@@ -53,7 +53,7 @@
 - [ ] 一条命令即可对「视频 + ground truth SRT」输出完整指标。
 - [ ] 报告至少包含 timing recall/precision/F1、边界误差、CER macro/micro、字符准确率、端到端可用召回、速度（× 实时）。
 - [ ] 报告输出 agent 可读 JSON 与逐条 GT/detection CSV，可直接定位漏检、合并、过切分、OCR 空文本和高 CER。
-- [ ] 记录当前基线（Zootopia clip 等现有素材）到 `benchmark/reports/` 或 `docs/benchmarks/`。
+- [ ] 记录当前基线（Zootopia clip 等现有素材）到 `debug/benchmark-reports/` 或 `docs/benchmarks/`。
 - [ ] benchmark 脚本通过 `./init.sh` 验证（不引入 lint/type/test 回归）。
 
 ### 2.2 增量处理 + 前台进度显示优化

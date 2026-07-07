@@ -25,6 +25,15 @@ def build_parser() -> argparse.ArgumentParser:
         description="Run benchmark from a JSON manifest file.",
     )
     parser.add_argument("manifest", type=Path, help="Benchmark manifest JSON path")
+    parser.add_argument(
+        "--label",
+        type=str,
+        default="auto",
+        help=(
+            "Override label. Defaults to 'auto' (commit-based incremental "
+            "subdirectory). Use 'manifest' to keep the label defined in the manifest file."
+        ),
+    )
     return parser
 
 
@@ -35,6 +44,27 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         config = load_run_config(args.manifest)
+        if args.label != "manifest":
+            import dataclasses
+            config = dataclasses.replace(config, label=args.label)
+
+        if config.label == "auto":
+            import dataclasses
+
+            from benchmark.git_utils import (
+                clean_commit_message,
+                get_latest_commit_message,
+                resolve_auto_increment_label,
+            )
+            commit_msg = get_latest_commit_message()
+            base_label = clean_commit_message(commit_msg)
+            final_label, final_output_dir = resolve_auto_increment_label(
+                config.output_dir, base_label
+            )
+            config = dataclasses.replace(config, label=final_label, output_dir=final_output_dir)
+
+
+
         result = run_benchmark(config)
         paths = write_reports(result)
     except (FileNotFoundError, ManifestError, RuntimeError, ValueError) as exc:
@@ -49,3 +79,4 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

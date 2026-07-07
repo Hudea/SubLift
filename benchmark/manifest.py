@@ -32,7 +32,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         region_box: optional [x, y, width, height] pixel box.
         label: optional report suffix.
         video_duration_seconds: optional duration override.
-        output_dir: report output directory, default benchmark/reports.
+        output_dir: report output directory, default debug/benchmark-reports.
     """
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -61,7 +61,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         video_duration_seconds=_optional_float(
             payload, "video_duration_seconds", exclusive_minimum=0.0
         ),
-        output_dir=output_dir or root / "benchmark/reports",
+        output_dir=output_dir or root / "debug/benchmark-reports",
     )
 
 

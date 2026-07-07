@@ -7,5 +7,5 @@
   "match_threshold": 0.5,
   "region_box": null,
   "label": "cli_bottomcrop_5fps",
-  "output_dir": "benchmark/reports"
+  "output_dir": "debug/benchmark-reports"
 }
