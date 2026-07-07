@@ -62,7 +62,7 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertEqual(p1.type, .progress)
         XCTAssertEqual(p1.stage, "ready")
 
-        // 2. frame → progress(stage=frame_received)
+        // 2. frame → progress(stage=processing)
         let jpegData = createTestJPEG()
         let jpegBase64 = jpegData.base64EncodedString()
 
@@ -75,7 +75,7 @@ final class PipelineClientIntegrationTests: XCTestCase {
             )
             let progress = try client.request(frame, expecting: ProgressMessage.self)
             let p = try XCTUnwrap(progress)
-            XCTAssertEqual(p.stage, "frame_received")
+            XCTAssertEqual(p.stage, "processing")
         }
 
         // 3. finalize → entries

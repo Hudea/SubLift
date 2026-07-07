@@ -24,7 +24,6 @@ final class SubtitleExtractor: ObservableObject {
     private var client = PipelineClient()
     private var currentTask: Task<Void, Never>?
     private var _cancelled = false
-    private var _videoId = ""
 
     var isRunning: Bool {
         switch status {
@@ -59,14 +58,10 @@ final class SubtitleExtractor: ObservableObject {
     func cancel() {
         _cancelled = true
         currentTask?.cancel()
+        // 直接关闭 socket：阻塞的 recv 会立即返回 EOF，主任务自然退出。
+        // 不发 cancel_job，避免与主任务的阻塞读并发访问同一 socket。
         let client = self.client
-        let vid = self._videoId
-        Task.detached {
-            if !vid.isEmpty {
-                _ = try? client.request(CancelJobMessage(videoId: vid), expecting: DoneMessage.self)
-            }
-            client.stop()
-        }
+        Task.detached { client.stop() }
         status = .idle
     }
 
@@ -96,7 +91,6 @@ final class SubtitleExtractor: ObservableObject {
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
             let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
-            self._videoId = videoId
 
             // 1. start_job
             let startMsg = StartJobMessage(

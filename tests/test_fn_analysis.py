@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("benchmark.srt_loader")
 from benchmark.srt_loader import SrtEntry
 
 from sublift.diagnostics.fn_analysis import (

@@ -41,7 +41,7 @@ MSG_BYE = "bye"
 MSG_ERROR = "error"
 
 # engine 合法值（paddle 留待 Phase 3 跨平台实现）
-ENGINES = frozenset({"vision"})
+ENGINES = frozenset({"vision", "mock"})
 
 # log level 合法值
 LOG_LEVELS = frozenset({"debug", "info", "warn", "error"})

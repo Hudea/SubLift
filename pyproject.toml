@@ -82,6 +82,10 @@ files = ["src", "tests"]
 module = ["Vision.*", "Quartz.*", "CoreGraphics.*", "Foundation.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["benchmark.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]

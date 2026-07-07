@@ -98,6 +98,16 @@ struct ContentView: View {
                 editor.load(extractor.entries)
             }
         }
+        .onChange(of: extractor.entries) { newEntries in
+            // 流式增量：每条新字幕实时同步到 editor 显示
+            if case .done = extractor.status { return }
+            let diff = newEntries.count - editor.entries.count
+            if diff > 0 {
+                for i in (newEntries.count - diff)..<newEntries.count {
+                    editor.appendIncremental(newEntries[i])
+                }
+            }
+        }
         .onChange(of: playerModel.currentMs) { newMs in
             editor.updateCurrent(atMs: newMs)
         }

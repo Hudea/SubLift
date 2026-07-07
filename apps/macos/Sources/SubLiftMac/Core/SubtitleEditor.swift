@@ -22,6 +22,12 @@ final class SubtitleEditor: ObservableObject {
         currentId = nil
     }
 
+    /// 增量追加单条字幕（流式提取过程中实时显示）。
+    /// finalize 后 load() 会全量替换，增量条目被丢弃。
+    func appendIncremental(_ data: SubtitleEntryData) {
+        entries.append(SubtitleEntry(data))
+    }
+
     /// 清空编辑器（新视频导入时）。
     func clear() {
         entries = []
