@@ -75,7 +75,7 @@ class Config:
 
     sample_fps: float = 5.0
     region_bottom_ratio: float = 0.3
-    confidence_threshold: float = 0.5
+    confidence_threshold: float = 0.3
     merge_gap_ms: int = 1000
     min_duration_ms: int = 500
     signature: SignatureConfig = SignatureConfig()
