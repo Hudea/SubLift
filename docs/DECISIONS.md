@@ -5,6 +5,19 @@
 
 ---
 
+## ADR-0010 打轴抽帧统一到 Python FfmpegExtractor（2026-07-09）
+
+- **背景**：GUI 用 AVF+JPEG 推帧时，同 region/Config 下 timing F1 ~84–86%，而 CLI/benchmark live（`FfmpegExtractor`）达 95.2%（5fps）/ 96.4%（8fps）。日志证明 region 与 pipeline 默认参数一致，差在选帧相位、时间戳网格与 JPEG 有损。
+- **决策**：
+  1. **打轴采样唯一实现** = Python `FfmpegExtractor`（与 CLI / `run_benchmark` 同源）。
+  2. GUI 默认 **path mode**：`start_job.video_path` 传本地路径，后端自抽帧；Swift **不再**为打轴推 JPEG frame 流。
+  3. 保留 **frame mode**（无 `video_path`）作兼容/调试。
+  4. AVF 仅用于 **预览与选区代表帧**，与打轴解耦。
+- **理由**：验收与产品必须同一像素/时间戳序列；双端各抽帧必然漂移。
+- **影响**：`bridge.py` path mode；`SubtitleExtractor` 默认 path；`docs/design/macos-gui.md` 抽帧章节；后续默认 fps 仍建议 5（速度），8 作高精度档。
+
+---
+
 ## ADR-0009 移除 Phase 2 .app 打包与 notarization 流程（2026-07-06）
 
 - **背景**：feat-025 原计划把 SwiftUI 工程打包为可分发 `.app`，并完成 Developer ID 签名 + `notarytool` 公证，使 Gatekeeper 放行。该流程需要 Apple Developer Program 会员、Developer ID 证书、embedded Python 运行时以及 hardened runtime 适配。

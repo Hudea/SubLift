@@ -89,6 +89,10 @@ uv run python scripts/run_benchmark_manifest.py benchmark/manifests/zootopia_cli
 GUI 选区路径只需要把 `region_box` 写入 manifest。坐标格式与 GUI / IPC 一致：
 `[x, y, width, height]`，基于视频原始像素坐标，左上角为原点。
 
+> **统一抽帧（ADR-0010）**：GUI 默认 path mode 与 live benchmark 均使用
+> `FfmpegExtractor`，同 `region_box` + `fps` 时 timing 指标应对齐（OCR 可有小幅抖动）。
+> 勿再用「仅对 GUI JPEG 导出 SRT 做 static」去解释与 live 的系统差。
+
 ```json
 {
   "video": "debug/Zootopia_clip_1080p.mp4",

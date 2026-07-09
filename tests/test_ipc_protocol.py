@@ -97,6 +97,13 @@ class TestStartJob:
             "duration_ms": 0,
         }
 
+    def test_start_job_with_video_path(self) -> None:
+        msg = build_start_job(
+            VIDEO_ID, 5.0, "vision", 0.5, video_path="/tmp/clip.mp4"
+        )
+        assert msg["video_path"] == "/tmp/clip.mp4"
+        validate(msg)
+
     def test_start_job_region_box_none(self) -> None:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
         assert msg["region_box"] is None

@@ -76,6 +76,9 @@ public struct SubtitleEntryData: Codable, Equatable {
 // MARK: - Request Messages (Swift → Python)
 
 /// 启动提取任务。
+///
+/// - 若 `videoPath` 非空：path mode，Python 用 `FfmpegExtractor` 自抽帧（与 CLI/benchmark 同源）。
+/// - 若 `videoPath` 为空：frame mode，Swift 推 JPEG frame 流（兼容/调试）。
 public struct StartJobMessage: Codable {
     public let type: MessageType
     public let videoId: String
@@ -85,6 +88,8 @@ public struct StartJobMessage: Codable {
     public let regionBox: RegionBox?
     public let durationMs: Int
     public let enableSsimPatrol: Bool?
+    /// 本地视频绝对路径；非空则后端抽帧。
+    public let videoPath: String?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -95,6 +100,7 @@ public struct StartJobMessage: Codable {
         case regionBox = "region_box"
         case durationMs = "duration_ms"
         case enableSsimPatrol = "enable_ssim_patrol"
+        case videoPath = "video_path"
     }
 
     public init(
@@ -104,7 +110,8 @@ public struct StartJobMessage: Codable {
         confidenceThreshold: Double,
         regionBox: RegionBox? = nil,
         durationMs: Int = 0,
-        enableSsimPatrol: Bool? = nil
+        enableSsimPatrol: Bool? = nil,
+        videoPath: String? = nil
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -114,6 +121,7 @@ public struct StartJobMessage: Codable {
         self.regionBox = regionBox
         self.durationMs = durationMs
         self.enableSsimPatrol = enableSsimPatrol
+        self.videoPath = videoPath
     }
 }
 

@@ -120,7 +120,34 @@ public final class PipelineClient {
             "-m", "sublift.ipc.server",
             "--socket", socketPath,
             "--engine", engine,
+            "--log-level", "INFO",
         ]
+        // 继承环境并补上 Homebrew，避免 GUI 子进程找不到 ffmpeg
+        var env = ProcessInfo.processInfo.environment
+        let extraPath = "/opt/homebrew/opt/ffmpeg-full/bin:/opt/homebrew/bin:/usr/local/bin"
+        if let path = env["PATH"], !path.isEmpty {
+            env["PATH"] = extraPath + ":" + path
+        } else {
+            env["PATH"] = extraPath + ":/usr/bin:/bin"
+        }
+        // 保证能 import 可编辑安装的 sublift（从任意 cwd 启动）
+        let repoRoot = Self.findRepoRoot()
+        if let repoRoot {
+            let srcPath = repoRoot.appendingPathComponent("src").path
+            if let pp = env["PYTHONPATH"], !pp.isEmpty {
+                env["PYTHONPATH"] = srcPath + ":" + pp
+            } else {
+                env["PYTHONPATH"] = srcPath
+            }
+            process.currentDirectoryURL = repoRoot
+        }
+        process.environment = env
+        // 把 Python stderr/stdout 接到当前进程，终端才能看到诊断日志
+        process.standardOutput = FileHandle.standardError
+        process.standardError = FileHandle.standardError
+        print(
+            "[SubLift] IPC server start python=\(resolvedPath) engine=\(engine) socket=\(socketPath) cwd=\(process.currentDirectoryURL?.path ?? "?")"
+        )
         try process.run()
         self.process = process
 
@@ -171,28 +198,60 @@ public final class PipelineClient {
         return try readMessageDecoded(as: responseType)
     }
 
-    /// 发送一条 Codable 消息并读取响应，支持在主响应前接收增量 push_entry。
+    /// 发送一条 Codable 消息并读取响应，支持在主响应前接收增量 push_entry / progress。
+    ///
+    /// 跳过 `progress` / `log`；`push_entry` 交给回调；`done(ok=false)` / `error` 抛错；
+    /// 其余类型按 `responseType` 解码为主响应（path mode 下多为 `entries`）。
+    ///
     /// - Parameters:
     ///   - message: 待发送的消息
     ///   - responseType: 期望的主响应类型
-    ///   - onPushEntry: 增量 push_entry 回调，在主响应前调用
-    /// - Returns: 解码后的主响应；连接关闭时返回 nil
+    ///   - onPushEntry: 增量 push_entry 回调
+    ///   - onProgress: 可选 progress 回调（pct 0...1）
+    /// - Returns: 解码后的主响应
+    /// - Throws: `connectionClosed` 若对端关闭（含用户取消关 socket）
     public func requestStreaming<S: Encodable, R: Decodable>(
         _ message: S,
         expecting responseType: R.Type,
-        onPushEntry: ((SubtitleEntryData) -> Void)? = nil
-    ) throws -> R? {
+        onPushEntry: ((SubtitleEntryData) -> Void)? = nil,
+        onProgress: ((Double, String) -> Void)? = nil
+    ) throws -> R {
         let packed = try Self.packMessage(message)
         try writeAll(packed)
-        // 循环读取，push_entry 分发给回调，直到收到主响应类型
         while true {
-            guard let dict = try readMessageAny() else { return nil }
-            if dict["type"] as? String == "push_entry" {
+            guard let dict = try readMessageAny() else {
+                throw PipelineClientError.connectionClosed
+            }
+            let type = dict["type"] as? String
+            if type == "push_entry" {
                 let bodyData = try JSONSerialization.data(withJSONObject: dict)
                 if let pushMsg = try? JSONDecoder().decode(PushEntryMessage.self, from: bodyData) {
                     onPushEntry?(pushMsg.entry)
                 }
                 continue
+            }
+            if type == "progress" {
+                // JSONSerialization 数字多为 NSNumber，as? Double 会失败导致进度永远 0
+                let pct = Self.jsonDouble(dict["pct"])
+                let stage = dict["stage"] as? String ?? ""
+                onProgress?(pct, stage)
+                continue
+            }
+            if type == "log" {
+                continue
+            }
+            if type == "done" {
+                let ok = dict["ok"] as? Bool ?? false
+                if !ok {
+                    let err = dict["error"] as? String ?? "unknown error"
+                    throw PipelineClientError.serverError(err)
+                }
+                // path mode 失败用 done；成功主响应是 entries，忽略 ok=true 的 done
+                continue
+            }
+            if type == "error" {
+                let err = dict["message"] as? String ?? "protocol error"
+                throw PipelineClientError.serverError(err)
             }
             let bodyData = try JSONSerialization.data(withJSONObject: dict)
             return try JSONDecoder().decode(responseType, from: bodyData)
@@ -201,21 +260,47 @@ public final class PipelineClient {
 
     // MARK: - Private
 
-    /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
-    /// TODO(feat-025): 打包时改为 embedded Python.framework 路径。
-    static let defaultPythonPath: String = {
-        // 从 bundlePath 开始向上查找 .venv/bin/python
-        // - release: .build/release/ → 需上溯 3 级到项目根
-        // - debug: 同上
+    /// JSON 数字（常为 NSNumber）→ Double。
+    private static func jsonDouble(_ value: Any?) -> Double {
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        if let n = value as? NSNumber { return n.doubleValue }
+        if let s = value as? String, let d = Double(s) { return d }
+        return 0
+    }
+
+    /// 向上查找含 `.venv` 与 `src/sublift` 的仓库根。
+    static func findRepoRoot() -> URL? {
         var currentURL = URL(fileURLWithPath: Bundle.main.bundlePath)
-        for _ in 0..<6 {
-            let candidate = currentURL.appendingPathComponent(".venv/bin/python")
-            if FileManager.default.fileExists(atPath: candidate.path) {
-                return candidate.path
+        for _ in 0..<8 {
+            let venv = currentURL.appendingPathComponent(".venv/bin/python")
+            let pkg = currentURL.appendingPathComponent("src/sublift")
+            if FileManager.default.fileExists(atPath: venv.path),
+               FileManager.default.fileExists(atPath: pkg.path) {
+                return currentURL
             }
             currentURL = currentURL.deletingLastPathComponent()
         }
-        // 回退：旧逻辑
+        // 再从 cwd 试
+        var cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        for _ in 0..<6 {
+            let venv = cwd.appendingPathComponent(".venv/bin/python")
+            let pkg = cwd.appendingPathComponent("src/sublift")
+            if FileManager.default.fileExists(atPath: venv.path),
+               FileManager.default.fileExists(atPath: pkg.path) {
+                return cwd
+            }
+            cwd = cwd.deletingLastPathComponent()
+        }
+        return nil
+    }
+
+    /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
+    /// TODO(feat-025): 打包时改为 embedded Python.framework 路径。
+    static let defaultPythonPath: String = {
+        if let root = findRepoRoot() {
+            return root.appendingPathComponent(".venv/bin/python").path
+        }
         return Bundle.main.bundlePath + "/../../.venv/bin/python"
     }()
 
@@ -374,4 +459,8 @@ public enum PipelineClientError: Error, Equatable {
     case socketCreateFailed(Int32)
     case socketConnectFailed(Int32)
     case socketWriteFailed(Int32)
+    /// Python 返回 `done(ok=false)` 或 `error`。
+    case serverError(String)
+    /// 对端关闭连接（含用户取消关闭 socket）。
+    case connectionClosed
 }

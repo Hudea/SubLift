@@ -74,6 +74,7 @@ def build_start_job(
     region_box: list[int] | None = None,
     duration_ms: int = 0,
     enable_ssim_patrol: bool | None = None,
+    video_path: str | None = None,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
 
@@ -85,7 +86,10 @@ def build_start_job(
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
         enable_ssim_patrol: 可选 SSIM 巡逻开关（feat-031b）。None 不传（用
-            Config 默认值 False）；True 显式启用 patrol；False 显式关闭。
+            Config 默认值）；True 显式启用 patrol；False 显式关闭。
+        video_path: 可选本地视频绝对路径。非空时进入 **path mode**：
+            Python 端用 ``FfmpegExtractor`` 自抽帧（与 CLI/benchmark 同源），
+            不再接收 frame 流。
     """
     msg: dict[str, Any] = {
         "type": MSG_START_JOB,
@@ -98,6 +102,8 @@ def build_start_job(
     }
     if enable_ssim_patrol is not None:
         msg["enable_ssim_patrol"] = enable_ssim_patrol
+    if video_path is not None:
+        msg["video_path"] = video_path
     return msg
 
 
@@ -276,6 +282,8 @@ def validate(message: dict[str, Any]) -> None:
             _require_int(message, "duration_ms")
         if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
             _require_bool(message, "enable_ssim_patrol")
+        if "video_path" in message and message["video_path"] is not None:
+            _require_str(message, "video_path")
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")

@@ -16,7 +16,8 @@ struct MessagesTests {
             engine: .vision,
             confidenceThreshold: 0.5,
             regionBox: [10, 20, 100, 200],
-            durationMs: 60000
+            durationMs: 60000,
+            videoPath: "/tmp/clip.mp4"
         )
         let data = try MessageCodec.encode(msg)
         let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
@@ -27,6 +28,7 @@ struct MessagesTests {
         #expect(decoded.confidenceThreshold == 0.5)
         #expect(decoded.regionBox == [10, 20, 100, 200])
         #expect(decoded.durationMs == 60000)
+        #expect(decoded.videoPath == "/tmp/clip.mp4")
     }
 
     @Test

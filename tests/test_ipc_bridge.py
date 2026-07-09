@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -257,3 +258,78 @@ class TestSafetyLimits:
         assert response is not None
         assert response["type"] == "error"
         assert "JPEG 过大" in response["message"]
+
+
+def _generate_test_video(path: Path, duration: float = 1.0, fps: float = 2.0) -> None:
+    """用 ffmpeg lavfi 生成短测试视频。"""
+    import subprocess
+
+    cmd = [
+        "ffmpeg",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        f"testsrc=duration={duration}:size=320x240:rate={fps}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(path),
+        "-y",
+    ]
+    subprocess.run(cmd, capture_output=True, check=True)
+
+
+class TestPathMode:
+    """start_job.video_path → 后端 FfmpegExtractor（与 CLI 同源）。"""
+
+    def test_missing_video_path_returns_done_error(self) -> None:
+        bridge = _make_handler()
+        msg = build_start_job(
+            "V1", 5.0, "vision", 0.5, video_path="/nonexistent/no_video.mp4"
+        )
+        response = _run(bridge, msg)
+        assert response is not None
+        assert response["type"] == "done"
+        assert response["ok"] is False
+        assert "不存在" in (response.get("error") or "")
+
+    def test_path_mode_returns_entries(self, tmp_path: Path) -> None:
+        video = tmp_path / "short.mp4"
+        _generate_test_video(video, duration=1.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        msg = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=1000,
+            video_path=str(video),
+        )
+        response = asyncio.run(bridge.handle(msg, collect_push))
+        assert response is not None
+        assert response["type"] == "entries"
+        assert response.get("is_final") is True
+        assert "entries" in response
+        # 至少推送过 progress
+        assert any(p.get("type") == "progress" for p in pushed)
+
+    def test_frame_rejected_in_path_mode_after_failed_path(self) -> None:
+        """path 失败后不应进入 path_mode 卡死；重新 frame mode 可用。"""
+        bridge = _make_handler()
+        _run(
+            bridge,
+            build_start_job("V1", 5.0, "vision", 0.5, video_path="/no/such.mp4"),
+        )
+        # 失败后 pipeline 已清空；重新 frame mode start
+        resp = _run(bridge, build_start_job("V2", 5.0, "vision", 0.5))
+        assert resp is not None
+        assert resp["type"] == "progress"
+        assert resp["stage"] == "ready"

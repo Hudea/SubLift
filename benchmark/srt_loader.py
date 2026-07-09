@@ -75,7 +75,8 @@ def parse_srt_text(text: str) -> list[SrtEntry]:
         line = raw_line.strip()
         m = _TIME_RE.match(line)
         if m:
-            if saw_timecode and current_text_lines:
+            # 上一条 cue 即使文本为空也保留（feat-033 空轴 / 评测 timing）
+            if saw_timecode:
                 index += 1
                 entries.append(
                     SrtEntry(index, start_ms, end_ms, _join_text(current_text_lines))
@@ -87,7 +88,7 @@ def parse_srt_text(text: str) -> list[SrtEntry]:
         elif line and not line.isdigit():
             current_text_lines.append(line)
 
-    if saw_timecode and current_text_lines:
+    if saw_timecode:
         index += 1
         entries.append(SrtEntry(index, start_ms, end_ms, _join_text(current_text_lines)))
 
