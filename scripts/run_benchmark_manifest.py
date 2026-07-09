@@ -62,8 +62,13 @@ def main(argv: list[str] | None = None) -> int:
                 config.output_dir, base_label
             )
             config = dataclasses.replace(config, label=final_label, output_dir=final_output_dir)
+        else:
+            # 固定 label 也归入同名子目录，与 auto 行为保持一致。
+            import dataclasses
 
-
+            config = dataclasses.replace(
+                config, output_dir=config.output_dir / config.label
+            )
 
         result = run_benchmark(config)
         paths = write_reports(result)

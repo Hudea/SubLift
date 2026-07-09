@@ -141,9 +141,9 @@
         {
           "id": "phase3.timeline",
           "name": "打轴检测优化",
-          "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。在 benchmark 数据集上 timing_f1 提升到 ≥ 95%，timing_precision 不下降。覆盖 feat-031。",
+          "description": "优化 pipeline/ 中 signature/changepoint/timeline 与 OCR 锚帧策略。feat-031 SSIM patrol；feat-033 residual 使 timing_f1 达 95.2%（baseline-no-filter 91.2%→95.2%）。覆盖 feat-031、feat-033。",
           "status": "done",
-          "covers": ["feat-031"]
+          "covers": ["feat-031", "feat-033"]
         },
         {
           "id": "phase3.docs",

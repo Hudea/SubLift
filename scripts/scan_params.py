@@ -22,8 +22,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from benchmark.alignment import align  # noqa: E402
-from benchmark.metrics import compute_segment_metrics  # noqa: E402
+from benchmark.diagnostics import analyze_entries  # noqa: E402
 from benchmark.srt_loader import SrtEntry, load_srt  # noqa: E402
 
 from sublift.config import ChangePointConfig, Config  # noqa: E402
@@ -164,17 +163,16 @@ def _run_once(
         SrtEntry(index=i + 1, start_ms=d.start_ms, end_ms=d.end_ms, text=d.text)
         for i, d in enumerate(detected)
     ]
-    pairs = align(detected_srt, ground_truth)
-    seg = compute_segment_metrics(pairs, ground_truth)
+    timing = analyze_entries(detected_srt, ground_truth).metrics.timing
     short = compute_short_subtitle_metrics(
         detected, ground_truth, threshold_ms=short_threshold_ms
     )
 
     return ScanResult(
         label=label,
-        segment_f1=seg.f1,
-        segment_recall=seg.recall,
-        segment_precision=seg.precision,
+        segment_f1=timing.timing_f1,
+        segment_recall=timing.timing_recall,
+        segment_precision=timing.timing_precision,
         short_metrics=short,
     )
 

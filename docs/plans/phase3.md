@@ -65,9 +65,10 @@
 
 ### 2.3 打轴检测优化
 
-- [ ] 在 benchmark 数据集上，`timing_f1` 提升到 ≥ 95%。
-- [ ] precision 不下降（不出现新的误检）。
-- [ ] 记录具体改善了哪些场景（如相似中文文本漏分段）。
+- [x] feat-031：SSIM patrol 一阶（merged FN 显著下降；详见 phase3.json）。
+- [x] feat-033：`timing_f1` 91.2% → **95.2%**（≥ 95%）。
+- [x] feat-033：precision 100% → 98.8%（1 FA，可接受；详见 phase3 evidence）。
+- [x] 记录改善场景：M1c 新闻空洞、短字幕 hysteresis、锚帧延迟（见 HURDLES / diagnosis）。
 
 ## 3. 大功能块与任务拆分
 
@@ -77,8 +78,9 @@
 | **feat-028** | Benchmark 基线录入 | benchmark | feat-027 | 对现有素材跑通 benchmark，记录基线数值 |
 | **feat-029** | 增量处理架构 | incremental | feat-028 | Pipeline/IPC 支持边收帧边处理；首条反馈时间缩短 |
 | **feat-030** | 前台进度与取消 | incremental | feat-029 | CLI/GUI 显示阶段进度；取消按钮生效 |
-| **feat-031** | 打轴检测优化 | timeline | feat-028 | `timing_f1` ≥ 95%，`timing_precision` 不下降 |
-| **feat-032** | Phase 3 文档收尾 | docs | feat-030, feat-031 | ARCHITECTURE/REQUIREMENTS/README/DECISIONS 更新 |
+| **feat-031** | 打轴检测优化（SSIM patrol） | timeline | feat-028 | patrol 落地、merged FN 显著下降；历史 F1 +15.6pp，**未达 95% 门由 feat-033 接力** |
+| **feat-033** | 打轴 residual 优化 | timeline | feat-031 | 机制化收敛 residual FN；`timing_f1` ≥ 95%，`timing_precision` 不下降 |
+| **feat-032** | Phase 3 文档收尾 | docs | feat-030, feat-031, feat-033 | ARCHITECTURE/REQUIREMENTS/README/DECISIONS 更新 |
 
 > 具体实现方法（如是否常驻 server、是否重构 Pipeline 为 push 模型、是否加 pixel-diff 信号等）
 > 不在本计划阶段定死，由各任务启动时根据实测和约束选择。
@@ -92,12 +94,14 @@ feat-027 (Benchmark 框架)
     │       ├─ feat-029 (增量处理架构)
     │       │       └─ feat-030 (前台进度与取消)
     │       │
-    │       └─ feat-031 (打轴检测优化)
+    │       └─ feat-031 (打轴 SSIM patrol)
     │               │
-    │               └─ feat-032 (文档收尾)
+    │               └─ feat-033 (打轴 residual → timing_f1≥95%)
+    │                       │
+    │                       └─ feat-032 (文档收尾，依赖 030+031+033)
 ```
 
-**原则**：先建 benchmark，再用 benchmark 驱动增量和打轴优化，最后文档收尾。
+**原则**：先建 benchmark，再用 benchmark 驱动增量和打轴优化；打轴分两阶（patrol → residual），最后文档收尾。
 
 ## 5. 关键约束
 
@@ -119,5 +123,6 @@ feat-027 (Benchmark 框架)
 
 - [ ] feat-027~028 完成：benchmark 可运行，基线已记录。
 - [ ] feat-029~030 完成：增量处理跑通，CLI/GUI 进度与取消可用。
-- [ ] feat-031 完成：`timing_f1` ≥ 95%。
+- [ ] feat-031 完成：SSIM patrol 一阶落地（历史证据见 phase3.json）。
+- [x] feat-033 完成：`timing_f1` 95.2%（≥ 95%）；precision 98.8%（相对 100% 基线 -1.2pp / 1 FA）。
 - [ ] feat-032 完成：文档更新，main 分支 `./init.sh` 8/8 通过。

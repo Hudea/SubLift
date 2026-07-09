@@ -76,11 +76,46 @@
       ]
     },
     {
+      "id": "feat-033",
+      "name": "打轴 residual 优化",
+      "description": "在 feat-031（SSIM patrol）之后，针对 baseline-no-filter 残留 14 条 timing FN 做机制化收敛。主模块 changepoint + core OCR 锚帧；按 M1 连续空洞 / M2 短字幕 / M3 残留 CHANGE 分阶段。验收：timing_f1≥95%；OCR 文本噪声后置。基线：timing_recall 83.9% / precision 100% / F1 91.2%。",
+      "module": "src/sublift/pipeline/core.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/dedupe.py, src/sublift/config.py",
+      "dependencies": ["feat-031"],
+      "status": "done",
+      "evidence": "已完成。\n\nfeat-033a：run_trace（MockOcr）同 region 诊断。纯打轴 0 no_overlap；52–63s 新闻窗有 IN@56.2s + CHANGE 序列。结论主因 M1c（OCR 空/后处理抹段），非 EMPTY 卡死。诊断见 debug/reports/feat033_diagnosis.md。修复 scripts/run_trace.py 与 scan_params.py 对已删除 benchmark.alignment 的 import。\n\nfeat-033b：OCR 锚帧延迟 + 多候选回退（core.py）；drop_empty_text 默认 False（dedupe 保留空文本时间轴）。新闻簇 #17–#19 从 no_overlap 变为 timing 命中。\n\nfeat-033c：hysteresis_frames 2→1。\n\nfeat-033d 参数落定：ocr_anchor_delay_frames=2 + hysteresis=1 + drop_empty_text=False。\n\n对比 baseline-no-filter（region [0,848,1920,87], 5fps, vision）：\n- timing_f1 91.2% → **95.2%**（+4.0pp，门通过）\n- timing_recall 83.9% → 92.0%\n- timing_precision 100% → 98.8%（1 FA，strict 略降）\n- timing FN：no_overlap 8→1，merged 6→6（部分类型转换）\n- 边界：start_mae 127→124ms，end_mae 182→140ms，boundary_p95 500→417ms\n- 主剩余 gap：text.noise（OCR 区域，后置）\n\n产物：debug/benchmark-reports/feat033_final/；gates status=pass。\n验证：uv run ruff check .；uv run mypy src；uv run pytest；./init.sh 8/8 通过。",
+      "subtasks": [
+        {
+          "id": "feat-033a",
+          "name": "trace 归因与机制判定",
+          "description": "同 baseline-no-filter 配置跑 run_trace；对 50–65s / 短字幕窗口判定 M1a|b|c、M2、M3；写出诊断结论（无默认参数变更）。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033b",
+          "name": "M1 连续空洞修复",
+          "description": "按 033a 主路径修 52–63s 新闻簇等 no_overlap；#16–#19 至少命中多数。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033c",
+          "name": "M2 短字幕补强",
+          "description": "在 patrol 开启下重扫 hysteresis/presence；可选非对称 IN 迟滞；precision 不降。",
+          "status": "done"
+        },
+        {
+          "id": "feat-033d",
+          "name": "M3 残留 CHANGE + 全量验收",
+          "description": "补强 merged_into_neighbor；过切分时 dedupe 模糊合并可选；全量 benchmark 对比基线并落定参数。",
+          "status": "done"
+        }
+      ]
+    },
+    {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
       "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构与打轴优化结果。",
       "module": "docs/",
-      "dependencies": ["feat-030", "feat-031"],
+      "dependencies": ["feat-030", "feat-031", "feat-033"],
       "status": "not-started",
       "evidence": ""
     }

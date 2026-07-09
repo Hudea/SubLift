@@ -31,16 +31,16 @@
 - **GUI 路径**用用户在 Vision 候选框中多选合并的 `FixedRegionDetector`，区域精准，CER 降到 45.8%、无空文本。
 - 与 `docs/ARCHITECTURE.md` §9 已知限制一致：**区域裁剪优化属 OCR 问题，Phase 3 明确后置**，不在 feat-031 打轴优化范围内。
 
-### 2. 打轴状态机漏检短字幕（feat-031 待解决）
+### 2. 打轴 residual（feat-031 → feat-033）
 
-两条路径都存在 FN，且 FN 集中在短字幕（<2s）：
+| 阶段 | 配置要点 | timing R | timing P | timing F1 | 说明 |
+|---|---|---:|---:|---:|---|
+| baseline-no-filter | patrol on, hyst=2, 丢空文本 | 83.9% | 100% | **91.2%** | 14 timing FN（8 no_overlap + 6 merged） |
+| feat-033 final | patrol on, hyst=1, delay=2, 保留空文本 | 92.0% | 98.8% | **95.2%** | 门通过；1 FA；主剩余 text.noise / merged residual |
 
-- CLI: 19 FN，GUI: 31 FN。
-- 典型漏检：`#15 砰`(1s)、`#4 可以收工了`(1.2s)、`#60 局长，嗨`(1.2s)。
-- GUI 路径 FN 更多，原因是 8fps 下短字幕在状态机迟滞窗口内被跳过，且合并去重把相邻短字幕合并成长条目。
+产物：`debug/benchmark-reports/baseline-no-filter/`、`debug/benchmark-reports/feat033_final/`。
 
-这是 `pipeline/changepoint.py` 状态机灵敏度问题，是 feat-031 的主战场。后续验收改看
-`timing_f1`、`timing_precision` 与 failure clusters。
+feat-033 诊断：多数「空洞」是 OCR 抹段（M1c），不是 EMPTY 卡死。OCR 区域/水印仍后置。
 
 ## Benchmark 诊断口径
 

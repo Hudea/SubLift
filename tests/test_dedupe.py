@@ -90,18 +90,22 @@ class TestFilterShort:
 
 
 class TestFilterEmpty:
-    """过滤空文本段。"""
+    """过滤空文本段（drop_empty_text=True 旧行为）。"""
 
     def test_filter_empty_text(self) -> None:
         """text 为空字符串 → 丢弃。"""
         entries = [_entry(0, 1000, "")]
-        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        result = merge_entries(
+            entries, merge_gap_ms=1000, min_duration_ms=0, drop_empty_text=True
+        )
         assert result == []
 
     def test_filter_whitespace_only(self) -> None:
         """text 仅含空白 → 丢弃。"""
         entries = [_entry(0, 1000, "   \n\t  ")]
-        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        result = merge_entries(
+            entries, merge_gap_ms=1000, min_duration_ms=0, drop_empty_text=True
+        )
         assert result == []
 
     def test_keep_nonempty_around_empty(self) -> None:
@@ -111,7 +115,9 @@ class TestFilterEmpty:
             _entry(1000, 2000, ""),
             _entry(2000, 3000, "再见"),
         ]
-        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        result = merge_entries(
+            entries, merge_gap_ms=1000, min_duration_ms=0, drop_empty_text=True
+        )
         assert result == [
             _entry(0, 1000, "你好"),
             _entry(2000, 3000, "再见"),
@@ -124,7 +130,9 @@ class TestFilterEmpty:
             _entry(1000, 2000, ""),
             _entry(2000, 3000, "你好"),
         ]
-        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        result = merge_entries(
+            entries, merge_gap_ms=1000, min_duration_ms=0, drop_empty_text=True
+        )
         assert result == [_entry(0, 3000, "你好")]
 
     def test_all_empty(self) -> None:
@@ -133,8 +141,21 @@ class TestFilterEmpty:
             _entry(0, 1000, ""),
             _entry(1000, 2000, "  "),
         ]
-        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        result = merge_entries(
+            entries, merge_gap_ms=1000, min_duration_ms=0, drop_empty_text=True
+        )
         assert result == []
+
+    def test_keep_empty_by_default(self) -> None:
+        """feat-033b：默认保留空文本段，避免抹掉时间轴。"""
+        entries = [
+            _entry(0, 1000, "你好"),
+            _entry(1000, 2000, ""),
+            _entry(2000, 3000, "再见"),
+        ]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert len(result) == 3
+        assert result[1].text == ""
 
 
 class TestJitterElimination:

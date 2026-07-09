@@ -185,6 +185,59 @@ class TestPipelineConfidenceFilter:
             assert result[0].text == ""
 
 
+class TestPipelineOcrAnchorDelay:
+    """feat-033b：OCR 锚帧延迟与空文本回退。"""
+
+    def test_empty_anchor_retries_fallback(self) -> None:
+        """主锚帧 OCR 空文本时，使用 fallback 帧重试并保留文本。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _subtitle_frame(600),
+            _subtitle_frame(800),
+            _blank_frame(1000),
+            _blank_frame(1200),
+        ]
+        ocr = MockOcrEngine(
+            sequence=[
+                OcrResult(text="", confidence=0.0),
+                OcrResult(text="你好", confidence=0.95),
+            ]
+        )
+        config = Config(
+            confidence_threshold=0.5,
+            min_duration_ms=0,
+            ocr_anchor_delay_frames=1,
+        )
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        assert len(result) == 1
+        assert result[0].text == "你好"
+        assert ocr._index == 2
+
+    def test_delay_zero_uses_event_frame_only(self) -> None:
+        """delay=0 时不强制二次 OCR（单帧成功即结束）。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _subtitle_frame(600),
+            _blank_frame(800),
+            _blank_frame(1000),
+        ]
+        ocr = MockOcrEngine(text="你好", confidence=0.9)
+        config = Config(
+            confidence_threshold=0.5,
+            min_duration_ms=0,
+            ocr_anchor_delay_frames=0,
+        )
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        assert len(result) == 1
+        assert result[0].text == "你好"
+
+
 class TestPipelineStreaming:
     """流式 API（feed/ocr_segment/finalize）测试。"""
 

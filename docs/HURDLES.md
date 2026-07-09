@@ -49,19 +49,16 @@
 
 ### OCR 锚帧落在字幕过渡画面导致空文本
 - **日期**：2026-07-03
-- **状态**：未解决（端到端实测发现，待评估）
+- **状态**：部分解决（feat-033b：`ocr_anchor_delay_frames=2` + 多候选回退 + 默认保留空文本时间轴；仍有 text.empty 残留）
 - **现象**：端到端 Pipeline 5fps 实测，段 5、段 11 出现 OCR 空文本。锚帧（IN/CHANGE 事件触发帧）恰好在字幕过渡画面（淡入/淡出/切换瞬间），Vision 未识别出文字，该段 text 为空。
 - **排查路径**：
   1. 确认 OCR 引擎正常：同一视频其他段识别成功
   2. 确认锚帧选取逻辑：core.py 用 `anchor_frames[event.timestamp_ms]` 取事件触发帧，该帧是状态机确认变化的帧
-  3. 分析根因：状态机用迟滞确认（hysteresis_frames=2），事件 timestamp_ms 回溯到信号首次出现帧，但该帧可能正是字幕过渡帧（半透明、不完整）
-- **根本原因**：锚帧选取策略只考虑"变化首次出现"，未考虑该帧是否是"字幕稳定可读帧"。过渡帧（淡入未完成、切换瞬间）OCR 置信度低或识别不出文本。
-- **待评估方案**：
-  1. **锚帧延后 N 帧（首选）**：事件触发后，往后取 1-2 帧作为 OCR 锚帧（字幕已稳定）。改动小，core.py 在缓存 anchor_frame 时取 `当前帧 + offset`。
-  2. **多帧 OCR 取最优**：对每段取多帧 OCR，选 confidence 最高的。增加 OCR 调用，但精度更高。
-  3. **空文本段重试**：OCR 返回空时，自动取段内下一帧重试。fallback 策略。
-- **影响评估**：端到端实测 2/23 段空文本（8.7% 段丢失文本），属可接受范围但影响最终 SRT 质量。与 dHash 漏检叠加，整体 recall 91.3%。
-- **相关文件**：`src/sublift/pipeline/core.py`（anchor_frames 缓存与 OCR 调用）
+  3. 分析根因：状态机用迟滞确认，事件 timestamp_ms 回溯到信号首次出现帧，但该帧可能正是字幕过渡帧
+- **根本原因**：锚帧选取策略只考虑"变化首次出现"，未考虑该帧是否是"字幕稳定可读帧"。
+- **解决方案（feat-033b）**：IN/CHANGE 后延迟 N 帧锁定主 OCR 锚；失败时回退稳定帧/段首/闭合帧；`drop_empty_text=False` 避免 timing 被抹掉。
+- **残留**：部分段仍 `text.empty`（区域/水印/不可读），属 OCR 质量后置。
+- **相关文件**：`src/sublift/pipeline/core.py`、`src/sublift/config.py`
 
 ---
 
@@ -154,8 +151,8 @@
 
 ### SSIM patrol 过切分与短字幕漏检（feat-031 残留）
 - **日期**：2026-07-06
-- **状态**：未解决（feat-031 初步优化已收尾，留作后续迭代）
-- **关联 feature**：feat-031（打轴检测优化）
+- **状态**：部分解决（feat-033 residual：hysteresis=1 + 锚帧延迟 + 保留空文本；timing_f1 达 95.2%。仍有 ~6 条 merged 与 #15 单字 no_overlap）
+- **关联 feature**：feat-031 / feat-033
 - **现象**：patrol 默认开启后（优化 3），整体 F1 从 79.5% 提升到 86.7%，precision 91.1%，但暴露两个残留问题：
 
   **问题 1：patrol 过切分导致重复命中**
@@ -196,12 +193,27 @@
 - **根本原因**：
   - 过切分：patrol 阈值 `0.92` 对同一句字幕内部的二值化 mask 局部波动过于敏感；CHANGE 候选确认后产生两段，OCR 文本因噪声不等导致 dedupe 失效
   - 短字幕：采样率 5fps + 迟滞 2 帧 = 400ms 迟滞窗口，对 `<=1000ms` 的字幕吃掉了 40%+ 时长；单字字幕前景占比不足
-- **待评估方案**（后续迭代）：
-  1. **patrol 阈值调优**：`ssim_patrol_threshold` 从 0.92 调到 0.88~0.90，降低敏感度减少过切分
-  2. **dedupe 模糊合并**：归一化后做编辑距离比较，距离/长度 < 比例（如 0.2）时合并，解决标点/噪声差异
-  3. **短字幕专用路径**：`hysteresis_frames=1` + 降低 `presence_threshold`，但需配合 patrol 阈值调优避免 FP 增长
-- **影响评估**：过切分使 precision 从潜在 94.9% 降到 91.1%（-3.8pp），但不影响 recall；短字幕漏检贡献了主要 FN（8/15 no_overlap）。两者均为 feat-031 后续迭代方向，不影响当前优化成果的可用性。
-- **相关文件**：`src/sublift/pipeline/changepoint.py`（patrol 阈值）、`src/sublift/pipeline/dedupe.py`（`_merge_adjacent` 归一化）、`src/sublift/config.py`（`ChangePointConfig`）、`debug/Zootopia_clip_1080p_优化 3.srt`（验证产物）
+- **feat-033 已落地**：
+  1. **诊断**：纯打轴 trace 对 52–63s 新闻簇有 IN/CHANGE，最终 SRT 空洞主因是 **M1c（OCR 空/confidence 滤掉段）**，非状态机卡 EMPTY。
+  2. **锚帧延迟 + 多候选 OCR**（`ocr_anchor_delay_frames=2`）+ **`drop_empty_text=False`**。
+  3. **`hysteresis_frames=1`** 补短字幕。
+  4. 验收：`baseline-no-filter` F1 91.2% → **95.2%**（R 83.9%→92.0%，P 100%→98.8%）。
+- **仍开放**：merged residual（#2/#10/#59/#69 等）、单字「砰」、OCR 区域水印（text.noise 后置）。
+- **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark-reports/feat033_final/`
+
+---
+
+### feat-033：打轴 residual 中「检出后被 OCR 抹掉」
+- **日期**：2026-07-09
+- **状态**：已解决（主路径 M1c）
+- **关联 feature**：feat-033
+- **现象**：`baseline-no-filter` 报告 8 条 `no_overlap`（含 52–63s 新闻簇），用户误判为状态机未重新 IN。
+- **排查路径**：
+  1. `run_trace.py` + MockOcr 从事件重建段 → 纯打轴 **0** no_overlap，新闻窗有完整 IN/CHANGE。
+  2. 对比 Vision 最终 SRT：段被 confidence 置空 / empty-filter 丢弃 → 评测成 no_overlap。
+- **根本原因**：OCR 锚帧落在过渡画面或识别失败时，后处理把**时间轴证据**一并删除。
+- **解决方案**：延迟锁定 OCR 锚帧；失败时多候选重试；默认不丢弃空文本段。
+- **相关文件**：`core.py`（`_open_segment` / `_close_segment` / `ocr_segment`）、`dedupe.py`（`drop_empty_text`）
 
 ---
 

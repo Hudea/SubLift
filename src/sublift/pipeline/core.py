@@ -42,18 +42,20 @@ if TYPE_CHECKING:
 class SegmentEvent:
     """段闭合事件。
 
-    由 :meth:`Pipeline.feed` 在段闭合（OUT/CHANGE）时返回，携带段首
+    由 :meth:`Pipeline.feed` 在段闭合（OUT/CHANGE）时返回，携带 OCR
     代表帧供 :meth:`Pipeline.ocr_segment` 使用。
 
     Attributes:
         start_ms: 段起始时间戳（毫秒）。
         end_ms: 段结束时间戳（毫秒）。
-        anchor_frame: 段首代表帧；None 表示该段无锚帧（OCR 将返回空文本）。
+        anchor_frame: 主 OCR 帧（延迟锚或稳定帧）；None 时 OCR 空文本。
+        fallback_frames: 额外候选帧（主帧失败时按序重试，feat-033b）。
     """
 
     start_ms: int
     end_ms: int
     anchor_frame: Frame | None
+    fallback_frames: tuple[Frame, ...] = ()
 
 
 class Pipeline:
@@ -118,6 +120,10 @@ class Pipeline:
         self._processed_count = 0
         self._last_timestamp_ms = 0
         self._cancelled = False
+        # feat-033b：OCR 锚帧延迟 + 稳定帧/首帧回退
+        self._pending_anchor_remaining: int = 0
+        self._segment_first_frame: Frame | None = None
+        self._segment_stable_frame: Frame | None = None
 
     # ------------------------------------------------------------------
     # 流式 API（feat-029）
@@ -157,39 +163,36 @@ class Pipeline:
         event = self._changepoint.process(signature, crop_np)
 
         if event is None:
+            self._on_stable_frame(frame)
             return None
 
         if event.event_type == EventType.IN:
-            self._open_segment_start_ms = event.timestamp_ms
+            self._open_segment(event.timestamp_ms, frame)
             self._timeline.consume(event)
-            self._anchor_frames[event.timestamp_ms] = frame
             return None
 
         if event.event_type == EventType.OUT:
             start_ms = self._open_segment_start_ms
             self._timeline.consume(event)
-            self._open_segment_start_ms = None
-            anchor = self._anchor_frames.pop(start_ms, None) if start_ms is not None else None
-            return SegmentEvent(
+            seg_event = self._close_segment(
                 start_ms=start_ms if start_ms is not None else event.timestamp_ms,
                 end_ms=event.timestamp_ms,
-                anchor_frame=anchor,
+                closing_frame=frame,
             )
+            return seg_event
 
         # CHANGE：旧段闭合 + 新段开启
         old_start = self._open_segment_start_ms
         self._timeline.consume(event)
-        self._open_segment_start_ms = event.timestamp_ms
-        self._anchor_frames[event.timestamp_ms] = frame
-        anchor = (
-            self._anchor_frames.pop(old_start, None) if old_start is not None else None
-        )
         end_ms = event.prev_end_ms if event.prev_end_ms is not None else event.timestamp_ms
-        return SegmentEvent(
+        # 闭合旧段时用稳定帧（本帧已是新字幕，勿作旧段 OCR 主锚）
+        closed = self._close_segment(
             start_ms=old_start if old_start is not None else event.timestamp_ms,
             end_ms=end_ms,
-            anchor_frame=anchor,
+            closing_frame=None,
         )
+        self._open_segment(event.timestamp_ms, frame)
+        return closed
 
     def ocr_segment(self, event: SegmentEvent) -> SubtitleEntry:
         """OCR 一个已闭合的段并缓存 raw entry。
@@ -197,13 +200,15 @@ class Pipeline:
         重操作（~几百 ms）：调用方应放到线程池，避免阻塞事件循环。
         OCR 完成后 raw entry 缓存到内部列表，供 :meth:`finalize` dedupe。
 
+        主锚帧置信不足或空文本时，尝试 ``fallback_frame``（feat-033b）。
+
         Args:
             event: :meth:`feed` 返回的段闭合事件。
 
         Returns:
             带 OCR 文本的 SubtitleEntry（未经 dedupe）。
         """
-        if event.anchor_frame is None or self._region is None:
+        if self._region is None:
             entry = SubtitleEntry(
                 start_ms=event.start_ms,
                 end_ms=event.end_ms,
@@ -213,11 +218,26 @@ class Pipeline:
             self._closed_entries.append(entry)
             return entry
 
-        crop_image = self._crop_region(event.anchor_frame, self._region.box)
-        ocr_result = self._ocr.recognize(crop_image)
+        text, confidence = self._ocr_frame(event.anchor_frame)
+        if self._needs_ocr_retry(text, confidence):
+            seen_ts = {
+                event.anchor_frame.timestamp_ms
+                if event.anchor_frame is not None
+                else -1
+            }
+            for fb in event.fallback_frames:
+                if fb.timestamp_ms in seen_ts:
+                    continue
+                seen_ts.add(fb.timestamp_ms)
+                fb_text, fb_conf = self._ocr_frame(fb)
+                if not self._needs_ocr_retry(fb_text, fb_conf):
+                    text, confidence = fb_text, fb_conf
+                    break
+                if fb_text.strip() and not text.strip():
+                    text, confidence = fb_text, fb_conf
+                if fb_conf > confidence and fb_text.strip():
+                    text, confidence = fb_text, fb_conf
 
-        text = ocr_result.text
-        confidence = ocr_result.confidence
         if confidence < self._config.confidence_threshold:
             text = ""
 
@@ -243,19 +263,21 @@ class Pipeline:
             if segments:
                 last = segments[-1]
                 if last.end_ms is not None:
-                    anchor = self._anchor_frames.pop(last.start_ms, None)
-                    event = SegmentEvent(
+                    event = self._close_segment(
                         start_ms=last.start_ms,
                         end_ms=last.end_ms,
-                        anchor_frame=anchor,
+                        closing_frame=None,
+                        clear_open=False,
                     )
                     self.ocr_segment(event)
             self._open_segment_start_ms = None
+            self._reset_segment_ocr_state()
 
         return merge_entries(
             self._closed_entries,
             merge_gap_ms=self._config.merge_gap_ms,
             min_duration_ms=self._config.min_duration_ms,
+            drop_empty_text=self._config.drop_empty_text,
         )
 
     def cancel(self) -> None:
@@ -269,6 +291,83 @@ class Pipeline:
         self._open_segment_start_ms = None
         self._processed_count = 0
         self._last_timestamp_ms = 0
+        self._reset_segment_ocr_state()
+
+    def _open_segment(self, start_ms: int, frame: Frame) -> None:
+        """开启新段并启动 OCR 锚帧延迟（feat-033b）。"""
+        self._open_segment_start_ms = start_ms
+        self._segment_first_frame = frame
+        self._segment_stable_frame = None
+        delay = max(0, self._config.ocr_anchor_delay_frames)
+        if delay == 0:
+            self._anchor_frames[start_ms] = frame
+            self._pending_anchor_remaining = 0
+        else:
+            self._pending_anchor_remaining = delay
+
+    def _on_stable_frame(self, frame: Frame) -> None:
+        """无状态事件时：推进延迟锚 / 更新稳定帧。"""
+        if self._open_segment_start_ms is None:
+            return
+        if self._pending_anchor_remaining > 0:
+            self._pending_anchor_remaining -= 1
+            if self._pending_anchor_remaining == 0:
+                self._anchor_frames[self._open_segment_start_ms] = frame
+            return
+        self._segment_stable_frame = frame
+
+    def _close_segment(
+        self,
+        *,
+        start_ms: int,
+        end_ms: int,
+        closing_frame: Frame | None,
+        clear_open: bool = True,
+    ) -> SegmentEvent:
+        """选取 OCR 主锚与回退帧，并清理段状态。"""
+        delayed = self._anchor_frames.pop(start_ms, None)
+        first = self._segment_first_frame
+        stable = self._segment_stable_frame
+        # 主锚：延迟锁定帧 > 稳定帧 > 段首帧
+        anchor = delayed or stable or first
+        # 回退候选：稳定帧 / 段首 / 闭合帧（去重，按可读性优先级）
+        fallbacks: list[Frame] = []
+        seen: set[int] = set()
+        if anchor is not None:
+            seen.add(anchor.timestamp_ms)
+        for cand in (stable, first, closing_frame, delayed):
+            if cand is None or cand.timestamp_ms in seen:
+                continue
+            seen.add(cand.timestamp_ms)
+            fallbacks.append(cand)
+
+        if clear_open:
+            self._open_segment_start_ms = None
+            self._reset_segment_ocr_state()
+
+        return SegmentEvent(
+            start_ms=start_ms,
+            end_ms=end_ms,
+            anchor_frame=anchor,
+            fallback_frames=tuple(fallbacks),
+        )
+
+    def _reset_segment_ocr_state(self) -> None:
+        self._pending_anchor_remaining = 0
+        self._segment_first_frame = None
+        self._segment_stable_frame = None
+
+    def _ocr_frame(self, frame: Frame | None) -> tuple[str, float]:
+        if frame is None or self._region is None:
+            return "", 0.0
+        crop_image = self._crop_region(frame, self._region.box)
+        result = self._ocr.recognize(crop_image)
+        return result.text, result.confidence
+
+    def _needs_ocr_retry(self, text: str, confidence: float) -> bool:
+        if not text.strip():
+            return True
+        return confidence < self._config.confidence_threshold
 
     @property
     def processed_count(self) -> int:
