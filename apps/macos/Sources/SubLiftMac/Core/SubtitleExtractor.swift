@@ -6,6 +6,9 @@ import Foundation
 ///
 /// **统一抽帧（path mode）**：Swift 只传 `video_path` + 参数，Python 用
 /// `FfmpegExtractor` 抽帧（与 CLI / benchmark 同源），不再 AVF+JPEG 推帧。
+///
+/// **生命周期**：每次 `extract` 独占一个 `PipelineClient` + `jobToken`。
+/// 取消/完成后丢弃 token，迟到的 progress / push_entry 不会污染 UI 状态。
 @MainActor
 final class SubtitleExtractor: ObservableObject {
 
@@ -21,9 +24,13 @@ final class SubtitleExtractor: ObservableObject {
     @Published private(set) var status: Status = .idle
     @Published private(set) var entries: [SubtitleEntryData] = []
 
-    private var client = PipelineClient()
+    /// 当前运行任务的 token；`nil` 表示无活跃任务（含已取消/已完成）。
+    private var jobToken: UUID?
+    /// 当前任务独占的 IPC 客户端（取消时只 stop 此实例）。
+    private var activeClient: PipelineClient?
+    /// 是否仍接受流式 progress / push_entry（最终 entries 落地或取消后为 false）。
+    private var acceptingLiveUpdates = false
     private var currentTask: Task<Void, Never>?
-    private var _cancelled = false
 
     var isRunning: Bool {
         switch status {
@@ -42,28 +49,45 @@ final class SubtitleExtractor: ObservableObject {
         enableSsimPatrol: Bool = false
     ) {
         guard !isRunning else { return }
-        _cancelled = false
+
+        let token = UUID()
+        jobToken = token
+        acceptingLiveUpdates = true
         entries = []
+
+        // 每任务独占客户端，避免取消 teardown 关掉新任务的 socket/进程。
+        let client = PipelineClient()
+        activeClient = client
+
         currentTask = Task { [weak self] in
             await self?.runExtract(
                 videoURL: videoURL,
                 fps: fps,
                 engine: engine,
                 regionBox: regionBox,
-                enableSsimPatrol: enableSsimPatrol
+                enableSsimPatrol: enableSsimPatrol,
+                jobToken: token,
+                client: client
             )
         }
     }
 
     func cancel() {
-        _cancelled = true
-        // 只关 socket 打断阻塞读；不要 Task.cancel()，否则日志会误报「cancelled」
-        // 而真实原因可能是进度未刷新导致用户误点取消。
-        let client = self.client
-        DispatchQueue.global(qos: .userInitiated).async {
-            client.stop()
-        }
+        guard isRunning else { return }
+
+        // 立刻失效 token / 流式更新，后续迟到回调全部丢弃。
+        let client = activeClient
+        jobToken = nil
+        acceptingLiveUpdates = false
+        activeClient = nil
         status = .error("已取消")
+
+        // 只关本任务 socket；不要 Task.cancel()，否则日志会误报 cancelled。
+        if let client {
+            DispatchQueue.global(qos: .userInitiated).async {
+                client.stop()
+            }
+        }
         print("[SubLift] extract cancel requested (closing IPC socket)")
     }
 
@@ -74,23 +98,34 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int,
         engine: OcrEngineName,
         regionBox: RegionBox?,
-        enableSsimPatrol: Bool
+        enableSsimPatrol: Bool,
+        jobToken token: UUID,
+        client: PipelineClient
     ) async {
+        defer {
+            // 任务结束时只 stop 自己的 client；若 cancel 已 swap 掉 activeClient 则仍安全。
+            if activeClient === client {
+                activeClient = nil
+            }
+            if jobToken == token {
+                jobToken = nil
+                acceptingLiveUpdates = false
+            }
+            DispatchQueue.global(qos: .utility).async {
+                client.stop()
+            }
+        }
+
         do {
             let startTime = Date()
 
+            guard isCurrentJob(token) else { return }
             status = .startingServer
-            _ = try await runOnBackground { [client] in
+            _ = try await runOnBackground {
                 try client.start(engine: engine.rawValue)
             }
-            defer {
-                let client = self.client
-                DispatchQueue.global(qos: .utility).async {
-                    client.stop()
-                }
-            }
 
-            if _cancelled { throw PipelineClientError.connectionClosed }
+            guard isCurrentJob(token) else { return }
 
             let durationMs = await estimateDurationMs(url: videoURL)
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
@@ -124,21 +159,23 @@ final class SubtitleExtractor: ObservableObject {
                 estimatedFrames: totalFramesSafe
             )
 
+            guard isCurrentJob(token) else { return }
             // 立刻显示进度条，避免一直 0 像未启动
             status = .sampling(progress: 0, frameCount: 0, totalFrames: totalFramesSafe)
 
-            let response = try await runOnBackground { [client] in
+            let response = try await runOnBackground {
                 try client.requestStreaming(
                     startMsg,
                     expecting: EntriesMessage.self,
-                    onPushEntry: { entry in
+                    onPushEntry: { [weak self] entry in
                         Task { @MainActor [weak self] in
-                            self?.entries.append(entry)
+                            guard let self, self.shouldAcceptLiveUpdate(token) else { return }
+                            self.entries.append(entry)
                         }
                     },
-                    onProgress: { pct, _ in
+                    onProgress: { [weak self] pct, _ in
                         Task { @MainActor [weak self] in
-                            guard let self else { return }
+                            guard let self, self.shouldAcceptLiveUpdate(token) else { return }
                             let frames = max(0, Int((pct * Double(totalFramesSafe)).rounded(.down)))
                             self.status = .sampling(
                                 progress: min(max(pct, 0), 1),
@@ -150,11 +187,13 @@ final class SubtitleExtractor: ObservableObject {
                 )
             }
 
-            if _cancelled {
+            guard isCurrentJob(token) else {
                 print("[SubLift] extract cancelled after IPC")
                 return
             }
 
+            // 先关闭流式入口，再写最终列表，避免迟到 push_entry 追加到 deduped 结果。
+            acceptingLiveUpdates = false
             let resultEntries = response.entries
             self.entries = resultEntries
 
@@ -176,25 +215,36 @@ final class SubtitleExtractor: ObservableObject {
             status = .done(entryCount: resultEntries.count)
 
         } catch PipelineClientError.connectionClosed {
-            if _cancelled {
-                status = .error("已取消")
-                print("[SubLift] extract cancelled (socket closed)")
-            } else {
+            // cancel() 已失效 token 并写好状态；此处仅处理「意外断连」。
+            if isCurrentJob(token) {
                 status = .error("连接中断")
                 print("[SubLift] extract connection closed unexpectedly")
+            } else {
+                print("[SubLift] extract cancelled (socket closed)")
             }
         } catch is CancellationError {
-            status = .error("已取消")
+            if isCurrentJob(token) {
+                status = .error("已取消")
+            }
             print("[SubLift] extract cancelled (task cancellation)")
         } catch {
-            if _cancelled {
-                status = .error("已取消")
-                print("[SubLift] extract cancelled: \(error)")
-            } else {
+            if isCurrentJob(token) {
                 status = .error("提取失败: \(error.localizedDescription)")
                 print("[SubLift] extract error: \(error)")
+            } else {
+                print("[SubLift] extract error ignored (stale job): \(error)")
             }
         }
+    }
+
+    /// 任务仍是当前 job（未被 cancel / 未被新 extract 替换）。
+    private func isCurrentJob(_ token: UUID) -> Bool {
+        jobToken == token
+    }
+
+    /// 允许落地 progress / push_entry。
+    private func shouldAcceptLiveUpdate(_ token: UUID) -> Bool {
+        acceptingLiveUpdates && jobToken == token
     }
 
     private static func logStartJob(

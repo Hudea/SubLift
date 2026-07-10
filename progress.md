@@ -2,19 +2,20 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-09
+- **最后更新：** 2026-07-10
 - **当前 Phase：** Phase 3 - 优化与基本可用
-- **当前功能：** 统一抽帧 path mode（未提交）
+- **当前功能：** path mode 取消/重试生命周期加固（审查 follow-up）
 - **分支：** opt/ocr-timeline
-- **说明：** GUI 默认 `start_job.video_path` → Python `FfmpegExtractor`（ADR-0010）。feat-033 F1 95.2%@5fps / 96.4%@8fps。下一优先：GUI 实机复测对齐 live；merge residual / 更快默认档。
+- **说明：** ADR-0010 统一抽帧已提交（7105d0e）。本轮修 P1 job token + 独占 PipelineClient、P2 ffmpeg stderr、P3 progress 节流。
 
 ## 进行中
 
-- 无（统一抽帧实现完成，待用户 GUI 验证 / 提交）
+- 无
 
 ## 近期完成（最近 5 个）
 
-- [x] 统一抽帧：path mode IPC + bridge + Swift 默认后端 ffmpeg；srt_loader 保留空 cue；ADR-0010。
+- [x] path mode 审查 follow-up：job token + 独占 client、ffmpeg stderr、progress 节流、path mode UDS 集成测。
+- [x] 统一抽帧：path mode IPC + bridge + Swift 默认后端 ffmpeg；ADR-0010（已提交）。
 - [x] feat-033：打轴 residual。F1 95.2%。详见 phase3.json。
 - [x] feat-031：SSIM patrol。F1 +15.6pp，由 033 接力达门。
 - [x] 实现 commit-based 自动 Label 与测试序号自动递增建档。

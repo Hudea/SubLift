@@ -317,7 +317,9 @@ class BridgeHandler:
                         logger.info(
                             "path_mode first_frame: ts_ms=%d", frame.timestamp_ms
                         )
-                    msg_q.put(("progress", n))
+                    # 首帧 / 每 N 帧推送进度，避免每帧写 UDS 与 Swift MainActor 积压
+                    if n == 1 or n % _PROGRESS_EVERY_N_FRAMES == 0:
+                        msg_q.put(("progress", n))
                     event = pipeline.feed(frame)
                     if event is not None:
                         entry = pipeline.ocr_segment(event)

@@ -7,12 +7,16 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
 from PIL import Image
 
 from sublift.models import Frame
+
+# 失败时附带的 stderr 尾部最大字符数
+_STDERR_TAIL_CHARS = 2000
 
 logger = logging.getLogger(__name__)
 
@@ -108,31 +112,64 @@ class FfmpegExtractor:
             "-",
         ]
 
-        # stdin/stderr 必须 DEVNULL：
-        # - stdin：避免 ffmpeg 等待交互输入（GUI Process 下会永久卡住）
-        # - stderr：PIPE 且不读会导致缓冲区满死锁
-        with subprocess.Popen(
-            cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-        ) as proc:
-            assert proc.stdout is not None
-            frame_index = 0
-            while True:
-                raw = proc.stdout.read(frame_size)
-                if len(raw) < frame_size:
-                    break
-                image = Image.frombytes("RGB", (width, height), raw)
-                timestamp_ms = int(frame_index / self._fps * 1000)
-                yield Frame(timestamp_ms=timestamp_ms, image=image)
-                frame_index += 1
+        # stdin=DEVNULL：避免 ffmpeg 等待交互输入（GUI Process 下会永久卡住）
+        # stderr 写入临时文件（非 PIPE）：避免缓冲区满死锁，失败时仍保留诊断尾部
+        stderr_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix="sublift-ffmpeg-stderr-",
+                suffix=".log",
+                delete=False,
+            ) as err_file:
+                stderr_path = Path(err_file.name)
 
-            return_code = proc.wait()
-            if return_code != 0:
-                raise RuntimeError(
-                    f"ffmpeg 抽帧失败（退出码 {return_code}），path={video_path}"
-                )
+            with (
+                stderr_path.open("wb") as stderr_fh,
+                subprocess.Popen(
+                    cmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=stderr_fh,
+                ) as proc,
+            ):
+                assert proc.stdout is not None
+                frame_index = 0
+                while True:
+                    raw = proc.stdout.read(frame_size)
+                    if len(raw) < frame_size:
+                        break
+                    image = Image.frombytes("RGB", (width, height), raw)
+                    timestamp_ms = int(frame_index / self._fps * 1000)
+                    yield Frame(timestamp_ms=timestamp_ms, image=image)
+                    frame_index += 1
+
+                return_code = proc.wait()
+                if return_code != 0:
+                    tail = _read_stderr_tail(stderr_path)
+                    detail = f"：{tail}" if tail else ""
+                    raise RuntimeError(
+                        f"ffmpeg 抽帧失败（退出码 {return_code}），"
+                        f"path={video_path}{detail}"
+                    )
+        finally:
+            if stderr_path is not None:
+                try:
+                    stderr_path.unlink(missing_ok=True)
+                except OSError:
+                    logger.debug("cleanup ffmpeg stderr log failed: %s", stderr_path)
+
+
+def _read_stderr_tail(path: Path, max_chars: int = _STDERR_TAIL_CHARS) -> str:
+    """读取 stderr 日志尾部并压成单行摘要。"""
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+    if not text:
+        return ""
+    if len(text) > max_chars:
+        text = text[-max_chars:]
+    return " ".join(text.split())
 
 
 def _probe_dimensions(video_path: Path) -> tuple[int, int]:
@@ -165,13 +202,22 @@ def _probe_dimensions(video_path: Path) -> tuple[int, int]:
             cmd,
             capture_output=True,
             text=True,
-            check=True,
+            check=False,
             timeout=60,
         )
     except subprocess.TimeoutExpired as exc:
         raise RuntimeError(f"ffprobe 超时: {video_path}") from exc
     except FileNotFoundError as exc:
         raise RuntimeError(f"ffprobe 不可用: {ffprobe}") from exc
+
+    if result.returncode != 0:
+        tail = " ".join((result.stderr or "").split())
+        if len(tail) > _STDERR_TAIL_CHARS:
+            tail = tail[-_STDERR_TAIL_CHARS:]
+        detail = f"：{tail}" if tail else ""
+        raise RuntimeError(
+            f"ffprobe 失败（退出码 {result.returncode}），path={video_path}{detail}"
+        )
 
     data = json.loads(result.stdout)
     streams = data.get("streams", [])

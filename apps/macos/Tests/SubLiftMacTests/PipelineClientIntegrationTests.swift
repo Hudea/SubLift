@@ -107,7 +107,108 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertTrue(msg.contains("video_id"), "错误消息应提及 video_id")
     }
 
+    /// path mode：start_job(video_path) → 流式 progress + 最终 entries（FfmpegExtractor）。
+    func testPathModeExtractOverUDS() throws {
+        let videoURL = try makeShortTestVideo()
+        defer { try? FileManager.default.removeItem(at: videoURL) }
+
+        let client = PipelineClient()
+        defer { client.stop() }
+
+        let success = try client.start(pythonExecutable: pythonPath, engine: "mock")
+        XCTAssertTrue(success)
+
+        var progressCount = 0
+        var lastPct: Double = -1
+        let startJob = StartJobMessage(
+            videoId: "PATH-MODE-001",
+            fps: 2.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            regionBox: [0, 180, 320, 60],
+            durationMs: 1_000,
+            enableSsimPatrol: nil,
+            videoPath: videoURL.path
+        )
+
+        let entries = try client.requestStreaming(
+            startJob,
+            expecting: EntriesMessage.self,
+            onPushEntry: { _ in },
+            onProgress: { pct, stage in
+                progressCount += 1
+                lastPct = pct
+                XCTAssertFalse(stage.isEmpty)
+            }
+        )
+
+        XCTAssertEqual(entries.type, .entries)
+        XCTAssertEqual(entries.videoId, "PATH-MODE-001")
+        XCTAssertTrue(entries.isFinal ?? true)
+        XCTAssertGreaterThan(progressCount, 0, "path mode 应推送 progress")
+        XCTAssertGreaterThanOrEqual(lastPct, 0)
+    }
+
+    /// 连续 start/stop 两个客户端互不影响（取消/重试独占 client 的基础保证）。
+    func testExclusiveClientsDoNotShareSocket() throws {
+        let a = PipelineClient()
+        let b = PipelineClient()
+        defer {
+            a.stop()
+            b.stop()
+        }
+
+        XCTAssertTrue(try a.start(pythonExecutable: pythonPath, engine: "mock"))
+        let pathA = a.socketPath
+        XCTAssertFalse(pathA.isEmpty)
+
+        XCTAssertTrue(try b.start(pythonExecutable: pythonPath, engine: "mock"))
+        let pathB = b.socketPath
+        XCTAssertFalse(pathB.isEmpty)
+        XCTAssertNotEqual(pathA, pathB)
+
+        a.stop()
+        XCTAssertTrue(a.socketPath.isEmpty)
+        // a 清理后 b 的 socket 仍应在
+        XCTAssertFalse(b.socketPath.isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pathB))
+    }
+
     // MARK: - Helpers
+
+    /// 用 ffmpeg lavfi 生成约 1s 的短视频（path mode 集成测）。
+    private func makeShortTestVideo() throws -> URL {
+        let candidates = [
+            "/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg",
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+            "/usr/bin/ffmpeg",
+        ]
+        let ffmpegPath = candidates.first {
+            FileManager.default.isExecutableFile(atPath: $0)
+        }
+        try XCTSkipUnless(ffmpegPath != nil, "需要系统 ffmpeg")
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sublift-path-\(UUID().uuidString.prefix(8)).mp4")
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: ffmpegPath!)
+        proc.arguments = [
+            "-v", "error",
+            "-f", "lavfi",
+            "-i", "testsrc=duration=1:size=320x240:rate=2",
+            "-c:v", "libx264",
+            "-pix_fmt", "yuv420p",
+            url.path,
+            "-y",
+        ]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        try proc.run()
+        proc.waitUntilExit()
+        XCTAssertEqual(proc.terminationStatus, 0, "ffmpeg 生成测试视频失败")
+        return url
+    }
 
     /// 生成一个有效的 320x240 黑色 JPEG。
     private func createTestJPEG() -> Data {

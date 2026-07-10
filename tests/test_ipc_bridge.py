@@ -20,7 +20,11 @@ from PIL import Image
 
 from sublift.detector.bottom_crop import BottomCropDetector
 from sublift.detector.fixed_region import FixedRegionDetector
-from sublift.ipc.bridge import MAX_JPEG_BYTES, BridgeHandler
+from sublift.ipc.bridge import (
+    _PROGRESS_EVERY_N_FRAMES,
+    MAX_JPEG_BYTES,
+    BridgeHandler,
+)
 from sublift.ipc.protocol import (
     build_cancel_job,
     build_finalize,
@@ -320,6 +324,42 @@ class TestPathMode:
         assert "entries" in response
         # 至少推送过 progress
         assert any(p.get("type") == "progress" for p in pushed)
+
+    def test_path_mode_progress_is_throttled(self, tmp_path: Path) -> None:
+        """path mode 不应每帧推 progress（使用 _PROGRESS_EVERY_N_FRAMES）。"""
+        video = tmp_path / "throttle.mp4"
+        # 2s @ 10fps 采样 → 约 20 帧；若每帧 progress 会远超节流后的数量
+        _generate_test_video(video, duration=2.0, fps=10.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        sample_fps = 10.0
+        msg = build_start_job(
+            "V1",
+            sample_fps,
+            "vision",
+            0.5,
+            duration_ms=2000,
+            video_path=str(video),
+        )
+        response = asyncio.run(bridge.handle(msg, collect_push))
+        assert response is not None
+        assert response["type"] == "entries"
+
+        processing = [
+            p
+            for p in pushed
+            if p.get("type") == "progress" and p.get("stage") == "processing"
+        ]
+        # 含：开始 0.0、节流帧、结束 1.0；绝不应接近「每帧一条」
+        est_frames = 20
+        assert len(processing) < est_frames
+        # 节流上限粗估：1(首帧) + floor((N-1)/N_every) + 1(完成) + 起始 0
+        max_expected = 2 + (est_frames // _PROGRESS_EVERY_N_FRAMES) + 2
+        assert len(processing) <= max_expected
 
     def test_frame_rejected_in_path_mode_after_failed_path(self) -> None:
         """path 失败后不应进入 path_mode 卡死；重新 frame mode 可用。"""

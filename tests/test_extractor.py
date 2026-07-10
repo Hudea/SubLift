@@ -35,6 +35,24 @@ class TestExtractorProtocol:
         with pytest.raises(FileNotFoundError):
             next(extractor.extract(Path("/nonexistent/video.mp4")))
 
+    def test_extract_invalid_file_includes_ffmpeg_stderr(
+        self, tmp_path: Path
+    ) -> None:
+        """损坏/非视频输入失败时应附带 stderr 诊断，而非仅有退出码。"""
+        bad = tmp_path / "not_a_video.mp4"
+        bad.write_bytes(b"this is not a media file")
+        extractor = FfmpegExtractor(fps=1.0)
+        with pytest.raises(RuntimeError) as ei:
+            list(extractor.extract(bad))
+        msg = str(ei.value)
+        assert "退出码" in msg
+        # 尾部应含 ffprobe/ffmpeg 真实错误（不仅是数字退出码）
+        assert len(msg) > len("ffprobe 失败（退出码 1），path=")
+        assert any(
+            token in msg.lower()
+            for token in ("invalid", "error", "moov", "failed", "not", "解析", "格式")
+        )
+
 
 def _generate_test_video(path: Path, duration: float = 3.0, fps: float = 2.0) -> None:
     """用 ffmpeg lavfi 生成测试视频。

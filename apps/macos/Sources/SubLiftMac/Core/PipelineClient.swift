@@ -5,7 +5,10 @@ import Foundation
 /// feat-014：启动 Python 子进程 + UDS 连接 + hello/bye 握手。
 /// feat-015：新增 Codable 消息编解码重载（packMessage/unpackMessage 泛型版本）。
 /// feat-016：将接入 Pipeline 帧流。
-public final class PipelineClient {
+///
+/// **并发约定**：每个实例由一次 extract 独占；`request*` 只在单一后台队列调用，
+/// `stop()` 可从任意线程幂等调用（关闭 fd / terminate 进程）。跨队列传递依赖此约定。
+public final class PipelineClient: @unchecked Sendable {
     /// 消息分帧：4 字节大端无符号整数表示 body 长度。
     static let lengthPrefixSize = 4
 
