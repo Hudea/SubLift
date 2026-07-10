@@ -46,6 +46,7 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int = 5,
         engine: OcrEngineName = .vision,
         regionBox: RegionBox? = nil,
+        subtitleProfile: SubtitleProfilePayload? = nil,
         enableSsimPatrol: Bool = false
     ) {
         guard !isRunning else { return }
@@ -65,6 +66,7 @@ final class SubtitleExtractor: ObservableObject {
                 fps: fps,
                 engine: engine,
                 regionBox: regionBox,
+                subtitleProfile: subtitleProfile,
                 enableSsimPatrol: enableSsimPatrol,
                 jobToken: token,
                 client: client
@@ -98,6 +100,7 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int,
         engine: OcrEngineName,
         regionBox: RegionBox?,
+        subtitleProfile: SubtitleProfilePayload?,
         enableSsimPatrol: Bool,
         jobToken token: UUID,
         client: PipelineClient
@@ -143,7 +146,8 @@ final class SubtitleExtractor: ObservableObject {
                 regionBox: regionBox,
                 durationMs: durationMs,
                 enableSsimPatrol: patrolPayload,
-                videoPath: videoPath
+                videoPath: videoPath,
+                subtitleProfile: subtitleProfile
             )
             Self.logStartJob(
                 videoURL: videoURL,
@@ -153,6 +157,7 @@ final class SubtitleExtractor: ObservableObject {
                 engine: engine,
                 confidenceThreshold: confidenceThreshold,
                 regionBox: regionBox,
+                subtitleProfile: subtitleProfile,
                 durationMs: durationMs,
                 uiPatrolToggle: enableSsimPatrol,
                 patrolPayload: patrolPayload,
@@ -255,6 +260,7 @@ final class SubtitleExtractor: ObservableObject {
         engine: OcrEngineName,
         confidenceThreshold: Double,
         regionBox: RegionBox?,
+        subtitleProfile: SubtitleProfilePayload?,
         durationMs: Int,
         uiPatrolToggle: Bool,
         patrolPayload: Bool?,
@@ -270,6 +276,14 @@ final class SubtitleExtractor: ObservableObject {
             matchesFeat033 = "N/A (nil → bottom_crop)"
         }
         let patrolPayloadStr = patrolPayload.map { $0 ? "true" : "false" } ?? "nil"
+        let profileStr: String
+        if let p = subtitleProfile {
+            profileStr =
+                "script=\(p.script) center=(\(p.centerX),\(p.centerY)) "
+                + "height=\(p.height) y=[\(p.yMin),\(p.yMax)]"
+        } else {
+            profileStr = "nil"
+        }
         print(
             """
             [SubLift] start_job (Swift → Python path mode)
@@ -280,6 +294,7 @@ final class SubtitleExtractor: ObservableObject {
               duration_ms=\(durationMs) estimated_frames=\(estimatedFrames)
               region_box=\(regionStr)
               region_matches_feat033_[0,848,1920,87]=\(matchesFeat033)
+              subtitle_profile=\(profileStr)
               enable_ssim_patrol UI=\(uiPatrolToggle) payload=\(patrolPayloadStr)
               frame_path=Python FfmpegExtractor (same as CLI/benchmark)
             """

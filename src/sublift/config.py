@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sublift.models import SubtitleProfile
 
 
 @dataclass(frozen=True)
@@ -93,6 +97,34 @@ class Config:
     False（默认）：保留时间轴命中，即使文本为空（评测 timing 不因 OCR
     失败变成 no_overlap；编辑器可见空行）。True：旧行为，strip 后为空则丢弃。
     """
+    subtitle_profile: SubtitleProfile | None = None
+    """字幕轨画像（feat-034b）。
+
+    GUI 从用户选区构造并经 IPC 传入；CLI/benchmark 可从 region_box 推导。
+    None 时 Pipeline 在确定 Region 后用 crop 全带默认 profile。
+    """
+    enable_line_select: bool = True
+    """是否启用 OCR 行级选择（feat-034c）。
+
+    True：按 SubtitleProfile 从 OcrResult.lines 选目标行，拒绝背景噪声行。
+    False：沿用整区 join 文本 + 全局 confidence_threshold（旧行为）。
+    """
+    low_conf_threshold: float = 0.28
+    """低置信放行下限（feat-034c）。
+
+    选中行 conf 低于 confidence_threshold 但 ≥ 此值，且多帧共识稳定、
+    文字系统匹配时仍可接受（避免 conf≈0.3 的中文字幕被清空）。
+    禁止仅靠把 confidence_threshold 降到 0.3。
+    """
+    ocr_consensus_frames: int = 4
+    """段内最多 OCR 代表帧数（feat-034d）。
+
+    对选中行做多数/编辑距离共识；典型 3–5。
+    """
+    line_select_min_score: float = 0.28
+    """行级选择总分下限。"""
+    line_select_min_script: float = 0.12
+    """行级选择文字系统分下限。"""
     signature: SignatureConfig = SignatureConfig()
     change_point: ChangePointConfig = ChangePointConfig()
 

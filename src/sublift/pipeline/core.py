@@ -25,10 +25,18 @@ import numpy as np
 from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector.base import Detector
 from sublift.extractor.base import Extractor
-from sublift.models import BoundingBox, Frame, Region, SubtitleEntry
+from sublift.models import BoundingBox, Frame, Region, SubtitleEntry, SubtitleProfile
 from sublift.ocr.base import OcrEngine
 from sublift.pipeline.changepoint import ChangePointDetector, EventType
 from sublift.pipeline.dedupe import merge_entries
+from sublift.pipeline.line_select import (
+    cleanup_subtitle_text,
+    consensus_text,
+    normalize_ocr_text,
+    script_score,
+    select_line,
+    should_accept_text,
+)
 from sublift.pipeline.signature import compute_signature
 from sublift.pipeline.timeline import TimelineBuilder
 
@@ -124,6 +132,10 @@ class Pipeline:
         self._pending_anchor_remaining: int = 0
         self._segment_first_frame: Frame | None = None
         self._segment_stable_frame: Frame | None = None
+        # feat-034b：字幕轨画像（显式传入或 Region 确定后由 crop 推导）
+        self._subtitle_profile: SubtitleProfile | None = config.subtitle_profile
+        # feat-034d：段内采样帧，供多帧共识
+        self._segment_sample_frames: list[Frame] = []
 
     # ------------------------------------------------------------------
     # 流式 API（feat-029）
@@ -153,6 +165,7 @@ class Pipeline:
             self._region = self._detector.detect(frame)
             if self._region is None:
                 return None
+            self._ensure_subtitle_profile()
 
         crop_image = self._crop_region(frame, self._region.box)
         crop_np = cv2.cvtColor(np.asarray(crop_image), cv2.COLOR_RGB2BGR)
@@ -200,7 +213,8 @@ class Pipeline:
         重操作（~几百 ms）：调用方应放到线程池，避免阻塞事件循环。
         OCR 完成后 raw entry 缓存到内部列表，供 :meth:`finalize` dedupe。
 
-        主锚帧置信不足或空文本时，尝试 ``fallback_frame``（feat-033b）。
+        feat-034：多代表帧行级选择 + 共识；低置信稳定中文可放行。
+        未启用行级选择时回退旧逻辑（整区 join + 全局阈值）。
 
         Args:
             event: :meth:`feed` 返回的段闭合事件。
@@ -218,28 +232,10 @@ class Pipeline:
             self._closed_entries.append(entry)
             return entry
 
-        text, confidence = self._ocr_frame(event.anchor_frame)
-        if self._needs_ocr_retry(text, confidence):
-            seen_ts = {
-                event.anchor_frame.timestamp_ms
-                if event.anchor_frame is not None
-                else -1
-            }
-            for fb in event.fallback_frames:
-                if fb.timestamp_ms in seen_ts:
-                    continue
-                seen_ts.add(fb.timestamp_ms)
-                fb_text, fb_conf = self._ocr_frame(fb)
-                if not self._needs_ocr_retry(fb_text, fb_conf):
-                    text, confidence = fb_text, fb_conf
-                    break
-                if fb_text.strip() and not text.strip():
-                    text, confidence = fb_text, fb_conf
-                if fb_conf > confidence and fb_text.strip():
-                    text, confidence = fb_text, fb_conf
-
-        if confidence < self._config.confidence_threshold:
-            text = ""
+        if self._config.enable_line_select:
+            text, confidence = self._ocr_segment_with_line_select(event)
+        else:
+            text, confidence = self._ocr_segment_legacy(event)
 
         entry = SubtitleEntry(
             start_ms=event.start_ms,
@@ -292,12 +288,26 @@ class Pipeline:
         self._processed_count = 0
         self._last_timestamp_ms = 0
         self._reset_segment_ocr_state()
+        self._subtitle_profile = self._config.subtitle_profile
+
+    @property
+    def subtitle_profile(self) -> SubtitleProfile | None:
+        """当前生效的字幕轨画像（feat-034b）；行级选择在 034c 消费。"""
+        return self._subtitle_profile
+
+    def _ensure_subtitle_profile(self) -> None:
+        """Region 就绪且无显式 profile 时，用 crop 全带推导默认画像。"""
+        if self._subtitle_profile is not None or self._region is None:
+            return
+        box = self._region.box
+        self._subtitle_profile = SubtitleProfile.from_crop(box.width, box.height)
 
     def _open_segment(self, start_ms: int, frame: Frame) -> None:
         """开启新段并启动 OCR 锚帧延迟（feat-033b）。"""
         self._open_segment_start_ms = start_ms
         self._segment_first_frame = frame
         self._segment_stable_frame = None
+        self._segment_sample_frames = [frame]
         delay = max(0, self._config.ocr_anchor_delay_frames)
         if delay == 0:
             self._anchor_frames[start_ms] = frame
@@ -306,15 +316,39 @@ class Pipeline:
             self._pending_anchor_remaining = delay
 
     def _on_stable_frame(self, frame: Frame) -> None:
-        """无状态事件时：推进延迟锚 / 更新稳定帧。"""
+        """无状态事件时：推进延迟锚 / 更新稳定帧 / 采样共识帧。"""
         if self._open_segment_start_ms is None:
             return
         if self._pending_anchor_remaining > 0:
             self._pending_anchor_remaining -= 1
             if self._pending_anchor_remaining == 0:
                 self._anchor_frames[self._open_segment_start_ms] = frame
+            self._record_sample_frame(frame)
             return
         self._segment_stable_frame = frame
+        self._record_sample_frame(frame)
+
+    def _record_sample_frame(self, frame: Frame) -> None:
+        """段内保留最多 ocr_consensus_frames 个采样（首帧 + 中间稀疏 + 最新）。"""
+        cap = max(1, self._config.ocr_consensus_frames)
+        samples = self._segment_sample_frames
+        if not samples:
+            samples.append(frame)
+            return
+        if samples[-1].timestamp_ms == frame.timestamp_ms:
+            samples[-1] = frame
+            return
+        if len(samples) < cap:
+            samples.append(frame)
+            return
+        # 已满：保留首帧，用新帧替换末帧；若 cap>=3 再偶尔替换中位
+        samples[-1] = frame
+        if cap >= 3 and len(samples) >= 3:
+            # 每累计到末帧时把上一「次新」挤到中间槽，保持时间跨度
+            mid = len(samples) // 2
+            if samples[mid].timestamp_ms < frame.timestamp_ms:
+                # 把中位向右挪的简易策略：中位取 (first, last) 中点已在列表中的较新者
+                samples[mid] = samples[-2] if len(samples) > 2 else samples[mid]
 
     def _close_segment(
         self,
@@ -330,12 +364,14 @@ class Pipeline:
         stable = self._segment_stable_frame
         # 主锚：延迟锁定帧 > 稳定帧 > 段首帧
         anchor = delayed or stable or first
-        # 回退候选：稳定帧 / 段首 / 闭合帧（去重，按可读性优先级）
+        # 回退候选：采样帧 + 稳定/段首/闭合/延迟（去重）
         fallbacks: list[Frame] = []
         seen: set[int] = set()
         if anchor is not None:
             seen.add(anchor.timestamp_ms)
-        for cand in (stable, first, closing_frame, delayed):
+        ordered: list[Frame | None] = list(self._segment_sample_frames)
+        ordered.extend([stable, first, closing_frame, delayed])
+        for cand in ordered:
             if cand is None or cand.timestamp_ms in seen:
                 continue
             seen.add(cand.timestamp_ms)
@@ -356,13 +392,154 @@ class Pipeline:
         self._pending_anchor_remaining = 0
         self._segment_first_frame = None
         self._segment_stable_frame = None
+        self._segment_sample_frames = []
 
-    def _ocr_frame(self, frame: Frame | None) -> tuple[str, float]:
+    def _ocr_segment_legacy(self, event: SegmentEvent) -> tuple[str, float]:
+        """旧路径：整区 join + 全局阈值 + 单锚回退。"""
+        text, confidence = self._ocr_frame_raw(event.anchor_frame)
+        if self._needs_ocr_retry(text, confidence):
+            seen_ts = {
+                event.anchor_frame.timestamp_ms
+                if event.anchor_frame is not None
+                else -1
+            }
+            for fb in event.fallback_frames:
+                if fb.timestamp_ms in seen_ts:
+                    continue
+                seen_ts.add(fb.timestamp_ms)
+                fb_text, fb_conf = self._ocr_frame_raw(fb)
+                if not self._needs_ocr_retry(fb_text, fb_conf):
+                    text, confidence = fb_text, fb_conf
+                    break
+                if fb_text.strip() and not text.strip():
+                    text, confidence = fb_text, fb_conf
+                if fb_conf > confidence and fb_text.strip():
+                    text, confidence = fb_text, fb_conf
+
+        if confidence < self._config.confidence_threshold:
+            text = ""
+        return text, confidence
+
+    def _ocr_segment_with_line_select(self, event: SegmentEvent) -> tuple[str, float]:
+        """行级选择 + 多帧共识（feat-034c/d）。"""
+        self._ensure_subtitle_profile()
+        profile = self._subtitle_profile
+        if profile is None:
+            # 无 profile 时退化为 crop 默认
+            if self._region is not None:
+                box = self._region.box
+                profile = SubtitleProfile.from_crop(box.width, box.height)
+                self._subtitle_profile = profile
+            else:
+                return "", 0.0
+
+        frames = self._collect_ocr_frames(event)
+        samples: list[tuple[str, float]] = []
+        norm_votes: dict[str, int] = {}
+
+        for frame in frames:
+            text, conf = self._ocr_frame_selected(frame, profile)
+            if not text.strip():
+                continue
+            samples.append((text, conf))
+            key = normalize_ocr_text(text)
+            norm_votes[key] = norm_votes.get(key, 0) + 1
+
+            # 高置信 + 文字系统匹配：单帧即可，少做 OCR
+            if (
+                conf >= self._config.confidence_threshold
+                and script_score(text, profile.script)
+                >= self._config.line_select_min_script
+            ):
+                break
+            # 低置信但已有 ≥2 票相同：可提前结束做共识
+            if norm_votes[key] >= 2 and conf >= self._config.low_conf_threshold:
+                break
+
+        text, confidence = consensus_text(samples)
+        if not text:
+            return "", 0.0
+
+        text = cleanup_subtitle_text(text, profile.script)
+        if not text:
+            return "", confidence
+
+        norm = normalize_ocr_text(text)
+        support = sum(
+            1
+            for t, _ in samples
+            if normalize_ocr_text(cleanup_subtitle_text(t, profile.script)) == norm
+            or normalize_ocr_text(t) == norm
+        )
+
+        accept = should_accept_text(
+            text,
+            confidence,
+            profile=profile,
+            confidence_threshold=self._config.confidence_threshold,
+            low_conf_threshold=self._config.low_conf_threshold,
+            support_votes=support,
+        )
+        if not accept:
+            return "", confidence
+        return text, confidence
+
+    def _collect_ocr_frames(self, event: SegmentEvent) -> list[Frame]:
+        """主锚 + fallback，截断到 ocr_consensus_frames。"""
+        cap = max(1, self._config.ocr_consensus_frames)
+        frames: list[Frame] = []
+        seen: set[int] = set()
+        for fr in (event.anchor_frame, *event.fallback_frames):
+            if fr is None or fr.timestamp_ms in seen:
+                continue
+            seen.add(fr.timestamp_ms)
+            frames.append(fr)
+            if len(frames) >= cap:
+                break
+        return frames
+
+    def _ocr_frame_selected(
+        self,
+        frame: Frame | None,
+        profile: SubtitleProfile,
+    ) -> tuple[str, float]:
+        """单帧 OCR → 行级选择 → (text, conf)。"""
+        if frame is None or self._region is None:
+            return "", 0.0
+        crop_image = self._crop_region(frame, self._region.box)
+        result = self._ocr.recognize(crop_image)
+
+        if result.lines:
+            chosen = select_line(
+                result.lines,
+                profile,
+                min_score=self._config.line_select_min_score,
+                min_script=self._config.line_select_min_script,
+            )
+            if chosen is None:
+                return "", 0.0
+            text = cleanup_subtitle_text(chosen.text, profile.script)
+            return text, chosen.confidence
+
+        # 无 lines 时兼容旧引擎输出
+        text = cleanup_subtitle_text(result.text, profile.script)
+        return text, result.confidence
+
+    def _ocr_frame_raw(self, frame: Frame | None) -> tuple[str, float]:
         if frame is None or self._region is None:
             return "", 0.0
         crop_image = self._crop_region(frame, self._region.box)
         result = self._ocr.recognize(crop_image)
         return result.text, result.confidence
+
+    def _ocr_frame(self, frame: Frame | None) -> tuple[str, float]:
+        """兼容旧调用：按配置选择路径。"""
+        if self._config.enable_line_select:
+            self._ensure_subtitle_profile()
+            profile = self._subtitle_profile
+            if profile is not None:
+                return self._ocr_frame_selected(frame, profile)
+        return self._ocr_frame_raw(frame)
 
     def _needs_ocr_retry(self, text: str, confidence: float) -> bool:
         if not text.strip():
@@ -431,6 +608,8 @@ class Pipeline:
         self._processed_count = 0
         self._last_timestamp_ms = 0
         self._cancelled = False
+        self._subtitle_profile = self._config.subtitle_profile
+        self._reset_segment_ocr_state()
 
     @staticmethod
     def _crop_region(frame: Frame, box: BoundingBox) -> Image.Image:

@@ -7,13 +7,16 @@ RuntimeError 提示安装可选依赖。
 默认识别语言为简体中文+英文（zh-Hans, en-US），覆盖 SubLift 核心场景。
 VNRecognizeTextRequest 的默认 recognitionLanguages 仅 en-US，无法识别中文，
 故必须显式设置。
+
+行级输出：每个 observation 映射为 OcrLine(text, confidence, box)；
+OcrResult.text/confidence 由 from_lines 兼容 join（\\n + 均值 conf）。
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from sublift.models import OcrResult
+from sublift.models import BoundingBox, OcrLine, OcrResult
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -79,9 +82,10 @@ class VisionOcrEngine:
             image: PIL.Image 图像。
 
         Returns:
-            OCR 识别结果。多行文本以 "\\n" 连接，置信度取各识别结果均值；
+            带 ``lines`` 的 OCR 结果；``text``/``confidence`` 为兼容汇总。
             无识别结果返回 OcrResult("", 0.0)。
         """
+        width, height = image.size
         cgimage = _pil_to_cgimage(image)
         handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
             cgimage, None
@@ -93,7 +97,7 @@ class VisionOcrEngine:
         if not success:
             return OcrResult(text="", confidence=0.0)
 
-        return _collect_results(request)
+        return _collect_results(request, (width, height))
 
 
 def _pil_to_cgimage(image: Image.Image) -> Any:
@@ -126,31 +130,116 @@ def _pil_to_cgimage(image: Image.Image) -> Any:
     )
 
 
-def _collect_results(request: Any) -> OcrResult:
-    """从 VNRecognizeTextRequest 收集识别结果。
+def _vision_box_to_pixel(
+    bbox: Any,
+    width: int,
+    height: int,
+) -> BoundingBox:
+    """将 Vision 归一化 boundingBox（原点左下）转为像素 BoundingBox（原点左上）。
+
+    支持带 origin/size 属性的对象，或 ``((x, y), (w, h))`` / 扁平四元组。
+    """
+    nx, ny, nw, nh = _unpack_normalized_rect(bbox)
+    # Vision: origin 左下；像素: 原点左上
+    x = round(nx * width)
+    y = round((1.0 - ny - nh) * height)
+    w = round(nw * width)
+    h = round(nh * height)
+    return _clamp_box(x, y, w, h, width, height)
+
+
+def _unpack_normalized_rect(bbox: Any) -> tuple[float, float, float, float]:
+    """从多种 PyObjC / 测试假对象形态解包 (x, y, w, h)。"""
+    if hasattr(bbox, "origin") and hasattr(bbox, "size"):
+        origin = bbox.origin
+        size = bbox.size
+        if hasattr(origin, "x"):
+            return (
+                float(origin.x),
+                float(origin.y),
+                float(size.width),
+                float(size.height),
+            )
+        # origin/size 可能是 (x, y) / (w, h) 元组
+        return (
+            float(origin[0]),
+            float(origin[1]),
+            float(size[0]),
+            float(size[1]),
+        )
+    if isinstance(bbox, (list, tuple)):
+        if len(bbox) == 2 and isinstance(bbox[0], (list, tuple)):
+            return (
+                float(bbox[0][0]),
+                float(bbox[0][1]),
+                float(bbox[1][0]),
+                float(bbox[1][1]),
+            )
+        if len(bbox) == 4:
+            return (float(bbox[0]), float(bbox[1]), float(bbox[2]), float(bbox[3]))
+    # 命名属性 x/y/width/height
+    if all(hasattr(bbox, name) for name in ("x", "y", "width", "height")):
+        return (
+            float(bbox.x),
+            float(bbox.y),
+            float(bbox.width),
+            float(bbox.height),
+        )
+    raise TypeError(f"unsupported Vision boundingBox type: {type(bbox)!r}")
+
+
+def _clamp_box(
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+    width: int,
+    height: int,
+) -> BoundingBox:
+    """将 box clamp 到图像范围内。"""
+    if width <= 0 or height <= 0:
+        return BoundingBox(x=0, y=0, width=0, height=0)
+    x = max(0, min(x, width))
+    y = max(0, min(y, height))
+    w = max(0, min(w, width - x))
+    h = max(0, min(h, height - y))
+    return BoundingBox(x=x, y=y, width=w, height=h)
+
+
+def _collect_results(
+    request: Any,
+    image_size: tuple[int, int],
+) -> OcrResult:
+    """从 VNRecognizeTextRequest 收集行级识别结果。
 
     Args:
         request: 已执行的 VNRecognizeTextRequest。
+        image_size: ``(width, height)`` 像素，用于 box 换算。
 
     Returns:
-        合并后的 OcrResult。多行文本以 "\\n" 连接，置信度取均值；
+        带 lines 的 OcrResult；兼容 text/confidence 由 from_lines 生成。
         无结果返回 OcrResult("", 0.0)。
     """
-    observations: list[Any] = request.results()
-    if not observations:
-        return OcrResult(text="", confidence=0.0)
+    observations: list[Any] = request.results() or []
+    width, height = image_size
+    lines: list[OcrLine] = []
 
-    texts: list[str] = []
-    confidences: list[float] = []
     for obs in observations:
         candidates = obs.topCandidates_(1)
-        if candidates:
-            candidate = candidates[0]
-            texts.append(candidate.string())
-            confidences.append(float(candidate.confidence()))
+        if not candidates:
+            continue
+        candidate = candidates[0]
+        text = str(candidate.string())
+        if not text.strip():
+            continue
+        conf = float(candidate.confidence())
+        try:
+            box = _vision_box_to_pixel(obs.boundingBox(), width, height)
+        except (TypeError, AttributeError, IndexError, ValueError):
+            # box 解析失败时仍保留文本，用整图占位便于下游降级
+            box = BoundingBox(x=0, y=0, width=max(0, width), height=max(0, height))
+        lines.append(OcrLine(text=text, confidence=conf, box=box))
 
-    if not texts:
-        return OcrResult(text="", confidence=0.0)
-
-    avg_conf = sum(confidences) / len(confidences)
-    return OcrResult(text="\n".join(texts), confidence=avg_conf)
+    # 稳定行序：上→下，同 y 左→右
+    lines.sort(key=lambda line: (line.box.y, line.box.x))
+    return OcrResult.from_lines(lines)

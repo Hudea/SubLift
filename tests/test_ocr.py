@@ -5,13 +5,51 @@ Mock 单测默认运行；Vision 单测需 PyObjC，集成测试需 macOS + Visi
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from sublift.models import OcrResult
+from sublift.models import BoundingBox, OcrLine, OcrResult
 from sublift.ocr.base import OcrEngine
 from sublift.ocr.mock import MockOcrEngine
-from sublift.ocr.vision import VisionOcrEngine, is_vision_available
+from sublift.ocr.vision import (
+    VisionOcrEngine,
+    _collect_results,
+    _vision_box_to_pixel,
+    is_vision_available,
+)
+
+
+class TestOcrResultFromLines:
+    """OcrResult.from_lines 兼容 join 约定。"""
+
+    def test_empty(self) -> None:
+        result = OcrResult.from_lines([])
+        assert result == OcrResult(text="", confidence=0.0, lines=())
+
+    def test_multiline_join_and_mean_conf(self) -> None:
+        lines = (
+            OcrLine(
+                text="hello",
+                confidence=0.8,
+                box=BoundingBox(x=0, y=0, width=40, height=10),
+            ),
+            OcrLine(
+                text="world",
+                confidence=0.4,
+                box=BoundingBox(x=0, y=20, width=40, height=10),
+            ),
+        )
+        result = OcrResult.from_lines(lines)
+        assert result.text == "hello\nworld"
+        assert result.confidence == pytest.approx(0.6)
+        assert result.lines == lines
+
+    def test_legacy_constructor_empty_lines(self) -> None:
+        result = OcrResult(text="hi", confidence=0.9)
+        assert result.lines == ()
+        assert result.text == "hi"
 
 
 class TestMockOcrEngine:
@@ -41,6 +79,26 @@ class TestMockOcrEngine:
         second = engine.recognize(img)
         assert first == second == OcrResult(text="hello", confidence=0.9)
 
+    def test_fixed_mode_with_lines(self) -> None:
+        lines = [
+            OcrLine(
+                text="上",
+                confidence=0.9,
+                box=BoundingBox(x=1, y=2, width=10, height=8),
+            ),
+            OcrLine(
+                text="下",
+                confidence=0.7,
+                box=BoundingBox(x=1, y=20, width=10, height=8),
+            ),
+        ]
+        engine = MockOcrEngine(lines=lines)
+        img = Image.new("RGB", (10, 10))
+        result = engine.recognize(img)
+        assert result.text == "上\n下"
+        assert result.confidence == pytest.approx(0.8)
+        assert result.lines == tuple(lines)
+
     def test_sequence_mode(self) -> None:
         """序列模式按调用顺序返回。"""
         seq = [
@@ -59,6 +117,103 @@ class TestMockOcrEngine:
         engine.recognize(img)
         with pytest.raises(IndexError):
             engine.recognize(img)
+
+
+class TestVisionBoxToPixel:
+    """Vision 归一化 box → 像素左上（纯函数，不依赖 PyObjC）。"""
+
+    def test_full_frame_origin_bottom_left(self) -> None:
+        # 整图：归一化 origin=(0,0) size=(1,1) → 像素 (0,0,W,H)
+        box = _vision_box_to_pixel(
+            SimpleNamespace(
+                origin=SimpleNamespace(x=0.0, y=0.0),
+                size=SimpleNamespace(width=1.0, height=1.0),
+            ),
+            200,
+            100,
+        )
+        assert box == BoundingBox(x=0, y=0, width=200, height=100)
+
+    def test_top_band(self) -> None:
+        # 顶部半区：Vision y 从 0.5 起、高 0.5 → 像素 y=0,h=50
+        box = _vision_box_to_pixel(
+            SimpleNamespace(
+                origin=SimpleNamespace(x=0.0, y=0.5),
+                size=SimpleNamespace(width=1.0, height=0.5),
+            ),
+            100,
+            100,
+        )
+        assert box.x == 0
+        assert box.y == 0
+        assert box.width == 100
+        assert box.height == 50
+
+    def test_tuple_form(self) -> None:
+        box = _vision_box_to_pixel(((0.1, 0.2), (0.3, 0.4)), 100, 100)
+        assert box.x == 10
+        # y = (1 - 0.2 - 0.4) * 100 = 40
+        assert box.y == 40
+        assert box.width == 30
+        assert box.height == 40
+
+
+class TestCollectResults:
+    """_collect_results 行级收集（假 observation，不依赖 Vision 运行时）。"""
+
+    def test_multiline_sorted_by_y(self) -> None:
+        def make_obs(
+            text: str,
+            conf: float,
+            nx: float,
+            ny: float,
+            nw: float,
+            nh: float,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                topCandidates_=lambda _n: [
+                    SimpleNamespace(string=lambda: text, confidence=lambda: conf)
+                ],
+                boundingBox=lambda: SimpleNamespace(
+                    origin=SimpleNamespace(x=nx, y=ny),
+                    size=SimpleNamespace(width=nw, height=nh),
+                ),
+            )
+
+        # 故意乱序：下方行先出现
+        request = SimpleNamespace(
+            results=lambda: [
+                make_obs("bottom", 0.5, 0.0, 0.0, 1.0, 0.3),
+                make_obs("top", 0.9, 0.0, 0.7, 1.0, 0.3),
+            ]
+        )
+        result = _collect_results(request, (100, 100))
+        assert result.text == "top\nbottom"
+        assert len(result.lines) == 2
+        assert result.lines[0].text == "top"
+        assert result.lines[1].text == "bottom"
+        assert result.confidence == pytest.approx(0.7)
+        assert result.lines[0].box.y < result.lines[1].box.y
+
+    def test_skips_empty_text(self) -> None:
+        request = SimpleNamespace(
+            results=lambda: [
+                SimpleNamespace(
+                    topCandidates_=lambda _n: [
+                        SimpleNamespace(string=lambda: "  ", confidence=lambda: 0.9)
+                    ],
+                    boundingBox=lambda: ((0.0, 0.0), (1.0, 1.0)),
+                )
+            ]
+        )
+        result = _collect_results(request, (50, 50))
+        assert result == OcrResult(text="", confidence=0.0, lines=())
+
+    def test_empty_observations(self) -> None:
+        request = SimpleNamespace(results=lambda: [])
+        result = _collect_results(request, (50, 50))
+        assert result.lines == ()
+        assert result.text == ""
 
 
 @pytest.mark.skipif(not is_vision_available(), reason="PyObjC Vision 未安装")
@@ -94,6 +249,16 @@ def _make_text_image(
     draw = ImageDraw.Draw(img)
     font = ImageFont.truetype(font_path, font_size)
     draw.text((20, 20), text, fill="black", font=font)
+    return img
+
+
+def _make_two_line_image() -> Image.Image:
+    """上下两行英文，用于行级 lines 集成测。"""
+    img = Image.new("RGB", (400, 160), "white")
+    draw = ImageDraw.Draw(img)
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 36)
+    draw.text((20, 20), "Hello", fill="black", font=font)
+    draw.text((20, 90), "World", fill="black", font=font)
     return img
 
 
@@ -133,3 +298,21 @@ class TestVisionOcrEngineIntegration:
         result = engine.recognize(img)
         assert result.text == ""
         assert result.confidence == 0.0
+        assert result.lines == ()
+
+    def test_recognize_multiline_lines_populated(self) -> None:
+        """多行图应填充 lines，每行含 conf 与合法 box。"""
+        img = _make_two_line_image()
+        engine = VisionOcrEngine()
+        result = engine.recognize(img)
+        assert result.text != ""
+        assert len(result.lines) >= 1
+        for line in result.lines:
+            assert line.text.strip()
+            assert 0.0 <= line.confidence <= 1.0
+            assert line.box.width >= 0
+            assert line.box.height >= 0
+            assert line.box.x >= 0
+            assert line.box.y >= 0
+        # 兼容汇总应与 lines 一致
+        assert result.text == "\n".join(line.text for line in result.lines)

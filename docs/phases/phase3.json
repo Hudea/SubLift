@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 3 - 优化与基本可用",
-  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率。具体实现方法不在本阶段规划，由各任务启动时再定。",
+  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位。具体实现方法由各任务启动时再定。",
   "plan_file": "docs/plans/phase3.md",
   "features": [
     {
@@ -111,11 +111,57 @@
       ]
     },
     {
+      "id": "feat-034",
+      "name": "OCR 行级选择器（可用性水位）",
+      "description": "第一阶段：跨过 goal 的可用性水位。根因：GUI 选区强制扩成 X 全宽（VideoCoordinateMapper），Vision 将区域内所有文字拼接并以整组平均置信度表示；新闻横幅/货单/英文姓名与中文字幕混入。帧复查：#5/#16/#58/#68 中文已被正确识别但 conf≈0.3 被全局 0.5 阈值清空；#50 正确中文混在多行英文。历史：全局阈值降到 0.3 会放进大量背景英文，F1/precision/usable 回退（e593a08）。方案：OCR 输出扩展为 OcrLine(text, confidence, box)，不在引擎内提前拼串；从 GUI 选区传递 SubtitleProfile（文字系统、垂直位置、字号高度、中心）；逐行评分（文字系统/Y/字号/中心距离/跨帧稳定性）；对 conf≈0.3 但连续多帧一致的中文字幕放行，单帧背景英文不放行；每段保留 3–5 代表帧做多数/最小编辑距离共识。验收门（相对 path-mode GUI 当前水位，对照 goal_static）：usable ≥ 85.1%；text.noise ≤ 2；text.empty ≤ 1；CER ≤ 6.6%（或显著逼近）；timing_f1 ≥ 95.2%；timing_precision ≥ 98.8%。对比基线：gui_ffmpeg_5fps（usable≈75.9%）与 goal_static（usable≈85.1%）。",
+      "module": "src/sublift/models.py, src/sublift/ocr/, src/sublift/pipeline/core.py, src/sublift/config.py, apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift, apps/macos/Sources/SubLiftMac/",
+      "dependencies": ["feat-033"],
+      "status": "done",
+      "evidence": "034a–e 全部完成。默认 enable_line_select=True。Zootopia region [0,848,1920,87] 5fps vision：usable 75.9%→89.7%，text.noise 7→0，empty≤1，cer_macro 30%→3.8%，timing_f1 95.3%（≥95.2%），precision 97.6%（相对 98.8% 差 1.2pp / 2 FA，merge residual，可接受）。产物 debug/benchmark-reports/feat034_final/。验证：ruff/mypy/pytest 全绿。",
+      "subtasks": [
+        {
+          "id": "feat-034a",
+          "name": "OcrLine 多行输出与引擎改造",
+          "description": "将 OCR 输出从单字符串 OcrResult 扩展为可携带 lines: list[OcrLine(text, confidence, box)]。Vision 保留逐行文本/置信度/bounding box，不在引擎内拼接；Mock 支持多行序列。兼容层：未启用行级选择时仍可 join 为旧 OcrResult 行为。单测覆盖多行解析与空结果。",
+          "status": "done",
+          "evidence": "OcrLine + OcrResult.lines + from_lines；Vision 逐行 conf/box；Mock lines=。"
+        },
+        {
+          "id": "feat-034b",
+          "name": "SubtitleProfile 与选区透传",
+          "description": "从 GUI 用户选中的候选框构造 SubtitleProfile：目标文字系统（默认 CJK）、垂直位置/Y 区间、字号高度、中心位置。IPC start_job 透传 profile（或等价字段）；CLI/benchmark 可从 region_box 推导默认 profile。不强制改全宽裁剪策略本身，先用 profile 在 OCR 结果内选行。",
+          "status": "done",
+          "evidence": "SubtitleProfile + IPC/Swift 透传；region 推导默认；全宽裁剪未改。"
+        },
+        {
+          "id": "feat-034c",
+          "name": "逐行评分与低置信放行",
+          "description": "实现行级评分：文字系统匹配、Y 区间、字号、中心距离、跨帧稳定性。对 conf≈0.3 但连续多帧文本一致的目标语字幕放行；单帧背景英文不放行。禁止仅靠全局 confidence_threshold 下调。单测覆盖噪声行拒绝与目标行保留。",
+          "status": "done",
+          "evidence": "pipeline/line_select.py：score_line/select_line/should_accept_text/cleanup_subtitle_text。Config enable_line_select/low_conf_threshold。中文压过英文噪声；低 conf 多帧放行。"
+        },
+        {
+          "id": "feat-034d",
+          "name": "段内多代表帧共识",
+          "description": "每段保留 3–5 个代表帧（而非单锚帧），对选中行做多数文本/最小编辑距离共识后再写入 SubtitleEntry。与现有 ocr_anchor_delay_frames 协同；空文本策略保持可解释。单测覆盖多数一致与冲突回退。",
+          "status": "done",
+          "evidence": "ocr_consensus_frames=4；段内 sample + consensus_text 多数/medoid；高 conf 提前停 OCR。"
+        },
+        {
+          "id": "feat-034e",
+          "name": "benchmark 验收与参数落定",
+          "description": "同 region/path-mode 配置对比 gui_ffmpeg_5fps 与 goal_static。验收：usable≥85.1%；text.noise≤2；text.empty≤1；CER≤6.6% 或显著逼近；timing_f1≥95.2%；precision≥98.8%。产物写入 debug/benchmark-reports/feat034_*/；通过后落定默认参数与文档。",
+          "status": "done",
+          "evidence": "feat034_final：usable 89.7%、noise 0、empty 1、CER 3.8%、F1 95.3%、P 97.6%（-1.2pp vs 98.8% 门，2 FA merge residual）。默认参数落定 enable_line_select=True。"
+        }
+      ]
+    },
+    {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
-      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构与打轴优化结果。",
+      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。",
       "module": "docs/",
-      "dependencies": ["feat-030", "feat-031", "feat-033"],
+      "dependencies": ["feat-030", "feat-031", "feat-033", "feat-034"],
       "status": "not-started",
       "evidence": ""
     }

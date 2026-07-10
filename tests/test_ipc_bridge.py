@@ -88,6 +88,34 @@ class TestStartJob:
         _run(bridge, msg)
         assert bridge._pipeline is not None
         assert isinstance(bridge._pipeline._detector, FixedRegionDetector)
+        # 无显式 profile 时从 region 推导 crop 全带
+        assert bridge._pipeline.subtitle_profile is not None
+        assert bridge._pipeline.subtitle_profile.height == 200
+        assert bridge._pipeline.subtitle_profile.center_x == 960
+
+    def test_start_job_with_explicit_subtitle_profile(self) -> None:
+        from sublift.models import SubtitleProfile
+
+        bridge = _make_handler()
+        profile = {
+            "script": "cjk",
+            "center_x": 100,
+            "center_y": 20,
+            "height": 40,
+            "y_min": 5,
+            "y_max": 45,
+        }
+        msg = build_start_job(
+            "V1",
+            5.0,
+            "vision",
+            0.5,
+            region_box=[0, 800, 1920, 100],
+            subtitle_profile=profile,
+        )
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert bridge._pipeline.subtitle_profile == SubtitleProfile.from_dict(profile)
 
     def test_start_job_without_region_box_uses_bottom_crop(self) -> None:
         bridge = _make_handler()
@@ -95,6 +123,7 @@ class TestStartJob:
         _run(bridge, msg)
         assert bridge._pipeline is not None
         assert isinstance(bridge._pipeline._detector, BottomCropDetector)
+        assert bridge._pipeline.subtitle_profile is None
 
     def test_start_job_vision_unavailable_returns_done_error(self) -> None:
         """VisionOcrEngine 构造失败时应返回 done(ok=False)。"""

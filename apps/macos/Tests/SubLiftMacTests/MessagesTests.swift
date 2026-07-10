@@ -10,6 +10,14 @@ struct MessagesTests {
 
     @Test
     func startJobRoundtrip() throws {
+        let profile = SubtitleProfilePayload(
+            script: "cjk",
+            centerX: 960,
+            centerY: 40,
+            height: 48,
+            yMin: 10,
+            yMax: 70
+        )
         let msg = StartJobMessage(
             videoId: "UUID-ABCD",
             fps: 5.0,
@@ -17,7 +25,8 @@ struct MessagesTests {
             confidenceThreshold: 0.5,
             regionBox: [10, 20, 100, 200],
             durationMs: 60000,
-            videoPath: "/tmp/clip.mp4"
+            videoPath: "/tmp/clip.mp4",
+            subtitleProfile: profile
         )
         let data = try MessageCodec.encode(msg)
         let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
@@ -29,6 +38,27 @@ struct MessagesTests {
         #expect(decoded.regionBox == [10, 20, 100, 200])
         #expect(decoded.durationMs == 60000)
         #expect(decoded.videoPath == "/tmp/clip.mp4")
+        #expect(decoded.subtitleProfile == profile)
+    }
+
+    @Test
+    func startJobSubtitleProfileSnakeCaseKeys() throws {
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            subtitleProfile: SubtitleProfilePayload(
+                centerX: 1, centerY: 2, height: 3, yMin: 0, yMax: 3
+            )
+        )
+        let data = try MessageCodec.encode(msg)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let profile = try #require(json["subtitle_profile"] as? [String: Any])
+        #expect(profile["center_x"] as? Int == 1)
+        #expect(profile["center_y"] as? Int == 2)
+        #expect(profile["y_min"] as? Int == 0)
+        #expect(profile["y_max"] as? Int == 3)
     }
 
     @Test

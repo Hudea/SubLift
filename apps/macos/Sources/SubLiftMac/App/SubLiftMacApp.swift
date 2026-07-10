@@ -224,6 +224,7 @@ struct ContentView: View {
                         videoURL: url,
                         engine: defaultEngine,
                         regionBox: regionModel.regionBoxForIPC(),
+                        subtitleProfile: regionModel.subtitleProfileForIPC(),
                         enableSsimPatrol: enableSsimPatrol
                     )
                 } label: {

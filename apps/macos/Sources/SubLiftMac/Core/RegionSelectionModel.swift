@@ -153,4 +153,14 @@ final class RegionSelectionModel: ObservableObject {
             videoHeight: videoHeight
         )
     }
+
+    /// feat-034b：供 `start_job` 使用的 `subtitle_profile`（相对 region crop）。
+    func subtitleProfileForIPC() -> SubtitleProfilePayload? {
+        guard let regionBox = regionBoxForIPC() else { return nil }
+        return RegionMerger.subtitleProfileFromSelection(
+            candidates: candidates.map { ($0.id, $0.pixelRect) },
+            selectedIds: selectedIds,
+            regionBox: regionBox
+        )
+    }
 }

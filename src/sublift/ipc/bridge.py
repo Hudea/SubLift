@@ -188,6 +188,7 @@ class BridgeHandler:
         raw_region = message.get("region_box")
         patrol_msg = message.get("enable_ssim_patrol")
         video_path_log = message.get("video_path")
+        raw_profile = message.get("subtitle_profile")
 
         cp_config = ChangePointConfig()
         if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
@@ -195,10 +196,27 @@ class BridgeHandler:
                 enable_ssim_patrol=bool(message["enable_ssim_patrol"])
             )
 
+        subtitle_profile = None
+        if isinstance(raw_profile, dict):
+            from sublift.models import SubtitleProfile
+
+            try:
+                subtitle_profile = SubtitleProfile.from_dict(raw_profile)
+            except ValueError as e:
+                logger.exception("subtitle_profile 解析失败")
+                return build_done(self._video_id, ok=False, error=str(e))
+        elif raw_profile is None and isinstance(raw_region, list) and len(raw_region) == 4:
+            # 无显式 profile 时从 region_box 推导 crop 全带默认（CLI 同源约定）
+            from sublift.models import SubtitleProfile
+
+            _x, _y, rw, rh = (int(v) for v in raw_region)
+            subtitle_profile = SubtitleProfile.from_crop(rw, rh)
+
         config = Config(
             sample_fps=self._fps,
             confidence_threshold=confidence_threshold,
             change_point=cp_config,
+            subtitle_profile=subtitle_profile,
         )
 
         try:
@@ -219,7 +237,8 @@ class BridgeHandler:
         logger.info(
             "start_job received: video_id=%s fps=%.1f engine=%s "
             "confidence_threshold=%.3f duration_ms=%d est_frames=%d "
-            "region_box=%s enable_ssim_patrol_msg=%s video_path=%s",
+            "region_box=%s enable_ssim_patrol_msg=%s video_path=%s "
+            "subtitle_profile=%s",
             self._video_id,
             self._fps,
             engine,
@@ -229,12 +248,13 @@ class BridgeHandler:
             raw_region,
             patrol_msg,
             video_path_log,
+            raw_profile,
         )
         logger.info(
             "start_job effective: detector=%s sample_fps=%.1f conf=%.3f "
             "hysteresis_frames=%d ocr_anchor_delay_frames=%d drop_empty_text=%s "
             "enable_ssim_patrol=%s presence_threshold=%.4f change_threshold=%d "
-            "min_duration_ms=%d merge_gap_ms=%d",
+            "min_duration_ms=%d merge_gap_ms=%d subtitle_profile=%s",
             detector_name,
             config.sample_fps,
             config.confidence_threshold,
@@ -246,6 +266,7 @@ class BridgeHandler:
             config.change_point.change_threshold,
             config.min_duration_ms,
             config.merge_gap_ms,
+            config.subtitle_profile.to_dict() if config.subtitle_profile else None,
         )
         if (
             isinstance(detector, FixedRegionDetector)

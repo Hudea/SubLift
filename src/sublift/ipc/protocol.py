@@ -75,6 +75,7 @@ def build_start_job(
     duration_ms: int = 0,
     enable_ssim_patrol: bool | None = None,
     video_path: str | None = None,
+    subtitle_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
 
@@ -90,6 +91,8 @@ def build_start_job(
         video_path: 可选本地视频绝对路径。非空时进入 **path mode**：
             Python 端用 ``FfmpegExtractor`` 自抽帧（与 CLI/benchmark 同源），
             不再接收 frame 流。
+        subtitle_profile: 可选字幕轨画像（feat-034b），字段见
+            :class:`sublift.models.SubtitleProfile.to_dict`。几何相对 region crop。
     """
     msg: dict[str, Any] = {
         "type": MSG_START_JOB,
@@ -104,6 +107,8 @@ def build_start_job(
         msg["enable_ssim_patrol"] = enable_ssim_patrol
     if video_path is not None:
         msg["video_path"] = video_path
+    if subtitle_profile is not None:
+        msg["subtitle_profile"] = subtitle_profile
     return msg
 
 
@@ -284,6 +289,7 @@ def validate(message: dict[str, Any]) -> None:
             _require_bool(message, "enable_ssim_patrol")
         if "video_path" in message and message["video_path"] is not None:
             _require_str(message, "video_path")
+        _optional_subtitle_profile(message)
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")
@@ -357,6 +363,24 @@ def _optional_region_box(message: dict[str, Any]) -> None:
     for v in box:
         if not isinstance(v, int) or isinstance(v, bool):
             raise ProtocolError(f"region_box 含非整数: {v!r}")
+
+
+def _optional_subtitle_profile(message: dict[str, Any]) -> None:
+    """校验可选 ``subtitle_profile`` 对象（feat-034b）。"""
+    if "subtitle_profile" not in message or message["subtitle_profile"] is None:
+        return
+    profile = message["subtitle_profile"]
+    if not isinstance(profile, dict):
+        raise ProtocolError(f"subtitle_profile 非对象: {profile!r}")
+    from sublift.models import SCRIPT_VALUES, SubtitleProfile
+
+    try:
+        SubtitleProfile.from_dict(profile)
+    except ValueError as e:
+        raise ProtocolError(str(e)) from e
+    # script 已在 from_dict 校验；再保证 keys 可序列化
+    if profile.get("script") not in SCRIPT_VALUES and "script" in profile:
+        raise ProtocolError(f"subtitle_profile.script 非法: {profile.get('script')!r}")
 
 
 def _require_entries(message: dict[str, Any]) -> None:

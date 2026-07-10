@@ -77,6 +77,41 @@ public struct SubtitleEntryData: Codable, Equatable {
 
 /// 启动提取任务。
 ///
+/// feat-034b：字幕轨画像（几何相对 region crop，与 Python `SubtitleProfile` 对齐）。
+public struct SubtitleProfilePayload: Codable, Equatable {
+    public let script: String
+    public let centerX: Int
+    public let centerY: Int
+    public let height: Int
+    public let yMin: Int
+    public let yMax: Int
+
+    enum CodingKeys: String, CodingKey {
+        case script
+        case centerX = "center_x"
+        case centerY = "center_y"
+        case height
+        case yMin = "y_min"
+        case yMax = "y_max"
+    }
+
+    public init(
+        script: String = "cjk",
+        centerX: Int,
+        centerY: Int,
+        height: Int,
+        yMin: Int,
+        yMax: Int
+    ) {
+        self.script = script
+        self.centerX = centerX
+        self.centerY = centerY
+        self.height = height
+        self.yMin = yMin
+        self.yMax = yMax
+    }
+}
+
 /// - 若 `videoPath` 非空：path mode，Python 用 `FfmpegExtractor` 自抽帧（与 CLI/benchmark 同源）。
 /// - 若 `videoPath` 为空：frame mode，Swift 推 JPEG frame 流（兼容/调试）。
 public struct StartJobMessage: Codable {
@@ -90,6 +125,8 @@ public struct StartJobMessage: Codable {
     public let enableSsimPatrol: Bool?
     /// 本地视频绝对路径；非空则后端抽帧。
     public let videoPath: String?
+    /// feat-034b：字幕轨画像；nil 时 Python 可从 region_box 推导默认。
+    public let subtitleProfile: SubtitleProfilePayload?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -101,6 +138,7 @@ public struct StartJobMessage: Codable {
         case durationMs = "duration_ms"
         case enableSsimPatrol = "enable_ssim_patrol"
         case videoPath = "video_path"
+        case subtitleProfile = "subtitle_profile"
     }
 
     public init(
@@ -111,7 +149,8 @@ public struct StartJobMessage: Codable {
         regionBox: RegionBox? = nil,
         durationMs: Int = 0,
         enableSsimPatrol: Bool? = nil,
-        videoPath: String? = nil
+        videoPath: String? = nil,
+        subtitleProfile: SubtitleProfilePayload? = nil
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -122,6 +161,7 @@ public struct StartJobMessage: Codable {
         self.durationMs = durationMs
         self.enableSsimPatrol = enableSsimPatrol
         self.videoPath = videoPath
+        self.subtitleProfile = subtitleProfile
     }
 }
 

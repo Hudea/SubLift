@@ -123,6 +123,59 @@ enum RegionMerger {
 
         return [0, y, width, height]
     }
+
+    /// feat-034b：由用户选中框并集 + 全宽 crop，构造 crop 坐标系下的 `SubtitleProfilePayload`。
+    ///
+    /// - `regionBox`：全宽裁剪带 `[x,y,w,h]`（视频像素）
+    /// - 选中框：真实字幕窄框（视频像素）；profile 几何相对 crop 原点
+    static func subtitleProfileFromSelection(
+        candidates: [(id: Int, pixelRect: CGRect)],
+        selectedIds: Set<Int>,
+        regionBox: RegionBox,
+        script: String = "cjk"
+    ) -> SubtitleProfilePayload? {
+        guard regionBox.count == 4 else { return nil }
+        let cropX = regionBox[0]
+        let cropY = regionBox[1]
+        let cropW = regionBox[2]
+        let cropH = regionBox[3]
+        guard cropW > 0, cropH > 0 else { return nil }
+
+        let selected = candidates.filter { selectedIds.contains($0.id) }
+        guard !selected.isEmpty else {
+            // 无选中时用 crop 全带默认
+            return SubtitleProfilePayload(
+                script: script,
+                centerX: cropW / 2,
+                centerY: cropH / 2,
+                height: cropH,
+                yMin: 0,
+                yMax: cropH
+            )
+        }
+
+        let minX = selected.map { $0.pixelRect.minX }.min()!
+        let maxX = selected.map { $0.pixelRect.maxX }.max()!
+        let minY = selected.map { $0.pixelRect.minY }.min()!
+        let maxY = selected.map { $0.pixelRect.maxY }.max()!
+
+        // 视频像素 → crop 相对，再 clamp
+        let relMinX = max(0, min(Int(minX.rounded(.down)) - cropX, cropW))
+        let relMaxX = max(relMinX, min(Int(maxX.rounded(.up)) - cropX, cropW))
+        let relMinY = max(0, min(Int(minY.rounded(.down)) - cropY, cropH))
+        let relMaxY = max(relMinY, min(Int(maxY.rounded(.up)) - cropY, cropH))
+        let bandW = max(0, relMaxX - relMinX)
+        let bandH = max(0, relMaxY - relMinY)
+
+        return SubtitleProfilePayload(
+            script: script,
+            centerX: relMinX + bandW / 2,
+            centerY: relMinY + bandH / 2,
+            height: bandH > 0 ? bandH : cropH,
+            yMin: relMinY,
+            yMax: relMaxY > relMinY ? relMaxY : cropH
+        )
+    }
 }
 
 /// feat-022：候选框配色（按编号区分）。

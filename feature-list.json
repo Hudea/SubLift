@@ -121,7 +121,7 @@
     {
       "id": "phase3",
       "name": "Phase 3 - 优化与基本可用",
-      "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，使项目从功能跑通进入基本可用。具体实现方法不在本阶段规划，见 docs/plans/phase3.md，细粒度任务见 docs/phases/phase3.json。",
+      "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位，使项目从功能跑通进入基本可用。见 docs/plans/phase3.md，细粒度任务见 docs/phases/phase3.json。",
       "detail_file": "docs/phases/phase3.json",
       "features": [
         {
@@ -146,9 +146,16 @@
           "covers": ["feat-031", "feat-033"]
         },
         {
+          "id": "phase3.ocr-usability",
+          "name": "OCR 可用性（行级选择器）",
+          "description": "第一阶段跨过 goal 可用性水位：保留 Vision 逐行 text/conf/box，按 SubtitleProfile 选目标行，段内多帧共识接受低置信稳定中文、拒绝背景英文噪声。验收 usable≥85.1%、text.noise≤2、empty≤1，timing 不回退。覆盖 feat-034。",
+          "status": "done",
+          "covers": ["feat-034"]
+        },
+        {
           "id": "phase3.docs",
           "name": "文档收尾",
-          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构与打轴优化结果。覆盖 feat-032。",
+          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。覆盖 feat-032。",
           "status": "not-started",
           "covers": ["feat-032"]
         }

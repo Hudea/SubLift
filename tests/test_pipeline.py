@@ -14,7 +14,7 @@ from PIL import Image
 
 from sublift.config import Config
 from sublift.detector import FixedRegionDetector
-from sublift.models import BoundingBox, Frame, OcrResult
+from sublift.models import BoundingBox, Frame, OcrLine, OcrResult
 from sublift.ocr.mock import MockOcrEngine
 from sublift.pipeline.core import Pipeline, SegmentEvent
 
@@ -166,10 +166,10 @@ class TestPipelineDedupe:
 
 
 class TestPipelineConfidenceFilter:
-    """confidence_threshold 过滤。"""
+    """confidence_threshold / 行级低置信策略。"""
 
-    def test_low_confidence_empties_text(self) -> None:
-        """OCR 返回低置信度 → text 设空。"""
+    def test_low_confidence_single_frame_empties_text(self) -> None:
+        """单帧低置信 → text 设空（不允许单帧 conf≈0.3 放行）。"""
         frames = [
             _blank_frame(0),
             _subtitle_frame(200),
@@ -177,12 +177,86 @@ class TestPipelineConfidenceFilter:
             _blank_frame(600),
         ]
         ocr = MockOcrEngine(text="你好", confidence=0.3)
-        config = Config(confidence_threshold=0.5, min_duration_ms=0)
+        config = Config(
+            confidence_threshold=0.5,
+            min_duration_ms=0,
+            ocr_consensus_frames=1,
+        )
         pipeline = _make_pipeline(frames, ocr, config)
         result = pipeline.run(Path("fake.mp4"))
 
         if result:
             assert result[0].text == ""
+
+    def test_low_confidence_stable_multi_frame_keeps_cjk(self) -> None:
+        """多帧一致的低置信中文可放行（feat-034c/d）。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _subtitle_frame(600),
+            _subtitle_frame(800),
+            _blank_frame(1000),
+        ]
+        ocr = MockOcrEngine(text="你好", confidence=0.3)
+        config = Config(
+            confidence_threshold=0.5,
+            low_conf_threshold=0.28,
+            min_duration_ms=0,
+            ocr_consensus_frames=4,
+            ocr_anchor_delay_frames=0,
+        )
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        assert len(result) >= 1
+        assert result[0].text == "你好"
+
+    def test_line_select_prefers_cjk_over_noise_lines(self) -> None:
+        """多行 OCR 时选中文目标行，拒绝英文噪声。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _subtitle_frame(600),
+            _blank_frame(800),
+        ]
+        lines = [
+            OcrLine(
+                text="BREAKING NEWS",
+                confidence=0.95,
+                box=BoundingBox(x=0, y=0, width=300, height=15),
+            ),
+            OcrLine(
+                text="你好尼克",
+                confidence=0.9,
+                box=BoundingBox(x=60, y=30, width=200, height=40),
+            ),
+        ]
+        ocr = MockOcrEngine(lines=lines)
+        config = Config(min_duration_ms=0, ocr_anchor_delay_frames=0)
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        assert len(result) >= 1
+        assert result[0].text == "你好尼克"
+
+    def test_legacy_path_without_line_select(self) -> None:
+        """enable_line_select=False 时整区 join + 全局阈值。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _blank_frame(600),
+        ]
+        ocr = MockOcrEngine(text="hello", confidence=0.9)
+        config = Config(
+            enable_line_select=False,
+            confidence_threshold=0.5,
+            min_duration_ms=0,
+        )
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        if result:
+            assert result[0].text == "hello"
 
 
 class TestPipelineOcrAnchorDelay:

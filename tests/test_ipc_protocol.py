@@ -50,6 +50,21 @@ class TestBuildAndValidate:
             build_error("oops"),
             build_start_job(VIDEO_ID, 5.0, "vision", 0.5),
             build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[10, 20, 100, 200]),
+            build_start_job(
+                VIDEO_ID,
+                5.0,
+                "vision",
+                0.5,
+                region_box=[0, 800, 1920, 100],
+                subtitle_profile={
+                    "script": "cjk",
+                    "center_x": 960,
+                    "center_y": 40,
+                    "height": 48,
+                    "y_min": 10,
+                    "y_max": 70,
+                },
+            ),
             build_frame(VIDEO_ID, 1000, b"\xff\xd8\xff\xe0fakejpeg"),
             build_frame(VIDEO_ID, 1000, b"\xff\xd8", region_box=[0, 0, 1920, 1080]),
             build_cancel_job(VIDEO_ID),
@@ -69,6 +84,7 @@ class TestBuildAndValidate:
             "error",
             "start_job-no-region",
             "start_job-with-region",
+            "start_job-with-profile",
             "frame-no-region",
             "frame-with-region",
             "cancel_job",
@@ -126,6 +142,24 @@ class TestStartJob:
             "confidence_threshold": 0.5,
         }
         with pytest.raises(ProtocolError, match="fps"):
+            validate(msg)
+
+    def test_invalid_subtitle_profile_script(self) -> None:
+        msg = build_start_job(
+            VIDEO_ID,
+            5.0,
+            "vision",
+            0.5,
+            subtitle_profile={
+                "script": "emoji",
+                "center_x": 0,
+                "center_y": 0,
+                "height": 1,
+                "y_min": 0,
+                "y_max": 1,
+            },
+        )
+        with pytest.raises(ProtocolError, match="script"):
             validate(msg)
 
     def test_region_box_wrong_length(self) -> None:

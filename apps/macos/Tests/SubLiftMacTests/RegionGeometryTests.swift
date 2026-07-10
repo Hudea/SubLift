@@ -121,4 +121,41 @@ struct RegionGeometryTests {
         #expect(ninth == RegionBoxPalette.colors[0])
         #expect(wrapped == RegionBoxPalette.colors[0])
     }
+
+    @Test
+    func subtitleProfileFromSelection_mapsIntoCropCoords() {
+        let candidates = [
+            (id: 1, pixelRect: CGRect(x: 400, y: 820, width: 200, height: 40)),
+            (id: 2, pixelRect: CGRect(x: 50, y: 100, width: 100, height: 20)),
+        ]
+        // crop band at y=800 h=100 full width
+        let regionBox: RegionBox = [0, 800, 1920, 100]
+        let profile = RegionMerger.subtitleProfileFromSelection(
+            candidates: candidates,
+            selectedIds: [1],
+            regionBox: regionBox
+        )
+        #expect(profile != nil)
+        #expect(profile?.script == "cjk")
+        #expect(profile?.centerX == 500)
+        #expect(profile?.centerY == 40)
+        #expect(profile?.height == 40)
+        #expect(profile?.yMin == 20)
+        #expect(profile?.yMax == 60)
+    }
+
+    @Test
+    func subtitleProfileFromSelection_defaultsToFullCropWhenNoneSelected() {
+        let regionBox: RegionBox = [0, 800, 1920, 100]
+        let profile = RegionMerger.subtitleProfileFromSelection(
+            candidates: [],
+            selectedIds: [],
+            regionBox: regionBox
+        )
+        #expect(profile?.centerX == 960)
+        #expect(profile?.centerY == 50)
+        #expect(profile?.height == 100)
+        #expect(profile?.yMin == 0)
+        #expect(profile?.yMax == 100)
+    }
 }

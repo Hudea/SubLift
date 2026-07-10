@@ -77,9 +77,16 @@ def run_benchmark(config: RunConfig) -> RunResult:
     ocr = _build_ocr_engine(config.engine)
     extractor = FfmpegExtractor(fps=config.fps)
     detector = _build_detector(config.region_box)
+    subtitle_profile = None
+    if config.region_box is not None:
+        from sublift.models import SubtitleProfile
+
+        _x, _y, rw, rh = config.region_box
+        subtitle_profile = SubtitleProfile.from_crop(rw, rh)
     pipeline_config = Config(
         sample_fps=config.fps,
         confidence_threshold=config.confidence,
+        subtitle_profile=subtitle_profile,
     )
     pipeline = Pipeline(detector=detector, ocr=ocr, config=pipeline_config, extractor=extractor)
 
