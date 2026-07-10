@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.runner import RunConfig
+from sublift.models import SCRIPT_AUTO, SCRIPT_VALUES
 
 
 class ManifestError(ValueError):
@@ -28,6 +29,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         fps: sampling FPS, default 5.0.
         engine: OCR engine, default "vision".
         confidence: OCR confidence threshold, default 0.5.
+        subtitle_script: target script, default "auto".
         match_threshold: segment match threshold, default 0.5.
         region_box: optional [x, y, width, height] pixel box.
         label: optional report suffix.
@@ -49,6 +51,12 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         fps=_float(payload, "fps", default=5.0, exclusive_minimum=0.0),
         engine=_str(payload, "engine", default="vision"),
         confidence=_float(payload, "confidence", default=0.5, minimum=0.0, maximum=1.0),
+        subtitle_script=_choice(
+            payload,
+            "subtitle_script",
+            default=SCRIPT_AUTO,
+            choices=SCRIPT_VALUES,
+        ),
         match_threshold=_float(
             payload,
             "match_threshold",
@@ -187,6 +195,20 @@ def _optional_str(payload: dict[str, Any], key: str) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise ManifestError(f"{key} 必须是非空字符串或 null")
+    return value
+
+
+def _choice(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: str,
+    choices: frozenset[str],
+) -> str:
+    value = _str(payload, key, default=default)
+    if value not in choices:
+        allowed = ", ".join(sorted(choices))
+        raise ManifestError(f"{key} 必须是以下值之一: {allowed}")
     return value
 
 

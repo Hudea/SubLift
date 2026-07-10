@@ -30,6 +30,7 @@ class TestParserDefaults:
         assert args.fps == 5.0
         assert args.confidence == 0.5
         assert args.engine == "vision"
+        assert args.script == "auto"
 
     def test_extract_custom_output(self) -> None:
         """-o 自定义输出路径。"""
@@ -66,6 +67,11 @@ class TestParserDefaults:
         parser = build_parser()
         with pytest.raises(SystemExit):
             parser.parse_args(["extract", "v.mp4", "--engine", "paddle"])
+
+    def test_extract_script_cjk(self) -> None:
+        parser = build_parser()
+        args = parser.parse_args(["extract", "v.mp4", "--script", "cjk"])
+        assert args.script == "cjk"
 
 
 class TestMainEntry:

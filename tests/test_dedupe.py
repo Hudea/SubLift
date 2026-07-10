@@ -157,6 +157,18 @@ class TestFilterEmpty:
         assert len(result) == 3
         assert result[1].text == ""
 
+    def test_consecutive_empty_kept_independent(self) -> None:
+        """相邻空文本不能合并，应保持独立。"""
+        entries = [
+            _entry(0, 1000, ""),
+            _entry(1000, 2000, ""),
+            _entry(2000, 3000, ""),
+        ]
+        result = merge_entries(entries, merge_gap_ms=1000, min_duration_ms=0)
+        assert len(result) == 3
+        assert result[0].end_ms == 1000
+        assert result[1].end_ms == 2000
+
 
 class TestJitterElimination:
     """抖动消除：A→B(短)→A → A。"""

@@ -5,6 +5,18 @@
 
 ---
 
+## ADR-0011 OCR 文字系统默认 auto，CJK 横幅按边界清理（2026-07-10）
+
+- **背景**：feat-034 初版为清理 `PHISON/SON` 使用无条件拉丁尾缀正则，误删纯英文和合法中英混排；其相似文本聚类又未把簇票数传给接受策略，低置信中文字幕仍被清空。
+- **决策**：
+  1. 无显式 `SubtitleProfile` 时文字系统默认 `auto`；GUI 按选中候选文本推断 `cjk/latin/auto`，CLI/benchmark 可显式固定。
+  2. 共识结果必须携带真实 `support_votes`，低置信接受策略直接消费簇票数，不再下游按全文精确相等重算。
+  3. 仅在显式 CJK 画像下清理与 CJK 边界直接粘连的拉丁横幅；纯英文、空格分隔英文及中文内部缩写均保留。
+- **理由**：让语言假设来自用户选区或显式配置，以多帧证据处理 OCR 变体，并把水印清理限制在可解释的结构边界内。
+- **结果**：固定 GT usable 92.0%、CER macro 3.2%、noise/empty 0、timing F1 97.7%、precision 98.8%；合法英文与 `ZPD` 有回归测试。
+
+---
+
 ## ADR-0010 打轴抽帧统一到 Python FfmpegExtractor（2026-07-09）
 
 - **背景**：GUI 用 AVF+JPEG 推帧时，同 region/Config 下 timing F1 ~84–86%，而 CLI/benchmark live（`FfmpegExtractor`）达 95.2%（5fps）/ 96.4%（8fps）。日志证明 region 与 pipeline 默认参数一致，差在选帧相位、时间戳网格与 JPEG 有损。
@@ -136,5 +148,4 @@ Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
 - **决策**：Phase 1 交付可运行 MVP——真实 1080p 视频经 `uv run sublift extract <video> -o out.srt` 产出可加载 SRT；而非仅抽象接口。
 - **理由**：用户选择「可运行 MVP」选项。端到端可运行才能验证架构有效性，避免抽象底座脱离实际。
 - **影响**：`docs/phases/phase1.json` 验收标准含真实视频产出 SRT 与三工具全绿；端到端验收作为 Phase 1 级验收门（任务粒度见 ADR-0004）。ASS/VTT、PaddleOCR 第二引擎、配置文件、进度展示等显式排除。
-
 

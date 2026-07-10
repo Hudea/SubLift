@@ -199,7 +199,7 @@
   3. **`hysteresis_frames=1`** 补短字幕。
   4. 验收：`baseline-no-filter` F1 91.2% → **95.2%**（R 83.9%→92.0%，P 100%→98.8%）。
 - **仍开放**：merged residual（新闻簇 / 哈啰 等）、单字「砰」。
-- **feat-034 已收敛 OCR 噪声**：行级选择 + 多帧共识后 usable 89.7%、noise 0；precision 仍略低于 98.8%（2 FA）。
+- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。报告见 `debug/benchmark-reports/feat034_p1_fix2/`。
 - **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark-reports/feat033_final/`
 
 ---

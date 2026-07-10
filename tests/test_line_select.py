@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from sublift.models import BoundingBox, OcrLine, OcrResult, SubtitleProfile
+from sublift.models import (
+    SCRIPT_AUTO,
+    SCRIPT_CJK,
+    BoundingBox,
+    OcrLine,
+    OcrResult,
+    SubtitleProfile,
+)
 from sublift.pipeline.line_select import (
     cjk_ratio,
     cleanup_subtitle_text,
@@ -77,25 +84,57 @@ class TestScriptAndSelect:
 
 class TestConsensus:
     def test_majority(self) -> None:
-        text, conf = consensus_text(
+        result = consensus_text(
             [
                 ("你好", 0.3),
                 ("你好", 0.35),
                 ("你好啊", 0.9),
-            ]
+            ],
+            script=SCRIPT_CJK,
         )
-        assert text == "你好"
-        assert conf == pytest.approx(0.325)
+        assert result.text == "你好"
+        assert result.confidence == pytest.approx(1.55 / 3)
+        assert result.support_votes == 3
 
     def test_medoid_on_tie(self) -> None:
-        text, _conf = consensus_text(
+        result = consensus_text(
             [
                 ("你好", 0.5),
                 ("你好啊", 0.5),
-            ]
+            ],
+            script=SCRIPT_CJK,
         )
         # 平票时 medoid；两者互为距离 1，稳定选字典序或 cost 相同的第一个
-        assert text in {"你好", "你好啊"}
+        assert result.text in {"你好", "你好啊"}
+
+    def test_cjk_variants_share_votes_and_drop_unstable_latin_edges(self) -> None:
+        result = consensus_text(
+            [
+                ("NEWS（动物方城市新闻台）ABCD", 0.30),
+                ("LIVE（动物方城市新闻台）EF", 0.32),
+                ("（动物方城市新闻台）", 0.31),
+            ],
+            script=SCRIPT_CJK,
+        )
+        assert result.text == "（动物方城市新闻台）"
+        assert result.confidence == pytest.approx(0.31)
+        assert result.support_votes == 3
+
+    def test_stable_mixed_text_is_preserved(self) -> None:
+        result = consensus_text(
+            [("任务代号 FOX TWO", 0.4), ("任务代号 FOX TWO", 0.42)],
+            script=SCRIPT_CJK,
+        )
+        assert result.text == "任务代号 FOX TWO"
+        assert result.support_votes == 2
+
+    def test_auto_does_not_fold_unrelated_english_into_cjk(self) -> None:
+        result = consensus_text(
+            [("HELLO", 0.9), ("你好", 0.4)],
+            script=SCRIPT_AUTO,
+        )
+        assert result.text == "HELLO"
+        assert result.support_votes == 1
 
     def test_edit_distance(self) -> None:
         assert edit_distance("你好", "你好") == 0
@@ -145,9 +184,23 @@ class TestAcceptPolicy:
 
 
 class TestCleanup:
-    def test_strip_trailing_latin_watermark(self) -> None:
-        assert cleanup_subtitle_text("（前市长杨咩咩入狱）PHISON") == "（前市长杨咩咩入狱）"
-        assert cleanup_subtitle_text("在动物方城市气候墙SON") == "在动物方城市气候墙"
+    def test_keep_legitimate_english(self) -> None:
+        assert cleanup_subtitle_text("HELLO") == "HELLO"
+        assert cleanup_subtitle_text("欢迎来到 ZPD") == "欢迎来到 ZPD"
+        assert cleanup_subtitle_text("任务代号 FOX TWO") == "任务代号 FOX TWO"
+        assert cleanup_subtitle_text("后来加入ZPD警局") == "后来加入ZPD警局"
+
+    def test_strip_only_latin_attached_to_cjk_edges(self) -> None:
+        assert cleanup_subtitle_text("（前市长杨咩咩入狱）PHISON") == (
+            "（前市长杨咩咩入狱）"
+        )
+        assert cleanup_subtitle_text("在动物方城市气候墙SON") == (
+            "在动物方城市气候墙"
+        )
+        assert cleanup_subtitle_text("FOR一起揭穿阴谋SON") == "一起揭穿阴谋"
+        assert cleanup_subtitle_text("哈茱蒂，本市第一位兔警员EFS CONSPI _N/、") == (
+            "哈茱蒂，本市第一位兔警员"
+        )
 
     def test_normalize_ellipsis_and_quotes(self) -> None:
         assert cleanup_subtitle_text("（前情提要⋯）") == "（前情提要…）"

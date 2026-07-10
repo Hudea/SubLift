@@ -4,6 +4,7 @@
   "fps": 5.0,
   "engine": "vision",
   "confidence": 0.5,
+  "subtitle_script": "cjk",
   "match_threshold": 0.5,
   "region_box": null,
   "label": "cli_bottomcrop_5fps",

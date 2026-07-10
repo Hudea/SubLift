@@ -117,6 +117,7 @@ video
 | `sample_fps` | 5.0 | 帧采样率 |
 | `region_bottom_ratio` | 0.3 | 字幕区域裁剪比例（下部 30%） |
 | `confidence_threshold` | 0.5 | OCR 置信度阈值（行级选择下为高 conf 门） |
+| `subtitle_script` | auto | 无显式 profile 时的文字系统；CLI/benchmark 可固定 cjk/latin |
 | `enable_line_select` | True | feat-034：按 SubtitleProfile 选行 + 多帧共识 |
 | `low_conf_threshold` | 0.28 | 低置信多帧稳定放行下限 |
 | `ocr_consensus_frames` | 4 | 段内最多 OCR 代表帧数 |

@@ -62,8 +62,9 @@ def _merge_adjacent(
     for current in entries[1:]:
         last = result[-1]
         gap = current.start_ms - last.end_ms
+        normalized = _normalize(current.text)
 
-        if gap <= merge_gap_ms and _normalize(current.text) == _normalize(last.text):
+        if gap <= merge_gap_ms and normalized and normalized == _normalize(last.text):
             result[-1] = SubtitleEntry(
                 start_ms=last.start_ms,
                 end_ms=current.end_ms,

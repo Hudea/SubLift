@@ -205,6 +205,7 @@ class TestPipelineConfidenceFilter:
             min_duration_ms=0,
             ocr_consensus_frames=4,
             ocr_anchor_delay_frames=0,
+            subtitle_script="cjk",
         )
         pipeline = _make_pipeline(frames, ocr, config)
         result = pipeline.run(Path("fake.mp4"))
@@ -233,11 +234,43 @@ class TestPipelineConfidenceFilter:
             ),
         ]
         ocr = MockOcrEngine(lines=lines)
-        config = Config(min_duration_ms=0, ocr_anchor_delay_frames=0)
+        config = Config(
+            min_duration_ms=0,
+            ocr_anchor_delay_frames=0,
+            subtitle_script="cjk",
+        )
         pipeline = _make_pipeline(frames, ocr, config)
         result = pipeline.run(Path("fake.mp4"))
         assert len(result) >= 1
         assert result[0].text == "你好尼克"
+
+    def test_similar_low_conf_variants_use_cluster_votes(self) -> None:
+        """低置信变体按相似簇计票，并移除不稳定拉丁边缘水印。"""
+        frames = [
+            _blank_frame(0),
+            _subtitle_frame(200),
+            _subtitle_frame(400),
+            _subtitle_frame(600),
+            _subtitle_frame(800),
+            _blank_frame(1000),
+        ]
+        ocr = MockOcrEngine(
+            sequence=[
+                OcrResult(text="NEWS（动物方城市新闻台）ABCD", confidence=0.30),
+                OcrResult(text="LIVE（动物方城市新闻台）EF", confidence=0.32),
+            ]
+        )
+        config = Config(
+            confidence_threshold=0.5,
+            low_conf_threshold=0.28,
+            min_duration_ms=0,
+            ocr_consensus_frames=4,
+            ocr_anchor_delay_frames=0,
+            subtitle_script="cjk",
+        )
+        pipeline = _make_pipeline(frames, ocr, config)
+        result = pipeline.run(Path("fake.mp4"))
+        assert result[0].text == "（动物方城市新闻台）"
 
     def test_legacy_path_without_line_select(self) -> None:
         """enable_line_select=False 时整区 join + 全局阈值。"""

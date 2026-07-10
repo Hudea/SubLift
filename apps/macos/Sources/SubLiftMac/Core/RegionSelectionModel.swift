@@ -158,7 +158,7 @@ final class RegionSelectionModel: ObservableObject {
     func subtitleProfileForIPC() -> SubtitleProfilePayload? {
         guard let regionBox = regionBoxForIPC() else { return nil }
         return RegionMerger.subtitleProfileFromSelection(
-            candidates: candidates.map { ($0.id, $0.pixelRect) },
+            candidates: candidates.map { ($0.id, $0.pixelRect, $0.textPreview) },
             selectedIds: selectedIds,
             regionBox: regionBox
         )

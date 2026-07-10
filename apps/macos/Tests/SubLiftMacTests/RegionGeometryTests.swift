@@ -125,8 +125,16 @@ struct RegionGeometryTests {
     @Test
     func subtitleProfileFromSelection_mapsIntoCropCoords() {
         let candidates = [
-            (id: 1, pixelRect: CGRect(x: 400, y: 820, width: 200, height: 40)),
-            (id: 2, pixelRect: CGRect(x: 50, y: 100, width: 100, height: 20)),
+            (
+                id: 1,
+                pixelRect: CGRect(x: 400, y: 820, width: 200, height: 40),
+                textPreview: "中文字幕"
+            ),
+            (
+                id: 2,
+                pixelRect: CGRect(x: 50, y: 100, width: 100, height: 20),
+                textPreview: "NEWS"
+            ),
         ]
         // crop band at y=800 h=100 full width
         let regionBox: RegionBox = [0, 800, 1920, 100]
@@ -157,5 +165,36 @@ struct RegionGeometryTests {
         #expect(profile?.height == 100)
         #expect(profile?.yMin == 0)
         #expect(profile?.yMax == 100)
+        #expect(profile?.script == "auto")
+    }
+
+    @Test
+    func subtitleProfileFromSelection_infersLatinAndMixedScripts() {
+        let regionBox: RegionBox = [0, 800, 1920, 100]
+        let candidates = [
+            (
+                id: 1,
+                pixelRect: CGRect(x: 400, y: 820, width: 200, height: 40),
+                textPreview: "HELLO"
+            ),
+            (
+                id: 2,
+                pixelRect: CGRect(x: 700, y: 820, width: 200, height: 40),
+                textPreview: "欢迎 ZPD"
+            ),
+        ]
+
+        let latin = RegionMerger.subtitleProfileFromSelection(
+            candidates: candidates,
+            selectedIds: [1],
+            regionBox: regionBox
+        )
+        let mixed = RegionMerger.subtitleProfileFromSelection(
+            candidates: candidates,
+            selectedIds: [2],
+            regionBox: regionBox
+        )
+        #expect(latin?.script == "latin")
+        #expect(mixed?.script == "auto")
     }
 }

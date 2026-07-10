@@ -74,7 +74,7 @@ class SubtitleProfile:
         y_max: 期望垂直带下沿。
     """
 
-    script: str = SCRIPT_CJK
+    script: str = SCRIPT_AUTO
     center_x: int = 0
     center_y: int = 0
     height: int = 0
@@ -86,7 +86,7 @@ class SubtitleProfile:
         width: int,
         height: int,
         *,
-        script: str = SCRIPT_CJK,
+        script: str = SCRIPT_AUTO,
     ) -> SubtitleProfile:
         """由 crop 尺寸推导默认 profile（CLI/benchmark：整带居中）。"""
         w = max(0, width)
@@ -105,7 +105,7 @@ class SubtitleProfile:
         region: BoundingBox,
         selection: BoundingBox,
         *,
-        script: str = SCRIPT_CJK,
+        script: str = SCRIPT_AUTO,
     ) -> SubtitleProfile:
         """将视频像素选区映射为相对 ``region`` crop 的 profile。
 
@@ -151,7 +151,7 @@ class SubtitleProfile:
         Raises:
             ValueError: 字段缺失、类型错误或 script 非法。
         """
-        script_raw = data.get("script", SCRIPT_CJK)
+        script_raw = data.get("script", SCRIPT_AUTO)
         if not isinstance(script_raw, str) or script_raw not in SCRIPT_VALUES:
             raise ValueError(f"subtitle_profile.script 非法: {script_raw!r}")
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from sublift.models import SCRIPT_AUTO
+
 if TYPE_CHECKING:
     from sublift.models import SubtitleProfile
 
@@ -103,6 +105,8 @@ class Config:
     GUI 从用户选区构造并经 IPC 传入；CLI/benchmark 可从 region_box 推导。
     None 时 Pipeline 在确定 Region 后用 crop 全带默认 profile。
     """
+    subtitle_script: str = SCRIPT_AUTO
+    """无显式 SubtitleProfile 时使用的文字系统（默认 auto，保护合法英文）。"""
     enable_line_select: bool = True
     """是否启用 OCR 行级选择（feat-034c）。
 

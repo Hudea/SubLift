@@ -96,7 +96,7 @@ public struct SubtitleProfilePayload: Codable, Equatable {
     }
 
     public init(
-        script: String = "cjk",
+        script: String = "auto",
         centerX: Int,
         centerY: Int,
         height: Int,

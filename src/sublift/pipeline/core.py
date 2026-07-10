@@ -25,14 +25,22 @@ import numpy as np
 from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector.base import Detector
 from sublift.extractor.base import Extractor
-from sublift.models import BoundingBox, Frame, Region, SubtitleEntry, SubtitleProfile
+from sublift.models import (
+    SCRIPT_CJK,
+    BoundingBox,
+    Frame,
+    Region,
+    SubtitleEntry,
+    SubtitleProfile,
+)
 from sublift.ocr.base import OcrEngine
 from sublift.pipeline.changepoint import ChangePointDetector, EventType
 from sublift.pipeline.dedupe import merge_entries
 from sublift.pipeline.line_select import (
+    cjk_ratio,
     cleanup_subtitle_text,
     consensus_text,
-    normalize_ocr_text,
+    latin_ratio,
     script_score,
     select_line,
     should_accept_text,
@@ -300,7 +308,11 @@ class Pipeline:
         if self._subtitle_profile is not None or self._region is None:
             return
         box = self._region.box
-        self._subtitle_profile = SubtitleProfile.from_crop(box.width, box.height)
+        self._subtitle_profile = SubtitleProfile.from_crop(
+            box.width,
+            box.height,
+            script=self._config.subtitle_script,
+        )
 
     def _open_segment(self, start_ms: int, frame: Frame) -> None:
         """开启新段并启动 OCR 锚帧延迟（feat-033b）。"""
@@ -428,49 +440,51 @@ class Pipeline:
             # 无 profile 时退化为 crop 默认
             if self._region is not None:
                 box = self._region.box
-                profile = SubtitleProfile.from_crop(box.width, box.height)
+                profile = SubtitleProfile.from_crop(
+                    box.width,
+                    box.height,
+                    script=self._config.subtitle_script,
+                )
                 self._subtitle_profile = profile
             else:
                 return "", 0.0
 
         frames = self._collect_ocr_frames(event)
         samples: list[tuple[str, float]] = []
-        norm_votes: dict[str, int] = {}
 
         for frame in frames:
             text, conf = self._ocr_frame_selected(frame, profile)
             if not text.strip():
                 continue
             samples.append((text, conf))
-            key = normalize_ocr_text(text)
-            norm_votes[key] = norm_votes.get(key, 0) + 1
 
-            # 高置信 + 文字系统匹配：单帧即可，少做 OCR
+            partial = consensus_text(samples, script=profile.script)
+
+            # 高置信且不含混合文字系统：单帧即可，少做 OCR。CJK 与拉丁
+            # 粘连时继续取样，让段内稳定性决定是合法混排还是横幅水印。
+            mixed_script = cjk_ratio(text) > 0.0 and latin_ratio(text) > 0.0
             if (
                 conf >= self._config.confidence_threshold
                 and script_score(text, profile.script)
                 >= self._config.line_select_min_script
+                and not (profile.script == SCRIPT_CJK and mixed_script)
             ):
                 break
-            # 低置信但已有 ≥2 票相同：可提前结束做共识
-            if norm_votes[key] >= 2 and conf >= self._config.low_conf_threshold:
+            # 相似变体已形成 ≥2 票共识即可提前结束，不要求全文精确相等。
+            if (
+                partial.support_votes >= 2
+                and partial.confidence >= self._config.low_conf_threshold
+            ):
                 break
 
-        text, confidence = consensus_text(samples)
-        if not text:
+        consensus = consensus_text(samples, script=profile.script)
+        if not consensus.text:
             return "", 0.0
 
-        text = cleanup_subtitle_text(text, profile.script)
+        text = cleanup_subtitle_text(consensus.text, profile.script)
+        confidence = consensus.confidence
         if not text:
             return "", confidence
-
-        norm = normalize_ocr_text(text)
-        support = sum(
-            1
-            for t, _ in samples
-            if normalize_ocr_text(cleanup_subtitle_text(t, profile.script)) == norm
-            or normalize_ocr_text(t) == norm
-        )
 
         accept = should_accept_text(
             text,
@@ -478,7 +492,7 @@ class Pipeline:
             profile=profile,
             confidence_threshold=self._config.confidence_threshold,
             low_conf_threshold=self._config.low_conf_threshold,
-            support_votes=support,
+            support_votes=consensus.support_votes,
         )
         if not accept:
             return "", confidence

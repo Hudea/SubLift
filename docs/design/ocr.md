@@ -128,16 +128,16 @@ PIL.Image
 
 ```python
 SubtitleProfile(
-    script="cjk",   # cjk | latin | auto
+    script="auto",  # cjk | latin | auto
     center_x, center_y, height, y_min, y_max  # crop 像素坐标
 )
 ```
 
 | 来源 | 行为 |
 |---|---|
-| GUI | 用户选中候选框并集 → crop 相对 profile，经 `start_job.subtitle_profile` 传入 |
-| region_box 无 profile | bridge/benchmark 用 `from_crop(w,h)` 整带默认 |
-| CLI 无 region | Pipeline 在 detector 确定 Region 后 `from_crop` |
+| GUI | 用户选中候选框并集 → crop 相对 profile；按候选文字推断 cjk/latin/auto，经 `start_job.subtitle_profile` 传入 |
+| region_box 无 profile | bridge/benchmark 用 `from_crop(w,h)` 整带默认；默认 auto，可显式固定 script |
+| CLI 无 region | Pipeline 在 detector 确定 Region 后 `from_crop`；`--script` 可覆盖默认 auto |
 
 **不改变** 全宽 `region_box` 裁剪；profile 只描述「在 crop 内选哪一带」。
 
@@ -146,11 +146,14 @@ SubtitleProfile(
 ```
 OcrResult.lines
   → select_line(profile)          # script / Y / 字号 / 中心
-  → cleanup_subtitle_text         # 去 PHISON 尾巴、统一 …「」
   → 多帧 samples
-  → consensus_text（多数 / medoid）
+  → consensus_text（相似邻域 / medoid / 真实簇票数）
+  → cleanup_subtitle_text         # CJK 粘连横幅边缘 + 常见标点
   → should_accept_text            # 高 conf 或 低 conf+多帧稳定
 ```
 
-Config：`enable_line_select=True`，`low_conf_threshold=0.28`，`ocr_consensus_frames=4`。  
+cleanup 不删除纯英文、空格分隔英文或夹在中文内部的英文（如 `ZPD警局`）；
+只有显式 CJK 画像下与中文边界直接粘连的拉丁横幅才会被清理。
+
+Config：`enable_line_select=True`，`subtitle_script="auto"`，`low_conf_threshold=0.28`，`ocr_consensus_frames=4`。
 `enable_line_select=False` 回退整区 join + 全局阈值。

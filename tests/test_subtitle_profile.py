@@ -7,7 +7,7 @@ from PIL import Image
 
 from sublift.config import Config
 from sublift.detector.fixed_region import FixedRegionDetector
-from sublift.models import SCRIPT_CJK, BoundingBox, Frame, SubtitleProfile
+from sublift.models import SCRIPT_AUTO, BoundingBox, Frame, SubtitleProfile
 from sublift.ocr.mock import MockOcrEngine
 from sublift.pipeline.core import Pipeline
 
@@ -15,7 +15,7 @@ from sublift.pipeline.core import Pipeline
 class TestSubtitleProfileFromCrop:
     def test_fills_band(self) -> None:
         p = SubtitleProfile.from_crop(1920, 87)
-        assert p.script == SCRIPT_CJK
+        assert p.script == SCRIPT_AUTO
         assert p.center_x == 960
         assert p.center_y == 43
         assert p.height == 87
@@ -101,3 +101,16 @@ class TestPipelineProfile:
         img = Image.new("RGB", (320, 200), "white")
         pipe.feed(Frame(timestamp_ms=0, image=img))
         assert pipe.subtitle_profile == SubtitleProfile.from_crop(320, 80)
+
+    def test_derived_auto_profile_keeps_english(self) -> None:
+        region = BoundingBox(x=0, y=100, width=320, height=80)
+        detector = FixedRegionDetector(region)
+        pipe = Pipeline(
+            detector=detector,
+            ocr=MockOcrEngine(text="HELLO", confidence=0.9),
+            config=Config(min_duration_ms=0),
+        )
+        img = Image.new("RGB", (320, 200), "white")
+        pipe.feed(Frame(timestamp_ms=0, image=img))
+        assert pipe.subtitle_profile is not None
+        assert pipe.subtitle_profile.script == SCRIPT_AUTO

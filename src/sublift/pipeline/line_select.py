@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import re
-from collections import Counter
 from dataclasses import dataclass
 
 from sublift.models import (
@@ -24,6 +23,14 @@ _CJK_RE = re.compile(
 )
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _WS_RE = re.compile(r"\s+")
+_CJK_EDGE_CLASS = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
+_LEADING_ATTACHED_LATIN_RE = re.compile(
+    rf"^[A-Za-z0-9._/\-]+(?=[{_CJK_EDGE_CLASS}（【《「『“])"
+)
+_TRAILING_ATTACHED_LATIN_RE = re.compile(
+    rf"(?<=[{_CJK_EDGE_CLASS}）】》」』”])"
+    r"[A-Za-z][A-Za-z0-9 .:_/\-]*[、，。！？…]*$"
+)
 
 
 @dataclass(frozen=True)
@@ -38,27 +45,34 @@ class LineScore:
     confidence: float
 
 
+@dataclass(frozen=True)
+class ConsensusResult:
+    """段内文本共识结果。"""
+
+    text: str
+    confidence: float
+    support_votes: int
+
+
 def normalize_ocr_text(text: str) -> str:
     """共识用规范化：去首尾空白、压缩内部空白。"""
     return _WS_RE.sub(" ", text.strip())
 
 
 def cleanup_subtitle_text(text: str, script: str = SCRIPT_CJK) -> str:
-    """选行/共识后的轻量清理：去粘连水印英文、统一常见标点。
+    """选行/共识后的轻量清理：CJK 粘连横幅边缘与常见标点。
 
-    不改变语义主体；用于压低 CER 与 text.noise，避免 PHISON/SON 等尾巴。
+    仅在显式 CJK 模式清理直接粘连边缘；不删除纯英文或常规中英混排。
     """
     t = normalize_ocr_text(text)
     if not t:
         return ""
 
-    if script in (SCRIPT_CJK, SCRIPT_AUTO):
-        # 粘在中文后的纯拉丁尾巴：气候墙SON / 入狱）PHISON
-        t = re.sub(r"[A-Za-z]{2,}$", "", t)
-        # 独立尾随英文词
-        t = re.sub(r"\s+[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*$", "", t)
-        # 行首英文水印
-        t = re.sub(r"^[A-Za-z]{2,}(?:\s+[A-Za-z]{2,})*\s+", "", t)
+    if script == SCRIPT_CJK and cjk_ratio(t) > 0.0:
+        # Vision 偶尔把横幅与字幕合成一行。仅清理直接粘在 CJK 边界上的
+        # 拉丁前后缀；空格分隔的合法混排与夹在中文内部的 ZPD 均保留。
+        t = _LEADING_ATTACHED_LATIN_RE.sub("", t, count=1)
+        t = _TRAILING_ATTACHED_LATIN_RE.sub("", t, count=1)
 
     # 省略号 / 引号 与常见 GT 对齐
     t = t.replace("⋯", "…").replace("...", "…")
@@ -211,58 +225,120 @@ def edit_distance(a: str, b: str) -> int:
     return prev[-1]
 
 
+def is_similar(a: str, b: str) -> bool:
+    """按归一化编辑距离判断两个共识 key 是否属于同一变体簇。"""
+    if not a or not b:
+        return a == b
+    if (a in b or b in a) and min(len(a), len(b)) >= 4:
+        return True
+    ed = edit_distance(a, b)
+    threshold = 0.34 if max(len(a), len(b)) <= 4 else 0.4
+    return ed / max(len(a), len(b)) <= threshold
+
+
+def _consensus_key(text: str, script: str) -> str:
+    """生成聚类 key；CJK 画像忽略易变的拉丁横幅，但不修改输出。"""
+    normalized = normalize_ocr_text(text)
+    if script != SCRIPT_CJK:
+        return normalized
+    cjk_chars = "".join(char for char in normalized if _CJK_RE.fullmatch(char))
+    return cjk_chars or normalized
+
+
+_LEADING_LATIN_EDGE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 .:_/\-]*")
+_TRAILING_LATIN_EDGE_RE = re.compile(r"[A-Za-z][A-Za-z0-9 .:_/\-]*$")
+
+
+def _edge_match(text: str, pattern: re.Pattern[str]) -> str:
+    match = pattern.search(text)
+    return match.group(0).strip() if match else ""
+
+
+def _trim_unstable_latin_edges(text: str, cluster_texts: list[str]) -> str:
+    """仅删除簇内不稳定的拉丁前后缀，保留稳定英文和中英混排主体。"""
+    result = text
+    leading = _edge_match(result, _LEADING_LATIN_EDGE_RE)
+    if leading:
+        leading_variants = {
+            _edge_match(candidate, _LEADING_LATIN_EDGE_RE) for candidate in cluster_texts
+        }
+        if len(leading_variants) > 1:
+            result = _LEADING_LATIN_EDGE_RE.sub("", result, count=1).strip()
+
+    trailing = _edge_match(result, _TRAILING_LATIN_EDGE_RE)
+    if trailing:
+        trailing_variants = {
+            _edge_match(candidate, _TRAILING_LATIN_EDGE_RE) for candidate in cluster_texts
+        }
+        if len(trailing_variants) > 1:
+            result = _TRAILING_LATIN_EDGE_RE.sub("", result, count=1).strip()
+    return result
+
+
 def consensus_text(
     samples: list[tuple[str, float]],
     *,
-    min_votes: int = 1,
-) -> tuple[str, float]:
+    script: str = SCRIPT_AUTO,
+) -> ConsensusResult:
     """多帧选中文本共识。
 
-    1. 规范化后计票，得票最多者胜（多数）
-    2. 平票时用总编辑距离最小的 medoid
-    3. confidence 取支持共识样本的均值
+    1. 规范化后聚类相似变体（应对背景英文横幅变化）
+    2. 簇内计票，选得票最多的簇
+    3. 簇内选与其他样本编辑距离最小的 medoid
+    4. confidence 取支持该簇的样本均值
 
     Args:
         samples: ``(text, confidence)`` 列表（已做行级选择后的结果）。
-        min_votes: 最少支持票；不足时仍返回最优文本，由调用方决定是否放行。
+        script: 目标文字系统。CJK 模式只在聚类 key 中忽略拉丁字符。
 
     Returns:
-        ``(text, confidence)``；无样本时 ``("", 0.0)``。
+        文本、簇平均置信度和真实簇票数。
     """
-    cleaned: list[tuple[str, float]] = []
-    for text, conf in samples:
+    cleaned: list[tuple[int, str, str, float]] = []
+    for index, (text, conf) in enumerate(samples):
         norm = normalize_ocr_text(text)
         if not norm:
             continue
-        cleaned.append((norm, conf))
+        cleaned.append((index, norm, _consensus_key(norm, script), conf))
     if not cleaned:
-        return "", 0.0
+        return ConsensusResult("", 0.0, 0)
 
-    counts = Counter(t for t, _ in cleaned)
-    # 多数：按票数，同票按首次出现顺序稳定
-    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-    top_text, top_votes = ranked[0]
+    # 以每个样本为中心建立相似邻域，再按票数/总距离/首次出现稳定选簇。
+    neighborhoods: list[list[tuple[int, str, str, float]]] = []
+    for _index, _text, center_key, _confidence in cleaned:
+        neighborhood = [
+            sample for sample in cleaned if is_similar(sample[2], center_key)
+        ]
+        neighborhoods.append(neighborhood)
 
-    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
-        # 平票 → medoid
-        candidates = [t for t, c in ranked if c == top_votes]
-        best_t = candidates[0]
-        best_cost = None
-        for cand in candidates:
-            cost = sum(edit_distance(cand, other) for other, _ in cleaned)
-            if best_cost is None or cost < best_cost:
-                best_cost = cost
-                best_t = cand
-        top_text = best_t
-        top_votes = counts[top_text]
+    def _cluster_rank(
+        cluster: list[tuple[int, str, str, float]],
+    ) -> tuple[int, int, int]:
+        total_cost = sum(
+            edit_distance(left[2], right[2])
+            for left in cluster
+            for right in cluster
+        )
+        return (-len(cluster), total_cost, min(item[0] for item in cluster))
 
-    if top_votes < min_votes and len(cleaned) >= min_votes:
-        # 仍返回，调用方用 conf 策略判断
-        pass
+    best_cluster = min(neighborhoods, key=_cluster_rank)
+    votes = len(best_cluster)
 
-    support_confs = [c for t, c in cleaned if t == top_text]
-    conf = sum(support_confs) / len(support_confs) if support_confs else 0.0
-    return top_text, conf
+    medoid = min(
+        best_cluster,
+        key=lambda candidate: (
+            sum(edit_distance(candidate[2], other[2]) for other in best_cluster),
+            sum(edit_distance(candidate[1], other[1]) for other in best_cluster),
+            candidate[0],
+        ),
+    )
+    text = medoid[1]
+    cluster_texts = [item[1] for item in best_cluster]
+    if script == SCRIPT_CJK and len(set(cluster_texts)) > 1:
+        text = _trim_unstable_latin_edges(text, cluster_texts)
+
+    confidence = sum(item[3] for item in best_cluster) / votes
+    return ConsensusResult(text, confidence, votes)
 
 
 def should_accept_text(

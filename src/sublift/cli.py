@@ -11,6 +11,7 @@ from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector import BottomCropDetector
 from sublift.export import SrtExporter
 from sublift.extractor import FfmpegExtractor
+from sublift.models import SCRIPT_AUTO, SCRIPT_VALUES
 from sublift.ocr import MockOcrEngine, VisionOcrEngine, is_vision_available
 from sublift.pipeline import Pipeline
 
@@ -47,6 +48,12 @@ def build_parser() -> argparse.ArgumentParser:
         default="vision",
         help="OCR 引擎（默认 vision；mock 用于无 Vision 环境的流程验证）",
     )
+    extract_parser.add_argument(
+        "--script",
+        choices=sorted(SCRIPT_VALUES),
+        default=SCRIPT_AUTO,
+        help="字幕文字系统（默认 auto；可选 cjk/latin）",
+    )
     return parser
 
 
@@ -63,6 +70,7 @@ def main(argv: list[str] | None = None) -> None:
             fps=args.fps,
             confidence=args.confidence,
             engine=args.engine,
+            script=args.script,
         )
 
 
@@ -73,6 +81,7 @@ def _run_extract(
     fps: float,
     confidence: float,
     engine: str,
+    script: str,
 ) -> None:
     """执行端到端字幕提取。"""
     if not video.exists():
@@ -87,12 +96,16 @@ def _run_extract(
     config = Config(
         sample_fps=fps,
         confidence_threshold=confidence,
+        subtitle_script=script,
     )
 
     pipeline = Pipeline(detector=detector, ocr=ocr, config=config, extractor=extractor)
 
     print(f"提取字幕：{video}")
-    print(f"采样率：{fps}fps  引擎：{engine}  置信度阈值：{confidence}")
+    print(
+        f"采样率：{fps}fps  引擎：{engine}  "
+        f"置信度阈值：{confidence}  文字系统：{script}"
+    )
     start = time.perf_counter()
     entries = pipeline.run(video)
     elapsed = time.perf_counter() - start

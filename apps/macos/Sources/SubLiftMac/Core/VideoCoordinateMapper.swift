@@ -129,10 +129,10 @@ enum RegionMerger {
     /// - `regionBox`：全宽裁剪带 `[x,y,w,h]`（视频像素）
     /// - 选中框：真实字幕窄框（视频像素）；profile 几何相对 crop 原点
     static func subtitleProfileFromSelection(
-        candidates: [(id: Int, pixelRect: CGRect)],
+        candidates: [(id: Int, pixelRect: CGRect, textPreview: String)],
         selectedIds: Set<Int>,
         regionBox: RegionBox,
-        script: String = "cjk"
+        script: String? = nil
     ) -> SubtitleProfilePayload? {
         guard regionBox.count == 4 else { return nil }
         let cropX = regionBox[0]
@@ -142,10 +142,13 @@ enum RegionMerger {
         guard cropW > 0, cropH > 0 else { return nil }
 
         let selected = candidates.filter { selectedIds.contains($0.id) }
+        let effectiveScript = script ?? inferScript(
+            from: selected.map(\.textPreview)
+        )
         guard !selected.isEmpty else {
             // 无选中时用 crop 全带默认
             return SubtitleProfilePayload(
-                script: script,
+                script: effectiveScript,
                 centerX: cropW / 2,
                 centerY: cropH / 2,
                 height: cropH,
@@ -168,13 +171,33 @@ enum RegionMerger {
         let bandH = max(0, relMaxY - relMinY)
 
         return SubtitleProfilePayload(
-            script: script,
+            script: effectiveScript,
             centerX: relMinX + bandW / 2,
             centerY: relMinY + bandH / 2,
             height: bandH > 0 ? bandH : cropH,
             yMin: relMinY,
             yMax: relMaxY > relMinY ? relMaxY : cropH
         )
+    }
+
+    private static func inferScript(from texts: [String]) -> String {
+        var hasCJK = false
+        var hasLatin = false
+
+        for scalar in texts.joined().unicodeScalars {
+            switch scalar.value {
+            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF:
+                hasCJK = true
+            case 0x41...0x5A, 0x61...0x7A:
+                hasLatin = true
+            default:
+                continue
+            }
+        }
+
+        if hasCJK && !hasLatin { return "cjk" }
+        if hasLatin && !hasCJK { return "latin" }
+        return "auto"
     }
 }
 

@@ -117,7 +117,7 @@
       "module": "src/sublift/models.py, src/sublift/ocr/, src/sublift/pipeline/core.py, src/sublift/config.py, apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift, apps/macos/Sources/SubLiftMac/",
       "dependencies": ["feat-033"],
       "status": "done",
-      "evidence": "034a–e 全部完成。默认 enable_line_select=True。Zootopia region [0,848,1920,87] 5fps vision：usable 75.9%→89.7%，text.noise 7→0，empty≤1，cer_macro 30%→3.8%，timing_f1 95.3%（≥95.2%），precision 97.6%（相对 98.8% 差 1.2pp / 2 FA，merge residual，可接受）。产物 debug/benchmark-reports/feat034_final/。验证：ruff/mypy/pytest 全绿。",
+      "evidence": "P1 修复与复测完成。修复项：dedupe 禁止空文本相互合并；consensus_text 以相似邻域聚类并向接受策略返回真实 support_votes，解决低置信文本变体按精确相等计票失败；显式 CJK 画像只清理与 CJK 边界直接粘连的拉丁横幅，保留纯英文、空格分隔英文及 ZPD 等内部混排；无显式 profile 默认 auto，GUI 按选中文字推断 cjk/latin/auto；benchmark manifest 可显式固定 subtitle_script。固定 GT 复测（Zootopia, 5fps, Vision, region [0,848,1920,87], subtitle_script=cjk）：usable 92.0%，text.noise 0，empty 0，CER macro 3.2%，timing F1 97.7%，precision 98.8%，全部通过验收门；#17/#18/#20/#29 恢复可用，#19 仅余 Vision 字形/标点误差。产物：debug/benchmark-reports/feat034_p1_fix2/。验证：ruff 全仓 0 error；mypy src tests 无问题（58 source files）；pytest 340 passed；Swift XCTest 15 passed + Swift Testing 121 passed；./init.sh 8/8 通过。",
       "subtasks": [
         {
           "id": "feat-034a",
@@ -129,30 +129,30 @@
         {
           "id": "feat-034b",
           "name": "SubtitleProfile 与选区透传",
-          "description": "从 GUI 用户选中的候选框构造 SubtitleProfile：目标文字系统（默认 CJK）、垂直位置/Y 区间、字号高度、中心位置。IPC start_job 透传 profile（或等价字段）；CLI/benchmark 可从 region_box 推导默认 profile。不强制改全宽裁剪策略本身，先用 profile 在 OCR 结果内选行。",
+          "description": "从 GUI 用户选中的候选框构造 SubtitleProfile：目标文字系统（按选中文字推断 cjk/latin/auto；无证据时 auto）、垂直位置/Y 区间、字号高度、中心位置。IPC start_job 透传 profile（或等价字段）；CLI/benchmark 可从 region_box 推导默认 profile，并可显式固定 script。不强制改全宽裁剪策略本身，先用 profile 在 OCR 结果内选行。",
           "status": "done",
-          "evidence": "SubtitleProfile + IPC/Swift 透传；region 推导默认；全宽裁剪未改。"
+          "evidence": "SubtitleProfile + IPC/Swift 透传；GUI 从候选文本推断 cjk/latin/auto；CLI/benchmark 默认 auto 且支持显式 script；region 推导默认；全宽裁剪未改。"
         },
         {
           "id": "feat-034c",
           "name": "逐行评分与低置信放行",
           "description": "实现行级评分：文字系统匹配、Y 区间、字号、中心距离、跨帧稳定性。对 conf≈0.3 但连续多帧文本一致的目标语字幕放行；单帧背景英文不放行。禁止仅靠全局 confidence_threshold 下调。单测覆盖噪声行拒绝与目标行保留。",
           "status": "done",
-          "evidence": "pipeline/line_select.py：score_line/select_line/should_accept_text/cleanup_subtitle_text。Config enable_line_select/low_conf_threshold。中文压过英文噪声；低 conf 多帧放行。"
+          "evidence": "pipeline/line_select.py：score_line/select_line/should_accept_text/cleanup_subtitle_text。Config enable_line_select/low_conf_threshold。中文压过英文噪声；低 conf 多帧放行；仅清理显式 CJK 下与中文边界直接粘连的拉丁横幅，合法英文与中英混排有回归测试。"
         },
         {
           "id": "feat-034d",
           "name": "段内多代表帧共识",
           "description": "每段保留 3–5 个代表帧（而非单锚帧），对选中行做多数文本/最小编辑距离共识后再写入 SubtitleEntry。与现有 ocr_anchor_delay_frames 协同；空文本策略保持可解释。单测覆盖多数一致与冲突回退。",
           "status": "done",
-          "evidence": "ocr_consensus_frames=4；段内 sample + consensus_text 多数/medoid；高 conf 提前停 OCR。"
+          "evidence": "ocr_consensus_frames=4；段内 sample + consensus_text 相似邻域/medoid；ConsensusResult 携带真实 support_votes；CJK+Latin 混合行继续取样区分稳定字幕与横幅；高 conf 纯目标语可提前停 OCR。"
         },
         {
           "id": "feat-034e",
           "name": "benchmark 验收与参数落定",
           "description": "同 region/path-mode 配置对比 gui_ffmpeg_5fps 与 goal_static。验收：usable≥85.1%；text.noise≤2；text.empty≤1；CER≤6.6% 或显著逼近；timing_f1≥95.2%；precision≥98.8%。产物写入 debug/benchmark-reports/feat034_*/；通过后落定默认参数与文档。",
           "status": "done",
-          "evidence": "feat034_final：usable 89.7%、noise 0、empty 1、CER 3.8%、F1 95.3%、P 97.6%（-1.2pp vs 98.8% 门，2 FA merge residual）。默认参数落定 enable_line_select=True。"
+          "evidence": "feat034_p1_fix2 固定 GT：usable 92.0%、noise 0、empty 0、CER macro 3.2%、timing F1 97.7%、precision 98.8%，全部通过门槛。产物 debug/benchmark-reports/feat034_p1_fix2/。默认参数：enable_line_select=True、subtitle_script=auto；中文固定基准显式 subtitle_script=cjk。"
         }
       ]
     },
