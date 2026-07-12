@@ -2,11 +2,11 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-10
+- **最后更新：** 2026-07-12
 - **当前 Phase：** Phase 3 - 优化与基本可用
-- **当前功能：** feat-034 已完成；下一功能未启动
+- **当前功能：** feat-029 已完成；下一功能未启动
 - **分支：** opt/ocr-timeline
-- **说明：** feat-034 P1 已收口；固定 GT 达 usable 92.0%、CER 3.2%、noise/empty 0、timing F1 97.7%、precision 98.8%。
+- **说明：** feat-029 增量处理架构验收收口完毕。彻底解决 Vision 引擎 OOM（autorelease_pool + CFData），1.29s 内推送首条字幕，Benchmark 无回归（timing F1 97.7%, CER 3.2%）。
 
 ## 进行中
 
@@ -14,6 +14,7 @@
 
 ## 近期完成（最近 5 个）
 
+- [x] **feat-029**：增量架构验收，解决 Vision 内存泄漏，流式时机与 Cancel 达标。
 - [x] **feat-034**：P1 修复与固定 GT 复测通过；报告见 `debug/benchmark-reports/feat034_p1_fix2/`。
 - [x] path mode / ADR-0010 统一抽帧。
 - [x] feat-033：打轴 residual。F1 95.2%。

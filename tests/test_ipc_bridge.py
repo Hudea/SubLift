@@ -323,11 +323,22 @@ class TestPathMode:
         msg = build_start_job(
             "V1", 5.0, "vision", 0.5, video_path="/nonexistent/no_video.mp4"
         )
-        response = _run(bridge, msg)
-        assert response is not None
-        assert response["type"] == "done"
-        assert response["ok"] is False
-        assert "不存在" in (response.get("error") or "")
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+        done_msg = next((p for p in pushed if p.get("type") == "done"), None)
+        assert done_msg is not None
+        assert done_msg["ok"] is False
+        assert "不存在" in (done_msg.get("error") or "")
 
     def test_path_mode_returns_entries(self, tmp_path: Path) -> None:
         video = tmp_path / "short.mp4"
@@ -346,11 +357,17 @@ class TestPathMode:
             duration_ms=1000,
             video_path=str(video),
         )
-        response = asyncio.run(bridge.handle(msg, collect_push))
-        assert response is not None
-        assert response["type"] == "entries"
-        assert response.get("is_final") is True
-        assert "entries" in response
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
+        assert entries_msg.get("is_final") is True
+        assert "entries" in entries_msg
         # 至少推送过 progress
         assert any(p.get("type") == "progress" for p in pushed)
 
@@ -374,9 +391,16 @@ class TestPathMode:
             duration_ms=2000,
             video_path=str(video),
         )
-        response = asyncio.run(bridge.handle(msg, collect_push))
-        assert response is not None
-        assert response["type"] == "entries"
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
 
         processing = [
             p

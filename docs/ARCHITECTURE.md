@@ -168,7 +168,7 @@ SubLift/
 | 分帧 | 4 字节大端长度前缀 + UTF-8 JSON body |
 | Swift 端 | `PipelineClient` 启动 `python -m sublift.ipc.server --socket <path>`，通过 BSD socket 收发 |
 | Python 端 | `asyncio.start_unix_server` + `src/sublift/ipc/bridge.py` 处理业务消息 |
-| 消息类型 | `start_job` / `frame` / `finalize` / `cancel_job` / `progress` / `entries` / `log` / `done` |
+| 消息类型 | `start_job` / `frame` / `finalize` / `cancel_job` / `progress` / `push_entry` / `entries` / `log` / `done` |
 
 ### 10.3 Swift 端分层
 
@@ -187,12 +187,14 @@ DropZone → VideoMetadata.load(url)
   ↓
 FrameSampler.sample(url:fps:) ──┬── AVFoundation (mp4/mov/H.264/HEVC)
                                  └── ffmpeg fallback (.mkv)
-  ↓ (ts_ms, jpegData)
-PipelineClient.sendFrame(...)
+  ↓ (ts_ms, jpegData)   【注: 增量抽帧可由 GUI 推送，或在 path_mode 下由 Python 端 _worker 线程独立执行】
+PipelineClient.sendFrame(...) / start_job(path_mode)
   ↓ UDS + JSON
-ipc.bridge.BridgeHandler ──缓冲帧──→ Pipeline.run_frames()
+ipc.bridge.BridgeHandler ──逐帧推进──→ Pipeline.feed(frame)
   ↓
-entries 消息 → SubtitleEditor.load(entries)
+[段闭合时触发] push_entry 增量推送 → SubtitleEditor 实时追加展示
+  ↓
+[全片结束] entries 最终批量合并推送 → SubtitleEditor.load(entries)
   ↓
 SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 ```

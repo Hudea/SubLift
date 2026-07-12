@@ -114,6 +114,7 @@ class BridgeHandler:
         self._est_total_frames: int = 0
         self._cancelled: bool = False
         self._path_mode: bool = False
+        self._path_task: asyncio.Task[None] | None = None
 
     async def handle(
         self,
@@ -167,7 +168,10 @@ class BridgeHandler:
         video_path_raw = message.get("video_path")
         if isinstance(video_path_raw, str) and video_path_raw.strip():
             self._path_mode = True
-            return await self._run_path_mode(video_path_raw.strip(), push)
+            self._path_task = asyncio.create_task(
+                self._run_path_mode(video_path_raw.strip(), push)
+            )
+            return build_progress(self._video_id, STAGE_READY, 0.0, 0)
 
         self._path_mode = False
         return build_progress(self._video_id, STAGE_READY, 0.0, 0)
@@ -295,7 +299,7 @@ class BridgeHandler:
         self,
         video_path: str,
         push: PushCallback,
-    ) -> dict[str, Any]:
+    ) -> None:
         """后端 FfmpegExtractor 抽帧并跑完整 pipeline（与 CLI/benchmark 同源）。
 
         整段 extract+OCR 放在**单一工作线程**中执行（避免 generator 跨线程 next 卡死），
@@ -306,9 +310,8 @@ class BridgeHandler:
         if not path.is_file():
             self._pipeline = None
             self._path_mode = False
-            return build_done(
-                self._video_id, ok=False, error=f"视频文件不存在: {video_path}"
-            )
+            await push(build_done(self._video_id, ok=False, error=f"视频文件不存在: {video_path}"))
+            return
 
         video_id = self._video_id
         await push(build_progress(video_id, STAGE_READY, 0.0, 0))
@@ -364,13 +367,15 @@ class BridgeHandler:
                 if self._cancelled and not thread.is_alive():
                     self._pipeline = None
                     self._path_mode = False
-                    return build_done(video_id, ok=False, error="cancelled")
+                    await push(build_done(video_id, ok=False, error="cancelled"))
+                    return
 
                 try:
-                    kind, payload = msg_q.get(timeout=0.2)
+                    kind, payload = msg_q.get_nowait()
                 except queue.Empty:
                     if not thread.is_alive() and msg_q.empty():
                         break
+                    await asyncio.sleep(0.05)
                     continue
 
                 if kind == "progress":
@@ -396,24 +401,31 @@ class BridgeHandler:
                 elif kind == "cancel":
                     self._pipeline = None
                     self._path_mode = False
-                    return build_done(video_id, ok=False, error="cancelled")
+                    await push(build_done(video_id, ok=False, error="cancelled"))
+                    return
                 elif kind == "error":
                     self._pipeline = None
                     self._path_mode = False
-                    return build_done(video_id, ok=False, error=str(payload))
+                    await push(build_done(video_id, ok=False, error=str(payload)))
+                    return
+        except asyncio.CancelledError:
+            logger.info("path_mode extraction task cancelled")
+            return
         except Exception as e:
             logger.exception("path_mode 提取失败")
             self._cancelled = True
             self._pipeline = None
             self._path_mode = False
-            return build_done(video_id, ok=False, error=str(e))
+            await push(build_done(video_id, ok=False, error=str(e)))
+            return
         finally:
             thread.join(timeout=5.0)
 
         if entries is None:
             self._pipeline = None
             self._path_mode = False
-            return build_done(video_id, ok=False, error="path_mode 未产出 entries")
+            await push(build_done(video_id, ok=False, error="path_mode 未产出 entries"))
+            return
 
         entry_dicts = [
             {
@@ -434,7 +446,8 @@ class BridgeHandler:
         await push(build_progress(video_id, STAGE_PROCESSING, 1.0, 0))
         self._pipeline = None
         self._path_mode = False
-        return build_entries(video_id, entry_dicts, is_final=True)
+        await push(build_entries(video_id, entry_dicts, is_final=True))
+        return
 
     async def _handle_frame(
         self,
@@ -536,6 +549,9 @@ class BridgeHandler:
         """取消任务，清理 Pipeline 状态。"""
         video_id = message["video_id"]
         self._cancelled = True
+        if self._path_task is not None:
+            self._path_task.cancel()
+            self._path_task = None
         if self._pipeline is not None:
             self._pipeline.cancel()
             self._pipeline = None

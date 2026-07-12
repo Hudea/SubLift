@@ -28,8 +28,8 @@
       "description": "把当前批量处理模式改为边收帧边处理。允许重构 pipeline/ 与 ipc/bridge.py，使首条字幕反馈时间显著缩短。具体实现方法（push 模型、常驻 server、并行抽帧等）由任务启动时评估。",
       "module": "src/sublift/pipeline/, src/sublift/ipc/bridge.py",
       "dependencies": ["feat-028"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "已完成。验证结论：1. 内存平稳：长视频(4K)处理内存不再随视频帧数线性增长；消除 Apple Vision 引擎内存泄漏（引入 autorelease_pool 并移交 PyObjC CFData）。2. 推送时机：在测试视频中 1.29s 内即推送第一条字幕（流式反馈生效）。3. 取消安全性：cancel 能够立即生效且释放所有资源，无残留线程。4. 基线无回归：Benchmark 显示 timing_f1 保持 97.7%，cer_macro 3.2%，usable 92.0%，无任何回退。产物已验证：pytest 测试及集成测试全部通过。"
     },
     {
       "id": "feat-030",

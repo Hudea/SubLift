@@ -135,7 +135,7 @@
           "id": "phase3.incremental",
           "name": "增量处理与前台进度优化",
           "description": "把批量处理改为边收帧边处理，缩短首条字幕反馈时间；CLI/GUI 显示真实阶段进度；支持取消操作。允许重构 pipeline/ 与 ipc/bridge.py。覆盖 feat-029~030。",
-          "status": "not-started",
+          "status": "done",
           "covers": ["feat-029", "feat-030"]
         },
         {

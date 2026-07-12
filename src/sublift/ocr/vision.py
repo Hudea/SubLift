@@ -25,7 +25,6 @@ try:
     import Vision
     from Quartz import (
         CGColorSpaceCreateDeviceRGB,
-        CGDataProviderCreateWithData,
         CGImageCreate,
     )
 
@@ -85,19 +84,21 @@ class VisionOcrEngine:
             带 ``lines`` 的 OCR 结果；``text``/``confidence`` 为兼容汇总。
             无识别结果返回 OcrResult("", 0.0)。
         """
-        width, height = image.size
-        cgimage = _pil_to_cgimage(image)
-        handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-            cgimage, None
-        )
-        request = Vision.VNRecognizeTextRequest.alloc().init()
-        request.setRecognitionLanguages_(self._recognition_languages)
+        import objc  # type: ignore
+        with objc.autorelease_pool():
+            width, height = image.size
+            cgimage = _pil_to_cgimage(image)
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
+                cgimage, None
+            )
+            request = Vision.VNRecognizeTextRequest.alloc().init()
+            request.setRecognitionLanguages_(self._recognition_languages)
 
-        success, _error = handler.performRequests_error_([request], None)
-        if not success:
-            return OcrResult(text="", confidence=0.0)
+            success, _error = handler.performRequests_error_([request], None)
+            if not success:
+                return OcrResult(text="", confidence=0.0)
 
-        return _collect_results(request, (width, height))
+            return _collect_results(request, (width, height))
 
 
 def _pil_to_cgimage(image: Image.Image) -> Any:
@@ -111,9 +112,13 @@ def _pil_to_cgimage(image: Image.Image) -> Any:
     """
     rgb_image = image.convert("RGB")
     width, height = rgb_image.size
-    raw_bytes = rgb_image.tobytes()
+    from Foundation import NSData
+    from Quartz import CGDataProviderCreateWithCFData
 
-    provider = CGDataProviderCreateWithData(None, raw_bytes, len(raw_bytes), None)
+    raw_bytes = rgb_image.tobytes()
+    ns_data = NSData.dataWithBytes_length_(raw_bytes, len(raw_bytes))
+    provider = CGDataProviderCreateWithCFData(ns_data)
+
     colorspace = CGColorSpaceCreateDeviceRGB()
     return CGImageCreate(
         width,
