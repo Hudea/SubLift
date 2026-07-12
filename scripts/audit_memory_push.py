@@ -1,7 +1,7 @@
 """增量架构内存与推送时机端到端审计。
 
 启动真实的 UDS Server，发送 start_job，测量 RSS 物理内存峰值、首条字幕推送延迟，
-并测试并发发送 cancel_job 的安全性。
+并测试并发发送 cancel_job 的安全性与真正资源退出，以及立即重启新任务的能力。
 
 用法：
     uv run --extra vision python scripts/audit_memory_push.py
@@ -14,6 +14,7 @@ import json
 import os
 import struct
 import subprocess
+import sys
 import time
 from typing import Any
 
@@ -53,6 +54,21 @@ async def get_rss_mb(pid: int) -> float:
         return rss_kb / 1024.0
     except Exception:
         return 0.0
+
+
+async def get_child_pids(parent_pid: int) -> list[int]:
+    """用 pgrep 获取当前父进程的所有子进程 PID。"""
+    try:
+        process = await asyncio.create_subprocess_exec(
+            "pgrep", "-P", str(parent_pid),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await process.communicate()
+        lines = stdout.decode().strip().splitlines()
+        return [int(line.strip()) for line in lines if line.strip().isdigit()]
+    except Exception:
+        return []
 
 
 async def run_audit() -> None:
@@ -104,9 +120,13 @@ async def run_audit() -> None:
         max_rss = 0.0
         entries_count = 0
         cancelled = False
+        cancel_t0 = 0.0
+        ffmpeg_pid = None
 
+        # ----------------------------------------------------
+        # 第一阶段：运行 Job 1 并触发 Cancel
+        # ----------------------------------------------------
         while True:
-            # 并发读取消息和监控内存
             read_task = asyncio.create_task(read_message(reader))
             monitor_task = asyncio.create_task(get_rss_mb(server_process.pid))
 
@@ -115,7 +135,6 @@ async def run_audit() -> None:
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
-            # 更新内存峰值
             if monitor_task in done:
                 current_rss = monitor_task.result()
                 if current_rss > max_rss:
@@ -123,13 +142,21 @@ async def run_audit() -> None:
             else:
                 monitor_task.cancel()
 
-            # 处理收到的消息
             if read_task in done:
                 msg = read_task.result()
                 if msg is None:
                     break
 
                 msg_type = msg.get("type")
+
+                # 如果 ffmpeg_pid 尚未捕获，尝试从子进程列表定位 ffmpeg
+                if ffmpeg_pid is None:
+                    children = await get_child_pids(server_process.pid)
+                    if children:
+                        # ffmpeg 是 python 服务进程派生的子进程
+                        ffmpeg_pid = children[0]
+                        print(f"[Client] 已捕获 ffmpeg 子进程 (PID: {ffmpeg_pid})")
+
                 if msg_type == "push_entry":
                     entries_count += 1
                     if first_push_time is None:
@@ -140,17 +167,76 @@ async def run_audit() -> None:
                     # 收到 2 条后测试真实 Cancel
                     if entries_count >= 2 and not cancelled:
                         print("[Client] 收到足够数据，发送 cancel_job 测试并发中断...")
+                        cancel_t0 = time.time()
                         await write_message(
                             writer, {"type": "cancel_job", "video_id": "audit-test-1"}
                         )
                         cancelled = True
                 elif msg_type == "done":
-                    print(f"[Done] 提取结束，状态: {msg}")
+                    cancel_delay = time.time() - cancel_t0 if cancelled else 0
+                    print(f"[Done] 收到取消确认，状态: {msg} (取消响应耗时: {cancel_delay:.4f}s)")
+
+                    # 验证 ffmpeg 是否真正退出
+                    if ffmpeg_pid is not None:
+                        print(f"[Client] 验证 ffmpeg (PID {ffmpeg_pid}) 是否完全退出...")
+                        for _ in range(30):
+                            current_children = await get_child_pids(server_process.pid)
+                            if ffmpeg_pid not in current_children:
+                                print(f"[Client] 💚 OK: ffmpeg (PID {ffmpeg_pid}) 已彻底退出")
+                                break
+                            await asyncio.sleep(0.05)
+                        else:
+                            print(f"❌ 错误：ffmpeg (PID {ffmpeg_pid}) 在取消后未退出！")
+                            sys.exit(1)
+
+                    if cancelled and cancel_delay > 1.0:
+                        print(f"❌ 错误：取消响应超时，耗时 {cancel_delay:.4f}s > 1.0s")
+                        sys.exit(1)
                     break
             else:
                 read_task.cancel()
 
             await asyncio.sleep(0.05)
+
+        # ----------------------------------------------------
+        # 第二阶段：立即在同一 Server 连接下拉起 Job 2
+        # ----------------------------------------------------
+        print("\n[Client] 立即拉起 Job 2 验证重启能力...")
+        start_msg2 = {
+            "type": "start_job",
+            "video_id": "audit-test-2",
+            "video_path": VIDEO_PATH,
+            "fps": 5.0,
+            "engine": "vision",
+            "confidence_threshold": 0.5,
+            "enable_ssim_patrol": True,
+            "region_box": [0, 860, 1920, 220],
+        }
+        await write_message(writer, start_msg2)
+        job2_t0 = time.time()
+        job2_push_received = False
+
+        for _ in range(100):  # 最多等待 5 秒
+            read_task = asyncio.create_task(read_message(reader))
+            await read_task
+            msg2 = read_task.result()
+            if msg2 is None:
+                break
+
+            if msg2.get("type") == "push_entry":
+                print(f"[Push] Job 2 成功收到字幕！延迟: {time.time() - job2_t0:.2f}s")
+                job2_push_received = True
+                break
+            await asyncio.sleep(0.05)
+
+        if not job2_push_received:
+            print("❌ 错误：拉起 Job 2 失败，未在 5s 内收到任何 push_entry")
+            sys.exit(1)
+        else:
+            print("💚 OK: Job 2 即时重启且运行正常，双向重启验证通过！")
+
+        # 优雅清理 Job 2
+        await write_message(writer, {"type": "cancel_job", "video_id": "audit-test-2"})
 
         print(f"\n[Memory] Server 子进程物理内存 (RSS) 峰值: {max_rss:.2f} MB")
 

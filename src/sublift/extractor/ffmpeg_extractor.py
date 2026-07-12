@@ -8,7 +8,9 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
 from PIL import Image
@@ -59,6 +61,22 @@ def _ffprobe_bin() -> str:
     return _resolve_bin(_FFPROBE_CANDIDATES, "ffprobe")
 
 
+@dataclass(frozen=True)
+class VideoInfo:
+    """视频探测元数据信息。"""
+
+    width: int
+    height: int
+    duration_ms: int
+
+
+def probe_video(video_path: Path) -> VideoInfo:
+    """探测视频的尺寸和时长。"""
+    width, height = _probe_dimensions(video_path)
+    duration_ms = probe_duration_ms(video_path)
+    return VideoInfo(width=width, height=height, duration_ms=duration_ms)
+
+
 class FfmpegExtractor:
     """通过 ffmpeg 按 fps 抽帧的 Extractor 实现。"""
 
@@ -69,6 +87,18 @@ class FfmpegExtractor:
             fps: 采样率（每秒抽帧数），默认 1.0。
         """
         self._fps = fps
+        self._proc: subprocess.Popen[bytes] | None = None
+        self._cancelled = threading.Event()
+
+    def cancel(self) -> None:
+        """强制终止当前的 ffmpeg 抽帧子进程。"""
+        self._cancelled.set()
+        if self._proc is not None:
+            try:
+                self._proc.terminate()
+                self._proc.kill()
+            except Exception:
+                pass
 
     def extract(self, video_path: Path) -> Iterator[Frame]:
         """从视频按 fps 抽帧，返回带时间戳的帧迭代器。
@@ -83,15 +113,24 @@ class FfmpegExtractor:
             FileNotFoundError: 视频文件不存在。
             RuntimeError: ffmpeg 抽帧或 ffprobe 探测失败。
         """
+        if self._cancelled.is_set():
+            return
+
         if not video_path.exists():
             raise FileNotFoundError(f"视频文件不存在: {video_path}")
 
         ffmpeg = _ffmpeg_bin()
         logger.info("FfmpegExtractor: ffmpeg=%s path=%s fps=%s", ffmpeg, video_path, self._fps)
 
+        if self._cancelled.is_set():
+            return
+
         width, height = _probe_dimensions(video_path)
         frame_size = width * height * 3
         logger.info("FfmpegExtractor: probe ok %dx%d", width, height)
+
+        if self._cancelled.is_set():
+            return
 
         cmd = [
             ffmpeg,
@@ -123,6 +162,9 @@ class FfmpegExtractor:
             ) as err_file:
                 stderr_path = Path(err_file.name)
 
+            if self._cancelled.is_set():
+                return
+
             with (
                 stderr_path.open("wb") as stderr_fh,
                 subprocess.Popen(
@@ -132,19 +174,33 @@ class FfmpegExtractor:
                     stderr=stderr_fh,
                 ) as proc,
             ):
-                assert proc.stdout is not None
-                frame_index = 0
-                while True:
-                    raw = proc.stdout.read(frame_size)
-                    if len(raw) < frame_size:
-                        break
-                    image = Image.frombytes("RGB", (width, height), raw)
-                    timestamp_ms = int(frame_index / self._fps * 1000)
-                    yield Frame(timestamp_ms=timestamp_ms, image=image)
-                    frame_index += 1
+                self._proc = proc
+                if self._cancelled.is_set():
+                    try:
+                        proc.terminate()
+                        proc.kill()
+                    except Exception:
+                        pass
+                    return
+
+                try:
+                    assert proc.stdout is not None
+                    frame_index = 0
+                    while True:
+                        if self._cancelled.is_set():
+                            break
+                        raw = proc.stdout.read(frame_size)
+                        if len(raw) < frame_size:
+                            break
+                        image = Image.frombytes("RGB", (width, height), raw)
+                        timestamp_ms = int(frame_index / self._fps * 1000)
+                        yield Frame(timestamp_ms=timestamp_ms, image=image)
+                        frame_index += 1
+                finally:
+                    self._proc = None
 
                 return_code = proc.wait()
-                if return_code != 0:
+                if not self._cancelled.is_set() and return_code != 0:
                     tail = _read_stderr_tail(stderr_path)
                     detail = f"：{tail}" if tail else ""
                     raise RuntimeError(
@@ -225,3 +281,41 @@ def _probe_dimensions(video_path: Path) -> tuple[int, int]:
         raise RuntimeError(f"未找到视频流: {video_path}")
     stream = streams[0]
     return int(stream["width"]), int(stream["height"])
+
+
+def probe_duration_ms(video_path: Path) -> int:
+    """用 ffprobe 获取视频时长（毫秒）。
+
+    Args:
+        video_path: 视频文件路径。
+
+    Returns:
+        时长（毫秒），无法获取时返回 0。
+    """
+    if not video_path.exists():
+        return 0
+    ffprobe = _ffprobe_bin()
+    cmd = [
+        ffprobe,
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(video_path),
+    ]
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            val = float(result.stdout.strip())
+            return int(val * 1000)
+    except Exception:
+        logger.exception("ffprobe probe_duration_ms 失败")
+    return 0

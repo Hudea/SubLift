@@ -255,9 +255,15 @@ struct ContentView: View {
                 statusLabel
             }
 
-            if case .sampling(let progress, _, _) = extractor.status {
+            switch extractor.status {
+            case .processing(let progress, _, _):
                 ProgressView(value: progress)
                     .progressViewStyle(.linear)
+            case .finalizing:
+                ProgressView()
+                    .progressViewStyle(.linear)
+            default:
+                EmptyView()
             }
         }
         .padding(.horizontal, 12)
@@ -271,12 +277,12 @@ struct ContentView: View {
             Text("就绪").foregroundStyle(.secondary)
         case .startingServer:
             Text("启动 Python 服务...").foregroundStyle(.orange)
-        case .sampling(_, let frameCount, let totalFrames):
-            Text("抽帧中 \(frameCount)/\(totalFrames)")
+        case .processing(let progress, let frameCount, let totalFrames):
+            Text("提取与识别中 \(frameCount)/\(totalFrames) (\(Int(progress * 100))%)")
                 .foregroundStyle(.blue)
                 .font(.system(.body, design: .monospaced))
-        case .processing:
-            Text("OCR 处理中...").foregroundStyle(.orange)
+        case .finalizing:
+            Text("正在整理字幕...").foregroundStyle(.orange)
         case .done(let count):
             Text("完成，识别 \(count) 条")
                 .foregroundStyle(.green)

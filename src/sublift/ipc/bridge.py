@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import io
 import logging
 import queue
@@ -115,6 +116,7 @@ class BridgeHandler:
         self._cancelled: bool = False
         self._path_mode: bool = False
         self._path_task: asyncio.Task[None] | None = None
+        self._extractor: FfmpegExtractor | None = None
 
     async def handle(
         self,
@@ -151,7 +153,7 @@ class BridgeHandler:
         if msg_type == MSG_FINALIZE:
             return await self._handle_finalize(message)
         if msg_type == MSG_CANCEL_JOB:
-            return self._handle_cancel(message)
+            return await self._handle_cancel(message)
 
         return build_error(f"unknown type: {msg_type!r}")
 
@@ -326,10 +328,12 @@ class BridgeHandler:
         pipeline = self._pipeline
         est = max(self._est_total_frames, 1)
         msg_q: queue.Queue[tuple[str, Any]] = queue.Queue()
+        self._extractor = FfmpegExtractor(fps=self._fps)
 
         def _worker() -> None:
             try:
-                extractor = FfmpegExtractor(fps=self._fps)
+                extractor = self._extractor
+                assert extractor is not None
                 logger.info("path_mode worker: starting extract loop")
                 n = 0
                 for frame in extractor.extract(path):
@@ -352,6 +356,7 @@ class BridgeHandler:
                     msg_q.put(("cancel", None))
                     return
                 logger.info("path_mode frames_done: n=%d, finalizing…", n)
+                msg_q.put(("progress_stage", "finalizing"))
                 entries = pipeline.finalize()
                 msg_q.put(("entries", entries))
             except BaseException as exc:
@@ -376,6 +381,11 @@ class BridgeHandler:
                     if not thread.is_alive() and msg_q.empty():
                         break
                     await asyncio.sleep(0.05)
+                    continue
+
+                if kind == "progress_stage":
+                    stage = str(payload)
+                    await push(build_progress(video_id, stage, 1.0, 0))
                     continue
 
                 if kind == "progress":
@@ -419,7 +429,13 @@ class BridgeHandler:
             await push(build_done(video_id, ok=False, error=str(e)))
             return
         finally:
-            thread.join(timeout=5.0)
+            self._cancelled = True
+            if self._extractor is not None:
+                self._extractor.cancel()
+            await asyncio.to_thread(thread.join, 1.0)
+            if thread.is_alive():
+                logger.error("path-mode worker thread did not stop cleanly")
+            self._extractor = None
 
         if entries is None:
             self._pipeline = None
@@ -443,7 +459,6 @@ class BridgeHandler:
             len(entries),
             empty_n,
         )
-        await push(build_progress(video_id, STAGE_PROCESSING, 1.0, 0))
         self._pipeline = None
         self._path_mode = False
         await push(build_entries(video_id, entry_dicts, is_final=True))
@@ -545,13 +560,18 @@ class BridgeHandler:
         self._pipeline = None
         return build_entries(video_id, entry_dicts, is_final=True)
 
-    def _handle_cancel(self, message: dict[str, Any]) -> dict[str, Any]:
+    async def _handle_cancel(self, message: dict[str, Any]) -> dict[str, Any]:
         """取消任务，清理 Pipeline 状态。"""
         video_id = message["video_id"]
         self._cancelled = True
         if self._path_task is not None:
             self._path_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self._path_task
             self._path_task = None
+        if self._extractor is not None:
+            self._extractor.cancel()
+            self._extractor = None
         if self._pipeline is not None:
             self._pipeline.cancel()
             self._pipeline = None

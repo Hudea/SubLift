@@ -15,8 +15,8 @@ final class SubtitleExtractor: ObservableObject {
     enum Status: Equatable {
         case idle
         case startingServer
-        case sampling(progress: Double, frameCount: Int, totalFrames: Int)
-        case processing
+        case processing(progress: Double, frameCount: Int, totalFrames: Int)
+        case finalizing
         case done(entryCount: Int)
         case error(String)
     }
@@ -166,7 +166,7 @@ final class SubtitleExtractor: ObservableObject {
 
             guard isCurrentJob(token) else { return }
             // 立刻显示进度条，避免一直 0 像未启动
-            status = .sampling(progress: 0, frameCount: 0, totalFrames: totalFramesSafe)
+            status = .processing(progress: 0, frameCount: 0, totalFrames: totalFramesSafe)
 
             let response = try await runOnBackground {
                 try client.requestStreaming(
@@ -178,15 +178,19 @@ final class SubtitleExtractor: ObservableObject {
                             self.entries.append(entry)
                         }
                     },
-                    onProgress: { [weak self] pct, _ in
+                    onProgress: { [weak self] pct, stage in
                         Task { @MainActor [weak self] in
                             guard let self, self.shouldAcceptLiveUpdate(token) else { return }
-                            let frames = max(0, Int((pct * Double(totalFramesSafe)).rounded(.down)))
-                            self.status = .sampling(
-                                progress: min(max(pct, 0), 1),
-                                frameCount: min(frames, totalFramesSafe),
-                                totalFrames: totalFramesSafe
-                            )
+                            if stage == "finalizing" {
+                                self.status = .finalizing
+                            } else {
+                                let frames = max(0, Int((pct * Double(totalFramesSafe)).rounded(.down)))
+                                self.status = .processing(
+                                    progress: min(max(pct, 0), 1),
+                                    frameCount: min(frames, totalFramesSafe),
+                                    totalFrames: totalFramesSafe
+                                )
+                            }
                         }
                     }
                 )

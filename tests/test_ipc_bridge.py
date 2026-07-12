@@ -426,3 +426,92 @@ class TestPathMode:
         assert resp is not None
         assert resp["type"] == "progress"
         assert resp["stage"] == "ready"
+
+    def test_path_mode_finalizing_stage_order(self, tmp_path: Path) -> None:
+        """验证 finalizing 阶段的优先级与绝对顺序。"""
+        video = tmp_path / "short.mp4"
+        _generate_test_video(video, duration=1.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        msg = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=1000,
+            video_path=str(video),
+        )
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+
+        progress_msgs = [p for p in pushed if p.get("type") == "progress"]
+        stages = [p.get("stage") for p in progress_msgs]
+
+        # finalizing 必须存在，且绝不能在最后被 processing 1.0 覆盖
+        assert "finalizing" in stages
+        finalizing_idx = stages.index("finalizing")
+
+        # 确认在此之后没有任何 processing 状态出现
+        for p in stages[finalizing_idx + 1:]:
+            assert p != "processing"
+
+        # done 消息或 entries 消息应当是最后的实体消息
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
+
+    def test_path_mode_cancel_and_restart(self, tmp_path: Path) -> None:
+        """验证在同个 Handler 上取消任务后，能立即拉起新任务。"""
+        video = tmp_path / "long.mp4"
+        _generate_test_video(video, duration=5.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        # 1. 启动任务并立即取消
+        msg1 = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=5000,
+            video_path=str(video),
+        )
+
+        async def run_it() -> None:
+            # 启动 Job 1
+            await bridge.handle(msg1, collect_push)
+            # 立即取消 Job 1，并等待其退出完成
+            cancel_msg = build_cancel_job("V1")
+            done_response = await bridge.handle(cancel_msg, collect_push)
+            assert done_response is not None
+            assert done_response["type"] == "done"
+            assert done_response["ok"] is False
+
+            # 2. 在相同的 BridgeHandler 实例上立即重新发起 Job 2
+            msg2 = build_start_job(
+                "V2",
+                2.0,
+                "vision",
+                0.5,
+                duration_ms=5000,
+                video_path=str(video),
+            )
+            response2 = await bridge.handle(msg2, collect_push)
+            assert response2 is not None
+            assert response2["type"] == "progress"
+            assert response2["stage"] == "ready"
+
+            # 优雅取消 Job 2 完成测试
+            await bridge.handle(build_cancel_job("V2"), collect_push)
+
+        asyncio.run(run_it())

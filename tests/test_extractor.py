@@ -120,3 +120,33 @@ class TestFfmpegExtractorIntegration:
         assert frames[0].timestamp_ms == 0
         assert frames[1].timestamp_ms == 500
         assert frames[-1].timestamp_ms == 2500
+
+    def test_probe_duration_ms(self, tmp_path: Path) -> None:
+        """验证时长探测。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=3.0, fps=2.0)
+        from sublift.extractor.ffmpeg_extractor import probe_duration_ms
+        assert probe_duration_ms(video) == 3000
+
+    def test_ffmpeg_extractor_cancel_midway(self, tmp_path: Path) -> None:
+        """中途取消测试。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=5.0, fps=2.0)
+        extractor = FfmpegExtractor(fps=1.0)
+
+        frames = []
+        for frame in extractor.extract(video):
+            frames.append(frame)
+            if len(frames) == 2:
+                extractor.cancel()
+        assert len(frames) == 2
+
+    def test_ffmpeg_extractor_cancel_before_extract(self, tmp_path: Path) -> None:
+        """在开始抽取前取消测试。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=3.0, fps=2.0)
+        extractor = FfmpegExtractor(fps=1.0)
+        extractor.cancel()
+
+        frames = list(extractor.extract(video))
+        assert len(frames) == 0

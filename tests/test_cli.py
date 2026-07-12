@@ -115,7 +115,7 @@ class TestMainEntry:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """--engine mock 贯通：伪造 Pipeline.run 输出，验证 SRT 文件写入。"""
+        """--engine mock 贯通：伪造 Pipeline 输出，验证 SRT 文件写入。"""
         video = tmp_path / "video.mp4"
         video.write_bytes(b"\x00")
         output = tmp_path / "out.srt"
@@ -125,10 +125,17 @@ class TestMainEntry:
             SubtitleEntry(start_ms=2000, end_ms=3000, text="[mock subtitle]"),
         ]
 
-        def fake_run(self: object, video_path: Path) -> list[SubtitleEntry]:
-            return fake_entries
-
-        monkeypatch.setattr("sublift.cli.Pipeline.run", fake_run)
+        from sublift.extractor.ffmpeg_extractor import VideoInfo
+        monkeypatch.setattr(
+            "sublift.extractor.ffmpeg_extractor.probe_video",
+            lambda v: VideoInfo(320, 240, 5000)
+        )
+        monkeypatch.setattr(
+            "sublift.extractor.ffmpeg_extractor.FfmpegExtractor.extract",
+            lambda self, v: iter([])
+        )
+        monkeypatch.setattr("sublift.cli.Pipeline.feed", lambda self, f: None)
+        monkeypatch.setattr("sublift.cli.Pipeline.finalize", lambda self: fake_entries)
         monkeypatch.setattr("sublift.cli.is_vision_available", lambda: False)
 
         main(["extract", str(video), "-o", str(output), "--engine", "mock"])
@@ -143,3 +150,64 @@ class TestMainEntry:
         captured = capsys.readouterr()
         assert "完成" in captured.out
         assert "2 条字幕" in captured.out
+
+    def test_extract_cli_progress_output(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """验证 TTY 和非 TTY 重定向时的进度输出。"""
+        video = tmp_path / "video.mp4"
+        video.write_bytes(b"\x00")
+        output = tmp_path / "out.srt"
+
+        from PIL import Image
+
+        from sublift.extractor.ffmpeg_extractor import VideoInfo
+        from sublift.models import Frame
+
+        # 1. 模拟 TTY
+        monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+        monkeypatch.setattr(
+            "sublift.extractor.ffmpeg_extractor.probe_video",
+            lambda v: VideoInfo(320, 240, 400)
+        )
+        mock_frames = [
+            Frame(0, Image.new("RGB", (10, 10))),
+            Frame(1000, Image.new("RGB", (10, 10))),
+        ]
+
+        class MockPipeline:
+            def __init__(self, *args: object, **kwargs: object) -> None:
+                self.processed_count = 0
+
+            def _reset_streaming_state(self) -> None:
+                self.processed_count = 0
+
+            def feed(self, frame: object) -> None:
+                self.processed_count += 1
+                return None
+
+            def ocr_segment(self, event: object) -> None:
+                return None
+
+            def finalize(self) -> list[SubtitleEntry]:
+                return []
+
+        monkeypatch.setattr("sublift.cli.Pipeline", MockPipeline)
+        monkeypatch.setattr(
+            "sublift.extractor.ffmpeg_extractor.FfmpegExtractor.extract",
+            lambda self, v: iter(mock_frames)
+        )
+
+        main(["extract", str(video), "-o", str(output), "--engine", "mock"])
+        captured = capsys.readouterr()
+        assert "\r[2/3] 提取与识别:" in captured.out
+
+        # 2. 模拟非 TTY (重定向)
+        monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+        main(["extract", str(video), "-o", str(output), "--engine", "mock"])
+        captured2 = capsys.readouterr()
+        assert "\r[2/3] 提取与识别:" not in captured2.out
+        assert "[2/3] 提取与识别: 100%" in captured2.out
