@@ -5,6 +5,19 @@
 
 ---
 
+## ADR-0012 增量 pipeline、真实进度与取消共享任务生命周期（2026-07-12）
+
+- **背景**：Phase 2 批量模式会先缓存全部帧再统一处理，用户长时间看不到字幕；取消只改变 bridge 状态，无法解除 worker 在 ffmpeg 读取上的阻塞。CLI 与 GUI 也缺少一致、真实的阶段进度。
+- **决策**：
+  1. `Pipeline` 以 `feed(frame)`、`ocr_segment(segment)`、`finalize()` 支持逐帧推进，段闭合后立即通过 IPC `push_entry` 推送。
+  2. GUI path mode、CLI 与 benchmark 共享 Python `FfmpegExtractor`；以视频时长和采样率估算总帧，报告 `processing/finalizing` 与实际帧计数。
+  3. 单次任务共享持久化 cancellation event；取消同时终止 ffmpeg 子进程，worker 在 `finally` 中释放 extractor 并回收线程，使下一任务可重新启动。
+  4. Vision OCR 调用使用 `autorelease_pool`，图像桥接数据使用 CFData 生命周期，避免长流临时对象累积。
+- **理由**：首条反馈、进度真实性、快速取消和内存稳定性本质上属于同一处理生命周期，必须由同一状态与资源所有权约束，不能靠 UI 假进度或仅设置布尔标记补偿。
+- **结果**：自动审计首条反馈 0.68s、取消响应 0.108s，ffmpeg 进程退出且第二任务可正常启动；4K 流式内存审计通过。≥10 分钟非 Zootopia GUI 手工体验验收由用户决定暂缓。
+
+---
+
 ## ADR-0011 OCR 文字系统默认 auto，CJK 横幅按边界清理（2026-07-10）
 
 - **背景**：feat-034 初版为清理 `PHISON/SON` 使用无条件拉丁尾缀正则，误删纯英文和合法中英混排；其相似文本聚类又未把簇票数传给接受策略，低置信中文字幕仍被清空。
@@ -148,4 +161,3 @@ Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
 - **决策**：Phase 1 交付可运行 MVP——真实 1080p 视频经 `uv run sublift extract <video> -o out.srt` 产出可加载 SRT；而非仅抽象接口。
 - **理由**：用户选择「可运行 MVP」选项。端到端可运行才能验证架构有效性，避免抽象底座脱离实际。
 - **影响**：`docs/phases/phase1.json` 验收标准含真实视频产出 SRT 与三工具全绿；端到端验收作为 Phase 1 级验收门（任务粒度见 ADR-0004）。ASS/VTT、PaddleOCR 第二引擎、配置文件、进度展示等显式排除。
-

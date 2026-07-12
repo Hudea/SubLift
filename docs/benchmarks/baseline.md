@@ -1,7 +1,8 @@
 # SubLift Benchmark 基线
 
 > 本文件记录当前 benchmark 基线，作为后续优化的对比依据。
-> feat-027 已统一为诊断报告口径；feat-028 会重新录入当前正式基线。
+> feat-027 已统一为诊断报告口径。feat-028 的独立初始基线入库经用户决定跳过；
+> 本页保留历史参考，并以 feat-034 P1 修复后的固定 GT 结果作为当前回归锚点。
 
 ## 素材
 
@@ -38,20 +39,22 @@
 | baseline-no-filter | patrol on, hyst=2, 丢空文本 | 83.9% | 100% | **91.2%** | 14 timing FN（8 no_overlap + 6 merged） |
 | feat-033 final | patrol on, hyst=1, delay=2, 保留空文本 | 92.0% | 98.8% | **95.2%** | 门通过；1 FA；主剩余 text.noise / merged residual |
 | feat-034 final | + 行级选择/多帧共识/cleanup | 93.1% | 97.6% | **95.3%** | usable **89.7%**；noise 0；CER 3.8%；P 略降 1.2pp（2 FA） |
+| feat-034 P1 fix2 | 修复共识计票、英文误删与空文本合并 | **96.6%** | **98.8%** | **97.7%** | 当前锚点；usable **92.0%**；noise/empty 0；CER 3.2% |
 
 ### 3. OCR 可用性（feat-034）
 
-| 指标 | gui_ffmpeg_5fps | goal_static | feat-034 final |
+| 指标 | gui_ffmpeg_5fps | goal_static | feat-034 P1 fix2 |
 |---|---:|---:|---:|
-| usable | 75.9% | 85.1% | **89.7%** |
+| usable | 75.9% | 85.1% | **92.0%** |
 | text.noise | 7 | — | **0** |
-| text.empty | ~5 | — | **1** |
-| cer_macro | ~30% | ~6.6% | **3.8%** |
-| timing_f1 | 95.2% | 97.7% | **95.3%** |
+| text.empty | ~5 | — | **0** |
+| cer_macro | ~30% | ~6.6% | **3.2%** |
+| timing_f1 | 95.2% | 97.7% | **97.7%** |
+| timing_precision | 98.8% | 98.8% | **98.8%** |
 
-产物：`debug/benchmark-reports/feat034_final/`。默认 `enable_line_select=True`。
+当前产物：`debug/benchmark-reports/feat034_p1_fix2/`。默认 `enable_line_select=True`、`subtitle_script=auto`；固定中文字幕 benchmark 显式使用 `cjk`。
 
-产物：`debug/benchmark-reports/baseline-no-filter/`、`debug/benchmark-reports/feat033_final/`、`debug/benchmark-reports/feat034_final/`。
+历史产物：`debug/benchmark-reports/baseline-no-filter/`、`debug/benchmark-reports/feat033_final/`、`debug/benchmark-reports/feat034_final/`。
 
 feat-033 诊断：多数「空洞」是 OCR 抹段（M1c），不是 EMPTY 卡死。  
 feat-034 以行级选择替代全局降阈值，跨过 goal usable 水位。
@@ -94,7 +97,7 @@ feat-027 将 benchmark 收敛为单一诊断口径：
 当前推荐把一次 benchmark 运行写成 manifest，再由脚本读取：
 
 ```bash
-uv run python scripts/run_benchmark_manifest.py benchmark/manifests/zootopia_cli_bottomcrop_5fps.json
+uv run --extra vision python scripts/run_benchmark_manifest.py benchmark/manifests/zootopia_cli_bottomcrop_5fps.json
 ```
 
 脚本输出当前诊断报告。入口是 `.agent.json`，后续 agent 应优先读取它，再按需打开

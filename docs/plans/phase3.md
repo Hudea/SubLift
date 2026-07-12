@@ -4,7 +4,8 @@
 > 项目级功能块见 `feature-list.json` 的 `phases[phase3]` 块。
 >
 > Phase 3 聚焦「优化」：建立可量化的 benchmark，改增量处理与前台进度体验，
-> 优化打轴检测准确率。具体实现方法不在本阶段规划，留到各任务启动时再定。
+> 优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位。本阶段已于
+> 2026-07-12 收口；未执行项和残余风险在本文及 phase3.json 中明确保留。
 
 ## 1. 目标与范围
 
@@ -61,18 +62,18 @@
 
 ### 2.1 Benchmark 优化
 
-- [ ] 一条命令即可对「视频 + ground truth SRT」输出完整指标。
-- [ ] 报告至少包含 timing recall/precision/F1、边界误差、CER macro/micro、字符准确率、端到端可用召回、速度（× 实时）。
-- [ ] 报告输出 agent 可读 JSON 与逐条 GT/detection CSV，可直接定位漏检、合并、过切分、OCR 空文本和高 CER。
-- [ ] 记录当前基线（Zootopia clip 等现有素材）到 `debug/benchmark-reports/` 或 `docs/benchmarks/`。
-- [ ] benchmark 脚本通过 `./init.sh` 验证（不引入 lint/type/test 回归）。
+- [x] 一条命令即可对「视频 + ground truth SRT」输出完整指标。
+- [x] 报告包含 timing recall/precision/F1、边界误差、CER macro/micro、字符准确率、端到端可用召回、速度（× 实时）。
+- [x] 报告输出 agent 可读 JSON 与逐条 GT/detection CSV，可直接定位漏检、合并、过切分、OCR 空文本和高 CER。
+- [~] Benchmark 框架与最终固定 GT 报告已记录；feat-028 的独立“初始基线入库”经用户决定跳过，历史水位汇总保留在 `docs/benchmarks/baseline.md`。
+- [x] benchmark 脚本通过 `./init.sh` 验证（不引入 lint/type/test 回归）。
 
 ### 2.2 增量处理 + 前台进度显示优化
 
-- [ ] CLI `sublift extract` 输出阶段进度（如抽帧 / 检测 / OCR / 导出）。
-- [ ] GUI 提取时显示百分比和当前阶段，且取消按钮生效。
-- [ ] 记录首条字幕反馈时间 benchmark，与 Phase 2 批量模式对比。
-- [ ] Python 端 `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿；Swift 端 `swift test` 全绿。
+- [x] CLI `sublift extract` 输出探测、提取与识别、整理与导出阶段及真实进度。
+- [x] GUI 提取时显示百分比和当前阶段，且取消按钮生效。
+- [x] 自动审计首条字幕反馈 0.68s；取消响应 0.108s，取消后第二任务可正常启动。
+- [x] Python 端 `uv run pytest` / `uv run ruff check .` / `uv run mypy src tests` 全绿；Swift 端 `swift test` 全绿。
 
 ### 2.3 打轴检测优化
 
@@ -83,11 +84,11 @@
 
 ### 2.4 OCR 可用性（feat-034）
 
-- [x] `usable_subtitle_recall` **89.7%** ≥ 85.1%
-- [x] `text.noise` **0** ≤ 2；`text.empty` **1** ≤ 1
-- [x] CER macro **3.8%** ≤ 6.6%
-- [x] `timing_f1` **95.3%** ≥ 95.2%
-- [~] `timing_precision` **97.6%**（门 98.8%；2 FA / merge residual，可接受）
+- [x] `usable_subtitle_recall` **92.0%** ≥ 85.1%
+- [x] `text.noise` **0** ≤ 2；`text.empty` **0** ≤ 1
+- [x] CER macro **3.2%** ≤ 6.6%
+- [x] `timing_f1` **97.7%** ≥ 95.2%
+- [x] `timing_precision` **98.8%** ≥ 98.8%
 - [x] 禁止仅靠全局 `confidence_threshold=0.3` 过门
 
 ## 3. 大功能块与任务拆分
@@ -141,12 +142,14 @@ feat-027 (Benchmark 框架)
 | 打轴优化与增量改动冲突 | 同时改 pipeline 结构 + 算法，bug 难定位 | 先打轴后增量，或分分支并行 |
 | ground truth 素材不足 | benchmark 说服力不够 | 至少复用现有 Zootopia clip，并记录获取方式 |
 | 首条反馈时间受 Vision 冷启动影响 | 优化效果有限 | 实测区分「server 启动」vs「算法首条」时间 |
+| 显式 CJK 边界清理可能误删无空格英文 | `NPD动物警局`、`苹果的iPhone` 等混排受损 | 默认 `auto`；扩充混排 GT 后再收紧或移除启发式 |
+| 长视频 GUI 体验尚未人工验收 | 自动指标不能覆盖进度观感与交互连续性 | 后续用 ≥10 分钟非 Zootopia 视频做拖拽、取消、重启验收 |
 
 ## 7. 阶段验收门（Phase 3 整体）
 
-- [ ] feat-027~028 完成：benchmark 可运行，基线已记录。
-- [ ] feat-029~030 完成：增量处理跑通，CLI/GUI 进度与取消可用。
+- [~] feat-027~028：benchmark 框架与固定 GT 报告完成；feat-028 独立基线入库按用户决定跳过。
+- [x] feat-029~030 完成：增量处理跑通，CLI/GUI 真实进度与快速取消可用。
 - [x] feat-031 完成：SSIM patrol 一阶落地（历史证据见 phase3.json）。
 - [x] feat-033 完成：`timing_f1` 95.2%（≥ 95%）；precision 98.8%（相对 100% 基线 -1.2pp / 1 FA）。
-- [x] feat-034 完成：usable 89.7%；noise 0；empty 1；CER 3.8%；F1 95.3%。
-- [ ] feat-032 完成：文档更新，main 分支 `./init.sh` 8/8 通过。
+- [x] feat-034 完成：usable 92.0%；noise 0；empty 0；CER 3.2%；F1 97.7%；precision 98.8%。
+- [x] feat-032 完成：核心文档统一到 Phase 3 最终实现与固定 GT 口径；`./init.sh` 8/8 通过。

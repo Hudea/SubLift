@@ -127,8 +127,8 @@
         {
           "id": "phase3.benchmark",
           "name": "Benchmark 优化",
-          "description": "定义打轴精准度、识别准确率、端到端可用性、速度等核心指标；实现 ground truth 加载与一对一对齐；提供一键运行入口；输出 agent 可读诊断报告；记录当前基线。覆盖 feat-027~028。注：feat-028 基线入库已跳过，基线以会话跑测形式记于 docs/benchmarks/baseline.md。",
-          "status": "in-progress",
+          "description": "Benchmark 框架、ground truth 加载、一对一对齐、核心指标和 agent 可读诊断报告已完成。feat-028 的独立初始基线入库经用户决定跳过；历史与最终固定 GT 水位汇总于 docs/benchmarks/baseline.md。覆盖 feat-027~028。",
+          "status": "done",
           "covers": ["feat-027", "feat-028"]
         },
         {
@@ -141,14 +141,14 @@
         {
           "id": "phase3.timeline",
           "name": "打轴检测优化",
-          "description": "优化 pipeline/ 中 signature/changepoint/timeline 与 OCR 锚帧策略。feat-031 SSIM patrol；feat-033 residual 使 timing_f1 达 95.2%（baseline-no-filter 91.2%→95.2%）。覆盖 feat-031、feat-033。",
+          "description": "优化 pipeline/ 中 signature/changepoint/timeline 与 OCR 锚帧策略。feat-031/033 完成 SSIM patrol 与 residual 收敛；feat-034 最终固定 GT timing F1 97.7%、precision 98.8%。覆盖 feat-031、feat-033。",
           "status": "done",
           "covers": ["feat-031", "feat-033"]
         },
         {
           "id": "phase3.ocr-usability",
           "name": "OCR 可用性（行级选择器）",
-          "description": "第一阶段跨过 goal 可用性水位：保留 Vision 逐行 text/conf/box，按 SubtitleProfile 选目标行，段内多帧共识接受低置信稳定中文、拒绝背景英文噪声。验收 usable≥85.1%、text.noise≤2、empty≤1，timing 不回退。覆盖 feat-034。",
+          "description": "保留 Vision 逐行 text/conf/box，按 SubtitleProfile 选目标行，以段内多帧共识接受低置信稳定字幕并拒绝背景噪声。最终固定 GT usable 92.0%、CER 3.2%、noise/empty 0。覆盖 feat-034。",
           "status": "done",
           "covers": ["feat-034"]
         },
@@ -156,7 +156,7 @@
           "id": "phase3.docs",
           "name": "文档收尾",
           "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。覆盖 feat-032。",
-          "status": "not-started",
+          "status": "done",
           "covers": ["feat-032"]
         }
       ]

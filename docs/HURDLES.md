@@ -39,7 +39,7 @@
 ### dHash 对中文文本内容变化判别力不足，导致 timeline 漏分段
 - **日期**：2026-07-03
 - **状态**：部分缓解（feat-031b SSIM patrol 已实现，merged_into_neighbor FN 减少约 70%）
-- **现象**：用 `scripts/test_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
+- **现象**：用 `scripts/run_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
   - "能不顾他们惊人的差异"
   - "彻底化解偏见和刻板印象"
   - "那也许我们都能接受彼此的差异"
@@ -87,7 +87,7 @@
   - 2 段 OCR 空文本（段 5、11）：锚帧落在过渡画面（见上条 HURDLE）
   - 1 段合并 4 段（段 22）：dHash 对相似中文文本判别力不足（见首条 HURDLE）
 - **结论**：Pipeline 端到端在 5fps 下表现扎实，打轴状态机很干净（0 误检）。主要瓶颈在 OCR 精度（空文本、英文水印干扰）和长段合并（dHash 对相似内容的区分度不够）。对 Phase 1 MVP 是不错的起点。
-- **相关文件**：`scripts/test_timeline.py`、`debug/timeline_compare_result.txt`
+- **相关文件**：`scripts/run_timeline.py`、`debug/timeline_compare_result.txt`
 
 ---
 
@@ -255,5 +255,5 @@
   1. Pipeline 已由 `run_frames` 退化为彻底基于 `feed` / `ocr_segment` 驱动的流式接口。`bridge.py` 的 `_worker` 直接逐帧驱动并在段闭合时及时 push。
   2. `vision.py` 的 `recognize` 中加入 `with objc.autorelease_pool():` 上下文。
   3. 废弃 `CGDataProviderCreateWithData`，改为通过 `NSData.dataWithBytes_length_` 包转后调用 `CGDataProviderCreateWithCFData(ns_data)`，将底层二进制的生命周期安全委托给 Toll-Free Bridging 体系。
-- **验证结果**：4K 视频测试，内存消耗峰值从 2157 MiB 下降到极低 (Top 3 分配仅为数十 KB)，未见任何线性增长；首条字幕在提取开始 1.29s 后即可向外推送；异常和 Cancel 处理也能干净重置无泄漏；且核心 Benchmark 无任何回退。
+- **验证结果**：4K 视频测试，内存消耗峰值从 2157 MiB 下降到极低 (Top 3 分配仅为数十 KB)，未见任何线性增长；后续 feat-030 自动审计首条反馈 0.68s、取消响应 0.108s，ffmpeg PID 退出且第二任务可正常启动；核心 Benchmark 无回退。≥10 分钟非 Zootopia 视频的 GUI 拖拽、进度观感、取消与重启手工验收由用户决定暂缓，仍是体验覆盖风险，不影响已验证的资源泄漏修复结论。
 - **相关文件**：`src/sublift/pipeline/core.py`（`feed` 驱动）、`src/sublift/ipc/bridge.py`（流式推送）、`src/sublift/ocr/vision.py`（内存防泄漏修复）
