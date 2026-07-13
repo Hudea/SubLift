@@ -32,6 +32,7 @@ struct ContentView: View {
     @StateObject private var metadataLoader = VideoMetadataLoader()
     @StateObject private var regionModel = RegionSelectionModel()
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
+    @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
     @State private var showFfmpegMissingAlert = false
     @State private var exportError: String?
     @State private var showExportSuccess = false
@@ -221,6 +222,7 @@ struct ContentView: View {
                 Button {
                     extractor.extract(
                         videoURL: url,
+                        fps: samplingQuality.sampleFps,
                         engine: defaultEngine,
                         regionBox: regionModel.regionBoxForIPC(),
                         subtitleProfile: regionModel.subtitleProfileForIPC()
@@ -235,6 +237,17 @@ struct ContentView: View {
                     Button("取消") { extractor.cancel() }
                         .buttonStyle(.bordered)
                 }
+
+                Picker("采样", selection: $samplingQuality) {
+                    ForEach(SamplingQuality.allCases) { quality in
+                        Text(quality.displayName).tag(quality)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 180)
+                .help(samplingQuality.helpText)
+                .disabled(extractor.isRunning)
+                .accessibilityLabel("采样密度")
 
                 Picker("", selection: $defaultEngine) {
                     Text("Apple Vision").tag(OcrEngineName.vision)
