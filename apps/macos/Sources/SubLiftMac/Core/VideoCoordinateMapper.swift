@@ -60,6 +60,93 @@ enum VideoCoordinateMapper {
     }
 }
 
+/// 多时间点抽帧：挑选更可能含字幕的代表帧（避免单帧落在无字幕画面）。
+enum RegionFramePicker {
+
+    /// 默认在片长上的采样比例（避开片头/片尾纯黑或片尾字幕）。
+    static let defaultSampleRatios: [Double] = [0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88]
+
+    /// 下部字幕带得分达到该值时可提前停止后续抽帧（性能）。
+    static let earlyStopScore: Double = 1.8
+
+    /// 根据片长生成采样时间点（秒），去重并排序。
+    static func sampleTimestamps(
+        durationSeconds: Double,
+        ratios: [Double] = defaultSampleRatios,
+        maxSamples: Int = 7
+    ) -> [Double] {
+        guard durationSeconds.isFinite, durationSeconds > 0 else { return [0] }
+
+        let capped = max(1, maxSamples)
+        let picked = Array(ratios.prefix(capped))
+        // 极短片：至少中点 + 靠后一点
+        let effectiveRatios: [Double]
+        if durationSeconds < 3 {
+            effectiveRatios = [0.4, 0.7]
+        } else if durationSeconds < 8 {
+            effectiveRatios = [0.2, 0.45, 0.7]
+        } else {
+            effectiveRatios = picked.isEmpty ? [0.5] : picked
+        }
+
+        let endPad = min(0.05, durationSeconds * 0.01)
+        var seconds = effectiveRatios.map { ratio in
+            max(0, min(durationSeconds * ratio, max(0, durationSeconds - endPad)))
+        }
+
+        // 毫秒级去重，保持稳定顺序
+        var seen = Set<Int>()
+        seconds = seconds.filter { t in
+            let key = Int((t * 1000).rounded())
+            return seen.insert(key).inserted
+        }
+        return seconds
+    }
+
+    /// 评估一帧检测结果是否像「有底部字幕」。分数越高越优先作代表帧。
+    ///
+    /// 只统计画面下部（`lowerBandRatio` 以下）且置信度达标的框；
+    /// 1~3 个下部框加权最高（典型硬字幕行数）。
+    static func subtitlePresenceScore(
+        candidates: [(pixelRect: CGRect, confidence: Float)],
+        videoHeight: Int,
+        lowerBandRatio: CGFloat = RegionMerger.defaultLowerBandRatio,
+        minimumConfidence: Float = 0.25
+    ) -> Double {
+        guard videoHeight > 0, !candidates.isEmpty else { return 0 }
+
+        let thresholdY = CGFloat(videoHeight) * lowerBandRatio
+        let lower = candidates.filter {
+            $0.pixelRect.midY >= thresholdY && $0.confidence >= minimumConfidence
+        }
+        guard !lower.isEmpty else { return 0 }
+
+        let confSum = lower.reduce(0.0) { $0 + Double($1.confidence) }
+        let countFactor: Double
+        switch lower.count {
+        case 1...3: countFactor = 2.0
+        case 4...6: countFactor = 1.0
+        default: countFactor = 0.35
+        }
+        // 轻微奖励：框越多但已在 countFactor 惩罚噪声；再加一点置信度底分
+        return confSum * countFactor + Double(lower.count) * 0.15
+    }
+
+    /// 在多帧候选中选得分最高的一帧；同分取先出现（更靠前的采样点）。
+    static func pickBestFrameIndex(scores: [Double]) -> Int? {
+        guard !scores.isEmpty else { return nil }
+        var bestIndex = 0
+        var bestScore = scores[0]
+        for i in 1..<scores.count {
+            if scores[i] > bestScore {
+                bestScore = scores[i]
+                bestIndex = i
+            }
+        }
+        return bestIndex
+    }
+}
+
 /// feat-022：由用户选中的候选框推算最终字幕带（X 全宽，Y 取选中框区间）。
 enum RegionMerger {
 
@@ -92,6 +179,7 @@ enum RegionMerger {
     }
 
     /// 默认预选：中心 Y 落在画面下部区域的候选框。
+    /// 无下部候选时返回空集（不再全选，避免把整屏文字并成巨大 region）。
     static func autoSelectIds(
         candidates: [(id: Int, pixelRect: CGRect, confidence: Float)],
         videoHeight: Int,

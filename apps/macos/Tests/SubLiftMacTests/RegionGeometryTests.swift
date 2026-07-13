@@ -93,6 +93,91 @@ struct RegionGeometryTests {
     }
 
     @Test
+    func autoSelectIds_returnsEmptyWhenNoLowerBand() {
+        let candidates: [(id: Int, pixelRect: CGRect, confidence: Float)] = [
+            (id: 1, pixelRect: CGRect(x: 0, y: 100, width: 100, height: 30), confidence: 0.9),
+            (id: 2, pixelRect: CGRect(x: 0, y: 200, width: 100, height: 30), confidence: 0.8),
+        ]
+        let ids = RegionMerger.autoSelectIds(candidates: candidates, videoHeight: 1080)
+        #expect(ids.isEmpty)
+    }
+
+    @Test
+    func sampleTimestamps_spreadsAcrossDuration() {
+        let ts = RegionFramePicker.sampleTimestamps(durationSeconds: 100)
+        #expect(ts.count >= 5)
+        #expect(ts.first! >= 10) // ~12%
+        #expect(ts.last! <= 90) // ~88%
+        // 单调递增
+        for i in 1..<ts.count {
+            #expect(ts[i] > ts[i - 1])
+        }
+    }
+
+    @Test
+    func sampleTimestamps_shortClipUsesFewerPoints() {
+        let short = RegionFramePicker.sampleTimestamps(durationSeconds: 2)
+        #expect(short.count == 2)
+        #expect(short[0] < short[1])
+    }
+
+    @Test
+    func sampleTimestamps_zeroDurationReturnsZero() {
+        #expect(RegionFramePicker.sampleTimestamps(durationSeconds: 0) == [0])
+    }
+
+    @Test
+    func subtitlePresenceScore_prefersLowerBandText() {
+        let lowerOnly: [(pixelRect: CGRect, confidence: Float)] = [
+            (CGRect(x: 100, y: 900, width: 400, height: 40), 0.9),
+        ]
+        let upperOnly: [(pixelRect: CGRect, confidence: Float)] = [
+            (CGRect(x: 100, y: 80, width: 400, height: 40), 0.95),
+        ]
+        let empty: [(pixelRect: CGRect, confidence: Float)] = []
+        let lowerScore = RegionFramePicker.subtitlePresenceScore(
+            candidates: lowerOnly, videoHeight: 1080
+        )
+        let upperScore = RegionFramePicker.subtitlePresenceScore(
+            candidates: upperOnly, videoHeight: 1080
+        )
+        let emptyScore = RegionFramePicker.subtitlePresenceScore(
+            candidates: empty, videoHeight: 1080
+        )
+        #expect(lowerScore > 1.5)
+        #expect(upperScore == 0)
+        #expect(emptyScore == 0)
+        #expect(lowerScore > upperScore)
+    }
+
+    @Test
+    func subtitlePresenceScore_penalizesTooManyLowerBoxes() {
+        let few: [(pixelRect: CGRect, confidence: Float)] = [
+            (CGRect(x: 0, y: 900, width: 100, height: 30), 0.8),
+            (CGRect(x: 0, y: 940, width: 100, height: 30), 0.8),
+        ]
+        let many: [(pixelRect: CGRect, confidence: Float)] = (0..<10).map { i in
+            (CGRect(x: 0, y: 800 + CGFloat(i) * 20, width: 100, height: 18), Float(0.8))
+        }
+        let fewScore = RegionFramePicker.subtitlePresenceScore(candidates: few, videoHeight: 1080)
+        let manyScore = RegionFramePicker.subtitlePresenceScore(candidates: many, videoHeight: 1080)
+        // 1~3 框加权更高；10 框虽 conf 总和更大但 countFactor 惩罚后应更低或接近
+        #expect(fewScore > 0)
+        #expect(manyScore > 0)
+        // 单框/双框字幕带应优于铺满下部的噪声
+        #expect(fewScore >= manyScore * 0.5)
+    }
+
+    @Test
+    func pickBestFrameIndex_selectsHighestScore() {
+        #expect(RegionFramePicker.pickBestFrameIndex(scores: [0.1, 2.5, 1.0]) == 1)
+        #expect(RegionFramePicker.pickBestFrameIndex(scores: [3.0, 2.0, 1.0]) == 0)
+        #expect(RegionFramePicker.pickBestFrameIndex(scores: []) == nil)
+        // 同分取先出现
+        #expect(RegionFramePicker.pickBestFrameIndex(scores: [1.0, 1.0, 0.5]) == 0)
+    }
+
+    @Test
     func regionBoxFromMergedRegion_convertsToIntArray() {
         let rect = CGRect(x: 0, y: 792, width: 1920, height: 112)
         let box = RegionMerger.regionBoxFromMergedRegion(rect, videoWidth: 1920, videoHeight: 1080)

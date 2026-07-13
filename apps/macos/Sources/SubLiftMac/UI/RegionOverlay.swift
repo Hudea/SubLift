@@ -106,6 +106,8 @@ struct PreviewRegionContainer<Content: View>: View {
 /// feat-022：候选框多选列表（颜色与预览一致）。
 struct RegionCandidateList: View {
     @ObservedObject var model: RegionSelectionModel
+    /// 在当前播放头重检；nil 时不显示按钮。
+    var onRedetectAtPlayhead: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -119,9 +121,13 @@ struct RegionCandidateList: View {
             case .detecting:
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Vision 检测文字框...")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        model.sampleAttemptCount > 0
+                            ? "多帧扫描字幕区…（已试 \(model.sampleAttemptCount) 帧）"
+                            : "多帧扫描字幕区…"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             case .failed(let message):
                 Text(message)
@@ -144,15 +150,30 @@ struct RegionCandidateList: View {
 
     @ViewBuilder
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Label("字幕区域", systemImage: "viewfinder")
                 .font(.caption.weight(.semibold))
             Spacer()
+            if canRedetect, let onRedetectAtPlayhead {
+                Button("重检当前帧", action: onRedetectAtPlayhead)
+                    .buttonStyle(.borderless)
+                    .font(.caption2)
+                    .help("先拖动进度条到有字幕的画面，再点此重检")
+            }
             if model.status == .ready, !model.candidates.isEmpty {
                 Text("点预览或列表多选")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    private var canRedetect: Bool {
+        switch model.status {
+        case .ready, .failed:
+            return true
+        case .idle, .detecting:
+            return false
         }
     }
 
@@ -188,21 +209,34 @@ struct RegionCandidateList: View {
 
     @ViewBuilder
     private var mergedSummary: some View {
-        if let merged = model.mergedRegion {
-            Text(
-                String(
-                    format: "合并区域：Y %.0f–%.0f，X 全宽 %.0f",
-                    merged.minY,
-                    merged.maxY,
-                    merged.width
+        VStack(alignment: .leading, spacing: 2) {
+            if let seconds = model.sampleSecondsUsed {
+                Text(
+                    String(
+                        format: "代表帧 %.1fs（扫描 %d 帧）",
+                        seconds,
+                        max(model.sampleAttemptCount, 1)
+                    )
                 )
-            )
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        } else {
-            Text("请至少选择一个候选框")
                 .font(.caption2)
-                .foregroundStyle(.orange)
+                .foregroundStyle(.secondary)
+            }
+            if let merged = model.mergedRegion {
+                Text(
+                    String(
+                        format: "合并区域：Y %.0f–%.0f，X 全宽 %.0f",
+                        merged.minY,
+                        merged.maxY,
+                        merged.width
+                    )
+                )
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            } else {
+                Text("请至少选择一个候选框（可先点「重检当前帧」）")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
         }
     }
 }

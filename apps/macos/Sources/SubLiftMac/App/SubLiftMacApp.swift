@@ -49,7 +49,9 @@ struct ContentView: View {
                         Divider()
                         metadataBar
                         Divider()
-                        RegionCandidateList(model: regionModel)
+                        RegionCandidateList(model: regionModel) {
+                            redetectRegionAtPlayhead()
+                        }
                         Divider()
                         extractionBar(url: url)
                     }
@@ -113,13 +115,12 @@ struct ContentView: View {
         }
         .onChange(of: metadataLoader.metadata) { meta in
             guard let meta, let url = videoURL else { return }
-            let sampleSeconds = max(1.0, Double(meta.durationMs) / 2000.0)
             Task {
                 await regionModel.detect(
                     url: url,
                     videoWidth: meta.width,
                     videoHeight: meta.height,
-                    sampleSeconds: sampleSeconds
+                    durationMs: meta.durationMs
                 )
             }
         }
@@ -352,6 +353,20 @@ struct ContentView: View {
         panel.canChooseDirectories = false
         if panel.runModal() == .OK {
             videoURL = panel.url
+        }
+    }
+
+    /// 在当前播放位置重跑 Vision 选区（用户可先 seek 到有字幕的画面）。
+    private func redetectRegionAtPlayhead() {
+        guard let meta = metadataLoader.metadata, let url = videoURL else { return }
+        let seconds = Double(playerModel.currentMs) / 1000.0
+        Task {
+            await regionModel.detectAt(
+                url: url,
+                videoWidth: meta.width,
+                videoHeight: meta.height,
+                sampleSeconds: seconds
+            )
         }
     }
 
