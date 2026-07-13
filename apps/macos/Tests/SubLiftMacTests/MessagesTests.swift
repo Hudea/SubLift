@@ -93,6 +93,43 @@ struct MessagesTests {
     }
 
     @Test
+    func startJobSsimPatrolDefaultsNilForProductPath() throws {
+        // GUI 产品路径不覆盖 SSIM patrol，让 Python Config 默认 True 生效。
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5
+        )
+        #expect(msg.enableSsimPatrol == nil)
+
+        let data = try MessageCodec.encode(msg)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        // Codable 对 nil optional 可能省略或写 null；二者后端均走默认开启。
+        if let val = json["enable_ssim_patrol"] {
+            #expect(val is NSNull)
+        }
+    }
+
+    @Test
+    func startJobSsimPatrolExplicitFalseForDiagnostics() throws {
+        // 内部诊断 / A/B 可显式关闭，必须编码为 false 而非 nil。
+        let msg = StartJobMessage(
+            videoId: "V1",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5,
+            enableSsimPatrol: false
+        )
+        let data = try MessageCodec.encode(msg)
+        let decoded = try MessageCodec.decode(data, as: StartJobMessage.self)
+        #expect(decoded.enableSsimPatrol == false)
+
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["enable_ssim_patrol"] as? Bool == false)
+    }
+
+    @Test
     func frameRoundtrip() throws {
         let msg = FrameMessage(
             videoId: "UUID-ABCD",

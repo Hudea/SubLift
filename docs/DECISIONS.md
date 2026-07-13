@@ -5,6 +5,19 @@
 
 ---
 
+## ADR-0013 SSIM patrol 为内部默认机制，不暴露给 GUI 用户（2026-07-13）
+
+- **背景**：feat-031 A/B 验证时 GUI 接入了「SSIM 巡逻」开关。产品稳定后该开关仍留在主界面与设置页；且 Swift 关闭时发送 `nil` 而非 `false`，Python 继续用默认 `True`，开关形同虚设。
+- **决策**：
+  1. 删除主界面与设置页的 SSIM 巡逻开关；GUI 不再传 `enable_ssim_patrol`。
+  2. 产品路径统一使用后端 `ChangePointConfig.enable_ssim_patrol=True`。
+  3. IPC 可选字段保留，供 benchmark、回归测试与内部诊断显式 `true`/`false`。
+  4. 若将来需要 GUI 调试入口，仅放在 DEBUG 开发者设置，且关闭时必须发送明确的 `false`。
+- **理由**：SSIM patrol 是打轴质量的内部补强，不是用户可选偏好；暴露半失效开关只会制造假控制与支持成本。
+- **结果**：GUI 提取始终走默认开启 patrol；诊断路径仍可显式关闭。
+
+---
+
 ## ADR-0012 增量 pipeline、真实进度与取消共享任务生命周期（2026-07-12）
 
 - **背景**：Phase 2 批量模式会先缓存全部帧再统一处理，用户长时间看不到字幕；取消只改变 bridge 状态，无法解除 worker 在 ffmpeg 读取上的阻塞。CLI 与 GUI 也缺少一致、真实的阶段进度。

@@ -46,8 +46,7 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int = 5,
         engine: OcrEngineName = .vision,
         regionBox: RegionBox? = nil,
-        subtitleProfile: SubtitleProfilePayload? = nil,
-        enableSsimPatrol: Bool = false
+        subtitleProfile: SubtitleProfilePayload? = nil
     ) {
         guard !isRunning else { return }
 
@@ -67,7 +66,6 @@ final class SubtitleExtractor: ObservableObject {
                 engine: engine,
                 regionBox: regionBox,
                 subtitleProfile: subtitleProfile,
-                enableSsimPatrol: enableSsimPatrol,
                 jobToken: token,
                 client: client
             )
@@ -101,7 +99,6 @@ final class SubtitleExtractor: ObservableObject {
         engine: OcrEngineName,
         regionBox: RegionBox?,
         subtitleProfile: SubtitleProfilePayload?,
-        enableSsimPatrol: Bool,
         jobToken token: UUID,
         client: PipelineClient
     ) async {
@@ -135,9 +132,11 @@ final class SubtitleExtractor: ObservableObject {
             let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
             let confidenceThreshold = 0.5
-            let patrolPayload: Bool? = enableSsimPatrol ? true : nil
             let videoPath = videoURL.standardizedFileURL.path
 
+            // SSIM patrol 是后端内部默认机制（Config.enable_ssim_patrol=True）。
+            // GUI 不传 enable_ssim_patrol，统一走 Python 默认；IPC 字段仍保留
+            // 供 benchmark / 回归 / 内部诊断显式关闭。
             let startMsg = StartJobMessage(
                 videoId: videoId,
                 fps: Double(fps),
@@ -145,7 +144,6 @@ final class SubtitleExtractor: ObservableObject {
                 confidenceThreshold: confidenceThreshold,
                 regionBox: regionBox,
                 durationMs: durationMs,
-                enableSsimPatrol: patrolPayload,
                 videoPath: videoPath,
                 subtitleProfile: subtitleProfile
             )
@@ -159,8 +157,6 @@ final class SubtitleExtractor: ObservableObject {
                 regionBox: regionBox,
                 subtitleProfile: subtitleProfile,
                 durationMs: durationMs,
-                uiPatrolToggle: enableSsimPatrol,
-                patrolPayload: patrolPayload,
                 estimatedFrames: totalFramesSafe
             )
 
@@ -266,8 +262,6 @@ final class SubtitleExtractor: ObservableObject {
         regionBox: RegionBox?,
         subtitleProfile: SubtitleProfilePayload?,
         durationMs: Int,
-        uiPatrolToggle: Bool,
-        patrolPayload: Bool?,
         estimatedFrames: Int
     ) {
         let regionStr = formatRegionBox(regionBox)
@@ -279,7 +273,6 @@ final class SubtitleExtractor: ObservableObject {
         } else {
             matchesFeat033 = "N/A (nil → bottom_crop)"
         }
-        let patrolPayloadStr = patrolPayload.map { $0 ? "true" : "false" } ?? "nil"
         let profileStr: String
         if let p = subtitleProfile {
             profileStr =
@@ -299,7 +292,7 @@ final class SubtitleExtractor: ObservableObject {
               region_box=\(regionStr)
               region_matches_feat033_[0,848,1920,87]=\(matchesFeat033)
               subtitle_profile=\(profileStr)
-              enable_ssim_patrol UI=\(uiPatrolToggle) payload=\(patrolPayloadStr)
+              enable_ssim_patrol=omitted (backend default True)
               frame_path=Python FfmpegExtractor (same as CLI/benchmark)
             """
         )

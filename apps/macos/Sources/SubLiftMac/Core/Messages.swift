@@ -122,6 +122,9 @@ public struct StartJobMessage: Codable {
     public let confidenceThreshold: Double
     public let regionBox: RegionBox?
     public let durationMs: Int
+    /// 可选 SSIM patrol 覆盖。GUI 产品路径应保持 `nil`，走 Python
+    /// `ChangePointConfig.enable_ssim_patrol=True` 默认。仅 benchmark /
+    /// 回归 / 内部诊断可显式传 `true`/`false`。
     public let enableSsimPatrol: Bool?
     /// 本地视频绝对路径；非空则后端抽帧。
     public let videoPath: String?

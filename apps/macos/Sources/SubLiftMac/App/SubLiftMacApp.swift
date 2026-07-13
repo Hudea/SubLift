@@ -32,7 +32,6 @@ struct ContentView: View {
     @StateObject private var metadataLoader = VideoMetadataLoader()
     @StateObject private var regionModel = RegionSelectionModel()
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
-    @AppStorage("enable_ssim_patrol") private var enableSsimPatrol: Bool = true
     @State private var showFfmpegMissingAlert = false
     @State private var exportError: String?
     @State private var showExportSuccess = false
@@ -224,8 +223,7 @@ struct ContentView: View {
                         videoURL: url,
                         engine: defaultEngine,
                         regionBox: regionModel.regionBoxForIPC(),
-                        subtitleProfile: regionModel.subtitleProfileForIPC(),
-                        enableSsimPatrol: enableSsimPatrol
+                        subtitleProfile: regionModel.subtitleProfileForIPC()
                     )
                 } label: {
                     Label("提取字幕", systemImage: "text.viewfinder")
@@ -245,10 +243,6 @@ struct ContentView: View {
                 .labelsHidden()
                 .frame(width: 130)
                 .disabled(extractor.isRunning)
-
-                Toggle("SSIM 巡逻", isOn: $enableSsimPatrol)
-                    .help("补强连续字幕分段（推荐开启）")
-                    .disabled(extractor.isRunning)
 
                 Spacer()
 

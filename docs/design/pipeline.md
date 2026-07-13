@@ -181,6 +181,7 @@ patrol 与 `enable_ssim_verify` 方向相反（verify 防 FP，patrol 防 FN）�
 同时启用。
 
 **默认开启**：`enable_ssim_patrol=True, interval=3, threshold=0.92`。
+GUI 产品路径不暴露该开关、不传 IPC 字段（ADR-0013）；benchmark / 诊断可经 `start_job.enable_ssim_patrol` 显式覆盖。
 
 ## feat-033 residual（机制摘要）
 

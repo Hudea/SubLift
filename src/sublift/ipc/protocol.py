@@ -86,8 +86,9 @@ def build_start_job(
         confidence_threshold: OCR 置信度阈值。
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
-        enable_ssim_patrol: 可选 SSIM 巡逻开关（feat-031b）。None 不传（用
-            Config 默认值）；True 显式启用 patrol；False 显式关闭。
+        enable_ssim_patrol: 可选 SSIM 巡逻覆盖（feat-031b / ADR-0013）。
+            None 不传（用 Config 默认 True）。产品 GUI 应始终省略；
+            仅 benchmark / 回归 / 内部诊断可传 True 或 False。
         video_path: 可选本地视频绝对路径。非空时进入 **path mode**：
             Python 端用 ``FfmpegExtractor`` 自抽帧（与 CLI/benchmark 同源），
             不再接收 frame 流。
