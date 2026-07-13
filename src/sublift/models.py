@@ -6,8 +6,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -40,31 +41,164 @@ class Frame:
 
 @dataclass(frozen=True)
 class OcrLine:
-    """OCR 单行识别结果（feat-033a）。
+    """单行 OCR 结果。
 
-    保留 Vision 每行 observation 的文本、置信度与 bbox，
-    供字幕行 selector 按 y 轨道/行高筛选目标字幕层。
-
-    bbox 为裁剪图内绝对像素坐标（左上原点），与 OcrEngine 收到的裁剪图同坐标系。
+    ``box`` 相对本次 ``recognize`` 的输入图像，像素坐标，原点左上。
     """
 
     text: str
     confidence: float
-    bbox: BoundingBox
+    box: BoundingBox
+
+
+# 合法文字系统取值（feat-034b SubtitleProfile.script）
+SCRIPT_CJK = "cjk"
+SCRIPT_LATIN = "latin"
+SCRIPT_AUTO = "auto"
+SCRIPT_VALUES = frozenset({SCRIPT_CJK, SCRIPT_LATIN, SCRIPT_AUTO})
+
+
+@dataclass(frozen=True)
+class SubtitleProfile:
+    """字幕轨画像，供行级选择（feat-034）。
+
+    几何字段均在 **OCR crop 坐标系**（与 :class:`OcrLine.box` 相同）：
+    原点为 ``region_box`` 裁剪图左上角，单位像素。
+
+    Attributes:
+        script: 目标文字系统（``cjk`` / ``latin`` / ``auto``）。
+        center_x: 期望字幕中心 X。
+        center_y: 期望字幕中心 Y。
+        height: 期望字号/行高（像素）。
+        y_min: 期望垂直带上沿。
+        y_max: 期望垂直带下沿。
+    """
+
+    script: str = SCRIPT_AUTO
+    center_x: int = 0
+    center_y: int = 0
+    height: int = 0
+    y_min: int = 0
+    y_max: int = 0
+
+    @staticmethod
+    def from_crop(
+        width: int,
+        height: int,
+        *,
+        script: str = SCRIPT_AUTO,
+    ) -> SubtitleProfile:
+        """由 crop 尺寸推导默认 profile（CLI/benchmark：整带居中）。"""
+        w = max(0, width)
+        h = max(0, height)
+        return SubtitleProfile(
+            script=script,
+            center_x=w // 2,
+            center_y=h // 2,
+            height=h,
+            y_min=0,
+            y_max=h,
+        )
+
+    @staticmethod
+    def from_selection_in_video(
+        region: BoundingBox,
+        selection: BoundingBox,
+        *,
+        script: str = SCRIPT_AUTO,
+    ) -> SubtitleProfile:
+        """将视频像素选区映射为相对 ``region`` crop 的 profile。
+
+        Args:
+            region: 最终 OCR 裁剪区（视频像素，通常 X 全宽）。
+            selection: 用户选中的字幕带（视频像素，可为窄框并集）。
+            script: 目标文字系统。
+        """
+        # selection 相对 crop 的包围盒
+        rel_x = selection.x - region.x
+        rel_y = selection.y - region.y
+        # clamp 到 crop
+        x0 = max(0, min(rel_x, max(0, region.width)))
+        y0 = max(0, min(rel_y, max(0, region.height)))
+        x1 = max(x0, min(rel_x + selection.width, max(0, region.width)))
+        y1 = max(y0, min(rel_y + selection.height, max(0, region.height)))
+        band_w = max(0, x1 - x0)
+        band_h = max(0, y1 - y0)
+        return SubtitleProfile(
+            script=script,
+            center_x=x0 + band_w // 2,
+            center_y=y0 + band_h // 2,
+            height=band_h if band_h > 0 else max(0, region.height),
+            y_min=y0,
+            y_max=y1 if y1 > y0 else max(0, region.height),
+        )
+
+    def to_dict(self) -> dict[str, str | int]:
+        """序列化为 IPC / JSON 字典。"""
+        return {
+            "script": self.script,
+            "center_x": self.center_x,
+            "center_y": self.center_y,
+            "height": self.height,
+            "y_min": self.y_min,
+            "y_max": self.y_max,
+        }
+
+    @staticmethod
+    def from_dict(data: Mapping[str, object]) -> SubtitleProfile:
+        """从 IPC / JSON 字典解析。
+
+        Raises:
+            ValueError: 字段缺失、类型错误或 script 非法。
+        """
+        script_raw = data.get("script", SCRIPT_AUTO)
+        if not isinstance(script_raw, str) or script_raw not in SCRIPT_VALUES:
+            raise ValueError(f"subtitle_profile.script 非法: {script_raw!r}")
+
+        def _int_field(key: str) -> int:
+            if key not in data:
+                raise ValueError(f"subtitle_profile.{key} 缺失")
+            val = data[key]
+            if isinstance(val, bool) or not isinstance(val, int):
+                raise ValueError(f"subtitle_profile.{key} 非整数: {val!r}")
+            return val
+
+        return SubtitleProfile(
+            script=script_raw,
+            center_x=_int_field("center_x"),
+            center_y=_int_field("center_y"),
+            height=_int_field("height"),
+            y_min=_int_field("y_min"),
+            y_max=_int_field("y_max"),
+        )
 
 
 @dataclass(frozen=True)
 class OcrResult:
     """OCR 识别结果。
 
-    text/confidence 为扁平字段（向后兼容）；lines 保留 per-line observation
-    （feat-033a）。无 profile 时走 text/confidence 旧路径，有 profile 时用 lines
-    跑 selector。
+    ``text`` / ``confidence`` 为兼容汇总（多行 ``\\n`` 连接 + 置信度均值）；
+    行级语义以 ``lines`` 为准。引擎应优先填充 ``lines``，再用
+    :meth:`from_lines` 生成汇总字段。
     """
 
     text: str
     confidence: float
-    lines: list[OcrLine] = field(default_factory=list)
+    lines: tuple[OcrLine, ...] = ()
+
+    @staticmethod
+    def from_lines(lines: Sequence[OcrLine]) -> OcrResult:
+        """由行级结果构造 OcrResult（兼容 join）。
+
+        空序列返回 ``OcrResult("", 0.0, lines=())``。
+        非空时 ``text`` 为各行 text 以 ``\\n`` 连接，``confidence`` 为均值。
+        """
+        if not lines:
+            return OcrResult(text="", confidence=0.0, lines=())
+        line_tuple = tuple(lines)
+        text = "\n".join(line.text for line in line_tuple)
+        confidence = sum(line.confidence for line in line_tuple) / len(line_tuple)
+        return OcrResult(text=text, confidence=confidence, lines=line_tuple)
 
 
 @dataclass(frozen=True)
@@ -75,79 +209,3 @@ class SubtitleEntry:
     end_ms: int
     text: str
     confidence: float = 1.0
-
-
-@dataclass(frozen=True)
-class PersistentTextPolicy:
-    """持久背景文字过滤策略（feat-034）。
-
-    描述如何通过跨段时序统计识别并剔除持久背景文字（ticker / 水印）。
-    双条件算法（任一命中即判为持久背景）：
-
-    - 条件 A（固定水印）：同一文本指纹在同一 y_bin 连续出现段数
-      ≥ min_repeat_segments。
-    - 条件 B（ticker 文本片段多变）：同一 y_bin 累计不同文本指纹数
-      ≥ min_distinct_texts，整个 y_bin 判为持久背景带。
-
-    Attributes:
-        enabled: 是否启用持久背景过滤。False 时 filter 跳过。
-        min_repeat_segments: 条件 A 阈值（同文本连续重复段数）。
-        min_distinct_texts: 条件 B 阈值（同 y_bin 不同文本数）。
-        y_bin_ratio: y_bin 划分粒度，bin = line_height * 此值。
-            同 bin 视为同 y 轨道。
-    """
-
-    enabled: bool = True
-    min_repeat_segments: int = 3
-    min_distinct_texts: int = 4
-    y_bin_ratio: float = 0.5
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> PersistentTextPolicy:
-        """从 IPC persistent_text_policy 字典构造（feat-034a）。"""
-        return cls(
-            enabled=bool(d.get("enabled", True)),
-            min_repeat_segments=int(d.get("min_repeat_segments", 3)),
-            min_distinct_texts=int(d.get("min_distinct_texts", 4)),
-            y_bin_ratio=float(d.get("y_bin_ratio", 0.5)),
-        )
-
-
-@dataclass(frozen=True)
-class SubtitleProfile:
-    """目标字幕层约束（feat-033b）。
-
-    描述 ROI 内「相信哪一层文字」，与 region_box（「看哪里」）正交。
-    selector 据此从 OCR observations 中筛选目标字幕行，过滤背景英文/水印/标牌。
-
-    所有 y 坐标均为裁剪图内绝对像素（左上原点），与 OcrLine.bbox 同坐标系。
-    GUI 生成时需把全帧候选框坐标减去 region_box 的 x/y 偏移。
-
-    persistent_text_policy（feat-034）描述跨段时序过滤策略，用于识别
-    同带同高、水平重叠的 ticker / 水印。None 时不做跨段过滤。
-    """
-
-    y_center: float
-    y_tolerance: float
-    line_height: float
-    max_lines: int = 1
-    script_hint: str = "auto"
-    persistent_text_policy: PersistentTextPolicy | None = None
-
-    @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> SubtitleProfile:
-        """从 IPC subtitle_profile 字典构造（feat-033b / feat-034a）。"""
-        policy_dict = d.get("persistent_text_policy")
-        policy = (
-            PersistentTextPolicy.from_dict(policy_dict)
-            if isinstance(policy_dict, dict)
-            else None
-        )
-        return cls(
-            y_center=float(d["y_center"]),
-            y_tolerance=float(d["y_tolerance"]),
-            line_height=float(d["line_height"]),
-            max_lines=int(d.get("max_lines", 1)),
-            script_hint=str(d.get("script_hint", "auto")),
-            persistent_text_policy=policy,
-        )

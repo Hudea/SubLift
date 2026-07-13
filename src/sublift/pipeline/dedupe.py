@@ -22,6 +22,8 @@ def merge_entries(
     entries: list[SubtitleEntry],
     merge_gap_ms: int = 1000,
     min_duration_ms: int = 500,
+    *,
+    drop_empty_text: bool = False,
 ) -> list[SubtitleEntry]:
     """去重合并字幕条目。
 
@@ -29,6 +31,8 @@ def merge_entries(
         entries: 已按时间排序的字幕条目列表。
         merge_gap_ms: 合并间隔阈值（毫秒），相邻段 gap <= 此值才合并。
         min_duration_ms: 最小持续时间阈值（毫秒），duration < 此值的段被丢弃。
+        drop_empty_text: True 时丢弃 text.strip() 为空的段；False 保留时间轴
+            （feat-033b，避免 OCR 失败把 timing 命中抹成 no_overlap）。
 
     Returns:
         清理后的字幕条目列表（新列表，不改变输入）。
@@ -37,8 +41,8 @@ def merge_entries(
         return []
 
     merged = _merge_adjacent(entries, merge_gap_ms)
-    filtered_empty = _filter_empty(merged)
-    filtered_short = _filter_short(filtered_empty, min_duration_ms)
+    after_empty = _filter_empty(merged) if drop_empty_text else merged
+    filtered_short = _filter_short(after_empty, min_duration_ms)
     return _merge_adjacent(filtered_short, merge_gap_ms)
 
 
@@ -58,8 +62,9 @@ def _merge_adjacent(
     for current in entries[1:]:
         last = result[-1]
         gap = current.start_ms - last.end_ms
+        normalized = _normalize(current.text)
 
-        if gap <= merge_gap_ms and _normalize(current.text) == _normalize(last.text):
+        if gap <= merge_gap_ms and normalized and normalized == _normalize(last.text):
             result[-1] = SubtitleEntry(
                 start_ms=last.start_ms,
                 end_ms=current.end_ms,

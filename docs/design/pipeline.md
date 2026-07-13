@@ -88,17 +88,18 @@ SSIM 二级验证（`compute_ssim`）：numpy 回退实现，不依赖 scikit-im
 
 `finalize_open_segment(last_timestamp_ms)`：视频结束时字幕仍在，用最后一帧时间戳关闭末尾段。
 
-## 去重 3-pass
+## 去重 3/4-pass
 
-`merge_entries(entries, merge_gap_ms, min_duration_ms) -> list[SubtitleEntry]`
+`merge_entries(entries, merge_gap_ms, min_duration_ms, drop_empty_text=False) -> list[SubtitleEntry]`
 
-纯函数，不改变输入。3-pass 顺序关键：
+纯函数，不改变输入。顺序关键：
 
 | Pass | 操作 | 逻辑 |
 |---|---|---|
 | 1 | 合并 | 相邻相同文本（归一化后相等）+ gap ≤ `merge_gap_ms` → 合并，保留首段文本 |
-| 2 | 过滤 | `duration < min_duration_ms` → 丢弃 |
-| 3 | 合并 | Pass 2 删段后原本被隔开的相同段变相邻 → 再合并一次 |
+| 2 | 空文本（可选） | 仅当 `drop_empty_text=True` 时丢弃 `text.strip()` 为空的段；**默认 False**（feat-033b 保留时间轴） |
+| 3 | 过滤过短 | `duration < min_duration_ms` → 丢弃 |
+| 4 | 合并 | 删段后原本被隔开的相同段变相邻 → 再合并一次 |
 
 **归一化**（`_normalize`）：移除所有空白字符。中文字幕中空白通常是 OCR 噪声，移除后比较更稳健。
 
@@ -115,16 +116,19 @@ Pass 1 在前的原因：两个短相同段合并后可能变合法（duration �
 3. 逐帧：`crop` → `compute_signature` → `changepoint.process`
 4. 事件驱动 `timeline_builder.consume`
 5. `finalize_open_segment` → `TimelineSegment` 列表
-6. 每段取 `anchor_frames[start_ms]` 代表帧 → `ocr.recognize` → `SubtitleEntry`
-7. `merge_entries` 最终清理
+6. 每段 OCR：延迟锚帧（`ocr_anchor_delay_frames`）+ 稳定帧回退重试 → `SubtitleEntry`
+7. `merge_entries` 最终清理（默认保留空文本段）
 
 ### 内存控制
 
-只缓存事件触发帧（`anchor_frames: dict[int, Frame]`），不缓存全部帧。OCR 后置每段调一次，而非逐帧。
+只缓存事件触发帧与段内延迟锚/稳定帧候选，不缓存全部帧。OCR 后置每段调用（含失败回退）。
 
-### confidence 过滤
+### confidence 过滤与 OCR 锚帧（feat-033b）
 
-OCR 返回 `confidence < config.confidence_threshold` 时，text 置空（保留段时间轴，text 为空）。
+- OCR 返回 `confidence < config.confidence_threshold` 时，text 置空。
+- **锚帧延迟**：IN/CHANGE 后等 N 帧再锁定主 OCR 帧（默认 N=2），避开过渡画面。
+- **多候选回退**：主锚失败时依次尝试稳定帧 / 段首 / 闭合帧。
+- **空文本默认保留**（`drop_empty_text=False`）：OCR 失败不抹掉时间轴命中。
 
 ## 配置参数
 
@@ -141,15 +145,25 @@ OCR 返回 `confidence < config.confidence_threshold` 时，text 置空（保留
 | 参数 | 默认值 | 说明 |
 |---|---|---|
 | `presence_threshold` | 0.01 | 前景占比阈值，> 此值判定有字幕 |
-| `hysteresis_frames` | 2 | 迟滞确认帧数 |
+| `hysteresis_frames` | 1 | 迟滞确认帧数（feat-033c：2→1） |
 | `change_threshold` | 10 | dHash 汉明距离阈值，> 此值判定内容变化 |
 | `enable_ssim_verify` | False | SSIM 两级验证开关（接口就位，MVP 关闭） |
 | `ssim_threshold` | 0.95 | SSIM 相似度阈值 |
 | `ssim_window_size` | 7 | SSIM 滑动窗口大小（奇数） |
-| `enable_ssim_patrol` | False | SSIM 巡逻开关（feat-031b，推荐开启） |
+| `enable_ssim_patrol` | True | SSIM 巡逻开关（feat-031b，默认开启） |
 | `ssim_patrol_interval` | 3 | SSIM 巡逻间隔（帧数） |
 | `ssim_patrol_threshold` | 0.92 | SSIM 巡逻阈值，前景 SSIM < 此值视为结构变化 |
 | `ssim_patrol_use_mask` | True | 巡逻时优先比较二值化前景 mask（屏蔽背景变化） |
+
+### Config（Pipeline 级，节选）
+
+| 参数 | 默认值 | 说明 |
+|---|---|---|
+| `ocr_anchor_delay_frames` | 2 | IN/CHANGE 后延迟锁定 OCR 锚帧（feat-033b） |
+| `drop_empty_text` | False | 是否丢弃 OCR 空文本段；默认保留时间轴 |
+| `confidence_threshold` | 0.5 | OCR 置信度低于此值则 text 置空 |
+| `min_duration_ms` | 500 | 过短段过滤 |
+| `merge_gap_ms` | 1000 | 相邻相同文本合并 gap |
 
 ## SSIM 巡逻机制（feat-031b）
 
@@ -166,16 +180,22 @@ patrol 与 dHash 候选共享 `_change_candidate_ms`，但 `trigger_reason` 区�
 patrol 与 `enable_ssim_verify` 方向相反（verify 防 FP，patrol 防 FN），可
 同时启用。
 
-**推荐配置**：`enable_ssim_patrol=True, interval=3, threshold=0.92`。
-在 Zootopia clip 上 F1 从 65.0% 提升到 80.6%（+15.6pp），recall 从 60.9%
-提升到 90.8%，precision 不下降。默认关闭以保持向后兼容，建议生产环境
-显式开启。
+**默认开启**：`enable_ssim_patrol=True, interval=3, threshold=0.92`。
+
+## feat-033 residual（机制摘要）
+
+| 机制 | 手段 | 模块 |
+|---|---|---|
+| M1c 检出后被 OCR 抹掉 | 锚帧延迟 + 多候选 OCR；`drop_empty_text=False` | `core.py` / `dedupe.py` |
+| M2 短字幕 | `hysteresis_frames=1` | `changepoint` / `config` |
+| M3 残留 CHANGE | 仍依赖 patrol；部分 merged 残留 | `changepoint` |
+
+验收（Zootopia, region `[0,848,1920,87]`, 5fps）：相对 `baseline-no-filter`  
+F1 **91.2% → 95.2%**，recall 83.9%→92.0%，precision 100%→98.8%（1 FA）。
 
 ## 已知限制
 
-- **dHash 对中文判别力不足**：9×8 降采样丢失汉字笔画高频信息，两句长度相近的中文字幕 dHash 距离可能 < 阈值，导致漏分段。详见 `docs/HURDLES.md`。**已通过 SSIM patrol 部分缓解**（feat-031b），merged_into_neighbor FN 减少约 70%。
-- **短字幕漏检**：duration < 1.5s 的短字幕召回率仍偏低（~60%），主要属于 IN/OUT 或采样不足，SSIM patrol 不能解决。详见 `docs/HURDLES.md`。
-- **OCR 锚帧过渡画面空文本**：锚帧（IN/CHANGE 事件触发帧）可能落在字幕淡入/切换瞬间，Vision 识别不出文字。详见 `docs/HURDLES.md`。首选待评估方案：锚帧延后 N 帧。
-- **字幕区域裁剪过宽**：`bottom_ratio=0.3` 是通用默认值，未针对实际视频校准。裁剪过宽会把画面上方英文标题/新闻栏误纳入，Vision 误识别为字幕，导致 OCR 字符准确率低。详见 `docs/HURDLES.md`。首选待评估方案：调小 bottom_ratio 或加 CLI 区域参数。
-
-端到端实测基线（Zootopia clip, 1080p, 5fps, region_box 精准对齐）：打轴 F1 65.0%（baseline）/ 80.6%（patrol 启用）。
+- **dHash 对中文判别力不足**：已通过 SSIM patrol 部分缓解（feat-031b）；仍有 residual merged（约 6 条）。
+- **单字极短字幕**：`#15 砰` 仍可能 no_overlap（前景弱 + 时长极短）。
+- **OCR 空文本**：已用锚帧延迟/回退缓解；部分段仍 `text.empty`（区域/水印问题后置）。
+- **字幕区域裁剪过宽 / 英文水印**：属 OCR 文本质量，Phase 3 后置。详见 `docs/HURDLES.md`。

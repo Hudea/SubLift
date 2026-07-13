@@ -48,79 +48,6 @@ public enum LogLevel: String, Codable {
 /// 用数组而非 struct，保持 JSON 传输紧凑。
 public typealias RegionBox = [Int]
 
-// MARK: - SubtitleProfile
-
-/// 目标字幕层约束（feat-033b），与 Python `SubtitleProfile` 对齐。
-///
-/// 描述 ROI 内「相信哪一层文字」，与 `regionBox`（「看哪里」）正交。
-/// 所有 y 坐标为裁剪图内绝对像素（左上原点）。
-public struct SubtitleProfile: Codable, Equatable {
-    public let yCenter: Double
-    public let yTolerance: Double
-    public let lineHeight: Double
-    public let maxLines: Int
-    public let scriptHint: String
-    public let persistentTextPolicy: PersistentTextPolicy?
-
-    enum CodingKeys: String, CodingKey {
-        case yCenter = "y_center"
-        case yTolerance = "y_tolerance"
-        case lineHeight = "line_height"
-        case maxLines = "max_lines"
-        case scriptHint = "script_hint"
-        case persistentTextPolicy = "persistent_text_policy"
-    }
-
-    public init(
-        yCenter: Double,
-        yTolerance: Double,
-        lineHeight: Double,
-        maxLines: Int = 1,
-        scriptHint: String = "auto",
-        persistentTextPolicy: PersistentTextPolicy? = nil
-    ) {
-        self.yCenter = yCenter
-        self.yTolerance = yTolerance
-        self.lineHeight = lineHeight
-        self.maxLines = maxLines
-        self.scriptHint = scriptHint
-        self.persistentTextPolicy = persistentTextPolicy
-    }
-}
-
-// MARK: - PersistentTextPolicy
-
-/// 持久背景文字过滤策略（feat-034a），与 Python `PersistentTextPolicy` 对齐。
-///
-/// 描述如何通过跨段时序统计识别并剔除持久背景文字（ticker / 水印）。
-/// 双条件算法：A 同文本连续重复段数 ≥ minRepeatSegments；B 同 y_bin
-/// 不同文本数 ≥ minDistinctinctTexts。详见 Python `ocr/persistent.py`。
-public struct PersistentTextPolicy: Codable, Equatable {
-    public let enabled: Bool
-    public let minRepeatSegments: Int
-    public let minDistinctinctTexts: Int
-    public let yBinRatio: Double
-
-    enum CodingKeys: String, CodingKey {
-        case enabled
-        case minRepeatSegments = "min_repeat_segments"
-        case minDistinctinctTexts = "min_distinct_texts"
-        case yBinRatio = "y_bin_ratio"
-    }
-
-    public init(
-        enabled: Bool = true,
-        minRepeatSegments: Int = 3,
-        minDistinctinctTexts: Int = 4,
-        yBinRatio: Double = 0.5
-    ) {
-        self.enabled = enabled
-        self.minRepeatSegments = minRepeatSegments
-        self.minDistinctinctTexts = minDistinctinctTexts
-        self.yBinRatio = yBinRatio
-    }
-}
-
 // MARK: - SubtitleEntryData
 
 /// 字幕条目，与 Python `SubtitleEntry` 对齐。
@@ -149,6 +76,44 @@ public struct SubtitleEntryData: Codable, Equatable {
 // MARK: - Request Messages (Swift → Python)
 
 /// 启动提取任务。
+///
+/// feat-034b：字幕轨画像（几何相对 region crop，与 Python `SubtitleProfile` 对齐）。
+public struct SubtitleProfilePayload: Codable, Equatable {
+    public let script: String
+    public let centerX: Int
+    public let centerY: Int
+    public let height: Int
+    public let yMin: Int
+    public let yMax: Int
+
+    enum CodingKeys: String, CodingKey {
+        case script
+        case centerX = "center_x"
+        case centerY = "center_y"
+        case height
+        case yMin = "y_min"
+        case yMax = "y_max"
+    }
+
+    public init(
+        script: String = "auto",
+        centerX: Int,
+        centerY: Int,
+        height: Int,
+        yMin: Int,
+        yMax: Int
+    ) {
+        self.script = script
+        self.centerX = centerX
+        self.centerY = centerY
+        self.height = height
+        self.yMin = yMin
+        self.yMax = yMax
+    }
+}
+
+/// - 若 `videoPath` 非空：path mode，Python 用 `FfmpegExtractor` 自抽帧（与 CLI/benchmark 同源）。
+/// - 若 `videoPath` 为空：frame mode，Swift 推 JPEG frame 流（兼容/调试）。
 public struct StartJobMessage: Codable {
     public let type: MessageType
     public let videoId: String
@@ -158,7 +123,10 @@ public struct StartJobMessage: Codable {
     public let regionBox: RegionBox?
     public let durationMs: Int
     public let enableSsimPatrol: Bool?
-    public let subtitleProfile: SubtitleProfile?
+    /// 本地视频绝对路径；非空则后端抽帧。
+    public let videoPath: String?
+    /// feat-034b：字幕轨画像；nil 时 Python 可从 region_box 推导默认。
+    public let subtitleProfile: SubtitleProfilePayload?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -169,6 +137,7 @@ public struct StartJobMessage: Codable {
         case regionBox = "region_box"
         case durationMs = "duration_ms"
         case enableSsimPatrol = "enable_ssim_patrol"
+        case videoPath = "video_path"
         case subtitleProfile = "subtitle_profile"
     }
 
@@ -180,7 +149,8 @@ public struct StartJobMessage: Codable {
         regionBox: RegionBox? = nil,
         durationMs: Int = 0,
         enableSsimPatrol: Bool? = nil,
-        subtitleProfile: SubtitleProfile? = nil
+        videoPath: String? = nil,
+        subtitleProfile: SubtitleProfilePayload? = nil
     ) {
         self.type = .startJob
         self.videoId = videoId
@@ -190,6 +160,7 @@ public struct StartJobMessage: Codable {
         self.regionBox = regionBox
         self.durationMs = durationMs
         self.enableSsimPatrol = enableSsimPatrol
+        self.videoPath = videoPath
         self.subtitleProfile = subtitleProfile
     }
 }

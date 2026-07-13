@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -19,13 +20,16 @@ from PIL import Image
 
 from sublift.detector.bottom_crop import BottomCropDetector
 from sublift.detector.fixed_region import FixedRegionDetector
-from sublift.ipc.bridge import MAX_JPEG_BYTES, BridgeHandler
+from sublift.ipc.bridge import (
+    _PROGRESS_EVERY_N_FRAMES,
+    MAX_JPEG_BYTES,
+    BridgeHandler,
+)
 from sublift.ipc.protocol import (
     build_cancel_job,
     build_finalize,
     build_frame,
     build_start_job,
-    build_subtitle_profile,
 )
 from sublift.ocr.mock import MockOcrEngine
 
@@ -84,6 +88,34 @@ class TestStartJob:
         _run(bridge, msg)
         assert bridge._pipeline is not None
         assert isinstance(bridge._pipeline._detector, FixedRegionDetector)
+        # 无显式 profile 时从 region 推导 crop 全带
+        assert bridge._pipeline.subtitle_profile is not None
+        assert bridge._pipeline.subtitle_profile.height == 200
+        assert bridge._pipeline.subtitle_profile.center_x == 960
+
+    def test_start_job_with_explicit_subtitle_profile(self) -> None:
+        from sublift.models import SubtitleProfile
+
+        bridge = _make_handler()
+        profile = {
+            "script": "cjk",
+            "center_x": 100,
+            "center_y": 20,
+            "height": 40,
+            "y_min": 5,
+            "y_max": 45,
+        }
+        msg = build_start_job(
+            "V1",
+            5.0,
+            "vision",
+            0.5,
+            region_box=[0, 800, 1920, 100],
+            subtitle_profile=profile,
+        )
+        _run(bridge, msg)
+        assert bridge._pipeline is not None
+        assert bridge._pipeline.subtitle_profile == SubtitleProfile.from_dict(profile)
 
     def test_start_job_without_region_box_uses_bottom_crop(self) -> None:
         bridge = _make_handler()
@@ -91,6 +123,7 @@ class TestStartJob:
         _run(bridge, msg)
         assert bridge._pipeline is not None
         assert isinstance(bridge._pipeline._detector, BottomCropDetector)
+        assert bridge._pipeline.subtitle_profile is None
 
     def test_start_job_vision_unavailable_returns_done_error(self) -> None:
         """VisionOcrEngine 构造失败时应返回 done(ok=False)。"""
@@ -102,29 +135,6 @@ class TestStartJob:
         assert response is not None
         assert response["type"] == "done"
         assert response["ok"] is False
-
-    def test_start_job_with_subtitle_profile_passes_to_pipeline(self) -> None:
-        """feat-033d：subtitle_profile 透传给 Pipeline。"""
-        bridge = _make_handler()
-        profile = build_subtitle_profile(
-            y_center=950.0, y_tolerance=30.0, line_height=60.0, max_lines=2
-        )
-        msg = build_start_job(
-            "V1", 5.0, "vision", 0.5, subtitle_profile=profile
-        )
-        _run(bridge, msg)
-        assert bridge._pipeline is not None
-        assert bridge._pipeline._profile is not None
-        assert bridge._pipeline._profile.y_center == 950.0
-        assert bridge._pipeline._profile.max_lines == 2
-
-    def test_start_job_without_profile_pipeline_profile_none(self) -> None:
-        """无 subtitle_profile 时 Pipeline.profile 为 None（走旧路径）。"""
-        bridge = _make_handler()
-        msg = build_start_job("V1", 5.0, "vision", 0.5)
-        _run(bridge, msg)
-        assert bridge._pipeline is not None
-        assert bridge._pipeline._profile is None
 
 
 class TestFrame:
@@ -281,3 +291,227 @@ class TestSafetyLimits:
         assert response is not None
         assert response["type"] == "error"
         assert "JPEG 过大" in response["message"]
+
+
+def _generate_test_video(path: Path, duration: float = 1.0, fps: float = 2.0) -> None:
+    """用 ffmpeg lavfi 生成短测试视频。"""
+    import subprocess
+
+    cmd = [
+        "ffmpeg",
+        "-v",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        f"testsrc=duration={duration}:size=320x240:rate={fps}",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(path),
+        "-y",
+    ]
+    subprocess.run(cmd, capture_output=True, check=True)
+
+
+class TestPathMode:
+    """start_job.video_path → 后端 FfmpegExtractor（与 CLI 同源）。"""
+
+    def test_missing_video_path_returns_done_error(self) -> None:
+        bridge = _make_handler()
+        msg = build_start_job(
+            "V1", 5.0, "vision", 0.5, video_path="/nonexistent/no_video.mp4"
+        )
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+        done_msg = next((p for p in pushed if p.get("type") == "done"), None)
+        assert done_msg is not None
+        assert done_msg["ok"] is False
+        assert "不存在" in (done_msg.get("error") or "")
+
+    def test_path_mode_returns_entries(self, tmp_path: Path) -> None:
+        video = tmp_path / "short.mp4"
+        _generate_test_video(video, duration=1.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        msg = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=1000,
+            video_path=str(video),
+        )
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
+        assert entries_msg.get("is_final") is True
+        assert "entries" in entries_msg
+        # 至少推送过 progress
+        assert any(p.get("type") == "progress" for p in pushed)
+
+    def test_path_mode_progress_is_throttled(self, tmp_path: Path) -> None:
+        """path mode 不应每帧推 progress（使用 _PROGRESS_EVERY_N_FRAMES）。"""
+        video = tmp_path / "throttle.mp4"
+        # 2s @ 10fps 采样 → 约 20 帧；若每帧 progress 会远超节流后的数量
+        _generate_test_video(video, duration=2.0, fps=10.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        sample_fps = 10.0
+        msg = build_start_job(
+            "V1",
+            sample_fps,
+            "vision",
+            0.5,
+            duration_ms=2000,
+            video_path=str(video),
+        )
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            assert response["type"] == "progress"
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
+
+        processing = [
+            p
+            for p in pushed
+            if p.get("type") == "progress" and p.get("stage") == "processing"
+        ]
+        # 含：开始 0.0、节流帧、结束 1.0；绝不应接近「每帧一条」
+        est_frames = 20
+        assert len(processing) < est_frames
+        # 节流上限粗估：1(首帧) + floor((N-1)/N_every) + 1(完成) + 起始 0
+        max_expected = 2 + (est_frames // _PROGRESS_EVERY_N_FRAMES) + 2
+        assert len(processing) <= max_expected
+
+    def test_frame_rejected_in_path_mode_after_failed_path(self) -> None:
+        """path 失败后不应进入 path_mode 卡死；重新 frame mode 可用。"""
+        bridge = _make_handler()
+        _run(
+            bridge,
+            build_start_job("V1", 5.0, "vision", 0.5, video_path="/no/such.mp4"),
+        )
+        # 失败后 pipeline 已清空；重新 frame mode start
+        resp = _run(bridge, build_start_job("V2", 5.0, "vision", 0.5))
+        assert resp is not None
+        assert resp["type"] == "progress"
+        assert resp["stage"] == "ready"
+
+    def test_path_mode_finalizing_stage_order(self, tmp_path: Path) -> None:
+        """验证 finalizing 阶段的优先级与绝对顺序。"""
+        video = tmp_path / "short.mp4"
+        _generate_test_video(video, duration=1.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        msg = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=1000,
+            video_path=str(video),
+        )
+        async def run_it() -> None:
+            response = await bridge.handle(msg, collect_push)
+            assert response is not None
+            if bridge._path_task:
+                await bridge._path_task
+        asyncio.run(run_it())
+
+        progress_msgs = [p for p in pushed if p.get("type") == "progress"]
+        stages = [p.get("stage") for p in progress_msgs]
+
+        # finalizing 必须存在，且绝不能在最后被 processing 1.0 覆盖
+        assert "finalizing" in stages
+        finalizing_idx = stages.index("finalizing")
+
+        # 确认在此之后没有任何 processing 状态出现
+        for p in stages[finalizing_idx + 1:]:
+            assert p != "processing"
+
+        # done 消息或 entries 消息应当是最后的实体消息
+        entries_msg = next((p for p in pushed if p.get("type") == "entries"), None)
+        assert entries_msg is not None
+
+    def test_path_mode_cancel_and_restart(self, tmp_path: Path) -> None:
+        """验证在同个 Handler 上取消任务后，能立即拉起新任务。"""
+        video = tmp_path / "long.mp4"
+        _generate_test_video(video, duration=5.0, fps=2.0)
+        bridge = _make_handler()
+        pushed: list[dict[str, Any]] = []
+
+        async def collect_push(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        # 1. 启动任务并立即取消
+        msg1 = build_start_job(
+            "V1",
+            2.0,
+            "vision",
+            0.5,
+            duration_ms=5000,
+            video_path=str(video),
+        )
+
+        async def run_it() -> None:
+            # 启动 Job 1
+            await bridge.handle(msg1, collect_push)
+            # 立即取消 Job 1，并等待其退出完成
+            cancel_msg = build_cancel_job("V1")
+            done_response = await bridge.handle(cancel_msg, collect_push)
+            assert done_response is not None
+            assert done_response["type"] == "done"
+            assert done_response["ok"] is False
+
+            # 2. 在相同的 BridgeHandler 实例上立即重新发起 Job 2
+            msg2 = build_start_job(
+                "V2",
+                2.0,
+                "vision",
+                0.5,
+                duration_ms=5000,
+                video_path=str(video),
+            )
+            response2 = await bridge.handle(msg2, collect_push)
+            assert response2 is not None
+            assert response2["type"] == "progress"
+            assert response2["stage"] == "ready"
+
+            # 优雅取消 Job 2 完成测试
+            await bridge.handle(build_cancel_job("V2"), collect_push)
+
+        asyncio.run(run_it())

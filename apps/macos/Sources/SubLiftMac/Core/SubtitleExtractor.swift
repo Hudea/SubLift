@@ -2,18 +2,21 @@ import AVFoundation
 import CoreMedia
 import Foundation
 
-/// feat-018：协调 FrameSampler（抽帧）+ PipelineClient（IPC）的端到端字幕提取。
+/// 协调 PipelineClient（IPC）的端到端字幕提取。
 ///
-/// 流式抽帧 + 批量 OCR：Swift 边抽帧边发 frame，Python 缓冲，
-/// finalize 后一次性跑 Pipeline（feat-016 batch 模型不变）。
+/// **统一抽帧（path mode）**：Swift 只传 `video_path` + 参数，Python 用
+/// `FfmpegExtractor` 抽帧（与 CLI / benchmark 同源），不再 AVF+JPEG 推帧。
+///
+/// **生命周期**：每次 `extract` 独占一个 `PipelineClient` + `jobToken`。
+/// 取消/完成后丢弃 token，迟到的 progress / push_entry 不会污染 UI 状态。
 @MainActor
 final class SubtitleExtractor: ObservableObject {
 
     enum Status: Equatable {
         case idle
         case startingServer
-        case sampling(progress: Double, frameCount: Int, totalFrames: Int)
-        case processing
+        case processing(progress: Double, frameCount: Int, totalFrames: Int)
+        case finalizing
         case done(entryCount: Int)
         case error(String)
     }
@@ -21,9 +24,13 @@ final class SubtitleExtractor: ObservableObject {
     @Published private(set) var status: Status = .idle
     @Published private(set) var entries: [SubtitleEntryData] = []
 
-    private var client = PipelineClient()
+    /// 当前运行任务的 token；`nil` 表示无活跃任务（含已取消/已完成）。
+    private var jobToken: UUID?
+    /// 当前任务独占的 IPC 客户端（取消时只 stop 此实例）。
+    private var activeClient: PipelineClient?
+    /// 是否仍接受流式 progress / push_entry（最终 entries 落地或取消后为 false）。
+    private var acceptingLiveUpdates = false
     private var currentTask: Task<Void, Never>?
-    private var _cancelled = false
 
     var isRunning: Bool {
         switch status {
@@ -39,32 +46,51 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int = 5,
         engine: OcrEngineName = .vision,
         regionBox: RegionBox? = nil,
-        enableSsimPatrol: Bool = false,
-        subtitleProfile: SubtitleProfile? = nil
+        subtitleProfile: SubtitleProfilePayload? = nil,
+        enableSsimPatrol: Bool = false
     ) {
         guard !isRunning else { return }
-        _cancelled = false
+
+        let token = UUID()
+        jobToken = token
+        acceptingLiveUpdates = true
         entries = []
+
+        // 每任务独占客户端，避免取消 teardown 关掉新任务的 socket/进程。
+        let client = PipelineClient()
+        activeClient = client
+
         currentTask = Task { [weak self] in
             await self?.runExtract(
                 videoURL: videoURL,
                 fps: fps,
                 engine: engine,
                 regionBox: regionBox,
+                subtitleProfile: subtitleProfile,
                 enableSsimPatrol: enableSsimPatrol,
-                subtitleProfile: subtitleProfile
+                jobToken: token,
+                client: client
             )
         }
     }
 
     func cancel() {
-        _cancelled = true
-        currentTask?.cancel()
-        // 直接关闭 socket：阻塞的 recv 会立即返回 EOF，主任务自然退出。
-        // 不发 cancel_job，避免与主任务的阻塞读并发访问同一 socket。
-        let client = self.client
-        Task.detached { client.stop() }
-        status = .idle
+        guard isRunning else { return }
+
+        // 立刻失效 token / 流式更新，后续迟到回调全部丢弃。
+        let client = activeClient
+        jobToken = nil
+        acceptingLiveUpdates = false
+        activeClient = nil
+        status = .error("已取消")
+
+        // 只关本任务 socket；不要 Task.cancel()，否则日志会误报 cancelled。
+        if let client {
+            DispatchQueue.global(qos: .userInitiated).async {
+                client.stop()
+            }
+        }
+        print("[SubLift] extract cancel requested (closing IPC socket)")
     }
 
     // MARK: - Private
@@ -74,107 +100,218 @@ final class SubtitleExtractor: ObservableObject {
         fps: Int,
         engine: OcrEngineName,
         regionBox: RegionBox?,
+        subtitleProfile: SubtitleProfilePayload?,
         enableSsimPatrol: Bool,
-        subtitleProfile: SubtitleProfile?
+        jobToken token: UUID,
+        client: PipelineClient
     ) async {
+        defer {
+            // 任务结束时只 stop 自己的 client；若 cancel 已 swap 掉 activeClient 则仍安全。
+            if activeClient === client {
+                activeClient = nil
+            }
+            if jobToken == token {
+                jobToken = nil
+                acceptingLiveUpdates = false
+            }
+            DispatchQueue.global(qos: .utility).async {
+                client.stop()
+            }
+        }
+
         do {
             let startTime = Date()
 
+            guard isCurrentJob(token) else { return }
             status = .startingServer
-            // IPC 调用是同步阻塞的，放到 detached task 里跑，让 main actor 能刷新 UI
-            _ = try await runDetached { [client] in
+            _ = try await runOnBackground {
                 try client.start(engine: engine.rawValue)
             }
-            defer {
-                let client = self.client
-                Task.detached { client.stop() }
-            }
+
+            guard isCurrentJob(token) else { return }
 
             let durationMs = await estimateDurationMs(url: videoURL)
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
             let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
+            let confidenceThreshold = 0.5
+            let patrolPayload: Bool? = enableSsimPatrol ? true : nil
+            let videoPath = videoURL.standardizedFileURL.path
 
-            // 1. start_job
             let startMsg = StartJobMessage(
                 videoId: videoId,
                 fps: Double(fps),
                 engine: engine,
-                confidenceThreshold: 0.5,
+                confidenceThreshold: confidenceThreshold,
                 regionBox: regionBox,
                 durationMs: durationMs,
-                enableSsimPatrol: enableSsimPatrol ? true : nil,
+                enableSsimPatrol: patrolPayload,
+                videoPath: videoPath,
                 subtitleProfile: subtitleProfile
             )
-            _ = try await runDetached { [client] in
-                try client.request(startMsg, expecting: ProgressMessage.self)
-            }
+            Self.logStartJob(
+                videoURL: videoURL,
+                videoId: videoId,
+                videoPath: videoPath,
+                fps: fps,
+                engine: engine,
+                confidenceThreshold: confidenceThreshold,
+                regionBox: regionBox,
+                subtitleProfile: subtitleProfile,
+                durationMs: durationMs,
+                uiPatrolToggle: enableSsimPatrol,
+                patrolPayload: patrolPayload,
+                estimatedFrames: totalFramesSafe
+            )
 
-            // 2. 流式抽帧 + 发 frame，使用 requestStreaming 接收增量 push_entry
-            let config = FrameSampler.Config(fps: fps)
-            var frameCount = 0
-            for await (frame, error) in FrameSampler.sample(url: videoURL, config: config) {
-                if _cancelled { throw CancellationError() }
-                if let error = error { throw error }
-                guard let frame = frame else { continue }
-                try Task.checkCancellation()
+            guard isCurrentJob(token) else { return }
+            // 立刻显示进度条，避免一直 0 像未启动
+            status = .processing(progress: 0, frameCount: 0, totalFrames: totalFramesSafe)
 
-                let base64 = frame.jpegData.base64EncodedString()
-                let frameMsg = FrameMessage(
-                    videoId: videoId,
-                    tsMs: frame.tsMs,
-                    jpegBytes: base64,
-                    regionBox: nil
-                )
-                _ = try await runDetached { [client, weak self] in
-                    try client.requestStreaming(frameMsg, expecting: ProgressMessage.self) { entry in
-                        Task { @MainActor in
-                            self?.entries.append(entry)
+            let response = try await runOnBackground {
+                try client.requestStreaming(
+                    startMsg,
+                    expecting: EntriesMessage.self,
+                    onPushEntry: { [weak self] entry in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.shouldAcceptLiveUpdate(token) else { return }
+                            self.entries.append(entry)
+                        }
+                    },
+                    onProgress: { [weak self] pct, stage in
+                        Task { @MainActor [weak self] in
+                            guard let self, self.shouldAcceptLiveUpdate(token) else { return }
+                            if stage == "finalizing" {
+                                self.status = .finalizing
+                            } else {
+                                let frames = max(0, Int((pct * Double(totalFramesSafe)).rounded(.down)))
+                                self.status = .processing(
+                                    progress: min(max(pct, 0), 1),
+                                    frameCount: min(frames, totalFramesSafe),
+                                    totalFrames: totalFramesSafe
+                                )
+                            }
                         }
                     }
-                }
-                frameCount += 1
-                let pct = min(Double(frameCount) / Double(totalFramesSafe), 1.0)
-                status = .sampling(
-                    progress: pct,
-                    frameCount: frameCount,
-                    totalFrames: totalFramesSafe
                 )
             }
 
-            if _cancelled { throw CancellationError() }
-
-            // 3. finalize → entries(is_final=true) 全量替换
-            status = .processing
-            let finalizeMsg = FinalizeMessage(videoId: videoId)
-            let response = try await runDetached { [client] in
-                try client.requestStreaming(finalizeMsg, expecting: EntriesMessage.self)
+            guard isCurrentJob(token) else {
+                print("[SubLift] extract cancelled after IPC")
+                return
             }
 
-            // 4. 用最终 entries 替换增量
-            let resultEntries = response?.entries ?? []
+            // 先关闭流式入口，再写最终列表，避免迟到 push_entry 追加到 deduped 结果。
+            acceptingLiveUpdates = false
+            let resultEntries = response.entries
             self.entries = resultEntries
 
             let elapsed = Date().timeIntervalSince(startTime)
-            #if DEBUG
-            print("[feat-018] 端到端耗时: \(String(format: "%.2f", elapsed))s, 帧数: \(frameCount), entries: \(resultEntries.count)")
-            #endif
+            let emptyCount = resultEntries.filter {
+                $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }.count
+            print(
+                """
+                [SubLift] extract done (path mode / FfmpegExtractor)
+                  elapsed_s=\(String(format: "%.2f", elapsed))
+                  estimated_frames=\(totalFramesSafe)
+                  entries=\(resultEntries.count) empty_text=\(emptyCount)
+                  region_box=\(Self.formatRegionBox(regionBox))
+                  video_path=\(videoPath)
+                """
+            )
 
             status = .done(entryCount: resultEntries.count)
 
+        } catch PipelineClientError.connectionClosed {
+            // cancel() 已失效 token 并写好状态；此处仅处理「意外断连」。
+            if isCurrentJob(token) {
+                status = .error("连接中断")
+                print("[SubLift] extract connection closed unexpectedly")
+            } else {
+                print("[SubLift] extract cancelled (socket closed)")
+            }
         } catch is CancellationError {
-            status = .error("已取消")
+            if isCurrentJob(token) {
+                status = .error("已取消")
+            }
+            print("[SubLift] extract cancelled (task cancellation)")
         } catch {
-            status = .error("提取失败: \(error.localizedDescription)")
-            #if DEBUG
-            print("[feat-018] 错误: \(error)")
-            #endif
+            if isCurrentJob(token) {
+                status = .error("提取失败: \(error.localizedDescription)")
+                print("[SubLift] extract error: \(error)")
+            } else {
+                print("[SubLift] extract error ignored (stale job): \(error)")
+            }
         }
+    }
+
+    /// 任务仍是当前 job（未被 cancel / 未被新 extract 替换）。
+    private func isCurrentJob(_ token: UUID) -> Bool {
+        jobToken == token
+    }
+
+    /// 允许落地 progress / push_entry。
+    private func shouldAcceptLiveUpdate(_ token: UUID) -> Bool {
+        acceptingLiveUpdates && jobToken == token
+    }
+
+    private static func logStartJob(
+        videoURL: URL,
+        videoId: String,
+        videoPath: String,
+        fps: Int,
+        engine: OcrEngineName,
+        confidenceThreshold: Double,
+        regionBox: RegionBox?,
+        subtitleProfile: SubtitleProfilePayload?,
+        durationMs: Int,
+        uiPatrolToggle: Bool,
+        patrolPayload: Bool?,
+        estimatedFrames: Int
+    ) {
+        let regionStr = formatRegionBox(regionBox)
+        let matchesFeat033: String
+        if let regionBox, regionBox.count == 4 {
+            let same = regionBox[0] == 0 && regionBox[1] == 848
+                && regionBox[2] == 1920 && regionBox[3] == 87
+            matchesFeat033 = same ? "YES" : "NO"
+        } else {
+            matchesFeat033 = "N/A (nil → bottom_crop)"
+        }
+        let patrolPayloadStr = patrolPayload.map { $0 ? "true" : "false" } ?? "nil"
+        let profileStr: String
+        if let p = subtitleProfile {
+            profileStr =
+                "script=\(p.script) center=(\(p.centerX),\(p.centerY)) "
+                + "height=\(p.height) y=[\(p.yMin),\(p.yMax)]"
+        } else {
+            profileStr = "nil"
+        }
+        print(
+            """
+            [SubLift] start_job (Swift → Python path mode)
+              video=\(videoURL.lastPathComponent)
+              video_path=\(videoPath)
+              video_id=\(videoId)
+              fps=\(fps) engine=\(engine.rawValue) confidence_threshold=\(confidenceThreshold)
+              duration_ms=\(durationMs) estimated_frames=\(estimatedFrames)
+              region_box=\(regionStr)
+              region_matches_feat033_[0,848,1920,87]=\(matchesFeat033)
+              subtitle_profile=\(profileStr)
+              enable_ssim_patrol UI=\(uiPatrolToggle) payload=\(patrolPayloadStr)
+              frame_path=Python FfmpegExtractor (same as CLI/benchmark)
+            """
+        )
+    }
+
+    private static func formatRegionBox(_ box: RegionBox?) -> String {
+        guard let box else { return "nil" }
+        return "[\(box.map(String.init).joined(separator: ", "))]"
     }
 
     private func estimateDurationMs(url: URL) async -> Int {
         if url.pathExtension.lowercased() == "mkv" {
-            // mkv 用 ffprobe 取时长（AVURLAsset.duration 对 mkv 不可靠）
             let frames = await FrameSampler.estimateFrameCount(url: url, fps: 1)
             return frames * 1000
         }
@@ -185,8 +322,18 @@ final class SubtitleExtractor: ObservableObject {
         return secs.isFinite ? Int(secs * 1000) : 0
     }
 
-    /// 把同步阻塞的 IPC 调用扔到后台线程跑，让 main actor 在 await 期间能刷新 UI。
-    private func runDetached<T>(_ body: @escaping () throws -> T) async throws -> T {
-        try await Task.detached(priority: .userInitiated) { try body() }.value
+    /// 在后台队列跑阻塞 IPC，且 **不** 因父 Task.cancel 误抛 CancellationError。
+    private func runOnBackground<T: Sendable>(
+        _ body: @escaping @Sendable () throws -> T
+    ) async throws -> T {
+        try await withCheckedThrowingContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    cont.resume(returning: try body())
+                } catch {
+                    cont.resume(throwing: error)
+                }
+            }
+        }
     }
 }

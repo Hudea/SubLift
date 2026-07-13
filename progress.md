@@ -2,36 +2,35 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-07
+- **最后更新：** 2026-07-12
 - **当前 Phase：** Phase 3 - 优化与基本可用
-- **当前功能：** feat-030 前台进度显示与取消（待启动）
-- **分支：** main
-- **说明：** benchmark 分支已合入 main。Phase 3 已完成 feat-027 benchmark 框架、feat-031 打轴优化、feat-033 OCR 字幕层筛选、feat-034 持久背景文字过滤；feat-028 基线入库已按用户决定标记 blocked；剩余 feat-030 前台进度与取消、feat-032 文档收尾。
+- **当前功能：** Phase 3 已收口；下一 Phase 尚未规划
+- **分支：** opt/ocr-timeline
+- **说明：** feat-027/029~034 已完成；feat-028 独立初始基线入库经用户决定跳过。最终固定 GT usable 92.0%、CER 3.2%、timing F1 97.7%、precision 98.8%。
 
 ## 进行中
 
-- (none)
+- 无
 
 ## 近期完成（最近 5 个）
 
-- [x] feat-027：Benchmark 框架。新增诊断指标、一对一时间匹配、agent JSON、GT/detection CSV 与 summary Markdown；manifest 一键入口可用。详见 phase3.json。
-- [x] benchmark 产物建档：基于最新 git commit 信息自动生成 label，并在 output_dir 下自动累加序号子目录。
-- [x] feat-034：持久背景文字过滤。PersistentTextPolicy dataclass + SubtitleProfile 扩展 + IPC schema；Pipeline 缓存 per-segment OcrLine；persistent.py 纯函数双条件算法（A 同文本连续重复 ≥K1，B 同 y_bin 不同文本 ≥M，排除目标轨道）；finalize 接入；Swift GUI 默认生成 policy。303 passed + 2 skipped；Swift 127 passed。详见 phase3.json。
-- [x] feat-033：OCR 字幕层筛选。OcrLine 模型 + selector 纯函数 + SubtitleProfile + Swift 接入。
-- [x] feat-029 + 审查修复 + 增量字幕实时显示：Pipeline 流式 push 模型。
+- [x] **feat-032**：Phase 3 文档、状态与最终质量口径完成收口。
+- [x] **feat-030**：前台进度与快速取消，取消响应 0.108s，CLI/GUI 阶段百分比对应真实处理进度。
+- [x] **feat-029**：增量架构验收，解决 Vision 内存泄漏，流式时机与 Cancel 达标。
+- [x] **feat-034**：P1 修复与固定 GT 复测通过；报告见 `debug/benchmark-reports/feat034_p1_fix2/`。
+- [x] feat-033：打轴 residual。F1 95.2%。
 
 ## 阻塞项 / 风险
 
-- [ ] **feat-028 跳过 / blocked**：基线不另做入库产物；已有会话跑测记录见 `docs/benchmarks/baseline.md`，后续对比可临时跑 manifest。
-- [ ] **patrol 过切分**：7 组 GT 被切成两条检测段（OCR 噪声差异导致 dedupe 无法合并）。详见 `docs/HURDLES.md`。
-- [ ] **短字幕漏检**：`<=1200ms` 的 GT 只命中 7/16，主因 hysteresis_frames=2 吃掉 40%+ 时长。详见 `docs/HURDLES.md`。
-- [ ] **ground truth 素材有限**：目前主要依赖 Zootopia clip。
-- [ ] **persistent filter 已知限制**：ticker 与目标字幕 y 中心完全重合且在同 y_bin 时无法区分；y_bin_ratio 阈值需在真实素材上调参。
+- [ ] **merged residual / #15 砰**：非 034 主目标，仍开放。
+- [ ] **ground truth 素材有限**：主要依赖 Zootopia clip。
+- [ ] **feat-030 长视频 GUI 手工验收暂缓**：尚未用 ≥10 分钟非 Zootopia 视频验证进度观感、取消和重新开始；自动 IPC 审计已通过。
+- [ ] **显式 CJK 混排风险**：边界 cleanup 可能误删 `NPD动物警局` / `苹果的iPhone` 一类无空格英文；默认 auto，待混排 GT 驱动修复。
 
 ## 近期决策
 
-- feat-028 跳过：基线不入库，需对比时临时跑 manifest；历史跑测摘要保留在 `docs/benchmarks/baseline.md`。
-- benchmark 诊断报告作为后续优化口径：打轴看 timing，识别看 recognition，产品可用性看 e2e。
-- feat-034 persistent filter 在 Pipeline.finalize 后处理：时序统计完整、不增加 push_entry 延迟、is_final 全量替换机制契合。
+- **ADR-0012**：增量 pipeline、真实进度、快速取消与 Vision 资源释放由同一任务生命周期管理。
+- **ADR-0011**：默认 script=`auto`；显式 CJK 边界 cleanup 的混排风险保留为 HURDLE。
+- **ADR-0010**：GUI、CLI、benchmark 的默认打轴抽帧统一到 Python `FfmpegExtractor`。
 
 > 完整决策记录见 `docs/DECISIONS.md`

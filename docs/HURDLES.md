@@ -18,10 +18,28 @@
 
 ---
 
+### 显式 CJK cleanup 可能误删句首/句尾无空格英文
+- **日期**：2026-07-12
+- **状态**：待真实 GUI / 混排 GT 验证（当前不定级为 P1）
+- **关联 feature**：feat-034 后续多语种与布局泛化验证
+- **现象**：`cleanup_subtitle_text(..., script="cjk")` 为清理 Vision 合并进中文字幕行的稳定英文横幅，会删除与 CJK 首尾边界直接粘连的拉丁字符。字符串级复现：
+  - `NPD动物警局` → `动物警局`
+  - `苹果的iPhone` → `苹果的`
+  - `欢迎来到ZPD` → `欢迎来到`
+  - 带空格的 `NPD 动物警局`、`苹果的 iPhone` 会保留；中文内部的 `后来加入ZPD警局` 也会保留。
+- **触发边界**：默认 `script="auto"` 不执行该删除；GUI 若从选中候选文字同时看到中文和英文，也会推断为 `auto`。风险发生在显式使用 `cjk`，或 Vision 将中英文拆成多个候选、用户只选择中文候选，导致 GUI 推断为 `cjk`，而后续全宽 OCR 又把句首/句尾英文识别进同一行时。
+- **根本原因**：当前后处理以“拉丁字符是否直接粘在 CJK 边界”替代空间证据，无法区分背景横幅 `PHISON/SON` 与合法字幕内容 `NPD/iPhone/ZPD`。字符邻接关系本身不是可靠的噪声判据。
+- **当前缓解**：无显式 profile 时默认 `auto`；GUI 按选中候选文字推断 `cjk/latin/auto`。该缓解降低了主路径误删概率，但不能覆盖 Vision 候选拆分或用户漏选英文候选的情况。
+- **验证计划**：建立短时、确定性的多语种 GT 回归集，覆盖英文位于句首/句中/句尾、带空格/无空格、不同字幕位置；通过 GUI 真实选区与 path mode 记录实际 script 推断和最终文本。只有真实主路径复现后再升级优先级。
+- **候选方案**：文字系统仅参与选行评分，不直接删除字符；扩展 `SubtitleProfile` 的水平范围，或使用 token/substring 级 bounding box，以用户选区几何和多帧空间稳定性区分字幕与横幅。完整方案实施前不得用品牌/缩写白名单代替。
+- **相关文件**：`src/sublift/pipeline/line_select.py`（CJK 边界清理）、`apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift`（script 推断）、`tests/test_line_select.py`、`apps/macos/Tests/SubLiftMacTests/RegionGeometryTests.swift`
+
+---
+
 ### dHash 对中文文本内容变化判别力不足，导致 timeline 漏分段
 - **日期**：2026-07-03
 - **状态**：部分缓解（feat-031b SSIM patrol 已实现，merged_into_neighbor FN 减少约 70%）
-- **现象**：用 `scripts/test_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
+- **现象**：用 `scripts/run_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
   - "能不顾他们惊人的差异"
   - "彻底化解偏见和刻板印象"
   - "那也许我们都能接受彼此的差异"
@@ -49,19 +67,16 @@
 
 ### OCR 锚帧落在字幕过渡画面导致空文本
 - **日期**：2026-07-03
-- **状态**：未解决（端到端实测发现，待评估）
+- **状态**：部分解决（feat-033b：`ocr_anchor_delay_frames=2` + 多候选回退 + 默认保留空文本时间轴；仍有 text.empty 残留）
 - **现象**：端到端 Pipeline 5fps 实测，段 5、段 11 出现 OCR 空文本。锚帧（IN/CHANGE 事件触发帧）恰好在字幕过渡画面（淡入/淡出/切换瞬间），Vision 未识别出文字，该段 text 为空。
 - **排查路径**：
   1. 确认 OCR 引擎正常：同一视频其他段识别成功
   2. 确认锚帧选取逻辑：core.py 用 `anchor_frames[event.timestamp_ms]` 取事件触发帧，该帧是状态机确认变化的帧
-  3. 分析根因：状态机用迟滞确认（hysteresis_frames=2），事件 timestamp_ms 回溯到信号首次出现帧，但该帧可能正是字幕过渡帧（半透明、不完整）
-- **根本原因**：锚帧选取策略只考虑"变化首次出现"，未考虑该帧是否是"字幕稳定可读帧"。过渡帧（淡入未完成、切换瞬间）OCR 置信度低或识别不出文本。
-- **待评估方案**：
-  1. **锚帧延后 N 帧（首选）**：事件触发后，往后取 1-2 帧作为 OCR 锚帧（字幕已稳定）。改动小，core.py 在缓存 anchor_frame 时取 `当前帧 + offset`。
-  2. **多帧 OCR 取最优**：对每段取多帧 OCR，选 confidence 最高的。增加 OCR 调用，但精度更高。
-  3. **空文本段重试**：OCR 返回空时，自动取段内下一帧重试。fallback 策略。
-- **影响评估**：端到端实测 2/23 段空文本（8.7% 段丢失文本），属可接受范围但影响最终 SRT 质量。与 dHash 漏检叠加，整体 recall 91.3%。
-- **相关文件**：`src/sublift/pipeline/core.py`（anchor_frames 缓存与 OCR 调用）
+  3. 分析根因：状态机用迟滞确认，事件 timestamp_ms 回溯到信号首次出现帧，但该帧可能正是字幕过渡帧
+- **根本原因**：锚帧选取策略只考虑"变化首次出现"，未考虑该帧是否是"字幕稳定可读帧"。
+- **解决方案（feat-033b）**：IN/CHANGE 后延迟 N 帧锁定主 OCR 锚；失败时回退稳定帧/段首/闭合帧；`drop_empty_text=False` 避免 timing 被抹掉。
+- **残留**：部分段仍 `text.empty`（区域/水印/不可读），属 OCR 质量后置。
+- **相关文件**：`src/sublift/pipeline/core.py`、`src/sublift/config.py`
 
 ---
 
@@ -72,7 +87,7 @@
   - 2 段 OCR 空文本（段 5、11）：锚帧落在过渡画面（见上条 HURDLE）
   - 1 段合并 4 段（段 22）：dHash 对相似中文文本判别力不足（见首条 HURDLE）
 - **结论**：Pipeline 端到端在 5fps 下表现扎实，打轴状态机很干净（0 误检）。主要瓶颈在 OCR 精度（空文本、英文水印干扰）和长段合并（dHash 对相似内容的区分度不够）。对 Phase 1 MVP 是不错的起点。
-- **相关文件**：`scripts/test_timeline.py`、`debug/timeline_compare_result.txt`
+- **相关文件**：`scripts/run_timeline.py`、`debug/timeline_compare_result.txt`
 
 ---
 
@@ -91,25 +106,6 @@
   3. **自适应区域检测**：用 Vision 的文字检测框自动定位字幕区域。精度最高但实现复杂，属 Phase 2 增强。
 - **影响评估**：这是当前 OCR 质量低的主因，前 6 条（无英文标题干扰）CER=0% 证明 OCR 引擎本身精度足够。调准区域后预计字符准确率可大幅提升。
 - **相关文件**：`src/sublift/detector/bottom_crop.py`、`src/sublift/config.py`（`region_bottom_ratio=0.3`）、`debug/cli_comparison.txt`（逐条对比证据）
-
----
-
-### 同一 ROI 内背景文字/伪文字被并入字幕
-- **日期**：2026-07-07
-- **状态**：已解决（feat-033 OCR 字幕层筛选已完成）
-- **现象**：GUI 已支持用户选择字幕候选框并生成 `region_box`，但 `region_box` 只是一个裁剪长条。如果长条内同时存在目标字幕、英文背景字、水印、标牌、装饰字体或被 Vision 误识别成文字的图案，当前 OCR 仍会把这些 observation 全部合并进字幕文本，导致错误文本、重复条目或同一句字幕被过切分。
-- **排查路径**：
-  1. 确认 GUI 当前传输的是全宽 ROI：用户选中的候选框会被合并为 `[x, y, width, height]`，表示"看哪里"。
-  2. 确认 Python 端 `VisionOcrEngine` 当前只返回合并后的 `OcrResult(text, confidence)`，未保留每行 observation 的 bbox。
-  3. 分析根因：系统缺少"字幕层"概念，无法表达 ROI 内哪一组文字才是目标字幕。
-- **根本原因**：`region_box` 只能限定 OCR 输入区域，不能限定 OCR 输出层。Vision 返回的是多条文字 observation，但当前实现过早把所有文字 `join` 成一个字符串，丢失了按 y 轨道、行高、中心性、脚本和时间稳定性筛选目标字幕层所需的信息。
-- **解决方案（feat-033）**：
-  1. **结构化 OCR observation**（feat-033a）：`OcrLine` dataclass 保留每行 text/confidence/bbox，`OcrResult.lines` 字段向后兼容。
-  2. **subtitle profile**（feat-033b）：`SubtitleProfile` 描述 y_center/y_tolerance/line_height/max_lines/script_hint，GUI 从选中候选框生成 crop-relative profile。
-  3. **字幕行 selector**（feat-033c）：纯函数 `select_lines` 按 y 轨道过滤 → 行高过滤 → max_lines 截断 → y 排序拼接。
-  4. **验证**（feat-033e）：PIL 合成含目标中文 + 背景英文的混合图，Vision OCR + selector 端到端验证只输出目标字幕行。
-- **影响评估**：已通过 PIL 合成 fixture 端到端验证，selector 能正确过滤背景英文。`persistent_text_policy`（跨段时序过滤水印/持久背景文字）跳过，留作后续迭代。
-- **相关文件**：`src/sublift/models.py`（OcrLine/SubtitleProfile）、`src/sublift/ocr/vision.py`（bbox 保留）、`src/sublift/ocr/selector.py`（纯函数 selector）、`src/sublift/ipc/protocol.py`（profile schema）、`src/sublift/pipeline/core.py`（ocr_segment 接入）、`apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift`（SubtitleProfileBuilder）、`apps/macos/Sources/SubLiftMac/Core/RegionSelectionModel.swift`（profile 生成）
 
 ---
 
@@ -173,8 +169,8 @@
 
 ### SSIM patrol 过切分与短字幕漏检（feat-031 残留）
 - **日期**：2026-07-06
-- **状态**：未解决（feat-031 初步优化已收尾，留作后续迭代）
-- **关联 feature**：feat-031（打轴检测优化）
+- **状态**：部分解决（feat-033 residual：hysteresis=1 + 锚帧延迟 + 保留空文本；timing_f1 达 95.2%。仍有 ~6 条 merged 与 #15 单字 no_overlap）
+- **关联 feature**：feat-031 / feat-033
 - **现象**：patrol 默认开启后（优化 3），整体 F1 从 79.5% 提升到 86.7%，precision 91.1%，但暴露两个残留问题：
 
   **问题 1：patrol 过切分导致重复命中**
@@ -215,32 +211,49 @@
 - **根本原因**：
   - 过切分：patrol 阈值 `0.92` 对同一句字幕内部的二值化 mask 局部波动过于敏感；CHANGE 候选确认后产生两段，OCR 文本因噪声不等导致 dedupe 失效
   - 短字幕：采样率 5fps + 迟滞 2 帧 = 400ms 迟滞窗口，对 `<=1000ms` 的字幕吃掉了 40%+ 时长；单字字幕前景占比不足
-- **待评估方案**（后续迭代）：
-  1. **patrol 阈值调优**：`ssim_patrol_threshold` 从 0.92 调到 0.88~0.90，降低敏感度减少过切分
-  2. **dedupe 模糊合并**：归一化后做编辑距离比较，距离/长度 < 比例（如 0.2）时合并，解决标点/噪声差异
-  3. **短字幕专用路径**：`hysteresis_frames=1` + 降低 `presence_threshold`，但需配合 patrol 阈值调优避免 FP 增长
-- **影响评估**：过切分使 precision 从潜在 94.9% 降到 91.1%（-3.8pp），但不影响 recall；短字幕漏检贡献了主要 FN（8/15 no_overlap）。两者均为 feat-031 后续迭代方向，不影响当前优化成果的可用性。
-- **相关文件**：`src/sublift/pipeline/changepoint.py`（patrol 阈值）、`src/sublift/pipeline/dedupe.py`（`_merge_adjacent` 归一化）、`src/sublift/config.py`（`ChangePointConfig`）、`debug/Zootopia_clip_1080p_优化 3.srt`（验证产物）
+- **feat-033 已落地**：
+  1. **诊断**：纯打轴 trace 对 52–63s 新闻簇有 IN/CHANGE，最终 SRT 空洞主因是 **M1c（OCR 空/confidence 滤掉段）**，非状态机卡 EMPTY。
+  2. **锚帧延迟 + 多候选 OCR**（`ocr_anchor_delay_frames=2`）+ **`drop_empty_text=False`**。
+  3. **`hysteresis_frames=1`** 补短字幕。
+  4. 验收：`baseline-no-filter` F1 91.2% → **95.2%**（R 83.9%→92.0%，P 100%→98.8%）。
+- **仍开放**：merged residual（新闻簇 / 哈啰 等）、单字「砰」。
+- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。报告见 `debug/benchmark-reports/feat034_p1_fix2/`。
+- **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark-reports/feat033_final/`
 
 ---
 
-### bridge 批量缓冲全帧导致内存随视频时长线性增长
-- **日期**：2026-07-06
-- **状态**：待解决（feat-029 增量处理架构的前置障碍）
-- **关联 feature**：feat-029（增量处理架构）
-- **现象**：GUI 提取长视频时内存占用随帧数线性增长，2 分钟 1080p clip ~3.6GB，10 分钟 ~18GB，长视频必 OOM。`bridge.py` 用 `MAX_FRAMES=60000` / `MAX_TOTAL_PIXELS` 硬上限兜底挡崩，但这是权宜之计，非正常设计。
+### feat-033：打轴 residual 中「检出后被 OCR 抹掉」
+- **日期**：2026-07-09
+- **状态**：已解决（主路径 M1c）
+- **关联 feature**：feat-033
+- **现象**：`baseline-no-filter` 报告 8 条 `no_overlap`（含 52–63s 新闻簇），用户误判为状态机未重新 IN。
 - **排查路径**：
-  1. 读 `bridge.py` `_handle_frame`：每帧解码成 PIL.Image 后 `self._frames.append(Frame(...))`，全部驻留内存
-  2. 读 `_handle_finalize`：`await asyncio.to_thread(self._pipeline.run_frames, iter(self._frames))` —— 把攒完的列表包装成迭代器一次性交给 Pipeline
-  3. 读 `core.py` `run_frames`：Pipeline 本身接收 `Iterator[Frame]`，内部逐帧过 changepoint → timeline，流式能力本就具备
-  4. 读 `core.py` 内部缓存：`anchor_frames` dict 只存 IN/CHANGE 事件时刻的代表帧，数量 ≈ 字幕段数（几十到几百），可忽略
-- **根本原因**：bridge 把本可流式的 Pipeline 退化成"先攒完再批量处理"模式。Pipeline 的 `run_frames` 接收 `Iterator[Frame]` 本来支持逐帧推进，但 bridge 硬把帧先攒成 `list[Frame]` 再 `iter(list)` 交出去，导致：
-  - 内存随视频时长线性增长（每帧 1080p RGB ~6MB × 帧数）
-  - 首条字幕要等全片处理完才出现（finalize 后才返回 entries）
-  - 长视频必然 OOM，硬上限是兜底而非解决方案
-- **解决方案方向**（feat-029 待设计）：
-  1. **bridge 边收帧边推进 Pipeline**：`_handle_frame` 收到帧后立即喂给 Pipeline，不攒列表
-  2. **打轴流式 + OCR 段闭合触发**：changepoint/timeline 本就是逐帧的；OCR 在段闭合（OUT/CHANGE 事件）时立即调用，产出该条字幕并 push 给 Swift
-  3. **Pipeline 改 push 模型**：从 `run_frames(iterator) -> list[entries]` 改为 `feed(frame) -> entry | None`（或回调），每帧返回新闭合的段
-- **影响评估**：当前批量模式对短 clip（<2 分钟）凑合可用，但作为产品形态不合格。feat-029 的核心就是把 bridge 的批量缓冲改掉。
-- **相关文件**：`src/sublift/ipc/bridge.py`（`_handle_frame` / `_handle_finalize`）、`src/sublift/pipeline/core.py`（`run_frames`）、`src/sublift/pipeline/changepoint.py`（状态机本就逐帧）
+  1. `run_trace.py` + MockOcr 从事件重建段 → 纯打轴 **0** no_overlap，新闻窗有完整 IN/CHANGE。
+  2. 对比 Vision 最终 SRT：段被 confidence 置空 / empty-filter 丢弃 → 评测成 no_overlap。
+- **根本原因**：OCR 锚帧落在过渡画面或识别失败时，后处理把**时间轴证据**一并删除。
+- **解决方案**：延迟锁定 OCR 锚帧；失败时多候选重试；默认不丢弃空文本段。
+- **相关文件**：`core.py`（`_open_segment` / `_close_segment` / `ocr_segment`）、`dedupe.py`（`drop_empty_text`）
+
+---
+
+### bridge 批量缓冲与 Vision 引擎内存泄漏导致长视频 OOM
+- **日期**：2026-07-06
+- **状态**：已解决（feat-029，已验证修复）
+- **关联 feature**：feat-029（增量处理架构）
+- **现象**：GUI 提取长视频时内存占用随帧数线性增长，2 分钟 1080p clip ~3.6GB，10 分钟 ~18GB，长视频必 OOM。
+- **排查路径**：
+  1. 审查 `pipeline/core.py` 的 `feed` 和 `bridge.py` 的增量抽取机制，发现 `path_mode` 下已经在用单线程边收帧边处理，并将每条产出的 `SubtitleEntry` 异步推入队列。
+  2. 即使架构流式化后，长视频 4K 提取测试中，内存仍然线性增加至 2.1 GB（对应 ~300 帧裁剪图片）。
+  3. `tracemalloc` 定位到 `PIL.Image.frombytes` 分配了内存。
+  4. 引入 `gc.get_referrers` 调查，发现 Python 层存活 Image 数量已归零。
+  5. 锁定到 `vision.py` 中的 PyObjC 桥接：`CGDataProviderCreateWithData` 调用接收了 Python 分配的二进制图片 `bytes` 缓冲，但未提供释放回调，导致 `bytes` 在 Objective-C 桥接层保留引用，随帧数无限泄漏。另外，缺乏 `objc.autorelease_pool`，其他 CF 对象如 `CGImage` 也会堆积到全局自动释放池中直到线程退出。
+- **根本原因**：
+  1. 历史版本的 bridge 把本可流式的 Pipeline 退化成批量缓冲模式。
+  2. Apple Vision 引擎桥接代码缺乏 `autorelease_pool` 保护。
+  3. PyObjC 将 Python 二进制数据转交给 CoreFoundation 时缺乏显式生命周期管理。
+- **解决方案**：
+  1. Pipeline 已由 `run_frames` 退化为彻底基于 `feed` / `ocr_segment` 驱动的流式接口。`bridge.py` 的 `_worker` 直接逐帧驱动并在段闭合时及时 push。
+  2. `vision.py` 的 `recognize` 中加入 `with objc.autorelease_pool():` 上下文。
+  3. 废弃 `CGDataProviderCreateWithData`，改为通过 `NSData.dataWithBytes_length_` 包转后调用 `CGDataProviderCreateWithCFData(ns_data)`，将底层二进制的生命周期安全委托给 Toll-Free Bridging 体系。
+- **验证结果**：4K 视频测试，内存消耗峰值从 2157 MiB 下降到极低 (Top 3 分配仅为数十 KB)，未见任何线性增长；后续 feat-030 自动审计首条反馈 0.68s、取消响应 0.108s，ffmpeg PID 退出且第二任务可正常启动；核心 Benchmark 无回退。≥10 分钟非 Zootopia 视频的 GUI 拖拽、进度观感、取消与重启手工验收由用户决定暂缓，仍是体验覆盖风险，不影响已验证的资源泄漏修复结论。
+- **相关文件**：`src/sublift/pipeline/core.py`（`feed` 驱动）、`src/sublift/ipc/bridge.py`（流式推送）、`src/sublift/ocr/vision.py`（内存防泄漏修复）

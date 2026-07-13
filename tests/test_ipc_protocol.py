@@ -31,10 +31,8 @@ from sublift.ipc.protocol import (
     build_frame,
     build_hello,
     build_log,
-    build_persistent_text_policy,
     build_progress,
     build_start_job,
-    build_subtitle_profile,
     validate,
 )
 
@@ -52,6 +50,21 @@ class TestBuildAndValidate:
             build_error("oops"),
             build_start_job(VIDEO_ID, 5.0, "vision", 0.5),
             build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[10, 20, 100, 200]),
+            build_start_job(
+                VIDEO_ID,
+                5.0,
+                "vision",
+                0.5,
+                region_box=[0, 800, 1920, 100],
+                subtitle_profile={
+                    "script": "cjk",
+                    "center_x": 960,
+                    "center_y": 40,
+                    "height": 48,
+                    "y_min": 10,
+                    "y_max": 70,
+                },
+            ),
             build_frame(VIDEO_ID, 1000, b"\xff\xd8\xff\xe0fakejpeg"),
             build_frame(VIDEO_ID, 1000, b"\xff\xd8", region_box=[0, 0, 1920, 1080]),
             build_cancel_job(VIDEO_ID),
@@ -71,6 +84,7 @@ class TestBuildAndValidate:
             "error",
             "start_job-no-region",
             "start_job-with-region",
+            "start_job-with-profile",
             "frame-no-region",
             "frame-with-region",
             "cancel_job",
@@ -99,6 +113,13 @@ class TestStartJob:
             "duration_ms": 0,
         }
 
+    def test_start_job_with_video_path(self) -> None:
+        msg = build_start_job(
+            VIDEO_ID, 5.0, "vision", 0.5, video_path="/tmp/clip.mp4"
+        )
+        assert msg["video_path"] == "/tmp/clip.mp4"
+        validate(msg)
+
     def test_start_job_region_box_none(self) -> None:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
         assert msg["region_box"] is None
@@ -123,6 +144,24 @@ class TestStartJob:
         with pytest.raises(ProtocolError, match="fps"):
             validate(msg)
 
+    def test_invalid_subtitle_profile_script(self) -> None:
+        msg = build_start_job(
+            VIDEO_ID,
+            5.0,
+            "vision",
+            0.5,
+            subtitle_profile={
+                "script": "emoji",
+                "center_x": 0,
+                "center_y": 0,
+                "height": 1,
+                "y_min": 0,
+                "y_max": 1,
+            },
+        )
+        with pytest.raises(ProtocolError, match="script"):
+            validate(msg)
+
     def test_region_box_wrong_length(self) -> None:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[1, 2, 3])
         with pytest.raises(ProtocolError, match="region_box"):
@@ -131,196 +170,6 @@ class TestStartJob:
     def test_region_box_non_int(self) -> None:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[1, 2, "3", 4])  # type: ignore[list-item]
         with pytest.raises(ProtocolError, match="region_box"):
-            validate(msg)
-
-
-class TestSubtitleProfile:
-    """subtitle_profile IPC schema 测试（feat-033b）。"""
-
-    def test_build_subtitle_profile(self) -> None:
-        profile = build_subtitle_profile(
-            y_center=950.0, y_tolerance=30.0, line_height=60.0, max_lines=2
-        )
-        assert profile == {
-            "y_center": 950.0,
-            "y_tolerance": 30.0,
-            "line_height": 60.0,
-            "max_lines": 2,
-            "script_hint": "auto",
-        }
-
-    def test_start_job_with_profile(self) -> None:
-        profile = build_subtitle_profile(y_center=100.0, y_tolerance=20.0, line_height=40.0)
-        msg = build_start_job(
-            VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=profile
-        )
-        assert msg["subtitle_profile"] == profile
-        validate(msg)
-
-    def test_start_job_without_profile(self) -> None:
-        """无 subtitle_profile 时消息不包含该字段。"""
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        assert "subtitle_profile" not in msg
-        validate(msg)
-
-    def test_profile_none_not_in_msg(self) -> None:
-        msg = build_start_job(
-            VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=None
-        )
-        assert "subtitle_profile" not in msg
-        validate(msg)
-
-    def test_profile_missing_y_center(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {"y_tolerance": 20.0, "line_height": 40.0}
-        with pytest.raises(ProtocolError, match="y_center"):
-            validate(msg)
-
-    def test_profile_non_numeric_y_center(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": "high",
-            "y_tolerance": 20.0,
-            "line_height": 40.0,
-        }
-        with pytest.raises(ProtocolError, match="y_center"):
-            validate(msg)
-
-    def test_profile_invalid_max_lines(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0,
-            "y_tolerance": 20.0,
-            "line_height": 40.0,
-            "max_lines": 3,
-        }
-        with pytest.raises(ProtocolError, match="max_lines"):
-            validate(msg)
-
-    def test_profile_invalid_script_hint(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0,
-            "y_tolerance": 20.0,
-            "line_height": 40.0,
-            "script_hint": "klingon",
-        }
-        with pytest.raises(ProtocolError, match="script_hint"):
-            validate(msg)
-
-    def test_profile_extra_field_rejected(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0,
-            "y_tolerance": 20.0,
-            "line_height": 40.0,
-            "unknown_field": 123,
-        }
-        with pytest.raises(ProtocolError, match="未知字段"):
-            validate(msg)
-
-    def test_profile_non_dict(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = [1, 2, 3]
-        with pytest.raises(ProtocolError, match="subtitle_profile 非字典"):
-            validate(msg)
-
-
-class TestPersistentTextPolicy:
-    """persistent_text_policy IPC schema 测试（feat-034a）。"""
-
-    def test_build_persistent_text_policy_defaults(self) -> None:
-        policy = build_persistent_text_policy()
-        assert policy == {
-            "enabled": True,
-            "min_repeat_segments": 3,
-            "min_distinct_texts": 4,
-            "y_bin_ratio": 0.5,
-        }
-
-    def test_build_persistent_text_policy_custom(self) -> None:
-        policy = build_persistent_text_policy(
-            enabled=False, min_repeat_segments=5, min_distinct_texts=8, y_bin_ratio=0.3
-        )
-        assert policy == {
-            "enabled": False,
-            "min_repeat_segments": 5,
-            "min_distinct_texts": 8,
-            "y_bin_ratio": 0.3,
-        }
-
-    def test_start_job_with_profile_and_policy(self) -> None:
-        policy = build_persistent_text_policy(min_repeat_segments=2)
-        profile = build_subtitle_profile(
-            y_center=950.0, y_tolerance=30.0, line_height=60.0,
-            persistent_text_policy=policy,
-        )
-        msg = build_start_job(
-            VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=profile
-        )
-        assert msg["subtitle_profile"]["persistent_text_policy"] == policy
-        validate(msg)
-
-    def test_start_job_with_policy_none(self) -> None:
-        """persistent_text_policy=None 时 profile 不包含该字段。"""
-        profile = build_subtitle_profile(
-            y_center=100.0, y_tolerance=20.0, line_height=40.0,
-            persistent_text_policy=None,
-        )
-        assert "persistent_text_policy" not in profile
-
-    def test_policy_invalid_enabled(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {"enabled": "yes"},
-        }
-        with pytest.raises(ProtocolError, match="enabled"):
-            validate(msg)
-
-    def test_policy_invalid_min_repeat_segments(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {"min_repeat_segments": 0},
-        }
-        with pytest.raises(ProtocolError, match="min_repeat_segments"):
-            validate(msg)
-
-    def test_policy_invalid_min_distinct_texts(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {"min_distinct_texts": "many"},
-        }
-        with pytest.raises(ProtocolError, match="min_distinct_texts"):
-            validate(msg)
-
-    def test_policy_invalid_y_bin_ratio(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {"y_bin_ratio": 0},
-        }
-        with pytest.raises(ProtocolError, match="y_bin_ratio"):
-            validate(msg)
-
-    def test_policy_extra_field_rejected(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {"unknown": 1},
-        }
-        with pytest.raises(ProtocolError, match="未知字段"):
-            validate(msg)
-
-    def test_policy_non_dict(self) -> None:
-        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5)
-        msg["subtitle_profile"] = {
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": [1, 2],
-        }
-        with pytest.raises(ProtocolError, match="persistent_text_policy 非字典"):
             validate(msg)
 
 

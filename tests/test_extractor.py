@@ -35,6 +35,24 @@ class TestExtractorProtocol:
         with pytest.raises(FileNotFoundError):
             next(extractor.extract(Path("/nonexistent/video.mp4")))
 
+    def test_extract_invalid_file_includes_ffmpeg_stderr(
+        self, tmp_path: Path
+    ) -> None:
+        """损坏/非视频输入失败时应附带 stderr 诊断，而非仅有退出码。"""
+        bad = tmp_path / "not_a_video.mp4"
+        bad.write_bytes(b"this is not a media file")
+        extractor = FfmpegExtractor(fps=1.0)
+        with pytest.raises(RuntimeError) as ei:
+            list(extractor.extract(bad))
+        msg = str(ei.value)
+        assert "退出码" in msg
+        # 尾部应含 ffprobe/ffmpeg 真实错误（不仅是数字退出码）
+        assert len(msg) > len("ffprobe 失败（退出码 1），path=")
+        assert any(
+            token in msg.lower()
+            for token in ("invalid", "error", "moov", "failed", "not", "解析", "格式")
+        )
+
 
 def _generate_test_video(path: Path, duration: float = 3.0, fps: float = 2.0) -> None:
     """用 ffmpeg lavfi 生成测试视频。
@@ -102,3 +120,33 @@ class TestFfmpegExtractorIntegration:
         assert frames[0].timestamp_ms == 0
         assert frames[1].timestamp_ms == 500
         assert frames[-1].timestamp_ms == 2500
+
+    def test_probe_duration_ms(self, tmp_path: Path) -> None:
+        """验证时长探测。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=3.0, fps=2.0)
+        from sublift.extractor.ffmpeg_extractor import probe_duration_ms
+        assert probe_duration_ms(video) == 3000
+
+    def test_ffmpeg_extractor_cancel_midway(self, tmp_path: Path) -> None:
+        """中途取消测试。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=5.0, fps=2.0)
+        extractor = FfmpegExtractor(fps=1.0)
+
+        frames = []
+        for frame in extractor.extract(video):
+            frames.append(frame)
+            if len(frames) == 2:
+                extractor.cancel()
+        assert len(frames) == 2
+
+    def test_ffmpeg_extractor_cancel_before_extract(self, tmp_path: Path) -> None:
+        """在开始抽取前取消测试。"""
+        video = tmp_path / "test.mp4"
+        _generate_test_video(video, duration=3.0, fps=2.0)
+        extractor = FfmpegExtractor(fps=1.0)
+        extractor.cancel()
+
+        frames = list(extractor.extract(video))
+        assert len(frames) == 0

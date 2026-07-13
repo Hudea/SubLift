@@ -31,6 +31,7 @@ class RunConfig:
     fps: float = 5.0
     engine: str = "vision"
     confidence: float = 0.5
+    subtitle_script: str = "auto"
     match_threshold: float = 0.5
     region_box: tuple[int, int, int, int] | None = None
     label: str | None = None
@@ -77,9 +78,21 @@ def run_benchmark(config: RunConfig) -> RunResult:
     ocr = _build_ocr_engine(config.engine)
     extractor = FfmpegExtractor(fps=config.fps)
     detector = _build_detector(config.region_box)
+    subtitle_profile = None
+    if config.region_box is not None:
+        from sublift.models import SubtitleProfile
+
+        _x, _y, rw, rh = config.region_box
+        subtitle_profile = SubtitleProfile.from_crop(
+            rw,
+            rh,
+            script=config.subtitle_script,
+        )
     pipeline_config = Config(
         sample_fps=config.fps,
         confidence_threshold=config.confidence,
+        subtitle_profile=subtitle_profile,
+        subtitle_script=config.subtitle_script,
     )
     pipeline = Pipeline(detector=detector, ocr=ocr, config=pipeline_config, extractor=extractor)
 

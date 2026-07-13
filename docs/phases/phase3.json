@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 3 - 优化与基本可用",
-  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率。具体实现方法不在本阶段规划，由各任务启动时再定。",
+  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位。具体实现方法由各任务启动时再定。",
   "plan_file": "docs/plans/phase3.md",
   "features": [
     {
@@ -28,8 +28,8 @@
       "description": "把当前批量处理模式改为边收帧边处理。允许重构 pipeline/ 与 ipc/bridge.py，使首条字幕反馈时间显著缩短。具体实现方法（push 模型、常驻 server、并行抽帧等）由任务启动时评估。",
       "module": "src/sublift/pipeline/, src/sublift/ipc/bridge.py",
       "dependencies": ["feat-028"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "已完成。验证结论：1. 内存平稳：长视频(4K)处理内存不再随视频帧数线性增长；消除 Apple Vision 引擎内存泄漏（引入 autorelease_pool 并移交 PyObjC CFData）。2. 推送时机：在测试视频中 1.29s 内即推送第一条字幕（流式反馈生效）。3. 取消安全性：cancel 能够立即生效且释放所有资源，无残留线程。4. 基线无回归：Benchmark 显示 timing_f1 保持 97.7%，cer_macro 3.2%，usable 92.0%，无任何回退。产物已验证：pytest 测试及集成测试全部通过。"
     },
     {
       "id": "feat-030",
@@ -37,8 +37,8 @@
       "description": "CLI 提取输出阶段进度/进度条；GUI 提取显示百分比和当前阶段；取消按钮在提取过程中生效。进度必须对应真实处理阶段。",
       "module": "src/sublift/cli.py, apps/macos/Sources/SubLiftMac/",
       "dependencies": ["feat-029"],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "已完成自动验收。1. CLI 进度条与三阶段显示：`[1/3] 探测`, `[2/3] 提取与识别`, `[3/3] 整理导出`；TTY 原位刷新，重定向输出按 10% 节流。2. GUI 状态为就绪/启动/处理中(含百分比)/正在整理/完成，finalizing 后不再退回 processing。3. FfmpegExtractor 使用持久 cancel Event 覆盖探测前取消，并终止底层进程；Bridge 异步等待 worker，取消后可在同一连接立即重启。真实 IPC 自动审计：首条 0.68s，取消确认 0.1079s，确认 ffmpeg PID 已退出；Job 2 重启后 0.46s 收到首条。验证：ruff、mypy、pytest 346 passed、Swift XCTest 15 passed + Swift Testing 121 passed、./init.sh 8/8 通过。≥10 分钟非 Zootopia GUI 手工体验验收按用户决定暂缓，记录于 progress 风险。"
     },
     {
       "id": "feat-031",
@@ -77,94 +77,93 @@
     },
     {
       "id": "feat-033",
-      "name": "OCR 字幕层筛选",
-      "description": "解决同一 ROI 内背景英文、标牌、水印、装饰性字体或误识别伪文字被并入字幕的问题。当前 GUI 传入的 region_box 只表示「看哪里」，无法表达「相信哪一层文字」。本任务引入 subtitle profile 概念，描述目标字幕层的稳定特征：y 轨道/中心线、行高、最多行数、脚本提示、中心性偏好、持久背景文字过滤策略。Vision OCR 需要保留 per-line observation（text、confidence、bbox），再由 selector 选择目标字幕行并合成文本。",
-      "module": "src/sublift/ocr/, src/sublift/pipeline/, src/sublift/ipc/, apps/macos/Sources/SubLiftMac/",
-      "dependencies": ["feat-028"],
+      "name": "打轴 residual 优化",
+      "description": "在 feat-031（SSIM patrol）之后，针对 baseline-no-filter 残留 14 条 timing FN 做机制化收敛。主模块 changepoint + core OCR 锚帧；按 M1 连续空洞 / M2 短字幕 / M3 残留 CHANGE 分阶段。验收：timing_f1≥95%；OCR 文本噪声后置。基线：timing_recall 83.9% / precision 100% / F1 91.2%。",
+      "module": "src/sublift/pipeline/core.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/dedupe.py, src/sublift/config.py",
+      "dependencies": ["feat-031"],
       "status": "done",
-      "evidence": "已完成。子任务 feat-033a/b/c/d/e 全部完成。\n\nfeat-033a 结构化 OCR observation：models.py 新增 OcrLine dataclass（text/confidence/bbox）+ OcrResult.lines 字段（默认空，向后兼容）。vision.py _collect_results 读取 obs.boundingBox()，通过 _vision_bbox_to_pixels 把 Vision 归一化 bbox（左下原点）转换为裁剪图内绝对像素 bbox（左上原点），与 Swift 端 VideoCoordinateMapper 同公式。4 个新模型测试 + 3 个 Vision 集成测试断言 lines/bbox。\n\nfeat-033b subtitle profile 数据契约：models.py 新增 SubtitleProfile dataclass（y_center/y_tolerance/line_height/max_lines/script_hint）+ from_dict 工厂。protocol.py build_start_job 加 subtitle_profile 可选参数 + build_subtitle_profile 辅助函数 + _validate_subtitle_profile 校验器（必填字段、数值范围、max_lines∈{1,2}、script_hint∈{zh,en,auto}、未知字段拒绝）。10 个新 IPC schema 测试。\n\nfeat-033c 字幕行 selector 纯函数：新增 src/sublift/ocr/selector.py，纯函数 select_lines(lines, profile) -> (text, confidence)。算法：y 轨道过滤 → 行高过滤（>=line_height*0.5）→ max_lines 截断（取置信度最高）→ y 排序 → \\n 拼接。9 个单测覆盖 4 场景（单行+背景英文、双行、水印过滤、空行）。\n\nfeat-033d Python 接入：pipeline/core.py __init__ 加 profile 参数，ocr_segment 里 profile 非空且 lines 非空时调 select_lines，否则走旧路径。bridge.py _handle_start_job 读 subtitle_profile 透传 Pipeline。2 个 Pipeline 接入测试 + 2 个 bridge 接入测试。\n\nfeat-033d Swift 接入：Messages.swift 新增 SubtitleProfile Codable struct + StartJobMessage.subtitleProfile 字段。VideoCoordinateMapper.swift 新增 SubtitleProfileBuilder.fromSelection（从选中候选框推算 crop-relative profile：y_center 减 region_box 原点 y、line_height 均值、max_lines 按 y 聚类判定）。RegionSelectionModel.subtitleProfileForIPC()。SubtitleExtractor.extract 透传 profile。SubLiftMacApp 调用 extract 时传 regionModel.subtitleProfileForIPC()。2 个 Messages roundtrip 测试 + 4 个 SubtitleProfileBuilder 测试。\n\nfeat-033e 端到端验证：PIL 合成含目标中文 + 背景英文的混合图，VisionOcrEngine 真实 OCR + selector 端到端验证。test_selector_filters_background_english：合成图「你好世界」+「CHAPTER ONE」，selector 根据 profile 只输出中文字幕行，背景英文被过滤。test_selector_no_profile_keeps_all：无 profile 时 OcrResult.text 包含所有行（旧路径兼容）。\n\npersistent_text_policy（跨段时序过滤水印/持久背景文字）本轮跳过，留作后续迭代。\n\n验证：uv run ruff check . 通过；uv run mypy src tests 通过（54 source files）；uv run pytest 通过（271 passed, 2 skipped）；swift test 通过（123 passed）；./init.sh 8/8 全绿。",
+      "evidence": "已完成。\n\nfeat-033a：run_trace（MockOcr）同 region 诊断。纯打轴 0 no_overlap；52–63s 新闻窗有 IN@56.2s + CHANGE 序列。结论主因 M1c（OCR 空/后处理抹段），非 EMPTY 卡死。诊断见 debug/reports/feat033_diagnosis.md。修复 scripts/run_trace.py 与 scan_params.py 对已删除 benchmark.alignment 的 import。\n\nfeat-033b：OCR 锚帧延迟 + 多候选回退（core.py）；drop_empty_text 默认 False（dedupe 保留空文本时间轴）。新闻簇 #17–#19 从 no_overlap 变为 timing 命中。\n\nfeat-033c：hysteresis_frames 2→1。\n\nfeat-033d 参数落定：ocr_anchor_delay_frames=2 + hysteresis=1 + drop_empty_text=False。\n\n对比 baseline-no-filter（region [0,848,1920,87], 5fps, vision）：\n- timing_f1 91.2% → **95.2%**（+4.0pp，门通过）\n- timing_recall 83.9% → 92.0%\n- timing_precision 100% → 98.8%（1 FA，strict 略降）\n- timing FN：no_overlap 8→1，merged 6→6（部分类型转换）\n- 边界：start_mae 127→124ms，end_mae 182→140ms，boundary_p95 500→417ms\n- 主剩余 gap：text.noise（OCR 区域，后置）\n\n产物：debug/benchmark-reports/feat033_final/；gates status=pass。\n验证：uv run ruff check .；uv run mypy src；uv run pytest；./init.sh 8/8 通过。",
       "subtasks": [
         {
           "id": "feat-033a",
-          "name": "结构化 OCR observation",
-          "description": "扩展 OCR 数据模型，保留 Vision 每行识别结果的 text、confidence、相对/绝对 bbox；保持现有 OcrEngine Protocol 的兼容迁移方案，避免一次性破坏 mock/测试。",
+          "name": "trace 归因与机制判定",
+          "description": "同 baseline-no-filter 配置跑 run_trace；对 50–65s / 短字幕窗口判定 M1a|b|c、M2、M3；写出诊断结论（无默认参数变更）。",
           "status": "done"
         },
         {
           "id": "feat-033b",
-          "name": "subtitle profile 数据契约",
-          "description": "定义 GUI/Python 共享的 subtitle_profile schema。profile 不记录每句字幕宽度，而记录目标字幕层的 y_center、y_tolerance、line_height、max_lines、script_hint、horizontal_policy、persistent_text_policy 等稳定约束。",
+          "name": "M1 连续空洞修复",
+          "description": "按 033a 主路径修 52–63s 新闻簇等 no_overlap；#16–#19 至少命中多数。",
           "status": "done"
         },
         {
           "id": "feat-033c",
-          "name": "字幕行 selector",
-          "description": "新增纯函数 selector，在 ROI 内根据 profile 从 OCR observations 中选择目标字幕行；支持单行/双行字幕、字幕长短变化、背景文字过滤和按 y/x 排序拼接。",
+          "name": "M2 短字幕补强",
+          "description": "在 patrol 开启下重扫 hysteresis/presence；可选非对称 IN 迟滞；precision 不降。",
           "status": "done"
         },
         {
           "id": "feat-033d",
-          "name": "GUI profile 生成与 IPC 接入",
-          "description": "基于用户选中的候选框生成 subtitle_profile，并通过 start_job 传给 Python；无 profile 时保持现有 region_box 行为。",
+          "name": "M3 残留 CHANGE + 全量验收",
+          "description": "补强 merged_into_neighbor；过切分时 dedupe 模糊合并可选；全量 benchmark 对比基线并落定参数。",
           "status": "done"
+        }
+      ]
+    },
+    {
+      "id": "feat-034",
+      "name": "OCR 行级选择器（可用性水位）",
+      "description": "第一阶段：跨过 goal 的可用性水位。根因：GUI 选区强制扩成 X 全宽（VideoCoordinateMapper），Vision 将区域内所有文字拼接并以整组平均置信度表示；新闻横幅/货单/英文姓名与中文字幕混入。帧复查：#5/#16/#58/#68 中文已被正确识别但 conf≈0.3 被全局 0.5 阈值清空；#50 正确中文混在多行英文。历史：全局阈值降到 0.3 会放进大量背景英文，F1/precision/usable 回退（e593a08）。方案：OCR 输出扩展为 OcrLine(text, confidence, box)，不在引擎内提前拼串；从 GUI 选区传递 SubtitleProfile（文字系统、垂直位置、字号高度、中心）；逐行评分（文字系统/Y/字号/中心距离/跨帧稳定性）；对 conf≈0.3 但连续多帧一致的中文字幕放行，单帧背景英文不放行；每段保留 3–5 代表帧做多数/最小编辑距离共识。验收门（相对 path-mode GUI 当前水位，对照 goal_static）：usable ≥ 85.1%；text.noise ≤ 2；text.empty ≤ 1；CER ≤ 6.6%（或显著逼近）；timing_f1 ≥ 95.2%；timing_precision ≥ 98.8%。对比基线：gui_ffmpeg_5fps（usable≈75.9%）与 goal_static（usable≈85.1%）。",
+      "module": "src/sublift/models.py, src/sublift/ocr/, src/sublift/pipeline/core.py, src/sublift/config.py, apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift, apps/macos/Sources/SubLiftMac/",
+      "dependencies": ["feat-033"],
+      "status": "done",
+      "evidence": "P1 修复与复测完成。修复项：dedupe 禁止空文本相互合并；consensus_text 以相似邻域聚类并向接受策略返回真实 support_votes，解决低置信文本变体按精确相等计票失败；显式 CJK 画像只清理与 CJK 边界直接粘连的拉丁横幅，保留纯英文、空格分隔英文及 ZPD 等内部混排；无显式 profile 默认 auto，GUI 按选中文字推断 cjk/latin/auto；benchmark manifest 可显式固定 subtitle_script。固定 GT 复测（Zootopia, 5fps, Vision, region [0,848,1920,87], subtitle_script=cjk）：usable 92.0%，text.noise 0，empty 0，CER macro 3.2%，timing F1 97.7%，precision 98.8%，全部通过验收门；#17/#18/#20/#29 恢复可用，#19 仅余 Vision 字形/标点误差。产物：debug/benchmark-reports/feat034_p1_fix2/。验证：ruff 全仓 0 error；mypy src tests 无问题（58 source files）；pytest 340 passed；Swift XCTest 15 passed + Swift Testing 121 passed；./init.sh 8/8 通过。",
+      "subtasks": [
+        {
+          "id": "feat-034a",
+          "name": "OcrLine 多行输出与引擎改造",
+          "description": "将 OCR 输出从单字符串 OcrResult 扩展为可携带 lines: list[OcrLine(text, confidence, box)]。Vision 保留逐行文本/置信度/bounding box，不在引擎内拼接；Mock 支持多行序列。兼容层：未启用行级选择时仍可 join 为旧 OcrResult 行为。单测覆盖多行解析与空结果。",
+          "status": "done",
+          "evidence": "OcrLine + OcrResult.lines + from_lines；Vision 逐行 conf/box；Mock lines=。"
         },
         {
-          "id": "feat-033e",
-          "name": "验证与 benchmark 对照",
-          "description": "构造同一 ROI 内含目标字幕、背景英文/水印/伪文字的样例或 fixture，验证 selector 只输出目标字幕；用 benchmark 对比 CER/WER 与重复条目变化。",
-          "status": "done"
+          "id": "feat-034b",
+          "name": "SubtitleProfile 与选区透传",
+          "description": "从 GUI 用户选中的候选框构造 SubtitleProfile：目标文字系统（按选中文字推断 cjk/latin/auto；无证据时 auto）、垂直位置/Y 区间、字号高度、中心位置。IPC start_job 透传 profile（或等价字段）；CLI/benchmark 可从 region_box 推导默认 profile，并可显式固定 script。不强制改全宽裁剪策略本身，先用 profile 在 OCR 结果内选行。",
+          "status": "done",
+          "evidence": "SubtitleProfile + IPC/Swift 透传；GUI 从候选文本推断 cjk/latin/auto；CLI/benchmark 默认 auto 且支持显式 script；region 推导默认；全宽裁剪未改。"
+        },
+        {
+          "id": "feat-034c",
+          "name": "逐行评分与低置信放行",
+          "description": "实现行级评分：文字系统匹配、Y 区间、字号、中心距离、跨帧稳定性。对 conf≈0.3 但连续多帧文本一致的目标语字幕放行；单帧背景英文不放行。禁止仅靠全局 confidence_threshold 下调。单测覆盖噪声行拒绝与目标行保留。",
+          "status": "done",
+          "evidence": "pipeline/line_select.py：score_line/select_line/should_accept_text/cleanup_subtitle_text。Config enable_line_select/low_conf_threshold。中文压过英文噪声；低 conf 多帧放行；仅清理显式 CJK 下与中文边界直接粘连的拉丁横幅，合法英文与中英混排有回归测试。"
+        },
+        {
+          "id": "feat-034d",
+          "name": "段内多代表帧共识",
+          "description": "每段保留 3–5 个代表帧（而非单锚帧），对选中行做多数文本/最小编辑距离共识后再写入 SubtitleEntry。与现有 ocr_anchor_delay_frames 协同；空文本策略保持可解释。单测覆盖多数一致与冲突回退。",
+          "status": "done",
+          "evidence": "ocr_consensus_frames=4；段内 sample + consensus_text 相似邻域/medoid；ConsensusResult 携带真实 support_votes；CJK+Latin 混合行继续取样区分稳定字幕与横幅；高 conf 纯目标语可提前停 OCR。"
+        },
+        {
+          "id": "feat-034e",
+          "name": "benchmark 验收与参数落定",
+          "description": "同 region/path-mode 配置对比 gui_ffmpeg_5fps 与 goal_static。验收：usable≥85.1%；text.noise≤2；text.empty≤1；CER≤6.6% 或显著逼近；timing_f1≥95.2%；precision≥98.8%。产物写入 debug/benchmark-reports/feat034_*/；通过后落定默认参数与文档。",
+          "status": "done",
+          "evidence": "feat034_p1_fix2 固定 GT：usable 92.0%、noise 0、empty 0、CER macro 3.2%、timing F1 97.7%、precision 98.8%，全部通过门槛。产物 debug/benchmark-reports/feat034_p1_fix2/。默认参数：enable_line_select=True、subtitle_script=auto；中文固定基准显式 subtitle_script=cjk。"
         }
       ]
     },
     {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
-      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化结果、OCR 字幕层筛选与持久背景文字过滤。",
+      "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。",
       "module": "docs/",
       "dependencies": ["feat-030", "feat-031", "feat-033", "feat-034"],
-      "status": "not-started",
-      "evidence": ""
-    },
-    {
-      "id": "feat-034",
-      "name": "持久背景文字过滤",
-      "description": "跨段时序统计识别持久背景文字（ticker / 水印），在 Pipeline.finalize 后处理剔除。单帧 selector（feat-033）对「同带同高、水平重叠」的 ticker 失效：y 轨道过滤失效（ticker 中心 y 与目标字幕重合）、行高过滤失效（ticker 行高接近目标）、单条 observation 合并（Vision 把水平相邻的中英文合并成一行）。本任务通过跨段时序统计解决：持久背景文字会在多段中以同 y 轨道、相同或不同文本片段重复出现。双条件算法：A 同文本指纹连续重复段数 ≥ K1（固定水印）；B 同 y_bin 不同文本数 ≥ M（ticker 文本片段多变）。判定为持久背景的行从对应段 entry.text 中剔除，重新合成。判定时机选 Pipeline.finalize 后处理：时序统计完整、不增加 push_entry 延迟、is_final 全量替换机制正好契合。",
-      "module": "src/sublift/ocr/, src/sublift/pipeline/, src/sublift/ipc/, apps/macos/Sources/SubLiftMac/",
-      "dependencies": ["feat-033"],
       "status": "done",
-      "evidence": "已完成。子任务 feat-034a/b/c/d/e 全部完成。\n\nfeat-034a 数据契约与 schema：models.py 新增 PersistentTextPolicy dataclass（enabled/min_repeat_segments/min_distinct_texts/y_bin_ratio）+ SubtitleProfile.persistent_text_policy 字段 + from_dict 扩展。protocol.py PROFILE_FIELDS 加 persistent_text_policy + build_persistent_text_policy 辅助函数 + _validate_persistent_text_policy 嵌套校验器（数值范围、正整数、未知字段拒绝）。11 个新 IPC schema 测试。Swift SubtitleProfile Codable 加 persistentTextPolicy 字段 + PersistentTextPolicy struct。\n\nfeat-034b Pipeline 缓存 per-segment OcrLine：Pipeline 新增 _segment_ocr_lines 字段，ocr_segment 在 OCR 后缓存 ocr_result.lines（early return 路径缓存空 list），与 _closed_entries 严格同 index 对齐。reset/cancel 同步清理。3 个新单测（缓存对齐、early return 对齐、reset 清理）。\n\nfeat-034c persistent filter 纯函数：新增 src/sublift/ocr/persistent.py，纯函数 filter_persistent_text(entries, segment_lines, profile) -> list[SubtitleEntry]。双条件算法：A 非目标轨道上同指纹最长连续出现段数 ≥ K1；B 非目标轨道上同 y_bin 不同指纹数 ≥ M → 整个 y_bin 标记。target_bins 由 _filter_candidates 选出每段目标行的 y_bin 集合（排除目标轨道避免误伤多变/重复的目标字幕）。剔除持久行后用 _filter_candidates + _compose 重新合成 text/confidence。selector.py 重构出 _filter_candidates 和 _compose 子函数供 persistent.py 复用。12 个单测覆盖 7 场景（ticker、固定水印、双行字幕安全、短字幕安全、空段、policy disabled、纯水印段、长度不一致）。\n\nfeat-034d Pipeline.finalize 接入：finalize 在 merge_entries 之前调 filter_persistent_text，policy=None 或 disabled 时原样返回（零行为变化）。2 个 Pipeline 接入测试（ticker 剔除端到端、无 policy 行为不变）。\n\nfeat-034e Swift GUI 生成与端到端验证：Messages.swift 新增 PersistentTextPolicy Codable struct + SubtitleProfile.persistentTextPolicy 字段。SubtitleProfileBuilder.fromSelection 默认生成 policy（enabled=true 用默认参数）。3 个新 Swift 测试（policy roundtrip、无 policy nil、builder 默认生成 policy）。\n\n验证：uv run ruff check . 通过；uv run mypy src tests 通过（56 source files）；uv run pytest 通过（303 passed, 2 skipped）；swift test 通过（127 passed）；./init.sh 8/8 全绿。",
-      "subtasks": [
-        {
-          "id": "feat-034a",
-          "name": "数据契约与 schema",
-          "description": "PersistentTextPolicy dataclass（min_repeat_segments/min_distinct_texts/y_bin_ratio/enabled）+ SubtitleProfile.persistent_text_policy 字段 + from_dict 扩展。IPC PROFILE_FIELDS 加字段 + 嵌套 dict 校验器（数值范围、未知字段拒绝、enabled 默认 True）。Swift SubtitleProfile Codable 扩展。",
-          "status": "done"
-        },
-        {
-          "id": "feat-034b",
-          "name": "Pipeline 缓存 per-segment OcrLine",
-          "description": "Pipeline 新增 _segment_ocr_lines 字段，ocr_segment 缓存 ocr_result.lines（仅 profile 非空时），与 _closed_entries 严格同 index 对齐。early return 路径同样对齐（append 空 list）。reset/cancel 同步清理。",
-          "status": "done"
-        },
-        {
-          "id": "feat-034c",
-          "name": "persistent filter 纯函数",
-          "description": "新增 src/sublift/ocr/persistent.py 纯函数 filter_persistent_text(entries, segment_lines, profile) -> list[SubtitleEntry]。算法：按 y_bin 聚合所有段 lines；条件 A 同文本指纹最长连续段数 ≥ K1 → 标记该指纹为持久；条件 B 同 y_bin 不同文本指纹数 ≥ M → 标记整个 y_bin 为持久背景带；剔除被标记行后对每段重新 select_lines 合成 text/confidence。policy=None 或 enabled=False 时原样返回。selector 重构出可复用子函数避免重复实现。",
-          "status": "done"
-        },
-        {
-          "id": "feat-034d",
-          "name": "Pipeline.finalize 接入",
-          "description": "finalize 在 merge_entries 之前调 filter_persistent_text。policy=None 或 disabled 时走旧路径（零行为变化）。端到端 fixture：PIL 合成多帧「中文 + ticker」序列验证 ticker 被剔除、中文保留。",
-          "status": "done"
-        },
-        {
-          "id": "feat-034e",
-          "name": "Swift GUI 生成与端到端验证",
-          "description": "SubtitleProfileBuilder 默认生成 persistent_text_policy（enabled=true 用默认参数）。Swift Codable roundtrip 测试。端到端合成多帧序列跑 VisionOcrEngine + persistent filter，断言 ticker 剔除、中文保留。",
-          "status": "done"
-        }
-      ]
+      "evidence": "2026-07-12 Phase 3 文档收口：README 更新 CLI --script、段内多帧共识、GUI 增量进度/取消与固定 GT 水位；ARCHITECTURE 更新默认 path mode、增量 feed/ocr_segment/finalize、Vision 资源生命周期、OCR 行级选择及最终指标；REQUIREMENTS 将 Phase 1~3 实现状态与长期跨平台边界校准；DECISIONS 新增 ADR-0012；phase3 plan、feature-list、baseline、HURDLES 与 progress 同步最终状态和残余风险。最终固定 GT：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%、micro 2.4%、字符准确率 97.6%，usable 92.0%，noise/empty 0，speed 21.0x。feat-028 独立初始基线入库和 ≥10 分钟非 Zootopia GUI 手工体验验收均按用户决定保留为明确跳过/暂缓项。最终验证：uv run ruff check . 0 error；uv run mypy src tests no issues；uv run pytest 346 passed；Swift swift test 15 XCTest + 121 Swift Testing passed；./init.sh 8/8 passed。"
     }
   ]
 }

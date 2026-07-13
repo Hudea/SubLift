@@ -69,32 +69,35 @@ Python 端 `bridge.py` 设有多项上限，防止异常输入耗尽资源：
 
 JPEG 解码失败、base64 解码失败均返回 `done` / `log(error)`，不崩溃 server。
 
-## 抽帧双路径
+## 抽帧：打轴 vs 预览
 
-### AVFoundation 路径（主路径）
+### 打轴采样（统一后端，默认）
+
+GUI 提取默认走 **path mode**：`start_job.video_path` 传入本地绝对路径，Python
+`BridgeHandler` 使用 **`FfmpegExtractor`**（与 CLI / `run_benchmark` 同源）：
 
 ```
-AVURLAsset(url:)
-  → loadTracks(.video)
-  → AVAssetReader + AVAssetReaderTrackOutput(kCVPixelFormatType_32BGRA)
-  → 按 PTS 跳采样（nextTargetMs += 1000/fps）
-  → CVPixelBuffer → CIImage(cvPixelBuffer:) → CIContext.createCGImage
-  → CGImageDestinationCreateWithData → JPEG q=0.85
+Swift start_job(video_path, fps, region_box, …)
+  → Python FfmpegExtractor(fps)  raw RGB 均匀网格
+  → Pipeline.feed / ocr_segment
+  → progress + push_entry + entries(is_final=True)
 ```
 
-覆盖 mp4 / mov / H.264 / HEVC（8/10-bit）。
+- **不再**经 AVF PTS 跳采样 + JPEG q=0.85 推帧（避免与验收 F1 漂移 ~10pp）。
+- 无 `video_path` 时仍可走 legacy **frame mode**（Swift 推 JPEG）供调试。
 
-### ffmpeg 兜底路径
+### 预览 / 选区用帧（仍可 AVF）
 
-用于 `.mkv` 及 AVFoundation 拒绝的容器：
+代表帧 Vision 候选框、播放预览继续用 AVFoundation；与打轴采样解耦。
 
-```bash
-ffmpeg -ss <secs> -i <input> -vf fps=5 -f image2pipe -vcodec mjpeg -q:v 2 -
+### 历史：Swift 侧 AVF / ffmpeg 兜底（frame mode / 预览）
+
+```
+AVURLAsset → AVAssetReader → PTS 跳采样 → JPEG q=0.85
+.mkv 等：系统 ffmpeg MJPEG 流（FfmpegFrameSampler）
 ```
 
 - `FfmpegDetector.whichFfmpeg()` 检测系统 ffmpeg，缺失弹窗引导 `brew install ffmpeg`。
-- `MjpegParser.parseNextJPEG(from:)` 按 `FF D8`（SOI）/ `FF D9`（EOI）marker 切帧，纯函数可单测。
-- `FfmpegFrameSampler.sample(url:config:)` 返回与 AVFoundation 同构的 `(tsMs, jpegData)` 异步流。
 
 ## 字幕编辑模型
 

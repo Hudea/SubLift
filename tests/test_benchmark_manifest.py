@@ -25,6 +25,7 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
                 "fps": 8,
                 "engine": "vision",
                 "confidence": 0.7,
+                "subtitle_script": "cjk",
                 "match_threshold": 0.6,
                 "region_box": [0, 842, 1920, 126],
                 "label": "gui_region_8fps",
@@ -41,6 +42,7 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
     assert config.ground_truth_path == repo / "benchmark/fixtures/movie.srt"
     assert config.fps == 8.0
     assert config.confidence == 0.7
+    assert config.subtitle_script == "cjk"
     assert config.match_threshold == 0.6
     assert config.region_box == (0, 842, 1920, 126)
     assert config.label == "gui_region_8fps"
@@ -62,4 +64,21 @@ def test_load_run_config_rejects_invalid_region_box(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ManifestError, match="width/height"):
+        load_run_config(manifest)
+
+
+def test_load_run_config_rejects_invalid_script(tmp_path: Path) -> None:
+    manifest = tmp_path / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/fixtures/movie.srt",
+                "subtitle_script": "emoji",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ManifestError, match="subtitle_script"):
         load_run_config(manifest)

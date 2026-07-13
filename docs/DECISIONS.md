@@ -5,6 +5,44 @@
 
 ---
 
+## ADR-0012 增量 pipeline、真实进度与取消共享任务生命周期（2026-07-12）
+
+- **背景**：Phase 2 批量模式会先缓存全部帧再统一处理，用户长时间看不到字幕；取消只改变 bridge 状态，无法解除 worker 在 ffmpeg 读取上的阻塞。CLI 与 GUI 也缺少一致、真实的阶段进度。
+- **决策**：
+  1. `Pipeline` 以 `feed(frame)`、`ocr_segment(segment)`、`finalize()` 支持逐帧推进，段闭合后立即通过 IPC `push_entry` 推送。
+  2. GUI path mode、CLI 与 benchmark 共享 Python `FfmpegExtractor`；以视频时长和采样率估算总帧，报告 `processing/finalizing` 与实际帧计数。
+  3. 单次任务共享持久化 cancellation event；取消同时终止 ffmpeg 子进程，worker 在 `finally` 中释放 extractor 并回收线程，使下一任务可重新启动。
+  4. Vision OCR 调用使用 `autorelease_pool`，图像桥接数据使用 CFData 生命周期，避免长流临时对象累积。
+- **理由**：首条反馈、进度真实性、快速取消和内存稳定性本质上属于同一处理生命周期，必须由同一状态与资源所有权约束，不能靠 UI 假进度或仅设置布尔标记补偿。
+- **结果**：自动审计首条反馈 0.68s、取消响应 0.108s，ffmpeg 进程退出且第二任务可正常启动；4K 流式内存审计通过。≥10 分钟非 Zootopia GUI 手工体验验收由用户决定暂缓。
+
+---
+
+## ADR-0011 OCR 文字系统默认 auto，CJK 横幅按边界清理（2026-07-10）
+
+- **背景**：feat-034 初版为清理 `PHISON/SON` 使用无条件拉丁尾缀正则，误删纯英文和合法中英混排；其相似文本聚类又未把簇票数传给接受策略，低置信中文字幕仍被清空。
+- **决策**：
+  1. 无显式 `SubtitleProfile` 时文字系统默认 `auto`；GUI 按选中候选文本推断 `cjk/latin/auto`，CLI/benchmark 可显式固定。
+  2. 共识结果必须携带真实 `support_votes`，低置信接受策略直接消费簇票数，不再下游按全文精确相等重算。
+  3. 仅在显式 CJK 画像下清理与 CJK 边界直接粘连的拉丁横幅；纯英文、空格分隔英文及中文内部缩写均保留。
+- **理由**：让语言假设来自用户选区或显式配置，以多帧证据处理 OCR 变体，并把水印清理限制在可解释的结构边界内。
+- **结果**：固定 GT usable 92.0%、CER macro 3.2%、noise/empty 0、timing F1 97.7%、precision 98.8%；合法英文与 `ZPD` 有回归测试。
+
+---
+
+## ADR-0010 打轴抽帧统一到 Python FfmpegExtractor（2026-07-09）
+
+- **背景**：GUI 用 AVF+JPEG 推帧时，同 region/Config 下 timing F1 ~84–86%，而 CLI/benchmark live（`FfmpegExtractor`）达 95.2%（5fps）/ 96.4%（8fps）。日志证明 region 与 pipeline 默认参数一致，差在选帧相位、时间戳网格与 JPEG 有损。
+- **决策**：
+  1. **打轴采样唯一实现** = Python `FfmpegExtractor`（与 CLI / `run_benchmark` 同源）。
+  2. GUI 默认 **path mode**：`start_job.video_path` 传本地路径，后端自抽帧；Swift **不再**为打轴推 JPEG frame 流。
+  3. 保留 **frame mode**（无 `video_path`）作兼容/调试。
+  4. AVF 仅用于 **预览与选区代表帧**，与打轴解耦。
+- **理由**：验收与产品必须同一像素/时间戳序列；双端各抽帧必然漂移。
+- **影响**：`bridge.py` path mode；`SubtitleExtractor` 默认 path；`docs/design/macos-gui.md` 抽帧章节；后续默认 fps 仍建议 5（速度），8 作高精度档。
+
+---
+
 ## ADR-0009 移除 Phase 2 .app 打包与 notarization 流程（2026-07-06）
 
 - **背景**：feat-025 原计划把 SwiftUI 工程打包为可分发 `.app`，并完成 Developer ID 签名 + `notarytool` 公证，使 Gatekeeper 放行。该流程需要 Apple Developer Program 会员、Developer ID 证书、embedded Python 运行时以及 hardened runtime 适配。
@@ -123,5 +161,3 @@ Phase 2 启动前对三项影响 feat-015/016/024 的设计点拍板：
 - **决策**：Phase 1 交付可运行 MVP——真实 1080p 视频经 `uv run sublift extract <video> -o out.srt` 产出可加载 SRT；而非仅抽象接口。
 - **理由**：用户选择「可运行 MVP」选项。端到端可运行才能验证架构有效性，避免抽象底座脱离实际。
 - **影响**：`docs/phases/phase1.json` 验收标准含真实视频产出 SRT 与三工具全绿；端到端验收作为 Phase 1 级验收门（任务粒度见 ADR-0004）。ASS/VTT、PaddleOCR 第二引擎、配置文件、进度展示等显式排除。
-
-

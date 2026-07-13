@@ -123,84 +123,81 @@ enum RegionMerger {
 
         return [0, y, width, height]
     }
-}
 
-/// feat-033d：从用户选中的候选框推算 SubtitleProfile。
-///
-/// 把全帧坐标的选中候选框转换为裁剪图内（crop-relative）的 profile：
-/// - y_center: 选中框中心 y 均值，减去 region_box 原点 y
-/// - line_height: 选中框高度均值
-/// - y_tolerance: 覆盖选中框中心 y 的实际跨度 + 单行抖动
-///   （双行字幕两行中心相距约一个行高，lineHeight/2 不够）
-/// - max_lines: 按选中框 y 分布聚类判定（简单版：唯一 y 个数，clamp 1...2）
-enum SubtitleProfileBuilder {
-
-    /// 从选中候选框 + region_box 生成 SubtitleProfile。
+    /// feat-034b：由用户选中框并集 + 全宽 crop，构造 crop 坐标系下的 `SubtitleProfilePayload`。
     ///
-    /// - Parameters:
-    ///   - selectedRects: 用户选中的候选框（全帧像素坐标）
-    ///   - regionBox: region_box [x, y, width, height]（x 恒为 0，y 为裁剪原点）
-    /// - Returns: crop-relative 的 SubtitleProfile；选中为空或 regionBox 无效时返回 nil
-    static func fromSelection(
-        selectedRects: [CGRect],
-        regionBox: RegionBox?
-    ) -> SubtitleProfile? {
-        guard !selectedRects.isEmpty,
-              let regionBox,
-              regionBox.count == 4
-        else { return nil }
+    /// - `regionBox`：全宽裁剪带 `[x,y,w,h]`（视频像素）
+    /// - 选中框：真实字幕窄框（视频像素）；profile 几何相对 crop 原点
+    static func subtitleProfileFromSelection(
+        candidates: [(id: Int, pixelRect: CGRect, textPreview: String)],
+        selectedIds: Set<Int>,
+        regionBox: RegionBox,
+        script: String? = nil
+    ) -> SubtitleProfilePayload? {
+        guard regionBox.count == 4 else { return nil }
+        let cropX = regionBox[0]
+        let cropY = regionBox[1]
+        let cropW = regionBox[2]
+        let cropH = regionBox[3]
+        guard cropW > 0, cropH > 0 else { return nil }
 
-        let cropOriginY = CGFloat(regionBox[1])
+        let selected = candidates.filter { selectedIds.contains($0.id) }
+        let effectiveScript = script ?? inferScript(
+            from: selected.map(\.textPreview)
+        )
+        guard !selected.isEmpty else {
+            // 无选中时用 crop 全带默认
+            return SubtitleProfilePayload(
+                script: effectiveScript,
+                centerX: cropW / 2,
+                centerY: cropH / 2,
+                height: cropH,
+                yMin: 0,
+                yMax: cropH
+            )
+        }
 
-        let midYs = selectedRects.map { $0.midY }
-        let centerYAvg = midYs.reduce(0, +) / CGFloat(midYs.count)
-        let yCenter = Double(centerYAvg - cropOriginY)
+        let minX = selected.map { $0.pixelRect.minX }.min()!
+        let maxX = selected.map { $0.pixelRect.maxX }.max()!
+        let minY = selected.map { $0.pixelRect.minY }.min()!
+        let maxY = selected.map { $0.pixelRect.maxY }.max()!
 
-        let heights = selectedRects.map { $0.height }
-        let heightAvg = heights.reduce(0, +) / CGFloat(heights.count)
-        let lineHeight = Double(heightAvg)
+        // 视频像素 → crop 相对，再 clamp
+        let relMinX = max(0, min(Int(minX.rounded(.down)) - cropX, cropW))
+        let relMaxX = max(relMinX, min(Int(maxX.rounded(.up)) - cropX, cropW))
+        let relMinY = max(0, min(Int(minY.rounded(.down)) - cropY, cropH))
+        let relMaxY = max(relMinY, min(Int(maxY.rounded(.up)) - cropY, cropH))
+        let bandW = max(0, relMaxX - relMinX)
+        let bandH = max(0, relMaxY - relMinY)
 
-        let yTolerance = _computeYTolerance(midYs: midYs, centerYAvg: centerYAvg, lineHeight: lineHeight)
-
-        let maxLines = _computeMaxLines(midYs: midYs, heightAvg: heightAvg)
-
-        // feat-034e：默认启用持久背景文字过滤（ticker / 水印）
-        // 用默认参数（min_repeat_segments=3, min_distinct_texts=4, y_bin_ratio=0.5）
-        let policy = PersistentTextPolicy()
-
-        return SubtitleProfile(
-            yCenter: yCenter,
-            yTolerance: yTolerance,
-            lineHeight: lineHeight,
-            maxLines: maxLines,
-            scriptHint: "auto",
-            persistentTextPolicy: policy
+        return SubtitleProfilePayload(
+            script: effectiveScript,
+            centerX: relMinX + bandW / 2,
+            centerY: relMinY + bandH / 2,
+            height: bandH > 0 ? bandH : cropH,
+            yMin: relMinY,
+            yMax: relMaxY > relMinY ? relMaxY : cropH
         )
     }
 
-    /// y_tolerance = 选中框中心 y 到均值的最大距离 + lineHeight/2（单行抖动余量）。
-    /// 双行字幕两行中心相距约一个行高，均值居中，每行到均值距离 ≈ span/2，
-    /// 加 lineHeight/2 余量保证两行都落在容差内。
-    private static func _computeYTolerance(
-        midYs: [CGFloat],
-        centerYAvg: CGFloat,
-        lineHeight: Double
-    ) -> Double {
-        let maxDist = midYs.map { abs($0 - centerYAvg) }.max() ?? 0
-        return Double(maxDist) + lineHeight / 2.0
-    }
+    private static func inferScript(from texts: [String]) -> String {
+        var hasCJK = false
+        var hasLatin = false
 
-    /// max_lines 按 y 中心聚类：相邻中心差 > heightAvg 视为不同行。
-    private static func _computeMaxLines(midYs: [CGFloat], heightAvg: CGFloat) -> Int {
-        let centers = midYs.sorted()
-        var clusters: [CGFloat] = []
-        for c in centers {
-            if let last = clusters.last, abs(c - last) <= heightAvg {
+        for scalar in texts.joined().unicodeScalars {
+            switch scalar.value {
+            case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF:
+                hasCJK = true
+            case 0x41...0x5A, 0x61...0x7A:
+                hasLatin = true
+            default:
                 continue
             }
-            clusters.append(c)
         }
-        return max(1, min(2, clusters.count))
+
+        if hasCJK && !hasLatin { return "cjk" }
+        if hasLatin && !hasCJK { return "latin" }
+        return "auto"
     }
 }
 

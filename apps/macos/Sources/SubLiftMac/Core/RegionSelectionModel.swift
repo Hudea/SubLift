@@ -154,14 +154,12 @@ final class RegionSelectionModel: ObservableObject {
         )
     }
 
-    /// feat-033d：从选中候选框生成 SubtitleProfile；无选中或无 regionBox 时返回 nil。
-    func subtitleProfileForIPC() -> SubtitleProfile? {
-        let regionBox = regionBoxForIPC()
-        let selectedRects = candidates
-            .filter { selectedIds.contains($0.id) }
-            .map { $0.pixelRect }
-        return SubtitleProfileBuilder.fromSelection(
-            selectedRects: selectedRects,
+    /// feat-034b：供 `start_job` 使用的 `subtitle_profile`（相对 region crop）。
+    func subtitleProfileForIPC() -> SubtitleProfilePayload? {
+        guard let regionBox = regionBoxForIPC() else { return nil }
+        return RegionMerger.subtitleProfileFromSelection(
+            candidates: candidates.map { ($0.id, $0.pixelRect, $0.textPreview) },
+            selectedIds: selectedIds,
             regionBox: regionBox
         )
     }

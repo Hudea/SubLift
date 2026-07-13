@@ -74,6 +74,7 @@ def build_start_job(
     region_box: list[int] | None = None,
     duration_ms: int = 0,
     enable_ssim_patrol: bool | None = None,
+    video_path: str | None = None,
     subtitle_profile: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """构造 start_job 消息。
@@ -86,8 +87,12 @@ def build_start_job(
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
         enable_ssim_patrol: 可选 SSIM 巡逻开关（feat-031b）。None 不传（用
-            Config 默认值 False）；True 显式启用 patrol；False 显式关闭。
-        subtitle_profile: 可选目标字幕层约束（feat-033b）。None 不传，走旧路径。
+            Config 默认值）；True 显式启用 patrol；False 显式关闭。
+        video_path: 可选本地视频绝对路径。非空时进入 **path mode**：
+            Python 端用 ``FfmpegExtractor`` 自抽帧（与 CLI/benchmark 同源），
+            不再接收 frame 流。
+        subtitle_profile: 可选字幕轨画像（feat-034b），字段见
+            :class:`sublift.models.SubtitleProfile.to_dict`。几何相对 region crop。
     """
     msg: dict[str, Any] = {
         "type": MSG_START_JOB,
@@ -100,6 +105,8 @@ def build_start_job(
     }
     if enable_ssim_patrol is not None:
         msg["enable_ssim_patrol"] = enable_ssim_patrol
+    if video_path is not None:
+        msg["video_path"] = video_path
     if subtitle_profile is not None:
         msg["subtitle_profile"] = subtitle_profile
     return msg
@@ -280,8 +287,9 @@ def validate(message: dict[str, Any]) -> None:
             _require_int(message, "duration_ms")
         if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
             _require_bool(message, "enable_ssim_patrol")
-        if "subtitle_profile" in message and message["subtitle_profile"] is not None:
-            _validate_subtitle_profile(message["subtitle_profile"])
+        if "video_path" in message and message["video_path"] is not None:
+            _require_str(message, "video_path")
+        _optional_subtitle_profile(message)
     elif msg_type == MSG_FRAME:
         _require_int(message, "ts_ms")
         _require_str(message, "jpeg_bytes")
@@ -357,6 +365,24 @@ def _optional_region_box(message: dict[str, Any]) -> None:
             raise ProtocolError(f"region_box 含非整数: {v!r}")
 
 
+def _optional_subtitle_profile(message: dict[str, Any]) -> None:
+    """校验可选 ``subtitle_profile`` 对象（feat-034b）。"""
+    if "subtitle_profile" not in message or message["subtitle_profile"] is None:
+        return
+    profile = message["subtitle_profile"]
+    if not isinstance(profile, dict):
+        raise ProtocolError(f"subtitle_profile 非对象: {profile!r}")
+    from sublift.models import SCRIPT_VALUES, SubtitleProfile
+
+    try:
+        SubtitleProfile.from_dict(profile)
+    except ValueError as e:
+        raise ProtocolError(str(e)) from e
+    # script 已在 from_dict 校验；再保证 keys 可序列化
+    if profile.get("script") not in SCRIPT_VALUES and "script" in profile:
+        raise ProtocolError(f"subtitle_profile.script 非法: {profile.get('script')!r}")
+
+
 def _require_entries(message: dict[str, Any]) -> None:
     if "entries" not in message:
         raise ProtocolError("entries 缺失")
@@ -387,136 +413,3 @@ def _validate_entry(e: Any, i: int) -> None:
         e["confidence"], bool
     ):
         raise ProtocolError(f"entries[{i}].confidence 缺失或非数值: {e.get('confidence')!r}")
-
-
-# profile 字段名常量（Swift 端 CodingKeys 对齐）
-PROFILE_FIELDS = frozenset(
-    {
-        "y_center",
-        "y_tolerance",
-        "line_height",
-        "max_lines",
-        "script_hint",
-        "persistent_text_policy",
-    }
-)
-PROFILE_SCRIPT_HINTS = frozenset({"zh", "en", "auto"})
-
-# persistent_text_policy 字段名常量（feat-034a）
-PERSISTENT_POLICY_FIELDS = frozenset(
-    {"enabled", "min_repeat_segments", "min_distinct_texts", "y_bin_ratio"}
-)
-
-
-def build_subtitle_profile(
-    y_center: float,
-    y_tolerance: float,
-    line_height: float,
-    max_lines: int = 1,
-    script_hint: str = "auto",
-    persistent_text_policy: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    """构造 subtitle_profile 字典（feat-033b / feat-034a）。
-
-    Args:
-        y_center: 目标字幕层中心 y（裁剪图内绝对像素，左上原点）。
-        y_tolerance: y 容差，line 中心 y 落在 [y_center-y_tolerance, y_center+y_tolerance]
-            才被 selector 选中。
-        line_height: 期望行高（像素），用于过滤背景细小文字。
-        max_lines: 最多保留几行（1=单行字幕，2=双行字幕）。
-        script_hint: 脚本提示（"zh"/"en"/"auto"），软约束，目前 selector 不强制使用。
-        persistent_text_policy: 可选持久背景文字过滤策略（feat-034）。None 不传，
-            走纯单帧 selector；传 dict 时由 PersistentTextPolicy.from_dict 消费。
-    """
-    profile: dict[str, Any] = {
-        "y_center": y_center,
-        "y_tolerance": y_tolerance,
-        "line_height": line_height,
-        "max_lines": max_lines,
-        "script_hint": script_hint,
-    }
-    if persistent_text_policy is not None:
-        profile["persistent_text_policy"] = persistent_text_policy
-    return profile
-
-
-def build_persistent_text_policy(
-    enabled: bool = True,
-    min_repeat_segments: int = 3,
-    min_distinct_texts: int = 4,
-    y_bin_ratio: float = 0.5,
-) -> dict[str, Any]:
-    """构造 persistent_text_policy 字典（feat-034a）。
-
-    Args:
-        enabled: 是否启用持久背景过滤。False 时 filter 跳过。
-        min_repeat_segments: 条件 A 阈值（同文本连续重复段数）。
-        min_distinct_texts: 条件 B 阈值（同 y_bin 不同文本数）。
-        y_bin_ratio: y_bin 划分粒度，bin = line_height * 此值。
-    """
-    return {
-        "enabled": enabled,
-        "min_repeat_segments": min_repeat_segments,
-        "min_distinct_texts": min_distinct_texts,
-        "y_bin_ratio": y_bin_ratio,
-    }
-
-
-def _validate_subtitle_profile(profile: Any) -> None:
-    """校验 subtitle_profile 字段 schema（feat-033b / feat-034a）。"""
-    if not isinstance(profile, dict):
-        raise ProtocolError(f"subtitle_profile 非字典: {profile!r}")
-
-    for key in ("y_center", "y_tolerance", "line_height"):
-        if key not in profile:
-            raise ProtocolError(f"subtitle_profile.{key} 缺失")
-        val = profile[key]
-        if isinstance(val, bool) or not isinstance(val, (int, float)):
-            raise ProtocolError(f"subtitle_profile.{key} 非数值: {val!r}")
-
-    if "max_lines" in profile:
-        ml = profile["max_lines"]
-        if not isinstance(ml, int) or isinstance(ml, bool) or ml not in (1, 2):
-            raise ProtocolError(f"subtitle_profile.max_lines 非法（仅允许 1 或 2）: {ml!r}")
-
-    if "script_hint" in profile:
-        sh = profile["script_hint"]
-        if not isinstance(sh, str) or sh not in PROFILE_SCRIPT_HINTS:
-            raise ProtocolError(
-                f"subtitle_profile.script_hint 非法（仅允许 zh/en/auto）: {sh!r}"
-            )
-
-    if "persistent_text_policy" in profile and profile["persistent_text_policy"] is not None:
-        _validate_persistent_text_policy(profile["persistent_text_policy"])
-
-    extra = set(profile.keys()) - PROFILE_FIELDS
-    if extra:
-        raise ProtocolError(f"subtitle_profile 含未知字段: {extra!r}")
-
-
-def _validate_persistent_text_policy(policy: Any) -> None:
-    """校验 persistent_text_policy 字段 schema（feat-034a）。"""
-    if not isinstance(policy, dict):
-        raise ProtocolError(f"persistent_text_policy 非字典: {policy!r}")
-
-    if "enabled" in policy and not isinstance(policy["enabled"], bool):
-        raise ProtocolError(f"persistent_text_policy.enabled 非布尔: {policy['enabled']!r}")
-
-    for key in ("min_repeat_segments", "min_distinct_texts"):
-        if key in policy:
-            val = policy[key]
-            if not isinstance(val, int) or isinstance(val, bool) or val < 1:
-                raise ProtocolError(
-                    f"persistent_text_policy.{key} 非正整数: {val!r}"
-                )
-
-    if "y_bin_ratio" in policy:
-        ratio = policy["y_bin_ratio"]
-        if isinstance(ratio, bool) or not isinstance(ratio, (int, float)) or ratio <= 0:
-            raise ProtocolError(
-                f"persistent_text_policy.y_bin_ratio 非正数: {ratio!r}"
-            )
-
-    extra = set(policy.keys()) - PERSISTENT_POLICY_FIELDS
-    if extra:
-        raise ProtocolError(f"persistent_text_policy 含未知字段: {extra!r}")

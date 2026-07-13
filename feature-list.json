@@ -121,49 +121,42 @@
     {
       "id": "phase3",
       "name": "Phase 3 - 优化与基本可用",
-      "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，使项目从功能跑通进入基本可用。具体实现方法不在本阶段规划，见 docs/plans/phase3.md，细粒度任务见 docs/phases/phase3.json。",
+      "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位，使项目从功能跑通进入基本可用。见 docs/plans/phase3.md，细粒度任务见 docs/phases/phase3.json。",
       "detail_file": "docs/phases/phase3.json",
       "features": [
         {
           "id": "phase3.benchmark",
           "name": "Benchmark 优化",
-          "description": "定义打轴精准度、识别准确率、端到端可用性、速度等核心指标；实现 ground truth 加载与一对一对齐；提供一键运行入口；输出 agent 可读诊断报告；记录当前基线。覆盖 feat-027~028。注：feat-028 基线入库已跳过，基线以会话跑测形式记于 docs/benchmarks/baseline.md。",
-          "status": "in-progress",
+          "description": "Benchmark 框架、ground truth 加载、一对一对齐、核心指标和 agent 可读诊断报告已完成。feat-028 的独立初始基线入库经用户决定跳过；历史与最终固定 GT 水位汇总于 docs/benchmarks/baseline.md。覆盖 feat-027~028。",
+          "status": "done",
           "covers": ["feat-027", "feat-028"]
         },
         {
           "id": "phase3.incremental",
           "name": "增量处理与前台进度优化",
           "description": "把批量处理改为边收帧边处理，缩短首条字幕反馈时间；CLI/GUI 显示真实阶段进度；支持取消操作。允许重构 pipeline/ 与 ipc/bridge.py。覆盖 feat-029~030。",
-          "status": "not-started",
+          "status": "done",
           "covers": ["feat-029", "feat-030"]
         },
         {
           "id": "phase3.timeline",
           "name": "打轴检测优化",
-          "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。在 benchmark 数据集上 timing_f1 提升到 ≥ 95%，timing_precision 不下降。覆盖 feat-031。",
+          "description": "优化 pipeline/ 中 signature/changepoint/timeline 与 OCR 锚帧策略。feat-031/033 完成 SSIM patrol 与 residual 收敛；feat-034 最终固定 GT timing F1 97.7%、precision 98.8%。覆盖 feat-031、feat-033。",
           "status": "done",
-          "covers": ["feat-031"]
+          "covers": ["feat-031", "feat-033"]
         },
         {
-          "id": "phase3.ocr-layer",
-          "name": "OCR 字幕层筛选",
-          "description": "在已选 ROI 内进一步区分目标字幕层与背景文字/伪文字。保留 OCR per-line observation（文本、bbox、confidence），由 subtitle profile 描述目标字幕的 y 轨道、行高、行数、脚本提示与持久背景过滤策略。覆盖 feat-033。",
-          "status": "done",
-          "covers": ["feat-033"]
-        },
-        {
-          "id": "phase3.persistent-text",
-          "name": "持久背景文字过滤",
-          "description": "跨段时序统计识别持久背景文字（ticker / 水印），在 Pipeline.finalize 后处理剔除。双条件算法：A 同文本连续重复段数 ≥ K1；B 同 y 轨道不同文本数 ≥ M。解决 ticker 与目标字幕同带同高、单帧 selector 无法区分的场景。覆盖 feat-034。",
+          "id": "phase3.ocr-usability",
+          "name": "OCR 可用性（行级选择器）",
+          "description": "保留 Vision 逐行 text/conf/box，按 SubtitleProfile 选目标行，以段内多帧共识接受低置信稳定字幕并拒绝背景噪声。最终固定 GT usable 92.0%、CER 3.2%、noise/empty 0。覆盖 feat-034。",
           "status": "done",
           "covers": ["feat-034"]
         },
         {
           "id": "phase3.docs",
           "name": "文档收尾",
-          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化、OCR 字幕层筛选与持久背景文字过滤。覆盖 feat-032。",
-          "status": "not-started",
+          "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。覆盖 feat-032。",
+          "status": "done",
           "covers": ["feat-032"]
         }
       ]

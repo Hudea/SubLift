@@ -32,8 +32,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from benchmark.alignment import align  # noqa: E402
-from benchmark.metrics import SegmentMetrics, compute_segment_metrics  # noqa: E402
+from benchmark.diagnostics import TimingMetrics, analyze_entries  # noqa: E402
 from benchmark.srt_loader import SrtEntry, load_srt  # noqa: E402
 
 from sublift.config import DEFAULT_CONFIG, ChangePointConfig, Config  # noqa: E402
@@ -309,8 +308,8 @@ def _run_comparison(args: argparse.Namespace, video_path: Path, gt_path: Path) -
     base_fn = classify_fn(base_detected, ground_truth, match_threshold=args.match_threshold)
     base_short = compute_short_subtitle_metrics(base_detected, ground_truth)
     print(
-        f"  F1={base_seg.f1 * 100:.1f}% FN={len(base_fn)}"
-            f" short={base_short.short_recall * 100:.1f}%",
+        f"  F1={base_seg.timing_f1 * 100:.1f}% FN={len(base_fn)}"
+        f" short={base_short.short_recall * 100:.1f}%",
         file=sys.stderr,
     )
 
@@ -327,7 +326,8 @@ def _run_comparison(args: argparse.Namespace, video_path: Path, gt_path: Path) -
     opt_fn = classify_fn(opt_detected, ground_truth, match_threshold=args.match_threshold)
     opt_short = compute_short_subtitle_metrics(opt_detected, ground_truth)
     print(
-        f"  F1={opt_seg.f1 * 100:.1f}% FN={len(opt_fn)} short={opt_short.short_recall * 100:.1f}%",
+        f"  F1={opt_seg.timing_f1 * 100:.1f}% FN={len(opt_fn)}"
+        f" short={opt_short.short_recall * 100:.1f}%",
         file=sys.stderr,
     )
 
@@ -346,19 +346,23 @@ def _compute_segment_metrics(
     detected: list[DetectedSegment],
     ground_truth: list[SrtEntry],
     match_threshold: float,
-) -> SegmentMetrics:
-    """计算 segment F1（复用 benchmark.alignment + metrics）。"""
+) -> TimingMetrics:
+    """计算 timing F1（复用 benchmark.diagnostics 一对一匹配）。"""
     detected_srt = [
         SrtEntry(index=i + 1, start_ms=d.start_ms, end_ms=d.end_ms, text=d.text)
         for i, d in enumerate(detected)
     ]
-    pairs = align(detected_srt, ground_truth, threshold=match_threshold)
-    return compute_segment_metrics(pairs, ground_truth)
+    analysis = analyze_entries(
+        detected_srt,
+        ground_truth,
+        temporal_iou_threshold=match_threshold,
+    )
+    return analysis.metrics.timing
 
 
 def _format_comparison(
-    base_seg: SegmentMetrics,
-    opt_seg: SegmentMetrics,
+    base_seg: TimingMetrics,
+    opt_seg: TimingMetrics,
     base_fn: list[FnClassification],
     opt_fn: list[FnClassification],
     base_short: ShortSubtitleMetrics,
@@ -381,16 +385,17 @@ def _format_comparison(
     lines.append("| 指标 | Baseline | Optimized | 变化 |")
     lines.append("|---|---|---|---|")
     lines.append(
-        f"| Segment F1 | {base_seg.f1 * 100:.1f}% | {opt_seg.f1 * 100:.1f}% | "
-        f"{(opt_seg.f1 - base_seg.f1) * 100:+.1f}pp |"
+        f"| Timing F1 | {base_seg.timing_f1 * 100:.1f}% | {opt_seg.timing_f1 * 100:.1f}% | "
+        f"{(opt_seg.timing_f1 - base_seg.timing_f1) * 100:+.1f}pp |"
     )
     lines.append(
-        f"| Recall | {base_seg.recall * 100:.1f}% | {opt_seg.recall * 100:.1f}% | "
-        f"{(opt_seg.recall - base_seg.recall) * 100:+.1f}pp |"
+        f"| Recall | {base_seg.timing_recall * 100:.1f}% | {opt_seg.timing_recall * 100:.1f}% | "
+        f"{(opt_seg.timing_recall - base_seg.timing_recall) * 100:+.1f}pp |"
     )
     lines.append(
-        f"| Precision | {base_seg.precision * 100:.1f}% | {opt_seg.precision * 100:.1f}% | "
-        f"{(opt_seg.precision - base_seg.precision) * 100:+.1f}pp |"
+        f"| Precision | {base_seg.timing_precision * 100:.1f}% | "
+        f"{opt_seg.timing_precision * 100:.1f}% | "
+        f"{(opt_seg.timing_precision - base_seg.timing_precision) * 100:+.1f}pp |"
     )
     lines.append(
         f"| FN 总数 | {len(base_fn)} | {len(opt_fn)} | {len(opt_fn) - len(base_fn):+d} |"
@@ -429,9 +434,9 @@ def _format_comparison(
 
     lines.append("## 参数落定决策")
     lines.append("")
-    f1_delta = opt_seg.f1 - base_seg.f1
-    precision_delta = opt_seg.precision - base_seg.precision
-    if opt_seg.f1 >= 0.95 and precision_delta >= 0:
+    f1_delta = opt_seg.timing_f1 - base_seg.timing_f1
+    precision_delta = opt_seg.timing_precision - base_seg.timing_precision
+    if opt_seg.timing_f1 >= 0.95 and precision_delta >= 0:
         lines.append("- 决策: **参数落定为默认值**（F1 ≥ 95% 且 precision 不下降）")
     elif f1_delta >= 0.03 and precision_delta >= 0:
         lines.append(

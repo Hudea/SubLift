@@ -5,88 +5,51 @@ Mock 单测默认运行；Vision 单测需 PyObjC，集成测试需 macOS + Visi
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
-from sublift.models import BoundingBox, OcrLine, OcrResult, PersistentTextPolicy, SubtitleProfile
+from sublift.models import BoundingBox, OcrLine, OcrResult
 from sublift.ocr.base import OcrEngine
 from sublift.ocr.mock import MockOcrEngine
-from sublift.ocr.vision import VisionOcrEngine, is_vision_available
+from sublift.ocr.vision import (
+    VisionOcrEngine,
+    _collect_results,
+    _vision_box_to_pixel,
+    is_vision_available,
+)
 
 
-class TestOcrLineModel:
-    """OcrLine / OcrResult.lines 数据模型测试（feat-033a）。"""
+class TestOcrResultFromLines:
+    """OcrResult.from_lines 兼容 join 约定。"""
 
-    def test_ocr_line_construction(self) -> None:
-        bbox = BoundingBox(x=10, y=20, width=100, height=30)
-        line = OcrLine(text="你好", confidence=0.9, bbox=bbox)
-        assert line.text == "你好"
-        assert line.confidence == 0.9
-        assert line.bbox == bbox
+    def test_empty(self) -> None:
+        result = OcrResult.from_lines([])
+        assert result == OcrResult(text="", confidence=0.0, lines=())
 
-    def test_ocr_result_default_lines_empty(self) -> None:
-        """OcrResult 不传 lines 时默认空列表（向后兼容）。"""
-        result = OcrResult(text="hello", confidence=0.8)
-        assert result.lines == []
+    def test_multiline_join_and_mean_conf(self) -> None:
+        lines = (
+            OcrLine(
+                text="hello",
+                confidence=0.8,
+                box=BoundingBox(x=0, y=0, width=40, height=10),
+            ),
+            OcrLine(
+                text="world",
+                confidence=0.4,
+                box=BoundingBox(x=0, y=20, width=40, height=10),
+            ),
+        )
+        result = OcrResult.from_lines(lines)
+        assert result.text == "hello\nworld"
+        assert result.confidence == pytest.approx(0.6)
+        assert result.lines == lines
 
-    def test_ocr_result_with_lines(self) -> None:
-        bbox = BoundingBox(x=0, y=0, width=50, height=20)
-        line = OcrLine(text="a", confidence=0.9, bbox=bbox)
-        result = OcrResult(text="a", confidence=0.9, lines=[line])
-        assert len(result.lines) == 1
-        assert result.lines[0] == line
-
-    def test_ocr_result_legacy_construction_still_works(self) -> None:
-        """旧式构造 OcrResult(text, confidence) 必须仍然工作。"""
-        result = OcrResult(text="hello", confidence=0.8)
-        assert result.text == "hello"
-        assert result.confidence == 0.8
-        assert result.lines == []
-
-
-class TestSubtitleProfileModel:
-    """SubtitleProfile / PersistentTextPolicy 数据模型测试（feat-033b / feat-034a）。"""
-
-    def test_profile_defaults(self) -> None:
-        profile = SubtitleProfile(y_center=100.0, y_tolerance=20.0, line_height=40.0)
-        assert profile.max_lines == 1
-        assert profile.script_hint == "auto"
-        assert profile.persistent_text_policy is None
-
-    def test_profile_from_dict_without_policy(self) -> None:
-        profile = SubtitleProfile.from_dict({
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-        })
-        assert profile.persistent_text_policy is None
-
-    def test_profile_from_dict_with_policy(self) -> None:
-        profile = SubtitleProfile.from_dict({
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": {
-                "enabled": True, "min_repeat_segments": 2,
-                "min_distinct_texts": 5, "y_bin_ratio": 0.4,
-            },
-        })
-        assert profile.persistent_text_policy is not None
-        assert profile.persistent_text_policy.enabled is True
-        assert profile.persistent_text_policy.min_repeat_segments == 2
-        assert profile.persistent_text_policy.min_distinct_texts == 5
-        assert abs(profile.persistent_text_policy.y_bin_ratio - 0.4) < 1e-6
-
-    def test_profile_from_dict_policy_non_dict_returns_none(self) -> None:
-        """persistent_text_policy 不是 dict 时被视为 None（保守）。"""
-        profile = SubtitleProfile.from_dict({
-            "y_center": 100.0, "y_tolerance": 20.0, "line_height": 40.0,
-            "persistent_text_policy": None,
-        })
-        assert profile.persistent_text_policy is None
-
-    def test_persistent_policy_defaults(self) -> None:
-        policy = PersistentTextPolicy()
-        assert policy.enabled is True
-        assert policy.min_repeat_segments == 3
-        assert policy.min_distinct_texts == 4
-        assert abs(policy.y_bin_ratio - 0.5) < 1e-6
+    def test_legacy_constructor_empty_lines(self) -> None:
+        result = OcrResult(text="hi", confidence=0.9)
+        assert result.lines == ()
+        assert result.text == "hi"
 
 
 class TestMockOcrEngine:
@@ -116,6 +79,26 @@ class TestMockOcrEngine:
         second = engine.recognize(img)
         assert first == second == OcrResult(text="hello", confidence=0.9)
 
+    def test_fixed_mode_with_lines(self) -> None:
+        lines = [
+            OcrLine(
+                text="上",
+                confidence=0.9,
+                box=BoundingBox(x=1, y=2, width=10, height=8),
+            ),
+            OcrLine(
+                text="下",
+                confidence=0.7,
+                box=BoundingBox(x=1, y=20, width=10, height=8),
+            ),
+        ]
+        engine = MockOcrEngine(lines=lines)
+        img = Image.new("RGB", (10, 10))
+        result = engine.recognize(img)
+        assert result.text == "上\n下"
+        assert result.confidence == pytest.approx(0.8)
+        assert result.lines == tuple(lines)
+
     def test_sequence_mode(self) -> None:
         """序列模式按调用顺序返回。"""
         seq = [
@@ -134,6 +117,103 @@ class TestMockOcrEngine:
         engine.recognize(img)
         with pytest.raises(IndexError):
             engine.recognize(img)
+
+
+class TestVisionBoxToPixel:
+    """Vision 归一化 box → 像素左上（纯函数，不依赖 PyObjC）。"""
+
+    def test_full_frame_origin_bottom_left(self) -> None:
+        # 整图：归一化 origin=(0,0) size=(1,1) → 像素 (0,0,W,H)
+        box = _vision_box_to_pixel(
+            SimpleNamespace(
+                origin=SimpleNamespace(x=0.0, y=0.0),
+                size=SimpleNamespace(width=1.0, height=1.0),
+            ),
+            200,
+            100,
+        )
+        assert box == BoundingBox(x=0, y=0, width=200, height=100)
+
+    def test_top_band(self) -> None:
+        # 顶部半区：Vision y 从 0.5 起、高 0.5 → 像素 y=0,h=50
+        box = _vision_box_to_pixel(
+            SimpleNamespace(
+                origin=SimpleNamespace(x=0.0, y=0.5),
+                size=SimpleNamespace(width=1.0, height=0.5),
+            ),
+            100,
+            100,
+        )
+        assert box.x == 0
+        assert box.y == 0
+        assert box.width == 100
+        assert box.height == 50
+
+    def test_tuple_form(self) -> None:
+        box = _vision_box_to_pixel(((0.1, 0.2), (0.3, 0.4)), 100, 100)
+        assert box.x == 10
+        # y = (1 - 0.2 - 0.4) * 100 = 40
+        assert box.y == 40
+        assert box.width == 30
+        assert box.height == 40
+
+
+class TestCollectResults:
+    """_collect_results 行级收集（假 observation，不依赖 Vision 运行时）。"""
+
+    def test_multiline_sorted_by_y(self) -> None:
+        def make_obs(
+            text: str,
+            conf: float,
+            nx: float,
+            ny: float,
+            nw: float,
+            nh: float,
+        ) -> SimpleNamespace:
+            return SimpleNamespace(
+                topCandidates_=lambda _n: [
+                    SimpleNamespace(string=lambda: text, confidence=lambda: conf)
+                ],
+                boundingBox=lambda: SimpleNamespace(
+                    origin=SimpleNamespace(x=nx, y=ny),
+                    size=SimpleNamespace(width=nw, height=nh),
+                ),
+            )
+
+        # 故意乱序：下方行先出现
+        request = SimpleNamespace(
+            results=lambda: [
+                make_obs("bottom", 0.5, 0.0, 0.0, 1.0, 0.3),
+                make_obs("top", 0.9, 0.0, 0.7, 1.0, 0.3),
+            ]
+        )
+        result = _collect_results(request, (100, 100))
+        assert result.text == "top\nbottom"
+        assert len(result.lines) == 2
+        assert result.lines[0].text == "top"
+        assert result.lines[1].text == "bottom"
+        assert result.confidence == pytest.approx(0.7)
+        assert result.lines[0].box.y < result.lines[1].box.y
+
+    def test_skips_empty_text(self) -> None:
+        request = SimpleNamespace(
+            results=lambda: [
+                SimpleNamespace(
+                    topCandidates_=lambda _n: [
+                        SimpleNamespace(string=lambda: "  ", confidence=lambda: 0.9)
+                    ],
+                    boundingBox=lambda: ((0.0, 0.0), (1.0, 1.0)),
+                )
+            ]
+        )
+        result = _collect_results(request, (50, 50))
+        assert result == OcrResult(text="", confidence=0.0, lines=())
+
+    def test_empty_observations(self) -> None:
+        request = SimpleNamespace(results=lambda: [])
+        result = _collect_results(request, (50, 50))
+        assert result.lines == ()
+        assert result.text == ""
 
 
 @pytest.mark.skipif(not is_vision_available(), reason="PyObjC Vision 未安装")
@@ -172,29 +252,13 @@ def _make_text_image(
     return img
 
 
-def _make_mixed_image(
-    target_text: str,
-    bg_text: str,
-    width: int = 500,
-    height: int = 200,
-    target_y: int = 120,
-    bg_y: int = 20,
-    target_font_size: int = 40,
-    bg_font_size: int = 25,
-) -> Image.Image:
-    """造一张含目标字幕 + 背景文字的图（feat-033e）。
-
-    目标字幕在下方（target_y），背景英文在上方（bg_y）。
-    用于验证 selector 能根据 profile 只选目标行。
-    """
-    img = Image.new("RGB", (width, height), "white")
+def _make_two_line_image() -> Image.Image:
+    """上下两行英文，用于行级 lines 集成测。"""
+    img = Image.new("RGB", (400, 160), "white")
     draw = ImageDraw.Draw(img)
-    bg_font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", bg_font_size)
-    draw.text((20, bg_y), bg_text, fill="gray", font=bg_font)
-    target_font = ImageFont.truetype(
-        "/System/Library/Fonts/STHeiti Light.ttc", target_font_size
-    )
-    draw.text((20, target_y), target_text, fill="black", font=target_font)
+    font = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 36)
+    draw.text((20, 20), "Hello", fill="black", font=font)
+    draw.text((20, 90), "World", fill="black", font=font)
     return img
 
 
@@ -211,11 +275,6 @@ class TestVisionOcrEngineIntegration:
         assert result.text != ""
         assert "hello" in result.text.lower()
         assert 0.0 <= result.confidence <= 1.0
-        assert len(result.lines) >= 1
-        assert result.lines[0].text != ""
-        assert result.lines[0].confidence > 0.0
-        assert result.lines[0].bbox.width > 0
-        assert result.lines[0].bbox.height > 0
 
     def test_recognize_chinese(self) -> None:
         """Vision 默认启用 zh-Hans，应识别出中文文本。"""
@@ -231,9 +290,6 @@ class TestVisionOcrEngineIntegration:
         assert result.text != ""
         assert "你好世界" in result.text
         assert 0.0 <= result.confidence <= 1.0
-        assert len(result.lines) >= 1
-        assert result.lines[0].bbox.width > 0
-        assert result.lines[0].bbox.height > 0
 
     def test_recognize_empty_image(self) -> None:
         """纯色空白图应返回空文本。"""
@@ -242,84 +298,21 @@ class TestVisionOcrEngineIntegration:
         result = engine.recognize(img)
         assert result.text == ""
         assert result.confidence == 0.0
-        assert result.lines == []
+        assert result.lines == ()
 
-    def test_recognize_bbox_within_image_bounds(self) -> None:
-        """bbox 必须落在裁剪图范围内（feat-033a 坐标转换正确性）。"""
-        img = _make_text_image("Test", width=400, height=100)
+    def test_recognize_multiline_lines_populated(self) -> None:
+        """多行图应填充 lines，每行含 conf 与合法 box。"""
+        img = _make_two_line_image()
         engine = VisionOcrEngine()
         result = engine.recognize(img)
-        if result.lines:
-            for line in result.lines:
-                assert 0 <= line.bbox.x < 400
-                assert 0 <= line.bbox.y < 100
-                assert line.bbox.x + line.bbox.width <= 400
-                assert line.bbox.y + line.bbox.height <= 100
-
-
-@pytest.mark.integration
-@pytest.mark.skipif(not is_vision_available(), reason="PyObjC Vision 未安装")
-class TestSelectorWithVision:
-    """feat-033e：selector + VisionOcrEngine 端到端验证。
-
-    用 PIL 合成含目标中文 + 背景英文的图，Vision OCR 识别后
-    selector 根据 profile 只选目标字幕行。
-    """
-
-    def test_selector_filters_background_english(self) -> None:
-        """目标中文字幕在下方，背景英文在上方，selector 只选中文字幕。"""
-        img = _make_mixed_image(
-            target_text="你好世界",
-            bg_text="CHAPTER ONE",
-            width=500,
-            height=200,
-            target_y=120,
-            bg_y=20,
-            target_font_size=40,
-            bg_font_size=25,
-        )
-        engine = VisionOcrEngine()
-        result = engine.recognize(img)
-
-        assert len(result.lines) >= 2, "Vision 应至少识别出 2 行"
-
-        # 目标字幕在下方（y > 100），背景在上方（y < 100）
-        target_lines = [ln for ln in result.lines if ln.bbox.y > 100]
-        bg_lines = [ln for ln in result.lines if ln.bbox.y < 100]
-        assert len(target_lines) >= 1, "应有目标字幕行"
-        assert len(bg_lines) >= 1, "应有背景英文行"
-
-        # 用目标行的 y 中心构造 profile
-        target = target_lines[0]
-        y_center = target.bbox.y + target.bbox.height / 2.0
-        line_height = target.bbox.height
-
-        from sublift.models import SubtitleProfile
-        from sublift.ocr.selector import select_lines
-
-        profile = SubtitleProfile(
-            y_center=y_center,
-            y_tolerance=line_height / 2.0,
-            line_height=line_height,
-            max_lines=2,
-        )
-        selected_text, _ = select_lines(result.lines, profile)
-
-        assert "你好世界" in selected_text
-        assert "CHAPTER" not in selected_text.upper()
-
-    def test_selector_no_profile_keeps_all(self) -> None:
-        """无 profile 时 OcrResult.text 包含所有行（旧路径兼容）。"""
-        img = _make_mixed_image(
-            target_text="你好",
-            bg_text="TITLE",
-            width=400,
-            height=200,
-            target_y=120,
-            bg_y=20,
-        )
-        engine = VisionOcrEngine()
-        result = engine.recognize(img)
-
-        assert "你好" in result.text
-        assert "TITLE" in result.text.upper()
+        assert result.text != ""
+        assert len(result.lines) >= 1
+        for line in result.lines:
+            assert line.text.strip()
+            assert 0.0 <= line.confidence <= 1.0
+            assert line.box.width >= 0
+            assert line.box.height >= 0
+            assert line.box.x >= 0
+            assert line.box.y >= 0
+        # 兼容汇总应与 lines 一致
+        assert result.text == "\n".join(line.text for line in result.lines)
