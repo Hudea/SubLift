@@ -58,6 +58,17 @@
 - CLI 配置文件（`sublift.toml`）与复杂参数增强。
 - 字幕翻译、软字幕提取、实时直播流处理。
 
+### 1.5 收口后追加：GUI 处理倍速（feat-035）
+
+用户在处理时除百分比外还需要判断吞吐量。复用 Python path mode 已推送的真实进度，
+在 Swift 端计算 `已处理视频时长 / 实际处理耗时`，并显示为如 `4.0× 实时` 的处理倍速。
+不新增 IPC 字段、不改变抽帧/OCR 行为，也不将采样 fps 或播放速度误报为处理性能。
+
+### 1.6 收口后追加：GUI 左栏自适应布局（feat-036）
+
+左侧预览不能无限占用纵向空间；它应保留播放控制、区域选择和提取操作的稳定可见空间。
+预览高度同时受视频比例、可用高度和上限约束；提取栏在窄栏拆行并让状态文本单行截断。
+
 ## 2. 验收门
 
 ### 2.1 Benchmark 优化
@@ -103,6 +114,8 @@
 | **feat-033** | 打轴 residual 优化 | timeline | feat-031 | 机制化收敛 residual FN；`timing_f1` ≥ 95%，`timing_precision` 不下降 |
 | **feat-034** | OCR 行级选择器 | ocr-usability | feat-033 | usable≥85.1%；noise≤2；empty≤1；timing 不回退 |
 | **feat-032** | Phase 3 文档收尾 | docs | feat-030, feat-031, feat-033, feat-034 | ARCHITECTURE/REQUIREMENTS/README/DECISIONS 更新 |
+| **feat-035** | GUI 处理倍速显示 | gui-observability | feat-030 | 处理期间显示相对实时倍速；仅由真实进度计算；单测覆盖换算与无效输入 |
+| **feat-036** | GUI 左栏自适应布局 | gui-layout | feat-030 | 预览不挤压下方交互；窄栏下提取控件和状态不换行溢出；单测覆盖尺寸计算 |
 
 > 具体实现方法（如是否常驻 server、是否重构 Pipeline 为 push 模型、是否加 pixel-diff 信号等）
 > 不在本计划阶段定死，由各任务启动时根据实测和约束选择。
@@ -153,3 +166,5 @@ feat-027 (Benchmark 框架)
 - [x] feat-033 完成：`timing_f1` 95.2%（≥ 95%）；precision 98.8%（相对 100% 基线 -1.2pp / 1 FA）。
 - [x] feat-034 完成：usable 92.0%；noise 0；empty 0；CER 3.2%；F1 97.7%；precision 98.8%。
 - [x] feat-032 完成：核心文档统一到 Phase 3 最终实现与固定 GT 口径；`./init.sh` 8/8 通过。
+- [x] feat-035 完成：GUI 提取状态显示真实处理倍速（相对实时），不影响 IPC 与识别路径。
+- [x] feat-036 完成：左栏预览保留控制区空间，提取栏两行布局并限制状态文本为单行。

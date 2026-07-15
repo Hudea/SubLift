@@ -157,6 +157,24 @@
       ]
     },
     {
+      "id": "feat-035",
+      "name": "GUI 处理倍速显示",
+      "description": "在 GUI 提取进度旁显示相对实时的处理倍速（已处理视频时长 ÷ 实际处理耗时）。倍速必须从 path mode 的真实 progress 推导，不得把采样 fps 或播放速度作为处理性能；开始阶段应抑制计时粒度导致的瞬时跳变。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/ProcessingRate.swift, apps/macos/Sources/SubLiftMac/Core/SubtitleExtractor.swift, apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+      "dependencies": ["feat-030"],
+      "status": "done",
+      "evidence": "新增 ProcessingRate 纯函数：按 `(processed_frames / sample_fps) / elapsed_seconds` 换算，并显示为如 `4.0× 实时`；前 0.25 秒、零帧或无效输入不显示。SubtitleExtractor 只在 processing 阶段根据已有真实 progress 更新倍速，finalizing、完成、取消和错误时清空；UI 在进度文本旁显示该值，不改 IPC/抽帧/OCR 路径。验证：swift test 通过（15 XCTest + 136 Swift Testing）；新增 ProcessingRateTests 覆盖换算、格式化、预热抑制和无效输入。Python 标准验证（./init.sh）通过。"
+    },
+    {
+      "id": "feat-036",
+      "name": "GUI 左栏自适应布局",
+      "description": "修复左栏预览随可用空间无限扩张、挤压下方播放控制、区域选择和提取栏的问题。预览高度须同时受视频比例、控制区预留高度和最大高度约束；窄栏下提取控件拆行，状态信息不应频繁换行或溢出。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/PreviewLayout.swift, apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+      "dependencies": ["feat-030"],
+      "status": "done",
+      "evidence": "新增 PreviewLayout 纯函数：预览高度为 `min(按视频比例的高度, 容器高度 - 240pt 控制区预留, 420pt)`。ContentView 使用 GeometryReader 将预览限制在该高度，余下空间给下方交互；提取栏改为两行（按钮/引擎、采样/状态），状态文本设置单行截断。新增 PreviewLayoutTests 覆盖横屏比例、短窗口控制区预留、最大高度和无元数据回退。验证：swift test 通过（15 XCTest + 139 Swift Testing）；Python 标准验证（./init.sh）通过。"
+    },
+    {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
       "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。",

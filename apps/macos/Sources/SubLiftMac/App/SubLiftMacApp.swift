@@ -42,19 +42,7 @@ struct ContentView: View {
             if let url = videoURL {
                 HSplitView {
                     // 左侧：预览 + 控制 + 元数据 + 提取
-                    VStack(spacing: 0) {
-                        previewSection
-                        Divider()
-                        VideoControlsView(model: playerModel)
-                        Divider()
-                        metadataBar
-                        Divider()
-                        RegionCandidateList(model: regionModel) {
-                            redetectRegionAtPlayhead()
-                        }
-                        Divider()
-                        extractionBar(url: url)
-                    }
+                    leftPane(url: url)
                     .frame(minWidth: 400)
 
                     // 右侧：字幕列表 + 编辑
@@ -148,15 +136,40 @@ struct ContentView: View {
 
     // MARK: - 预览（叠加 Vision 候选框）
 
+    private func leftPane(url: URL) -> some View {
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                previewSection(height: PreviewLayout.height(
+                    containerSize: geometry.size,
+                    videoSize: CGSize(
+                        width: metadataLoader.metadata?.width ?? 0,
+                        height: metadataLoader.metadata?.height ?? 0
+                    )
+                ))
+                Divider()
+                VideoControlsView(model: playerModel)
+                Divider()
+                metadataBar
+                Divider()
+                RegionCandidateList(model: regionModel) {
+                    redetectRegionAtPlayhead()
+                }
+                Divider()
+                extractionBar(url: url)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
     @ViewBuilder
-    private var previewSection: some View {
+    private func previewSection(height: CGFloat) -> some View {
         let width = metadataLoader.metadata?.width ?? 0
-        let height = metadataLoader.metadata?.height ?? 0
+        let videoHeight = metadataLoader.metadata?.height ?? 0
 
         PreviewRegionContainer(
             regionModel: regionModel,
             videoWidth: width,
-            videoHeight: height
+            videoHeight: videoHeight
         ) {
             if playerModel.loadFailed {
                 unsupportedPreview
@@ -164,7 +177,9 @@ struct ContentView: View {
                 VideoPreview(model: playerModel)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .clipped()
     }
 
     // MARK: - 元数据栏
@@ -239,6 +254,19 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                 }
 
+                Spacer(minLength: 0)
+
+                Picker("", selection: $defaultEngine) {
+                    Text("Apple Vision").tag(OcrEngineName.vision)
+                    Text("Mock 引擎").tag(OcrEngineName.mock)
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                .disabled(extractor.isRunning)
+            }
+
+            HStack(spacing: 12) {
+
                 Picker("采样", selection: $samplingQuality) {
                     ForEach(SamplingQuality.allCases) { quality in
                         Text(quality.displayName).tag(quality)
@@ -250,17 +278,10 @@ struct ContentView: View {
                 .disabled(extractor.isRunning)
                 .accessibilityLabel("采样密度")
 
-                Picker("", selection: $defaultEngine) {
-                    Text("Apple Vision").tag(OcrEngineName.vision)
-                    Text("Mock 引擎").tag(OcrEngineName.mock)
-                }
-                .labelsHidden()
-                .frame(width: 130)
-                .disabled(extractor.isRunning)
-
-                Spacer()
-
                 statusLabel
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(minWidth: 100, maxWidth: .infinity, alignment: .trailing)
             }
 
             switch extractor.status {
@@ -286,9 +307,15 @@ struct ContentView: View {
         case .startingServer:
             Text("启动 Python 服务...").foregroundStyle(.orange)
         case .processing(let progress, let frameCount, let totalFrames):
-            Text("提取与识别中 \(frameCount)/\(totalFrames) (\(Int(progress * 100))%)")
-                .foregroundStyle(.blue)
-                .font(.system(.body, design: .monospaced))
+            HStack(spacing: 6) {
+                Text("提取与识别中 \(frameCount)/\(totalFrames) (\(Int(progress * 100))%)")
+                    .foregroundStyle(.blue)
+                if let rateText = ProcessingRate.displayText(for: extractor.processingRate) {
+                    Text(rateText)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(.body, design: .monospaced))
         case .finalizing:
             Text("正在整理字幕...").foregroundStyle(.orange)
         case .done(let count):

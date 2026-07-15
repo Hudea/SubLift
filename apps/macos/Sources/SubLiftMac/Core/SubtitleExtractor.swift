@@ -23,6 +23,8 @@ final class SubtitleExtractor: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var entries: [SubtitleEntryData] = []
+    /// 已处理视频时长 / 实际处理时间；仅在 processing 阶段有有效值。
+    @Published private(set) var processingRate: Double?
 
     /// 当前运行任务的 token；`nil` 表示无活跃任务（含已取消/已完成）。
     private var jobToken: UUID?
@@ -54,6 +56,7 @@ final class SubtitleExtractor: ObservableObject {
         jobToken = token
         acceptingLiveUpdates = true
         entries = []
+        processingRate = nil
 
         // 每任务独占客户端，避免取消 teardown 关掉新任务的 socket/进程。
         let client = PipelineClient()
@@ -81,6 +84,7 @@ final class SubtitleExtractor: ObservableObject {
         acceptingLiveUpdates = false
         activeClient = nil
         status = .error("已取消")
+        processingRate = nil
 
         // 只关本任务 socket；不要 Task.cancel()，否则日志会误报 cancelled。
         if let client {
@@ -118,6 +122,7 @@ final class SubtitleExtractor: ObservableObject {
 
         do {
             let startTime = Date()
+            var processingStartedAt: Date?
 
             guard isCurrentJob(token) else { return }
             status = .startingServer
@@ -178,9 +183,17 @@ final class SubtitleExtractor: ObservableObject {
                         Task { @MainActor [weak self] in
                             guard let self, self.shouldAcceptLiveUpdate(token) else { return }
                             if stage == "finalizing" {
+                                self.processingRate = nil
                                 self.status = .finalizing
                             } else {
+                                let processingStart = processingStartedAt ?? Date()
+                                processingStartedAt = processingStart
                                 let frames = max(0, Int((pct * Double(totalFramesSafe)).rounded(.down)))
+                                self.processingRate = ProcessingRate.realTimeMultiplier(
+                                    processedFrames: frames,
+                                    sampleFps: fps,
+                                    elapsedSeconds: Date().timeIntervalSince(processingStart)
+                                )
                                 self.status = .processing(
                                     progress: min(max(pct, 0), 1),
                                     frameCount: min(frames, totalFramesSafe),
@@ -201,6 +214,7 @@ final class SubtitleExtractor: ObservableObject {
             acceptingLiveUpdates = false
             let resultEntries = response.entries
             self.entries = resultEntries
+            self.processingRate = nil
 
             let elapsed = Date().timeIntervalSince(startTime)
             let emptyCount = resultEntries.filter {
@@ -222,6 +236,7 @@ final class SubtitleExtractor: ObservableObject {
         } catch PipelineClientError.connectionClosed {
             // cancel() 已失效 token 并写好状态；此处仅处理「意外断连」。
             if isCurrentJob(token) {
+                processingRate = nil
                 status = .error("连接中断")
                 print("[SubLift] extract connection closed unexpectedly")
             } else {
@@ -229,11 +244,13 @@ final class SubtitleExtractor: ObservableObject {
             }
         } catch is CancellationError {
             if isCurrentJob(token) {
+                processingRate = nil
                 status = .error("已取消")
             }
             print("[SubLift] extract cancelled (task cancellation)")
         } catch {
             if isCurrentJob(token) {
+                processingRate = nil
                 status = .error("提取失败: \(error.localizedDescription)")
                 print("[SubLift] extract error: \(error)")
             } else {

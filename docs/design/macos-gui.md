@@ -12,7 +12,9 @@
 | `Messages.swift` | IPC 消息 Codable 定义，与 Python 端 `src/sublift/ipc/protocol.py` 字段对齐。 |
 | `FrameSampler.swift` | `AVAssetReader` 按 fps 跳采样，将 `CVPixelBuffer` 编码为 JPEG；按扩展名路由 mkv 到 ffmpeg 兜底。 |
 | `FfmpegFallback.swift` | 检测系统 ffmpeg/ffprobe、MJPEG stdout 流切帧（SOI/EOI marker）、mkv 抽帧与元数据探测。 |
-| `SubtitleExtractor.swift` | 协调 `PipelineClient` + `FrameSampler`，完成启动 IPC → 流式抽帧 → finalize → 接收 entries 的端到端状态机。 |
+| `PreviewLayout.swift` | 根据视频宽高比、左栏可用尺寸和控制区预留高度，为预览区计算受上限约束的高度。 |
+| `SubtitleExtractor.swift` | 协调 `PipelineClient` + `FrameSampler`，完成启动 IPC → 流式抽帧 → finalize → 接收 entries 的端到端状态机；根据真实 progress 计算处理倍速。 |
+| `ProcessingRate.swift` | 将已处理的视频时长除以实际处理耗时，格式化为相对实时的处理倍速（如 `4.0× 实时`）。 |
 | `SubtitleEditor.swift` | 维护可编辑字幕列表，提供文本修改、合并、拆分与当前高亮节流。 |
 | `SubtitleEntry.swift` | 带 `UUID` 的可变字幕条目模型，负责与 IPC 不可变 `SubtitleEntryData` 双向转换。 |
 | `SrtFormatter.swift` | Swift 端 SRT 文本格式化，不经过 IPC 调 Python。 |
@@ -85,10 +87,18 @@ Swift start_job(video_path, fps, region_box, …)
 
 - **不再**经 AVF PTS 跳采样 + JPEG q=0.85 推帧（避免与验收 F1 漂移 ~10pp）。
 - 无 `video_path` 时仍可走 legacy **frame mode**（Swift 推 JPEG）供调试。
+- 提取栏的处理倍速由 Swift 根据 path mode 的真实进度与本地计时计算：`(processed_frames / sample_fps) / elapsed_seconds`。它表示处理吞吐量而非播放速度；开始 0.25 秒内不显示，以避免计时粒度造成的跳变。
 
 ### 预览 / 选区用帧（仍可 AVF）
 
 代表帧 Vision 候选框、播放预览继续用 AVFoundation；与打轴采样解耦。
+
+### 左栏自适应布局
+
+左栏将预览、播放控制、元数据、区域候选和提取栏放在单一纵向布局中。预览高度取
+`min(按源视频比例拟合的高度, 可用高度 - 240pt 控制区预留, 420pt)`；因此缩小窗口时，
+预览先收缩而不会吞掉下方交互。提取栏把按钮/引擎与采样/状态拆为两行，状态文本限制
+为单行截断，避免窄栏频繁换行。
 
 ### 历史：Swift 侧 AVF / ffmpeg 兜底（frame mode / 预览）
 

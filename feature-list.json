@@ -153,6 +153,20 @@
           "covers": ["feat-034"]
         },
         {
+          "id": "phase3.gui-observability",
+          "name": "GUI 处理倍速显示",
+          "description": "GUI 在真实处理进度旁显示相对实时处理倍速（已处理视频时长 / 实际处理耗时）；不改变 IPC、抽帧或 OCR 路径。覆盖 feat-035。",
+          "status": "done",
+          "covers": ["feat-035"]
+        },
+        {
+          "id": "phase3.gui-layout",
+          "name": "GUI 左栏自适应布局",
+          "description": "左栏预览按视频比例和可用高度自适应，并为控制、区域选择和提取栏预留空间；窄栏下将提取控件拆行，状态保持单行。覆盖 feat-036。",
+          "status": "done",
+          "covers": ["feat-036"]
+        },
+        {
           "id": "phase3.docs",
           "name": "文档收尾",
           "description": "更新 ARCHITECTURE/REQUIREMENTS/README/DECISIONS，反映 Phase 3 范围、benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。覆盖 feat-032。",
