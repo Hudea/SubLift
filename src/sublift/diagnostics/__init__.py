@@ -11,6 +11,13 @@ from sublift.diagnostics.fn_analysis import (
     classify_fn,
     format_fn_report,
 )
+from sublift.diagnostics.performance import (
+    PerformanceMode,
+    PerformanceRecorder,
+    aggregate_run_payloads,
+    collect_environment,
+    parse_performance_mode,
+)
 from sublift.diagnostics.short_subtitle import (
     ShortSubtitleMetrics,
     compute_short_subtitle_metrics,
@@ -27,14 +34,19 @@ from sublift.diagnostics.trace import (
 __all__ = [
     "DetectedSegment",
     "FnClassification",
+    "PerformanceMode",
+    "PerformanceRecorder",
     "ShortSubtitleMetrics",
     "TraceRecord",
     "TraceRecorder",
     "TriggerReason",
     "VetoReason",
+    "aggregate_run_payloads",
     "classify_fn",
+    "collect_environment",
     "compute_short_subtitle_metrics",
     "format_fn_report",
     "format_short_subtitle_report",
     "load_jsonl",
+    "parse_performance_mode",
 ]

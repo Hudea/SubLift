@@ -1,8 +1,8 @@
 {
   "project": "SubLift",
-  "phase": "Phase 3 - 优化与基本可用",
-  "description": "建立端到端 benchmark，改增量处理与前台进度体验，优化打轴检测准确率，并以 OCR 行级选择器跨过可用性水位。具体实现方法由各任务启动时再定。",
-  "plan_file": "docs/plans/phase3.md",
+  "phase": "phase3-opt-perf",
+  "description": "以既有固定 GT 质量水位为锚，继续推进可观测、可复现的性能优化。当前先建立开发者性能模式和性能 baseline；实际性能机制优化待 baseline 指出主瓶颈后再新增独立 feature。",
+  "plan_file": "docs/plans/phase3-opt-perf.md",
   "features": [
     {
       "id": "feat-027",
@@ -18,16 +18,20 @@
       "name": "Benchmark 基线录入",
       "description": "使用 feat-027 框架对现有素材（至少包含 Zootopia clip）跑通 benchmark，记录当前基线数值到版本控制，作为后续优化对比依据。",
       "module": "debug/benchmark-reports/",
-      "dependencies": ["feat-027"],
+      "dependencies": [
+        "feat-027"
+      ],
       "status": "blocked",
-      "evidence": "用户决定不做：基线数值已以会话跑测形式记录于 docs/benchmarks/baseline.md，不另出 debug/benchmark-reports/ 入库产物。后续若需对比可临时跑 manifest，产物默认写入 debug/benchmark-reports/。"
+      "evidence": "用户决定不做：基线数值已以会话跑测形式记录于 benchmark/README.md（原 docs/benchmarks/baseline.md 已迁移），不另出 debug/benchmark-reports/ 入库产物。后续若需对比可临时跑 manifest，产物默认写入 debug/benchmark-reports/。"
     },
     {
       "id": "feat-029",
       "name": "增量处理架构",
       "description": "把当前批量处理模式改为边收帧边处理。允许重构 pipeline/ 与 ipc/bridge.py，使首条字幕反馈时间显著缩短。具体实现方法（push 模型、常驻 server、并行抽帧等）由任务启动时评估。",
       "module": "src/sublift/pipeline/, src/sublift/ipc/bridge.py",
-      "dependencies": ["feat-028"],
+      "dependencies": [
+        "feat-028"
+      ],
       "status": "done",
       "evidence": "已完成。验证结论：1. 内存平稳：长视频(4K)处理内存不再随视频帧数线性增长；消除 Apple Vision 引擎内存泄漏（引入 autorelease_pool 并移交 PyObjC CFData）。2. 推送时机：在测试视频中 1.29s 内即推送第一条字幕（流式反馈生效）。3. 取消安全性：cancel 能够立即生效且释放所有资源，无残留线程。4. 基线无回归：Benchmark 显示 timing_f1 保持 97.7%，cer_macro 3.2%，usable 92.0%，无任何回退。产物已验证：pytest 测试及集成测试全部通过。"
     },
@@ -36,7 +40,9 @@
       "name": "前台进度显示与取消",
       "description": "CLI 提取输出阶段进度/进度条；GUI 提取显示百分比和当前阶段；取消按钮在提取过程中生效。进度必须对应真实处理阶段。",
       "module": "src/sublift/cli.py, apps/macos/Sources/SubLiftMac/",
-      "dependencies": ["feat-029"],
+      "dependencies": [
+        "feat-029"
+      ],
       "status": "done",
       "evidence": "已完成自动验收。1. CLI 进度条与三阶段显示：`[1/3] 探测`, `[2/3] 提取与识别`, `[3/3] 整理导出`；TTY 原位刷新，重定向输出按 10% 节流。2. GUI 状态为就绪/启动/处理中(含百分比)/正在整理/完成，finalizing 后不再退回 processing。3. FfmpegExtractor 使用持久 cancel Event 覆盖探测前取消，并终止底层进程；Bridge 异步等待 worker，取消后可在同一连接立即重启。真实 IPC 自动审计：首条 0.68s，取消确认 0.1079s，确认 ffmpeg PID 已退出；Job 2 重启后 0.46s 收到首条。验证：ruff、mypy、pytest 346 passed、Swift XCTest 15 passed + Swift Testing 121 passed、./init.sh 8/8 通过。≥10 分钟非 Zootopia GUI 手工体验验收按用户决定暂缓，记录于 progress 风险。"
     },
@@ -45,7 +51,9 @@
       "name": "打轴检测优化",
       "description": "优化 pipeline/ 中 signature/changepoint/timeline，提升时间轴分段准确率。重点解决连续字幕切换漏检、相邻字幕合并、短字幕漏检。当前判断：连续字幕漏检主要发生在 STABLE 状态内，foreground_ratio 持续表示“有字幕”，IN/OUT 不会触发，只能依赖 CHANGE；现有 dHash 对中文短句/相似布局不够敏感，容易漏发 CHANGE，导致多条真实字幕被合并为一个长检测段。拟采用“先可观测、再算法补强”的顺序：先增加打轴决策 trace 解释 FN，再引入可配置的 SSIM patrol 补强 CHANGE 检测，最后单独评估短字幕的 presence/hysteresis 策略。验收：在 benchmark 数据集上 timing_f1 提升到 ≥ 95%，timing_precision 不下降，并记录改善场景。",
       "module": "src/sublift/pipeline/signature.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/timeline.py",
-      "dependencies": ["feat-028"],
+      "dependencies": [
+        "feat-028"
+      ],
       "status": "done",
       "evidence": "已完成（独立优化任务，不依赖 feat-028 基线）。子任务 feat-031a/b/c/d 全部完成 + GUI 接入。\n\nfeat-031a 打轴决策 trace 与 FN 归因：新增 src/sublift/diagnostics/ 模块（trace.py + fn_analysis.py），ChangePointDetector 增加 trace_recorder hook，Pipeline 透传。新增 scripts/run_trace.py 脚本。29 个新测试用例。\n\nfeat-031b SSIM patrol 补强连续字幕 CHANGE：config.py 新增 4 个 patrol 字段，signature.py 新增 compute_foreground_ssim（二值化前景 mask SSIM），changepoint.py 新增 _handle_patrol_path / _maybe_patrol。patrol 在 dHash 未触发时周期性比较前景结构。10 个新测试用例。\n\nfeat-031c 短字幕漏检专项：新增 diagnostics/short_subtitle.py（ShortSubtitleMetrics + compute_short_subtitle_metrics），新增 scripts/scan_params.py 参数扫描脚本。9 个新测试用例。参数扫描结论：min_duration_ms 无影响（只影响 dedupe），hysteresis=1 略提升短字幕（+4pp），presence=0.02 提升 F1 但短字幕无改善。短字幕漏检主要属于 IN/OUT 或采样不足。\n\nfeat-031d 对比验证与参数落定：scripts/run_trace.py 增加 --compare-baseline 对比模式。在 Zootopia clip（1080p, 5fps, region_box 精准对齐）上对比：baseline F1=65.0%/recall=60.9%/precision=69.7%/FN=47（全 merged），optimized F1=80.6%/recall=90.8%/precision=72.5%/FN=15（14 merged + 1 boundary）。merged_into_neighbor 减少 33 条（-70%），段 33 类合并漏检已消除。短字幕召回率 24%→60%（+36pp）。precision 不下降（+2.7pp）。\n\nGUI 接入：protocol.py validate() + build_start_job() 增加 enable_ssim_patrol 可选字段；bridge.py _handle_start_job 读取该字段构造 ChangePointConfig；Swift 端 StartJobMessage 增加字段，SettingsView + SubLiftMacApp 主窗口提取栏增加 Toggle 开关，@AppStorage 持久化。patrol 默认开启。\n\n实跑验证（优化 3，GUI 默认 patrol 开启）：F1=86.7%，recall=82.8%，precision=91.1%（0 FP），FN=15，空文本从 13 降到 0，CER 从 88% 降到 31.9%。段 33 类 11s 合并段已拆分。\n\n残留问题（记录于 docs/HURDLES.md）：\n1. patrol 过切分：7 组 GT 被切成两条检测段（OCR 噪声/标点差异导致 dedupe 无法合并），precision 从潜在 94.9% 降到 91.1%。待评估：patrol 阈值调优（0.92→0.88）或 dedupe 模糊合并。\n2. 短字幕漏检：<=1200ms 的 GT 只命中 7/16，#15 砰、#59（哈，胡）、#69 哈啰等单字/极短字幕未抓到。主因 hysteresis_frames=2 吃掉 40%+ 时长。待评估：hysteresis=1 + 降 presence_threshold。\n\n参数落定：F1 提升 +15.6pp ≥ 3pp 且 precision 不下降，但未达 95% 目标。patrol 已设为默认开启（config.py + @AppStorage 默认 True）。docs/design/pipeline.md 与 docs/HURDLES.md 已更新。\n\n验证：uv run ruff check . 通过；uv run mypy src tests 通过（53 source files）；uv run pytest 通过（256 passed）；swift build 通过；swift test 通过（117 passed）；./init.sh 退出 0（8/8 通过）。",
       "subtasks": [
@@ -80,7 +88,9 @@
       "name": "打轴 residual 优化",
       "description": "在 feat-031（SSIM patrol）之后，针对 baseline-no-filter 残留 14 条 timing FN 做机制化收敛。主模块 changepoint + core OCR 锚帧；按 M1 连续空洞 / M2 短字幕 / M3 残留 CHANGE 分阶段。验收：timing_f1≥95%；OCR 文本噪声后置。基线：timing_recall 83.9% / precision 100% / F1 91.2%。",
       "module": "src/sublift/pipeline/core.py, src/sublift/pipeline/changepoint.py, src/sublift/pipeline/dedupe.py, src/sublift/config.py",
-      "dependencies": ["feat-031"],
+      "dependencies": [
+        "feat-031"
+      ],
       "status": "done",
       "evidence": "已完成。\n\nfeat-033a：run_trace（MockOcr）同 region 诊断。纯打轴 0 no_overlap；52–63s 新闻窗有 IN@56.2s + CHANGE 序列。结论主因 M1c（OCR 空/后处理抹段），非 EMPTY 卡死。诊断见 debug/reports/feat033_diagnosis.md。修复 scripts/run_trace.py 与 scan_params.py 对已删除 benchmark.alignment 的 import。\n\nfeat-033b：OCR 锚帧延迟 + 多候选回退（core.py）；drop_empty_text 默认 False（dedupe 保留空文本时间轴）。新闻簇 #17–#19 从 no_overlap 变为 timing 命中。\n\nfeat-033c：hysteresis_frames 2→1。\n\nfeat-033d 参数落定：ocr_anchor_delay_frames=2 + hysteresis=1 + drop_empty_text=False。\n\n对比 baseline-no-filter（region [0,848,1920,87], 5fps, vision）：\n- timing_f1 91.2% → **95.2%**（+4.0pp，门通过）\n- timing_recall 83.9% → 92.0%\n- timing_precision 100% → 98.8%（1 FA，strict 略降）\n- timing FN：no_overlap 8→1，merged 6→6（部分类型转换）\n- 边界：start_mae 127→124ms，end_mae 182→140ms，boundary_p95 500→417ms\n- 主剩余 gap：text.noise（OCR 区域，后置）\n\n产物：debug/benchmark-reports/feat033_final/；gates status=pass。\n验证：uv run ruff check .；uv run mypy src；uv run pytest；./init.sh 8/8 通过。",
       "subtasks": [
@@ -115,7 +125,9 @@
       "name": "OCR 行级选择器（可用性水位）",
       "description": "第一阶段：跨过 goal 的可用性水位。根因：GUI 选区强制扩成 X 全宽（VideoCoordinateMapper），Vision 将区域内所有文字拼接并以整组平均置信度表示；新闻横幅/货单/英文姓名与中文字幕混入。帧复查：#5/#16/#58/#68 中文已被正确识别但 conf≈0.3 被全局 0.5 阈值清空；#50 正确中文混在多行英文。历史：全局阈值降到 0.3 会放进大量背景英文，F1/precision/usable 回退（e593a08）。方案：OCR 输出扩展为 OcrLine(text, confidence, box)，不在引擎内提前拼串；从 GUI 选区传递 SubtitleProfile（文字系统、垂直位置、字号高度、中心）；逐行评分（文字系统/Y/字号/中心距离/跨帧稳定性）；对 conf≈0.3 但连续多帧一致的中文字幕放行，单帧背景英文不放行；每段保留 3–5 代表帧做多数/最小编辑距离共识。验收门（相对 path-mode GUI 当前水位，对照 goal_static）：usable ≥ 85.1%；text.noise ≤ 2；text.empty ≤ 1；CER ≤ 6.6%（或显著逼近）；timing_f1 ≥ 95.2%；timing_precision ≥ 98.8%。对比基线：gui_ffmpeg_5fps（usable≈75.9%）与 goal_static（usable≈85.1%）。",
       "module": "src/sublift/models.py, src/sublift/ocr/, src/sublift/pipeline/core.py, src/sublift/config.py, apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift, apps/macos/Sources/SubLiftMac/",
-      "dependencies": ["feat-033"],
+      "dependencies": [
+        "feat-033"
+      ],
       "status": "done",
       "evidence": "P1 修复与复测完成。修复项：dedupe 禁止空文本相互合并；consensus_text 以相似邻域聚类并向接受策略返回真实 support_votes，解决低置信文本变体按精确相等计票失败；显式 CJK 画像只清理与 CJK 边界直接粘连的拉丁横幅，保留纯英文、空格分隔英文及 ZPD 等内部混排；无显式 profile 默认 auto，GUI 按选中文字推断 cjk/latin/auto；benchmark manifest 可显式固定 subtitle_script。固定 GT 复测（Zootopia, 5fps, Vision, region [0,848,1920,87], subtitle_script=cjk）：usable 92.0%，text.noise 0，empty 0，CER macro 3.2%，timing F1 97.7%，precision 98.8%，全部通过验收门；#17/#18/#20/#29 恢复可用，#19 仅余 Vision 字形/标点误差。产物：debug/benchmark-reports/feat034_p1_fix2/。验证：ruff 全仓 0 error；mypy src tests 无问题（58 source files）；pytest 340 passed；Swift XCTest 15 passed + Swift Testing 121 passed；./init.sh 8/8 通过。",
       "subtasks": [
@@ -161,7 +173,9 @@
       "name": "GUI 处理倍速显示",
       "description": "在 GUI 提取进度旁显示相对实时的处理倍速（已处理视频时长 ÷ 实际处理耗时）。倍速必须从 path mode 的真实 progress 推导，不得把采样 fps 或播放速度作为处理性能；开始阶段应抑制计时粒度导致的瞬时跳变。",
       "module": "apps/macos/Sources/SubLiftMac/Core/ProcessingRate.swift, apps/macos/Sources/SubLiftMac/Core/SubtitleExtractor.swift, apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
-      "dependencies": ["feat-030"],
+      "dependencies": [
+        "feat-030"
+      ],
       "status": "done",
       "evidence": "新增 ProcessingRate 纯函数：按 `(processed_frames / sample_fps) / elapsed_seconds` 换算，并显示为如 `4.0× 实时`；前 0.25 秒、零帧或无效输入不显示。SubtitleExtractor 只在 processing 阶段根据已有真实 progress 更新倍速，finalizing、完成、取消和错误时清空；UI 在进度文本旁显示该值，不改 IPC/抽帧/OCR 路径。验证：swift test 通过（15 XCTest + 136 Swift Testing）；新增 ProcessingRateTests 覆盖换算、格式化、预热抑制和无效输入。Python 标准验证（./init.sh）通过。"
     },
@@ -170,18 +184,69 @@
       "name": "GUI 左栏自适应布局",
       "description": "修复左栏预览随可用空间无限扩张、挤压下方播放控制、区域选择和提取栏的问题。预览高度须同时受视频比例、控制区预留高度和最大高度约束；窄栏下提取控件拆行，状态信息不应频繁换行或溢出。",
       "module": "apps/macos/Sources/SubLiftMac/Core/PreviewLayout.swift, apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
-      "dependencies": ["feat-030"],
+      "dependencies": [
+        "feat-030"
+      ],
       "status": "done",
       "evidence": "新增 PreviewLayout 纯函数：预览高度为 `min(按视频比例的高度, 容器高度 - 240pt 控制区预留, 420pt)`。ContentView 使用 GeometryReader 将预览限制在该高度，余下空间给下方交互；提取栏改为两行（按钮/引擎、采样/状态），状态文本设置单行截断。新增 PreviewLayoutTests 覆盖横屏比例、短窗口控制区预留、最大高度和无元数据回退。验证：swift test 通过（15 XCTest + 139 Swift Testing）；Python 标准验证（./init.sh）通过。"
+    },
+    {
+      "id": "feat-037",
+      "name": "开发者性能模式与性能基线",
+      "description": "为 benchmark/CLI 内部诊断增加 off/summary/trace 三档开发者性能模式。summary 以有界内存聚合探测、抽帧输出等待、逐帧 crop/signature/changepoint、OCR、行选择/共识、finalize/dedupe 和总耗时，并记录首帧/首条延迟、帧数、原始输出字节、OCR 调用次数、Python 峰值 RSS、CPU 时间与运行环境；trace 在 summary 基础上输出逐字幕段明细，不默认输出逐帧日志。性能数据进入统一 agent JSON/summary，和 timing/CER/usable 同报告。使用固定 Zootopia 1080p、5fps、Vision、region/profile 配置执行 1 次预热 + 3 次独立测量，以中位数为主值形成 baseline。该任务只建立测量与基线，不实施 ROI、并发或 OCR 算法优化。",
+      "module": "src/sublift/diagnostics/performance.py, src/sublift/extractor/ffmpeg_extractor.py, src/sublift/pipeline/core.py, benchmark/runner.py, benchmark/manifest.py, benchmark/diagnostics.py, benchmark/report.py, scripts/run_benchmark_manifest.py, tests/",
+      "dependencies": [
+        "feat-027",
+        "feat-034"
+      ],
+      "status": "done",
+      "evidence": "feat-037 正式收口（2026-07-15）。\n\n测量基础设施：PerformanceMode(off/summary/trace)、PerformanceRecorder、叶子阶段归因（含 frame_materialize）、unattributed_ms/stage_coverage_pct、三次 measured 质量门+detection hash、spawn 子进程先 Queue.get 再 join、强制 trace 测试。\n\n干净 baseline（commit 0023e73, git_dirty=false）：warmup=1 + measured=3；core_wall median=11175.4ms（22.75×）；ocr 4544ms(~40.7%)、extract_wait 2691ms(~24.1%)、frame_materialize 1658ms(~14.8%)；unattributed=63.9ms、coverage=99.4%；raw_output_bytes=7906636800 (~7.91 GB / 7.36 GiB)；OCR calls=110。\n质量 3/3 一致 hash=b2d35c1e25f156e1：F1=97.7% P=98.8% usable=92.0% CER=3.2% noise/empty=0。\n扰动（此前协议）summary vs off +0.03%。Trace smoke：92 段 JSONL 非空。\n\n验证：pytest 366 passed；./init.sh 8/8；产物 debug/benchmark-reports/feat037_perf_baseline/ 与 benchmark/README.md（原 docs/benchmarks/baseline.md 已迁移）。",
+      "subtasks": [
+        {
+          "id": "feat-037a",
+          "name": "性能记录模型与模式开关",
+          "description": "定义 PerformanceMode(off/summary/trace)、PerformanceRecorder、阶段/分布/计数数据模型和序列化协议；统一使用 perf_counter_ns 单调时钟。off 不创建 recorder、不输出性能字段；summary 聚合数据保持有界内存；trace 才允许写逐字幕段事件。",
+          "status": "done"
+        },
+        {
+          "id": "feat-037b",
+          "name": "端到端阶段埋点",
+          "description": "在公共 Python 路径埋点：probe；ffmpeg spawn→首帧、next/read 等待、帧数和 raw bytes；Pipeline crop/颜色转换、signature、changepoint；Vision recognize；line select/cleanup/consensus；finalize/dedupe。逐字幕段记录区间、代表帧数、OCR 调用次数与耗时、是否产出文本，不记录原始字幕文本。准确标注 extractor 指标为解码+转换+管道输出等待，不冒充纯 codec decode。",
+          "status": "done"
+        },
+        {
+          "id": "feat-037c",
+          "name": "Manifest 与联合报告",
+          "description": "为 benchmark manifest/入口增加 performance.mode 与重复运行配置；agent JSON 和 summary Markdown 增加 performance 块，同时保留同次运行的 timing/CER/usable gates。trace 模式额外生成逐字幕段 JSONL；报告记录 commit/dirty、系统、CPU、Python、ffmpeg、视频尺寸/fps/region/profile。",
+          "status": "done"
+        },
+        {
+          "id": "feat-037d",
+          "name": "固定负载性能 baseline",
+          "description": "固定 Zootopia 1080p、5fps、Vision、region [0,848,1920,87]、subtitle_script=cjk；执行 1 次预热（丢弃）+ 3 次独立测量，报告中位数及 min/max 离散度。把指标定义、环境、运行命令和实测值写入 benchmark/README.md（原 docs/benchmarks/baseline.md 已迁移）；8/12fps 只作为可选扩展矩阵，不作为本 feature 完成门。",
+          "status": "done"
+        },
+        {
+          "id": "feat-037e",
+          "name": "低扰动与无质量回归验收",
+          "description": "单测覆盖计时聚合、异常闭合、模式开关、JSON schema 和 manifest；短视频集成测试验证 off 与 summary 的字幕结果一致。summary 相对 off 的三次运行中位耗时增幅目标 ≤5%；固定 GT 保持 timing_f1≥95.2%、precision≥98.8%、usable≥85.1%、CER≤6.6%、noise≤2、empty≤1；运行 ruff、mypy、pytest、./init.sh。",
+          "status": "done"
+        }
+      ]
     },
     {
       "id": "feat-032",
       "name": "Phase 3 文档收尾",
       "description": "更新 ARCHITECTURE.md、REQUIREMENTS.md、README.md、DECISIONS.md，反映 Phase 3 范围、新增 benchmark 说明、增量处理架构、打轴优化与 OCR 行级选择器结果。",
       "module": "docs/",
-      "dependencies": ["feat-030", "feat-031", "feat-033", "feat-034"],
+      "dependencies": [
+        "feat-030",
+        "feat-031",
+        "feat-033",
+        "feat-034"
+      ],
       "status": "done",
-      "evidence": "2026-07-12 Phase 3 文档收口：README 更新 CLI --script、段内多帧共识、GUI 增量进度/取消与固定 GT 水位；ARCHITECTURE 更新默认 path mode、增量 feed/ocr_segment/finalize、Vision 资源生命周期、OCR 行级选择及最终指标；REQUIREMENTS 将 Phase 1~3 实现状态与长期跨平台边界校准；DECISIONS 新增 ADR-0012；phase3 plan、feature-list、baseline、HURDLES 与 progress 同步最终状态和残余风险。最终固定 GT：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%、micro 2.4%、字符准确率 97.6%，usable 92.0%，noise/empty 0，speed 21.0x。feat-028 独立初始基线入库和 ≥10 分钟非 Zootopia GUI 手工体验验收均按用户决定保留为明确跳过/暂缓项。最终验证：uv run ruff check . 0 error；uv run mypy src tests no issues；uv run pytest 346 passed；Swift swift test 15 XCTest + 121 Swift Testing passed；./init.sh 8/8 passed。"
+      "evidence": "2026-07-12 Phase 3 文档收口：README 更新 CLI --script、段内多帧共识、GUI 增量进度/取消与固定 GT 水位；ARCHITECTURE 更新默认 path mode、增量 feed/ocr_segment/finalize、Vision 资源生命周期、OCR 行级选择及最终指标；REQUIREMENTS 将 Phase 1~3 实现状态与长期跨平台边界校准；DECISIONS 新增 ADR-0012；phase3 plan、feature-list、baseline、HURDLES 与 progress 同步最终状态和残余风险。最终固定 GT：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%、micro 2.4%、字符准确率 97.6%，usable 92.0%，noise/empty 0，speed 21.0x。feat-028 独立初始基线入库和 ≥10 分钟非 Zootopia GUI 手工体验验收均按用户决定保留为明确跳过/暂缓项。最终验证：uv run ruff check . 0 error；uv run mypy src tests no issues；uv run pytest 346 passed；Swift swift test 15 XCTest + 121 Swift Testing passed；./init.sh 8/8 passed。2026-07-15 后续一致性修正：docs/design/macos-gui.md 删除旧批量缓冲、MAX_FRAMES/MAX_TOTAL_PIXELS 与 finalize 后才运行 Pipeline 的现行描述，明确产品默认 path mode、逐帧 feed、段闭合 push_entry、最终 dedupe、取消资源回收及 legacy frame mode 边界；feature-list 同步当前 GUI 抽帧职责。验证：./init.sh 8/8 通过。"
     }
   ]
 }

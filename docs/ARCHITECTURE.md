@@ -69,6 +69,7 @@ video
 - [pipeline 设计](design/pipeline.md) — 帧签名、状态机、时间轴、去重、编排
 - [ocr 设计](design/ocr.md) — Protocol、Vision 实现、Mock、跨平台演进
 - [extractor 设计](design/extractor.md) — Protocol、ffmpeg 实现、流式采样
+- [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
 
 ## 5. 核心数据模型
 
@@ -212,11 +213,11 @@ SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 - **平台 API 隔离**：Apple Vision 在 GUI 端仅用于字幕区域候选框检测（`VisionTextDetector.swift`），OCR 仍由 Python 端 `ocr/vision.py` 执行。
 - **无分发包**：Phase 2 不做独立 `.app` 打包与 Apple 公证（ADR-0009），GUI 通过 `swift run SubLiftMac` 在开发者环境运行。
 
-## 11. Phase 3 优化架构
+## 11. phase3-opt-perf 架构
 
 ### 11.1 Benchmark 驱动
 
-`scripts/run_benchmark_manifest.py` 以 manifest 固定视频、GT、区域与配置，输出 summary、agent JSON、GT CSV 和 detection CSV。所有质量结论先看同一 GT 总表，再拆 failure clusters，最后定位 cue 与根因；`docs/benchmarks/baseline.md` 保存关键水位导航。
+`scripts/run_benchmark_manifest.py` 以 manifest 固定视频、GT、区域与配置，输出 summary、agent JSON、GT CSV 和 detection CSV。质量诊断为一对一 temporal IoU + case 分类；可选 `performance` 模式（off/summary/trace）在同源 Pipeline 上聚合阶段耗时，并与同次质量门联合报告。设计见 [design/benchmark.md](design/benchmark.md)；命令、manifest 字段与回归锚点见 [benchmark/README.md](../benchmark/README.md)。
 
 ### 11.2 增量处理与取消
 

@@ -82,3 +82,85 @@ def test_load_run_config_rejects_invalid_script(tmp_path: Path) -> None:
 
     with pytest.raises(ManifestError, match="subtitle_script"):
         load_run_config(manifest)
+
+
+def test_load_run_config_default_performance_off(tmp_path: Path) -> None:
+    """旧 manifest 无 performance 块时默认为 off，不改变行为。"""
+    repo = tmp_path / "repo"
+    manifest_dir = repo / "benchmark" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("", encoding="utf-8")
+    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    manifest = manifest_dir / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/fixtures/movie.srt",
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_run_config(manifest)
+    assert config.performance_mode == "off"
+    assert config.warmup_runs == 0
+    assert config.measured_runs == 1
+
+
+def test_load_run_config_performance_block(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    manifest_dir = repo / "benchmark" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("", encoding="utf-8")
+    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    manifest = manifest_dir / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/fixtures/movie.srt",
+                "performance": {
+                    "mode": "summary",
+                    "warmup_runs": 1,
+                    "measured_runs": 3,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_run_config(manifest)
+    assert config.performance_mode == "summary"
+    assert config.warmup_runs == 1
+    assert config.measured_runs == 3
+
+
+def test_load_run_config_rejects_invalid_performance_mode(tmp_path: Path) -> None:
+    manifest = tmp_path / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/fixtures/movie.srt",
+                "performance": {"mode": "debug"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match=r"performance\.mode"):
+        load_run_config(manifest)
+
+
+def test_load_run_config_rejects_invalid_measured_runs(tmp_path: Path) -> None:
+    manifest = tmp_path / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/fixtures/movie.srt",
+                "performance": {"mode": "summary", "measured_runs": 0},
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match="measured_runs"):
+        load_run_config(manifest)

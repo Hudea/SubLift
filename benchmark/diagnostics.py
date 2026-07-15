@@ -256,6 +256,8 @@ def format_agent_json(
         "repro_command": "uv run python scripts/run_benchmark_manifest.py <manifest.json>",
         "artifacts": _artifact_payload(artifacts or {}),
     }
+    if result.performance is not None:
+        payload["performance"] = result.performance
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -381,6 +383,9 @@ def format_summary_markdown(
     lines.append(f"| speed | video_duration_seconds | {speed['video_duration_seconds']:.1f} |")
     lines.append(f"| speed | speed_factor | {speed['speed_factor']:.1f}x |")
     lines.append("")
+
+    if result.performance is not None:
+        lines.extend(_format_performance_markdown(result.performance))
 
     lines.append("## Failure Clusters")
     if not analysis.failure_clusters:
@@ -948,3 +953,138 @@ def _speed_payload(result: RunResult) -> dict[str, float]:
         "video_duration_seconds": result.video_duration_seconds,
         "speed_factor": speed_factor,
     }
+
+
+def _format_performance_markdown(performance: dict[str, object]) -> list[str]:
+    """Render feat-037 performance block for summary Markdown."""
+    lines: list[str] = ["## Performance", ""]
+    mode = performance.get("mode", "unknown")
+    completed = performance.get("completed")
+    lines.append(f"- mode: `{mode}`")
+    lines.append(f"- completed: `{completed}`")
+    warmup = performance.get("warmup_runs")
+    measured = performance.get("measured_runs")
+    if warmup is not None or measured is not None:
+        lines.append(f"- runs: warmup={warmup} measured={measured}")
+
+    throughput = performance.get("throughput")
+    if isinstance(throughput, dict):
+        lines.append("")
+        lines.append("### Attribution (last measured run)")
+        lines.append(
+            f"- attributed_stage_ms: `{_fmt_perf_num(throughput.get('attributed_stage_ms'))}`"
+        )
+        lines.append(
+            f"- unattributed_ms: `{_fmt_perf_num(throughput.get('unattributed_ms'))}`"
+        )
+        lines.append(
+            f"- stage_coverage_pct: `{_fmt_perf_num(throughput.get('stage_coverage_pct'))}`"
+        )
+
+    quality = performance.get("quality")
+    if isinstance(quality, dict):
+        lines.append("")
+        lines.append("### Quality across measured runs")
+        lines.append(f"- detections_consistent: `{quality.get('detections_consistent')}`")
+        lines.append(f"- all_runs_pass: `{quality.get('all_runs_pass')}`")
+        lines.append(
+            f"- reference_detection_hash: `{quality.get('reference_detection_hash')}`"
+        )
+        runs = quality.get("runs")
+        if isinstance(runs, list) and runs:
+            lines.append("")
+            lines.append("| Run | Hash | F1 | Precision | Usable | CER | Pass |")
+            lines.append("|---:|---|---:|---:|---:|---:|---|")
+            for item in runs:
+                if not isinstance(item, dict):
+                    continue
+                raw_metrics = item.get("metrics")
+                metrics: dict[str, object] = (
+                    raw_metrics if isinstance(raw_metrics, dict) else {}
+                )
+                lines.append(
+                    f"| {item.get('run_index')} | `{item.get('detection_hash')}` | "
+                    f"{_fmt_perf_num(metrics.get('timing_f1'))} | "
+                    f"{_fmt_perf_num(metrics.get('timing_precision'))} | "
+                    f"{_fmt_perf_num(metrics.get('usable_subtitle_recall'))} | "
+                    f"{_fmt_perf_num(metrics.get('cer_macro'))} | "
+                    f"{item.get('all_pass')} |"
+                )
+
+    aggregate = performance.get("aggregate")
+    if isinstance(aggregate, dict) and aggregate.get("measured_runs"):
+        lines.append("")
+        lines.append("### Aggregate (median / min / max)")
+        lines.append("| Metric | Median | Min | Max |")
+        lines.append("|---|---:|---:|---:|")
+        for key, label in (
+            ("core_wall_ms", "core_wall_ms"),
+            ("realtime_factor", "realtime_factor"),
+            ("first_frame_ms", "first_frame_ms"),
+            ("first_entry_ms", "first_entry_ms"),
+            ("spawn_to_first_frame_ms", "spawn_to_first_frame_ms"),
+            ("python_peak_rss_bytes", "python_peak_rss_bytes"),
+            ("raw_output_bytes", "raw_output_bytes"),
+            ("ocr_calls", "ocr_calls"),
+        ):
+            stats = aggregate.get(key)
+            if not isinstance(stats, dict):
+                continue
+            med = stats.get("median")
+            mn = stats.get("min")
+            mx = stats.get("max")
+            lines.append(
+                f"| {label} | {_fmt_perf_num(med)} | {_fmt_perf_num(mn)} | {_fmt_perf_num(mx)} |"
+            )
+
+    stages = performance.get("stages")
+    if isinstance(stages, dict) and stages:
+        lines.append("")
+        lines.append("### Stages (last measured run)")
+        lines.append("| Stage | Count | Total ms | Mean ms | Max ms |")
+        lines.append("|---|---:|---:|---:|---:|")
+        for name, stats in stages.items():
+            if not isinstance(stats, dict):
+                continue
+            lines.append(
+                f"| `{name}` | {stats.get('count', 0)} | "
+                f"{_fmt_perf_num(stats.get('total_ms'))} | "
+                f"{_fmt_perf_num(stats.get('mean_ms'))} | "
+                f"{_fmt_perf_num(stats.get('max_ms'))} |"
+            )
+            if name == "extract_wait" and stats.get("definition"):
+                lines.append("")
+                lines.append(f"> extract_wait definition: {stats['definition']}")
+
+    env = performance.get("environment")
+    if isinstance(env, dict) and env:
+        lines.append("")
+        lines.append("### Environment")
+        for key in (
+            "git_commit",
+            "git_dirty",
+            "platform",
+            "machine",
+            "python_version",
+            "ffmpeg_version",
+            "vision_available",
+        ):
+            if key in env:
+                lines.append(f"- {key}: `{env[key]}`")
+
+    lines.append("")
+    return lines
+
+
+def _fmt_perf_num(value: object) -> str:
+    if value is None:
+        return "—"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float):
+        if abs(value) >= 100:
+            return f"{value:.1f}"
+        if abs(value) >= 1:
+            return f"{value:.2f}"
+        return f"{value:.3f}"
+    return str(value)

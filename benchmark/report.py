@@ -35,12 +35,16 @@ def write_reports(
     output_dir.mkdir(parents=True, exist_ok=True)
     prefix = result.config.output_prefix
 
-    paths = {
+    paths: dict[str, Path] = {
         "agent_json": output_dir / f"{prefix}.agent.json",
         "gt_cases_csv": output_dir / f"{prefix}.gt_cases.csv",
         "det_cases_csv": output_dir / f"{prefix}.det_cases.csv",
         "summary_markdown": output_dir / f"{prefix}.summary.md",
     }
+    # feat-037：trace 模式若有 segment 路径则登记为 artifact
+    if result.performance and result.performance.get("segment_trace_path"):
+        paths["perf_segments_jsonl"] = Path(str(result.performance["segment_trace_path"]))
+
     analysis = analyze_result(
         result,
         baseline_timing_precision=baseline_timing_precision,

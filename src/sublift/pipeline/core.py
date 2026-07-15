@@ -15,9 +15,10 @@ Pipeline 串联七个组件，支持两种使用模式：
 from __future__ import annotations
 
 from collections.abc import Iterator
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import cv2
 import numpy as np
@@ -51,6 +52,7 @@ from sublift.pipeline.timeline import TimelineBuilder
 if TYPE_CHECKING:
     from PIL import Image
 
+    from sublift.diagnostics.performance import PerformanceRecorder
     from sublift.diagnostics.trace import TraceRecorder
 
 
@@ -105,6 +107,7 @@ class Pipeline:
         *,
         extractor: Extractor | None = None,
         trace_recorder: TraceRecorder | None = None,
+        performance_recorder: PerformanceRecorder | None = None,
     ) -> None:
         """初始化流水线。
 
@@ -116,12 +119,15 @@ class Pipeline:
                 帧流模式（run_frames()/feed()）不需要，可不传。
             trace_recorder: 可选打轴决策 trace 记录器（feat-031a）。
                 注入后 ``ChangePointDetector`` 会逐帧记录决策上下文。
+            performance_recorder: 可选性能记录器（feat-037）。
+                None 时热点路径仅一次空值判断，不改变提取语义。
         """
         self._extractor = extractor
         self._detector = detector
         self._ocr = ocr
         self._config = config
         self._trace_recorder = trace_recorder
+        self._perf = performance_recorder
 
         # 流式状态（feed/ocr_segment/finalize 共享）
         self._changepoint = ChangePointDetector(
@@ -144,6 +150,13 @@ class Pipeline:
         self._subtitle_profile: SubtitleProfile | None = config.subtitle_profile
         # feat-034d：段内采样帧，供多帧共识
         self._segment_sample_frames: list[Frame] = []
+
+    def _perf_span(self, stage: str, *, sample: bool = False) -> Any:
+        """性能 span；无 recorder 时返回 nullcontext（一次空值判断）。"""
+        perf = self._perf
+        if perf is None:
+            return nullcontext()
+        return perf.span(stage, sample=sample)
 
     # ------------------------------------------------------------------
     # 流式 API（feat-029）
@@ -175,13 +188,17 @@ class Pipeline:
                 return None
             self._ensure_subtitle_profile()
 
-        crop_image = self._crop_region(frame, self._region.box)
-        crop_np = cv2.cvtColor(np.asarray(crop_image), cv2.COLOR_RGB2BGR)
+        with self._perf_span("crop"):
+            crop_image = self._crop_region(frame, self._region.box)
+        with self._perf_span("color_convert"):
+            crop_np = cv2.cvtColor(np.asarray(crop_image), cv2.COLOR_RGB2BGR)
 
-        signature = compute_signature(
-            crop_np, frame.timestamp_ms, self._config.signature
-        )
-        event = self._changepoint.process(signature, crop_np)
+        with self._perf_span("signature"):
+            signature = compute_signature(
+                crop_np, frame.timestamp_ms, self._config.signature
+            )
+        with self._perf_span("changepoint"):
+            event = self._changepoint.process(signature, crop_np)
 
         if event is None:
             self._on_stable_frame(frame)
@@ -238,12 +255,22 @@ class Pipeline:
                 confidence=0.0,
             )
             self._closed_entries.append(entry)
+            self._record_segment_perf(
+                event,
+                representative_frames=0,
+                ocr_calls=0,
+                ocr_wall_ns=0,
+                select_wall_ns=0,
+                accepted=False,
+                output_chars=0,
+            )
             return entry
 
+        seg_stats = {"ocr_calls": 0, "ocr_ns": 0, "select_ns": 0, "rep_frames": 0}
         if self._config.enable_line_select:
-            text, confidence = self._ocr_segment_with_line_select(event)
+            text, confidence = self._ocr_segment_with_line_select(event, seg_stats)
         else:
-            text, confidence = self._ocr_segment_legacy(event)
+            text, confidence = self._ocr_segment_legacy(event, seg_stats)
 
         entry = SubtitleEntry(
             start_ms=event.start_ms,
@@ -252,6 +279,18 @@ class Pipeline:
             confidence=confidence,
         )
         self._closed_entries.append(entry)
+        accepted = bool(text.strip())
+        if self._perf is not None and accepted:
+            self._perf.mark_first_entry()
+        self._record_segment_perf(
+            event,
+            representative_frames=int(seg_stats["rep_frames"]),
+            ocr_calls=int(seg_stats["ocr_calls"]),
+            ocr_wall_ns=int(seg_stats["ocr_ns"]),
+            select_wall_ns=int(seg_stats["select_ns"]),
+            accepted=accepted,
+            output_chars=len(text),
+        )
         return entry
 
     def finalize(self) -> list[SubtitleEntry]:
@@ -260,29 +299,34 @@ class Pipeline:
         Returns:
             去重合并后的字幕条目列表。
         """
-        # 关闭末尾未闭合段
-        if self._open_segment_start_ms is not None:
-            self._timeline.finalize_open_segment(self._last_timestamp_ms)
-            segments = self._timeline.build()
-            if segments:
-                last = segments[-1]
-                if last.end_ms is not None:
-                    event = self._close_segment(
-                        start_ms=last.start_ms,
-                        end_ms=last.end_ms,
-                        closing_frame=None,
-                        clear_open=False,
-                    )
-                    self.ocr_segment(event)
-            self._open_segment_start_ms = None
-            self._reset_segment_ocr_state()
+        with self._perf_span("finalize"):
+            # 关闭末尾未闭合段
+            if self._open_segment_start_ms is not None:
+                self._timeline.finalize_open_segment(self._last_timestamp_ms)
+                segments = self._timeline.build()
+                if segments:
+                    last = segments[-1]
+                    if last.end_ms is not None:
+                        event = self._close_segment(
+                            start_ms=last.start_ms,
+                            end_ms=last.end_ms,
+                            closing_frame=None,
+                            clear_open=False,
+                        )
+                        self.ocr_segment(event)
+                self._open_segment_start_ms = None
+                self._reset_segment_ocr_state()
 
-        return merge_entries(
-            self._closed_entries,
-            merge_gap_ms=self._config.merge_gap_ms,
-            min_duration_ms=self._config.min_duration_ms,
-            drop_empty_text=self._config.drop_empty_text,
-        )
+            with self._perf_span("dedupe"):
+                result = merge_entries(
+                    self._closed_entries,
+                    merge_gap_ms=self._config.merge_gap_ms,
+                    min_duration_ms=self._config.min_duration_ms,
+                    drop_empty_text=self._config.drop_empty_text,
+                )
+        if self._perf is not None:
+            self._perf.sample_resources()
+        return result
 
     def cancel(self) -> None:
         """取消并清理内部状态，释放内存。后续 feed() 将拒绝处理。"""
@@ -406,9 +450,13 @@ class Pipeline:
         self._segment_stable_frame = None
         self._segment_sample_frames = []
 
-    def _ocr_segment_legacy(self, event: SegmentEvent) -> tuple[str, float]:
+    def _ocr_segment_legacy(
+        self,
+        event: SegmentEvent,
+        seg_stats: dict[str, int] | None = None,
+    ) -> tuple[str, float]:
         """旧路径：整区 join + 全局阈值 + 单锚回退。"""
-        text, confidence = self._ocr_frame_raw(event.anchor_frame)
+        text, confidence = self._ocr_frame_raw(event.anchor_frame, seg_stats)
         if self._needs_ocr_retry(text, confidence):
             seen_ts = {
                 event.anchor_frame.timestamp_ms
@@ -419,7 +467,7 @@ class Pipeline:
                 if fb.timestamp_ms in seen_ts:
                     continue
                 seen_ts.add(fb.timestamp_ms)
-                fb_text, fb_conf = self._ocr_frame_raw(fb)
+                fb_text, fb_conf = self._ocr_frame_raw(fb, seg_stats)
                 if not self._needs_ocr_retry(fb_text, fb_conf):
                     text, confidence = fb_text, fb_conf
                     break
@@ -432,7 +480,11 @@ class Pipeline:
             text = ""
         return text, confidence
 
-    def _ocr_segment_with_line_select(self, event: SegmentEvent) -> tuple[str, float]:
+    def _ocr_segment_with_line_select(
+        self,
+        event: SegmentEvent,
+        seg_stats: dict[str, int] | None = None,
+    ) -> tuple[str, float]:
         """行级选择 + 多帧共识（feat-034c/d）。"""
         self._ensure_subtitle_profile()
         profile = self._subtitle_profile
@@ -450,15 +502,21 @@ class Pipeline:
                 return "", 0.0
 
         frames = self._collect_ocr_frames(event)
+        if seg_stats is not None:
+            seg_stats["rep_frames"] = len(frames)
         samples: list[tuple[str, float]] = []
 
         for frame in frames:
-            text, conf = self._ocr_frame_selected(frame, profile)
+            text, conf = self._ocr_frame_selected(frame, profile, seg_stats)
             if not text.strip():
                 continue
             samples.append((text, conf))
 
-            partial = consensus_text(samples, script=profile.script)
+            with self._perf_span("consensus"):
+                t0 = self._perf.now_ns() if self._perf is not None else 0
+                partial = consensus_text(samples, script=profile.script)
+                if seg_stats is not None and self._perf is not None:
+                    seg_stats["select_ns"] += self._perf.now_ns() - t0
 
             # 高置信且不含混合文字系统：单帧即可，少做 OCR。CJK 与拉丁
             # 粘连时继续取样，让段内稳定性决定是合法混排还是横幅水印。
@@ -477,11 +535,19 @@ class Pipeline:
             ):
                 break
 
-        consensus = consensus_text(samples, script=profile.script)
+        with self._perf_span("consensus"):
+            t0 = self._perf.now_ns() if self._perf is not None else 0
+            consensus = consensus_text(samples, script=profile.script)
+            if seg_stats is not None and self._perf is not None:
+                seg_stats["select_ns"] += self._perf.now_ns() - t0
         if not consensus.text:
             return "", 0.0
 
-        text = cleanup_subtitle_text(consensus.text, profile.script)
+        with self._perf_span("cleanup"):
+            t0 = self._perf.now_ns() if self._perf is not None else 0
+            text = cleanup_subtitle_text(consensus.text, profile.script)
+            if seg_stats is not None and self._perf is not None:
+                seg_stats["select_ns"] += self._perf.now_ns() - t0
         confidence = consensus.confidence
         if not text:
             return "", confidence
@@ -516,35 +582,95 @@ class Pipeline:
         self,
         frame: Frame | None,
         profile: SubtitleProfile,
+        seg_stats: dict[str, int] | None = None,
     ) -> tuple[str, float]:
         """单帧 OCR → 行级选择 → (text, conf)。"""
         if frame is None or self._region is None:
             return "", 0.0
-        crop_image = self._crop_region(frame, self._region.box)
-        result = self._ocr.recognize(crop_image)
+        with self._perf_span("crop"):
+            crop_image = self._crop_region(frame, self._region.box)
+        with self._perf_span("ocr", sample=True):
+            t0 = self._perf.now_ns() if self._perf is not None else 0
+            result = self._ocr.recognize(crop_image)
+            if seg_stats is not None and self._perf is not None:
+                seg_stats["ocr_calls"] += 1
+                seg_stats["ocr_ns"] += self._perf.now_ns() - t0
+            elif seg_stats is not None:
+                seg_stats["ocr_calls"] += 1
 
         if result.lines:
-            chosen = select_line(
-                result.lines,
-                profile,
-                min_score=self._config.line_select_min_score,
-                min_script=self._config.line_select_min_script,
-            )
+            with self._perf_span("line_select"):
+                t0 = self._perf.now_ns() if self._perf is not None else 0
+                chosen = select_line(
+                    result.lines,
+                    profile,
+                    min_score=self._config.line_select_min_score,
+                    min_script=self._config.line_select_min_script,
+                )
+                if seg_stats is not None and self._perf is not None:
+                    seg_stats["select_ns"] += self._perf.now_ns() - t0
             if chosen is None:
                 return "", 0.0
-            text = cleanup_subtitle_text(chosen.text, profile.script)
+            with self._perf_span("cleanup"):
+                t0 = self._perf.now_ns() if self._perf is not None else 0
+                text = cleanup_subtitle_text(chosen.text, profile.script)
+                if seg_stats is not None and self._perf is not None:
+                    seg_stats["select_ns"] += self._perf.now_ns() - t0
             return text, chosen.confidence
 
         # 无 lines 时兼容旧引擎输出
-        text = cleanup_subtitle_text(result.text, profile.script)
+        with self._perf_span("cleanup"):
+            t0 = self._perf.now_ns() if self._perf is not None else 0
+            text = cleanup_subtitle_text(result.text, profile.script)
+            if seg_stats is not None and self._perf is not None:
+                seg_stats["select_ns"] += self._perf.now_ns() - t0
         return text, result.confidence
 
-    def _ocr_frame_raw(self, frame: Frame | None) -> tuple[str, float]:
+    def _ocr_frame_raw(
+        self,
+        frame: Frame | None,
+        seg_stats: dict[str, int] | None = None,
+    ) -> tuple[str, float]:
         if frame is None or self._region is None:
             return "", 0.0
-        crop_image = self._crop_region(frame, self._region.box)
-        result = self._ocr.recognize(crop_image)
+        with self._perf_span("crop"):
+            crop_image = self._crop_region(frame, self._region.box)
+        with self._perf_span("ocr", sample=True):
+            t0 = self._perf.now_ns() if self._perf is not None else 0
+            result = self._ocr.recognize(crop_image)
+            if seg_stats is not None and self._perf is not None:
+                seg_stats["ocr_calls"] += 1
+                seg_stats["ocr_ns"] += self._perf.now_ns() - t0
+            elif seg_stats is not None:
+                seg_stats["ocr_calls"] += 1
+        if seg_stats is not None and seg_stats.get("rep_frames", 0) == 0:
+            seg_stats["rep_frames"] = 1
         return result.text, result.confidence
+
+    def _record_segment_perf(
+        self,
+        event: SegmentEvent,
+        *,
+        representative_frames: int,
+        ocr_calls: int,
+        ocr_wall_ns: int,
+        select_wall_ns: int,
+        accepted: bool,
+        output_chars: int,
+    ) -> None:
+        perf = self._perf
+        if perf is None:
+            return
+        perf.record_segment(
+            start_ms=event.start_ms,
+            end_ms=event.end_ms,
+            representative_frames=representative_frames,
+            ocr_calls=ocr_calls,
+            ocr_wall_ns=ocr_wall_ns,
+            select_wall_ns=select_wall_ns,
+            accepted=accepted,
+            output_chars=output_chars,
+        )
 
     def _ocr_frame(self, frame: Frame | None) -> tuple[str, float]:
         """兼容旧调用：按配置选择路径。"""
@@ -583,26 +709,46 @@ class Pipeline:
         """
         if self._extractor is None:
             raise RuntimeError("文件模式 run() 需要 extractor，请在构造 Pipeline 时传入")
-        frames = self._extractor.extract(video_path)
-        return self.run_frames(frames)
+        if self._perf is not None:
+            self._perf.mark_core_start()
+        try:
+            frames = self._extractor.extract(video_path)
+            return self.run_frames(frames, _mark_core=False)
+        finally:
+            if self._perf is not None:
+                self._perf.mark_core_end()
+                self._perf.sample_resources()
 
-    def run_frames(self, frames: Iterator[Frame]) -> list[SubtitleEntry]:
+    def run_frames(
+        self,
+        frames: Iterator[Frame],
+        *,
+        _mark_core: bool = True,
+    ) -> list[SubtitleEntry]:
         """执行端到端字幕提取（帧流模式，批量向后兼容）。
 
         内部走 feed + ocr_segment + finalize 流式路径，结果与旧实现等价。
 
         Args:
             frames: 帧迭代器。
+            _mark_core: 是否标记 core wall（``run()`` 已标记时传 False）。
 
         Returns:
             清理后的字幕条目列表。
         """
+        if _mark_core and self._perf is not None:
+            self._perf.mark_core_start()
         self._reset_streaming_state()
-        for frame in frames:
-            event = self.feed(frame)
-            if event is not None:
-                self.ocr_segment(event)
-        return self.finalize()
+        try:
+            for frame in frames:
+                event = self.feed(frame)
+                if event is not None:
+                    self.ocr_segment(event)
+            return self.finalize()
+        finally:
+            if _mark_core and self._perf is not None:
+                self._perf.mark_core_end()
+                self._perf.sample_resources()
 
     # ------------------------------------------------------------------
     # 内部辅助

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from benchmark.runner import RunConfig
+from sublift.diagnostics.performance import PerformanceMode, parse_performance_mode
 from sublift.models import SCRIPT_AUTO, SCRIPT_VALUES
 
 
@@ -35,6 +36,12 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         label: optional report suffix.
         video_duration_seconds: optional duration override.
         output_dir: report output directory, default debug/benchmark-reports.
+        performance: optional object::
+            {
+              "mode": "off"|"summary"|"trace",  # default off
+              "warmup_runs": int >= 0,          # default 0
+              "measured_runs": int >= 1         # default 1
+            }
     """
     try:
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -45,6 +52,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
 
     root = _discover_repo_root(manifest_path)
     output_dir = _path(payload, ("output_dir",), root, required=False)
+    perf_mode, warmup_runs, measured_runs = _performance(payload)
     return RunConfig(
         video_path=_required_path(payload, ("video", "video_path"), root),
         ground_truth_path=_required_path(payload, ("ground_truth", "ground_truth_path"), root),
@@ -70,6 +78,9 @@ def load_run_config(manifest_path: Path) -> RunConfig:
             payload, "video_duration_seconds", exclusive_minimum=0.0
         ),
         output_dir=output_dir or root / "debug/benchmark-reports",
+        performance_mode=perf_mode,
+        warmup_runs=warmup_runs,
+        measured_runs=measured_runs,
     )
 
 
@@ -227,3 +238,32 @@ def _region_box(payload: dict[str, Any]) -> tuple[int, int, int, int] | None:
     if width <= 0 or height <= 0:
         raise ManifestError("region_box 的 width/height 必须大于 0")
     return (x, y, width, height)
+
+
+def _performance(payload: dict[str, Any]) -> tuple[str, int, int]:
+    """解析 performance 块；缺省为 off / 0 warmup / 1 measured。"""
+    if "performance" not in payload or payload["performance"] is None:
+        return PerformanceMode.OFF.value, 0, 1
+    value = payload["performance"]
+    if not isinstance(value, dict):
+        raise ManifestError("performance 必须是 object")
+
+    mode_raw = value.get("mode", PerformanceMode.OFF.value)
+    if not isinstance(mode_raw, str):
+        raise ManifestError("performance.mode 必须是字符串")
+    try:
+        mode = parse_performance_mode(mode_raw)
+    except ValueError as exc:
+        raise ManifestError(str(exc)) from exc
+
+    warmup = value.get("warmup_runs", 0)
+    measured = value.get("measured_runs", 1)
+    if not isinstance(warmup, int) or isinstance(warmup, bool):
+        raise ManifestError("performance.warmup_runs 必须是整数")
+    if not isinstance(measured, int) or isinstance(measured, bool):
+        raise ManifestError("performance.measured_runs 必须是整数")
+    if warmup < 0:
+        raise ManifestError("performance.warmup_runs 不能为负")
+    if measured < 1:
+        raise ManifestError("performance.measured_runs 必须 >= 1")
+    return mode.value, warmup, measured

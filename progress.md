@@ -2,11 +2,11 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-15（GUI 左栏自适应布局）
-- **当前 Phase：** Phase 3 - 优化与基本可用
-- **当前功能：** feat-036 — GUI 左栏自适应布局
-- **分支：** main
-- **说明：** 预览按视频比例与窗口空间自适应，始终为下方控制、区域选择和提取栏预留空间；窄栏状态不换行溢出。
+- **最后更新：** 2026-07-15（benchmark 文档重组）
+- **当前 Phase：** phase3-opt-perf
+- **当前功能：** 无进行中功能；下一项建议 ROI 输出
+- **分支：** opt/perf
+- **说明：** 删除 `docs/benchmarks/baseline.md`；设计 → `docs/design/benchmark.md`；用法/锚点 → `benchmark/README.md`。
 
 ## 进行中
 
@@ -14,23 +14,23 @@
 
 ## 近期完成（最近 5 个）
 
-- [x] **bugfix(GUI)**：代表帧无字幕导致错选区 → 多时间点扫描 + 得分选帧 + 「重检当前帧」；无下部候选时不再全选。
-- [x] **feat-036 GUI**：左栏预览受视频比例、最大高度和控制区预留共同约束；提取栏拆行，状态文本单行截断。
-- [x] **feat-035 GUI**：提取进度旁显示相对实时处理倍速；预热期/无效数据不显示，完成、取消或报错时清空。
-- [x] **GUI**：采样密度三档「快速/平衡/精细」→ sample_fps 5/8/12（默认快速=5，UI 不显示数字）。
-- [x] **bugfix**：收回 GUI「SSIM 巡逻」开关（ADR-0013）；产品路径不传 `enable_ssim_patrol`，走后端默认 True；IPC 字段保留给诊断。
+- [x] **docs(benchmark)**：设计 `docs/design/benchmark.md` + 用法 `benchmark/README.md`；移除散落 baseline.md。
+- [x] **feat-037**：开发者性能模式 + 测量可信度补强 + baseline。
+- [x] **bugfix(GUI)**：代表帧无字幕导致错选区 → 多时间点扫描 + 得分选帧。
+- [x] **docs(GUI)**：macos-gui 统一到 path mode。
+- [x] **feat-036 GUI**：左栏预览自适应布局。
 
 ## 阻塞项 / 风险
 
 - [ ] **merged residual / #15 砰**：非 034 主目标，仍开放。
-- [ ] **ground truth 素材有限**：主要依赖 Zootopia clip。
-- [ ] **feat-030 长视频 GUI 手工验收暂缓**：尚未用 ≥10 分钟非 Zootopia 视频验证进度观感、取消和重新开始；自动 IPC 审计已通过。
-- [ ] **显式 CJK 混排风险**：边界 cleanup 可能误删 `NPD动物警局` / `苹果的iPhone` 一类无空格英文；默认 auto，待混排 GT 驱动修复。
+- [ ] **ground truth 素材有限**：性能 baseline 同 Zootopia 片源，不冒充泛化。
+- [ ] **feat-030 长视频 GUI 手工验收暂缓**。
+- [ ] **显式 CJK 混排风险**：边界 cleanup 可能误删无空格英文；默认 auto。
 
 ## 近期决策
 
-- **ADR-0013**：SSIM patrol 为内部默认机制，不暴露给 GUI 用户。
-- **ADR-0012**：增量 pipeline、真实进度、快速取消与 Vision 资源释放由同一任务生命周期管理。
-- **ADR-0011**：默认 script=`auto`；显式 CJK 边界 cleanup 的混排风险保留为 HURDLE。
+- **Benchmark 文档分层**：ARCHITECTURE 索引 → design 设计 → `benchmark/README.md` 用法与锚点。
+- **下一步性能优先 ROI 输出**：extract_wait + frame_materialize ≈ 39% core；不在 037 内实施。
+- **性能优化先测量**：extract_wait 不得称为纯解码。
 
 > 完整决策记录见 `docs/DECISIONS.md`

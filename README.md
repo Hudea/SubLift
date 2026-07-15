@@ -89,14 +89,15 @@ uv run mypy src tests         # 类型检查（strict）
 
 - [架构设计](docs/ARCHITECTURE.md) — 模块布局、数据流、分层原则
 - [需求规格](docs/REQUIREMENTS.md) — 功能需求、非功能需求、验收标准
-- 设计文档：[pipeline](docs/design/pipeline.md) · [ocr](docs/design/ocr.md) · [extractor](docs/design/extractor.md) · [macos-gui](docs/design/macos-gui.md)
+- 设计文档：[pipeline](docs/design/pipeline.md) · [ocr](docs/design/ocr.md) · [extractor](docs/design/extractor.md) · [benchmark](docs/design/benchmark.md) · [macos-gui](docs/design/macos-gui.md)
+- [Benchmark 用法](benchmark/README.md) — manifest 运行、产物与回归锚点
 - [已知障碍](docs/HURDLES.md) — 开发中遇到的技术问题与解决方案
 
 ### Phase 3 固定 GT 水位
 
 Zootopia 固定片段（1080p、5fps、统一 diagnostic 口径）的最终结果：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%（字符准确率 97.6%），usable subtitle recall 92.0%，空文本与噪声均为 0。该结果用于回归锚点，不代表对其他片源的泛化保证；非 Zootopia 长视频 GUI 手工体验验收和多样化 GT 扩充仍是后续工作。
 
-Benchmark 入口与指标说明见 [Phase 3 baseline](docs/benchmarks/baseline.md)，最终报告位于 `debug/benchmark-reports/feat034_p1_fix2/`。
+Benchmark 入口与指标说明见 [benchmark/README.md](benchmark/README.md)（设计见 [docs/design/benchmark.md](docs/design/benchmark.md)）。质量历史报告示例：`debug/benchmark-reports/feat034_p1_fix2/`；性能报告默认：`debug/perf_reports/`。
 
 ### 技术栈
 

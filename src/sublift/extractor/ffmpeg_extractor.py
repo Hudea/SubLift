@@ -12,10 +12,14 @@ import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PIL import Image
 
 from sublift.models import Frame
+
+if TYPE_CHECKING:
+    from sublift.diagnostics.performance import PerformanceRecorder
 
 # 失败时附带的 stderr 尾部最大字符数
 _STDERR_TAIL_CHARS = 2000
@@ -80,15 +84,24 @@ def probe_video(video_path: Path) -> VideoInfo:
 class FfmpegExtractor:
     """通过 ffmpeg 按 fps 抽帧的 Extractor 实现。"""
 
-    def __init__(self, fps: float = 1.0) -> None:
+    def __init__(
+        self,
+        fps: float = 1.0,
+        *,
+        performance_recorder: PerformanceRecorder | None = None,
+    ) -> None:
         """初始化抽帧器。
 
         Args:
             fps: 采样率（每秒抽帧数），默认 1.0。
+            performance_recorder: 可选性能记录器（feat-037）。
+                记录 probe、spawn→首帧、extract_wait（decode+filter+RGB+pipe）
+                与 raw_output_bytes；不把 extract_wait 标为纯 codec decode。
         """
         self._fps = fps
         self._proc: subprocess.Popen[bytes] | None = None
         self._cancelled = threading.Event()
+        self._perf = performance_recorder
 
     def cancel(self) -> None:
         """强制终止当前的 ffmpeg 抽帧子进程。"""
@@ -125,7 +138,12 @@ class FfmpegExtractor:
         if self._cancelled.is_set():
             return
 
-        width, height = _probe_dimensions(video_path)
+        perf = self._perf
+        if perf is not None:
+            with perf.span("probe"):
+                width, height = _probe_dimensions(video_path)
+        else:
+            width, height = _probe_dimensions(video_path)
         frame_size = width * height * 3
         logger.info("FfmpegExtractor: probe ok %dx%d", width, height)
 
@@ -165,6 +183,9 @@ class FfmpegExtractor:
             if self._cancelled.is_set():
                 return
 
+            if perf is not None:
+                perf.mark_spawn()
+
             with (
                 stderr_path.open("wb") as stderr_fh,
                 subprocess.Popen(
@@ -181,6 +202,8 @@ class FfmpegExtractor:
                         proc.kill()
                     except Exception:
                         pass
+                    if perf is not None:
+                        perf.note_incomplete("cancelled")
                     return
 
                 try:
@@ -188,11 +211,28 @@ class FfmpegExtractor:
                     frame_index = 0
                     while True:
                         if self._cancelled.is_set():
+                            if perf is not None:
+                                perf.note_incomplete("cancelled")
                             break
-                        raw = proc.stdout.read(frame_size)
+                        if perf is not None:
+                            t0 = perf.now_ns()
+                            raw = proc.stdout.read(frame_size)
+                            wait_ns = perf.now_ns() - t0
+                            # extract_wait = decode + filter + RGB + pipe output（非纯解码）
+                            perf.add_stage_ns("extract_wait", wait_ns)
+                        else:
+                            raw = proc.stdout.read(frame_size)
                         if len(raw) < frame_size:
                             break
-                        image = Image.frombytes("RGB", (width, height), raw)
+                        if perf is not None:
+                            perf.incr("raw_output_bytes", len(raw))
+                            if frame_index == 0:
+                                perf.mark_first_frame()
+                            perf.incr("frame_count")
+                            with perf.span("frame_materialize"):
+                                image = Image.frombytes("RGB", (width, height), raw)
+                        else:
+                            image = Image.frombytes("RGB", (width, height), raw)
                         timestamp_ms = int(frame_index / self._fps * 1000)
                         yield Frame(timestamp_ms=timestamp_ms, image=image)
                         frame_index += 1
@@ -201,6 +241,8 @@ class FfmpegExtractor:
 
                 return_code = proc.wait()
                 if not self._cancelled.is_set() and return_code != 0:
+                    if perf is not None:
+                        perf.note_incomplete(f"ffmpeg_exit_{return_code}")
                     tail = _read_stderr_tail(stderr_path)
                     detail = f"：{tail}" if tail else ""
                     raise RuntimeError(

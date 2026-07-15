@@ -10,10 +10,10 @@
 |---|---|
 | `PipelineClient.swift` | 启动 Python IPC 子进程，通过 UDS 进行 4 字节长度前缀 + JSON 分帧的消息收发。 |
 | `Messages.swift` | IPC 消息 Codable 定义，与 Python 端 `src/sublift/ipc/protocol.py` 字段对齐。 |
-| `FrameSampler.swift` | `AVAssetReader` 按 fps 跳采样，将 `CVPixelBuffer` 编码为 JPEG；按扩展名路由 mkv 到 ffmpeg 兜底。 |
-| `FfmpegFallback.swift` | 检测系统 ffmpeg/ffprobe、MJPEG stdout 流切帧（SOI/EOI marker）、mkv 抽帧与元数据探测。 |
+| `FrameSampler.swift` | 为预览候选框扫描、代表帧截取和 legacy frame mode 提供 AVFoundation 采样；不参与默认打轴提取。 |
+| `FfmpegFallback.swift` | 为 mkv 预览/代表帧、元数据探测及 legacy frame mode 提供 ffmpeg 兜底。 |
 | `PreviewLayout.swift` | 根据视频宽高比、左栏可用尺寸和控制区预留高度，为预览区计算受上限约束的高度。 |
-| `SubtitleExtractor.swift` | 协调 `PipelineClient` + `FrameSampler`，完成启动 IPC → 流式抽帧 → finalize → 接收 entries 的端到端状态机；根据真实 progress 计算处理倍速。 |
+| `SubtitleExtractor.swift` | 启动 IPC 后发送 `start_job(video_path, region_box, subtitle_profile)`；消费后端 `progress` / `push_entry` / 最终 `entries`，协调取消、重试和处理倍速。 |
 | `ProcessingRate.swift` | 将已处理的视频时长除以实际处理耗时，格式化为相对实时的处理倍速（如 `4.0× 实时`）。 |
 | `SubtitleEditor.swift` | 维护可编辑字幕列表，提供文本修改、合并、拆分与当前高亮节流。 |
 | `SubtitleEntry.swift` | 带 `UUID` 的可变字幕条目模型，负责与 IPC 不可变 `SubtitleEntryData` 双向转换。 |
@@ -48,28 +48,27 @@
 
 | 方向 | 消息 | 关键字段 |
 |---|---|---|
-| Swift → Python | `start_job` | `video_id`, `fps`, `engine`, `confidence_threshold`, `region_box: [x,y,w,h]?`, `duration_ms` |
-| Swift → Python | `frame` | `video_id`, `ts_ms`, `jpeg_bytes: base64` |
-| Swift → Python | `finalize` | `video_id`（通知帧流结束，Python 跑 Pipeline） |
+| Swift → Python | `start_job` | `video_id`, `video_path?`, `fps`, `engine`, `confidence_threshold`, `region_box?`, `subtitle_profile?`, `duration_ms`；`video_path` 非空即进入默认 path mode |
+| Swift → Python | `frame` | 仅 legacy frame mode：`video_id`, `ts_ms`, `jpeg_bytes: base64`；后端解码后立即 `Pipeline.feed()`，不累计帧 |
+| Swift → Python | `finalize` | 仅 legacy frame mode：关闭末段并执行最终 dedupe；不是“收到后才开始跑整条 Pipeline” |
 | Swift → Python | `cancel_job` | `video_id` |
-| Python → Swift | `progress` | `video_id`, `stage`, `pct`, `eta_ms` |
-| Python → Swift | `entries` | `video_id`, `entries: [{start_ms, end_ms, text, confidence}]` |
+| Python → Swift | `progress` | `video_id`, `stage`, `pct`, `eta_ms`；阶段为 ready / processing / finalizing |
+| Python → Swift | `push_entry` | 段闭合并完成 OCR 后立即推送单条字幕，用于首条反馈与增量列表 |
+| Python → Swift | `entries` | 最终 dedupe 后的全量条目，`is_final=true`；Swift 用它覆盖增量列表 |
 | Python → Swift | `log` | `video_id`, `level`, `msg` |
 | Python → Swift | `done` | `video_id`, `ok`, `error?` |
 | 控制 | `hello` / `bye` / `error` | 握手与控制错误 |
 
-### 安全保障
+默认 path mode 不发送 `frame` / `finalize`。`start_job` 请求在后端处理期间保持打开，
+同一连接先收到 `progress` / `push_entry`，最后以 `entries(is_final=true)` 作为主响应。
 
-Python 端 `bridge.py` 设有多项上限，防止异常输入耗尽资源：
+### 流式边界与安全保障
 
-| 常量 | 含义 |
-|---|---|
-| `MAX_FRAMES` | 最多缓冲 60000 帧（约 3.3h @ 5fps） |
-| `MAX_JPEG_BYTES` | 单帧 JPEG 上限 20MB |
-| `MAX_IMAGE_PIXELS` | 单帧解码后像素上限 |
-| `MAX_TOTAL_PIXELS` | 累计像素上限 |
-
-JPEG 解码失败、base64 解码失败均返回 `done` / `log(error)`，不崩溃 server。
+- path mode 的 worker 从 `FfmpegExtractor` 取一帧就调用一次 `Pipeline.feed()`，不会保存全片帧。
+- Pipeline 只保留当前字幕段所需的少量 OCR 代表帧，数量由 `ocr_consensus_frames` 限制（默认 4）；内存不随视频时长线性增长。
+- `MAX_FRAMES` / `MAX_TOTAL_PIXELS` 已随批量缓冲删除，不再是当前安全模型的一部分。
+- legacy frame mode 仍限制单帧 `MAX_JPEG_BYTES=20MB` 与 `MAX_IMAGE_PIXELS=50_000_000`，并校验 Base64/JPEG；解码失败返回协议错误，不崩溃 server。
+- 取消 path mode 时同时设置取消状态并终止 ffmpeg 子进程；worker 在 `finally` 中回收 extractor 和线程，随后可启动新任务。
 
 ## 抽帧：打轴 vs 预览
 
@@ -87,6 +86,7 @@ Swift start_job(video_path, fps, region_box, …)
 
 - **不再**经 AVF PTS 跳采样 + JPEG q=0.85 推帧（避免与验收 F1 漂移 ~10pp）。
 - 无 `video_path` 时仍可走 legacy **frame mode**（Swift 推 JPEG）供调试。
+- 产品 GUI 不调用 legacy frame mode；`FrameMessage.region_box` 是否为空不影响默认路径，任务区域已由 `start_job.region_box` 一次性配置。
 - 提取栏的处理倍速由 Swift 根据 path mode 的真实进度与本地计时计算：`(processed_frames / sample_fps) / elapsed_seconds`。它表示处理吞吐量而非播放速度；开始 0.25 秒内不显示，以避免计时粒度造成的跳变。
 
 ### 预览 / 选区用帧（仍可 AVF）
@@ -100,13 +100,14 @@ Swift start_job(video_path, fps, region_box, …)
 预览先收缩而不会吞掉下方交互。提取栏把按钮/引擎与采样/状态拆为两行，状态文本限制
 为单行截断，避免窄栏频繁换行。
 
-### 历史：Swift 侧 AVF / ffmpeg 兜底（frame mode / 预览）
+### 预览与兼容路径：Swift 侧 AVF / ffmpeg
 
 ```
 AVURLAsset → AVAssetReader → PTS 跳采样 → JPEG q=0.85
 .mkv 等：系统 ffmpeg MJPEG 流（FfmpegFrameSampler）
 ```
 
+- 这条路径服务于预览、候选框扫描和兼容测试，不是产品默认打轴数据源。
 - `FfmpegDetector.whichFfmpeg()` 检测系统 ffmpeg，缺失弹窗引导 `brew install ffmpeg`。
 
 ## 字幕编辑模型
@@ -168,5 +169,6 @@ AVURLAsset → AVAssetReader → PTS 跳采样 → JPEG q=0.85
 
 - **仅开发者构建运行**：Phase 2 不做独立 `.app` 与公证，GUI 通过 `swift run SubLiftMac` 启动。
 - **mkv 依赖系统 ffmpeg**：未安装时 UI 禁用 mkv 拖入并弹窗引导。
-- **首条识别结果 ≤10s 目标**：当前实现为流式抽帧 + 批量 OCR（feat-018 务实方案），真增量需后续改造 Pipeline 为滑动窗口模型。
+- **首条反馈取决于首段闭合**：当前已是真增量处理，段闭合后立即 OCR 并 `push_entry`；首条耗时不再随整部视频长度增长，但会受首段时长和 Vision 冷启动影响。
+- **长视频 GUI 手工体验尚未收口**：自动审计已验证内存平稳、取消和重启；≥10 分钟非 Zootopia 视频的进度观感与完整交互仍待人工验收。
 - **时间码拖动调整未实现**：编辑功能目前仅支持文本修改、合并、拆分，时间码手动调整留待后续。
