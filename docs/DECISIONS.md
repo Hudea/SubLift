@@ -5,6 +5,32 @@
 
 ---
 
+## ADR-0014 固定字幕区域自动在 ffmpeg 输出前裁剪，Pipeline 只消费 frame-local 坐标（2026-07-17）
+
+- **状态**：已确认的 Phase 4 架构决策；实现与性能证据待 feat-038 / feat-039。
+- **背景**：feat-037 canonical baseline 显示全帧 raw RGB 输出约 7.91 GB；其中
+  extract_wait 约 24.1%、frame_materialize 约 14.8%。GUI 默认 path mode 已只发送
+  视频路径和固定 region，Python 端却仍让 ffmpeg 输出完整 1920×1080 RGB，随后 Pipeline
+  再裁 [0,848,1920,87] 字幕带。
+- **决策**：
+  1. 有效固定 region 的 GUI path mode 与 benchmark ROI 组，使用 ffmpeg
+     fps,crop(...:exact=1)，只把 ROI raw RGB 经 stdout 传入 Python。
+  2. source-frame region 只用于 ffmpeg 与诊断；ROI Frame 进入 Pipeline 后一律改用
+     frame-local 全幅 Region [0,0,w,h]，由 RoiPassthroughDetector 明确表达，禁止把
+     source box 二次用于图像 crop。
+  3. GUI 不增加 ROI 开关；显式 ROI 非法时任务报错，region 为空、legacy frame mode、
+     BottomCrop 与未验证旋转映射维持现有全帧路径。
+  4. benchmark 保留仅供内部使用的 full / roi A/B 输出模式；ROI 结论必须与同次
+     detection_hash、固定 GT 质量门和环境元数据一起报告。
+  5. 本决策不宣称 codec 级 ROI decode；H.264 / HEVC 等通常仍需完整重建编码帧。
+- **理由**：ROI 输出能以确定比例消除无效 RGB 搬运，却不改打轴/OCR 算法；局部坐标
+  detector 使 source / ROI 坐标不会静默混用，便于测试与回退。
+- **影响**：涉及 extractor、detector、pipeline、bridge 与 benchmark；CLI BottomCrop、
+  JPEG/缩放、并发、旋转映射和跨片源质量泛化均不纳入本轮。完整契约见
+  docs/design/roi-data-path.md。
+
+---
+
 ## ADR-0013 SSIM patrol 为内部默认机制，不暴露给 GUI 用户（2026-07-13）
 
 - **背景**：feat-031 A/B 验证时 GUI 接入了「SSIM 巡逻」开关。产品稳定后该开关仍留在主界面与设置页；且 Swift 关闭时发送 `nil` 而非 `false`，Python 继续用默认 `True`，开关形同虚设。

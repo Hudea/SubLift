@@ -16,7 +16,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class BoundingBox:
-    """矩形区域，绝对像素坐标。"""
+    """矩形区域（像素）。
+
+    坐标空间由接口声明，禁止跨空间复用同一数值：
+    - source-frame：与全帧 ffmpeg 输出一致（GUI region / manifest / crop 参数）
+    - frame-local：当前 extractor 输出图左上（ROI Region / signature 输入）
+    - ocr-crop：传给 OCR 的图左上（OcrLine / SubtitleProfile）
+    """
 
     x: int
     y: int
@@ -26,14 +32,14 @@ class BoundingBox:
 
 @dataclass(frozen=True)
 class Region:
-    """字幕区域，由 BoundingBox 描述。"""
+    """字幕区域；``box`` 必须与其消费的 Frame.image 坐标空间一致。"""
 
     box: BoundingBox
 
 
 @dataclass(frozen=True)
 class Frame:
-    """视频帧，附带时间戳。"""
+    """视频帧，附带时间戳；``image`` 原点为当前输入图左上。"""
 
     timestamp_ms: int
     image: Image.Image

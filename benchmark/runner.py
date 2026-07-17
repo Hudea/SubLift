@@ -13,12 +13,12 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from queue import Empty
-from typing import Any
+from typing import Any, Literal
 
 from benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
 from benchmark.srt_loader import SrtEntry, load_srt
-from sublift.config import DEFAULT_CONFIG, Config
-from sublift.detector import BottomCropDetector, FixedRegionDetector
+from sublift.config import Config
+from sublift.detector.base import Detector
 from sublift.diagnostics.performance import (
     PerformanceMode,
     PerformanceRecorder,
@@ -27,6 +27,7 @@ from sublift.diagnostics.performance import (
     parse_performance_mode,
 )
 from sublift.extractor import FfmpegExtractor
+from sublift.extractor.frame_io import plan_frame_io
 from sublift.models import BoundingBox, SubtitleEntry
 from sublift.ocr import MockOcrEngine, VisionOcrEngine, is_vision_available
 from sublift.pipeline import Pipeline
@@ -69,6 +70,9 @@ class RunConfig:
     measured_runs: int = 1
     # 多 run 时默认独立进程隔离 peak RSS；单测可关以加速
     isolate_processes: bool = True
+    # feat-038：内部 full/roi 输出对照；默认 full 保持历史路径可比
+    # "full" = 全帧 RGB + FixedRegion(source)；"roi" = ffmpeg crop + RoiPassthrough
+    frame_output_mode: str = "full"
 
     @property
     def output_prefix(self) -> str:
@@ -113,6 +117,7 @@ def run_benchmark(config: RunConfig) -> RunResult:
         raise ValueError("warmup_runs 不能为负")
     if config.measured_runs < 1:
         raise ValueError("measured_runs 必须 >= 1")
+    _validate_frame_output_mode(config)
 
     mode = parse_performance_mode(config.performance_mode)
     ground_truth = load_srt(config.ground_truth_path)
@@ -385,6 +390,7 @@ def _run_once(
                 "confidence": config.confidence,
                 "subtitle_script": config.subtitle_script,
                 "region_box": list(config.region_box) if config.region_box else None,
+                "frame_output_mode": config.frame_output_mode,
                 "video_duration_seconds": video_duration,
                 "match_threshold": config.match_threshold,
             }
@@ -392,8 +398,7 @@ def _run_once(
 
     try:
         ocr = _build_ocr_engine(config.engine)
-        extractor = FfmpegExtractor(fps=config.fps, performance_recorder=recorder)
-        detector = _build_detector(config.region_box)
+        extractor, detector = _build_extractor_and_detector(config, recorder)
         subtitle_profile = None
         if config.region_box is not None:
             from sublift.models import SubtitleProfile
@@ -504,14 +509,43 @@ def _build_ocr_engine(engine: str) -> VisionOcrEngine | MockOcrEngine:
     raise ValueError(f"未知引擎: {engine}")
 
 
-def _build_detector(
-    region_box: tuple[int, int, int, int] | None,
-) -> BottomCropDetector | FixedRegionDetector:
-    """按 region_box 选择检测器；None 时回退下部裁剪（与 ipc.bridge 一致）。"""
-    if region_box is not None:
-        x, y, width, height = region_box
-        return FixedRegionDetector(BoundingBox(x=x, y=y, width=width, height=height))
-    return BottomCropDetector(bottom_ratio=DEFAULT_CONFIG.region_bottom_ratio)
+def _validate_frame_output_mode(config: RunConfig) -> None:
+    """校验 frame_output_mode 与 region_box 组合（与 manifest 规则对齐）。"""
+    mode = config.frame_output_mode
+    if mode not in ("full", "roi"):
+        raise ValueError(
+            f"frame_output_mode 必须是 'full' 或 'roi'（收到 {mode!r}）"
+        )
+    if mode == "roi" and config.region_box is None:
+        raise ValueError("frame_output_mode=roi 需要 region_box")
+
+
+def _build_extractor_and_detector(
+    config: RunConfig,
+    recorder: PerformanceRecorder | None,
+) -> tuple[FfmpegExtractor, Detector]:
+    """经 plan_frame_io 一次定案 extractor + detector。"""
+    region = None
+    if config.region_box is not None:
+        x, y, width, height = config.region_box
+        region = BoundingBox(x=x, y=y, width=width, height=height)
+    # benchmark 显式 full|roi；roi 下变换未验证硬失败
+    plan_mode: Literal["full", "roi"] = (
+        "roi" if config.frame_output_mode == "roi" else "full"
+    )
+    plan = plan_frame_io(
+        config.video_path,
+        region,
+        mode=plan_mode,
+        on_unvalidated_transform="error",
+    )
+    extractor = FfmpegExtractor(
+        fps=config.fps,
+        output_crop=plan.output_crop,
+        source_info=plan.source,
+        performance_recorder=recorder,
+    )
+    return extractor, plan.detector
 
 
 def _entry_to_srt(index: int, entry: SubtitleEntry) -> SrtEntry:

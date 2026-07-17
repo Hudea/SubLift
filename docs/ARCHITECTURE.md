@@ -70,6 +70,7 @@ video
 - [ocr 设计](design/ocr.md) — Protocol、Vision 实现、Mock、跨平台演进
 - [extractor 设计](design/extractor.md) — Protocol、ffmpeg 实现、流式采样
 - [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
+- [ROI 数据通路设计（Phase 4 计划）](design/roi-data-path.md) — 固定区域 crop-before-Python、坐标契约与 A/B 验收边界
 
 ## 5. 核心数据模型
 
@@ -77,9 +78,9 @@ video
 
 | 模型 | 字段 | 用途 |
 |---|---|---|
-| `BoundingBox` | `x, y, width, height: int` | 矩形区域，绝对像素坐标 |
-| `Region` | `box: BoundingBox` | 字幕区域 |
-| `Frame` | `timestamp_ms: int, image: PIL.Image` | 视频帧，附带时间戳 |
+| `BoundingBox` | `x, y, width, height: int` | 矩形区域；坐标空间由接口声明：外部选区 / manifest 为 source-frame，图像与 OCR box 为各自输入图局部坐标 |
+| `Region` | `box: BoundingBox` | 字幕区域；坐标必须与其消费的 Frame.image 坐标空间一致 |
+| `Frame` | `timestamp_ms: int, image: PIL.Image` | 视频帧，附带时间戳；image 的坐标原点为当前输入图左上 |
 | `OcrLine` | `text, confidence, box: BoundingBox` | 单行 OCR；box 相对 recognize 输入图、像素左上 |
 | `OcrResult` | `text, confidence, lines: tuple[OcrLine,...]` | OCR 结果；text/conf 为兼容汇总（`\\n` + 均值），行级以 lines 为准 |
 | `SubtitleProfile` | `script, center_x/y, height, y_min/y_max` | 字幕轨画像（feat-034b）；几何相对 region crop，供行级选择 |
@@ -227,7 +228,19 @@ SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 
 Vision 保留逐行 `OcrLine`，不在引擎层提前丢失 box/confidence。GUI 候选区形成 `SubtitleProfile`；pipeline 根据文字系统、Y 区间、字号高度和中心距离选行，对段内最多 4 个代表帧做相似文本聚类与 medoid 共识。低置信文本只有在跨帧支持充足时放行。Vision 调用包在 `autorelease_pool` 中，CGImage 数据用 CFData 管理，避免长流处理时 Objective-C 临时对象堆积。
 
-## 12. 架构决策
+## 12. Phase 4 ROI 数据通路
+
+对 **已知固定**字幕区域，ffmpeg 在 stdout 前 exact crop，Pipeline 仅消费
+frame-local 的 ROI 图像（`RoiPassthroughDetector` → Region `[0,0,w,h]` 零拷贝透传）。
+默认 GUI path mode 有效固定 region 自动启用；无 region、legacy frame mode、BottomCrop
+和未验证旋转映射维持全帧路径。benchmark 以内部 `frame_output_mode=full|roi` 做 A/B。
+
+这不是 codec 级 ROI decode：编码帧通常仍需完整重建。目标是消除全帧 RGB 管道、PIL
+materialize 与重复 crop 的无效成本，并用同提交 full / roi A/B 与固定 GT hash 验证结果
+等价。架构契约见 [ROI 数据通路设计](design/roi-data-path.md)，任务与硬门见
+[Phase 4 计划](plans/phase4-roi-data-path.md)。
+
+## 13. 架构决策
 
 完整决策记录见 [DECISIONS.md](DECISIONS.md)，要点：
 
@@ -243,3 +256,5 @@ Vision 保留逐行 `OcrLine`，不在引擎层提前丢失 box/confidence。GUI
 - **ADR-0010**：GUI 默认打轴抽帧统一到 Python `FfmpegExtractor`
 - **ADR-0011**：OCR 文字系统默认 `auto`，显式 CJK 仅做边界 cleanup
 - **ADR-0012**：增量 pipeline、真实进度与取消共享同一任务生命周期
+- **ADR-0013**：SSIM patrol 为内部默认机制，不暴露给 GUI 用户
+- **ADR-0014**：固定字幕区域自动在 ffmpeg 输出前裁剪，Pipeline 只消费 frame-local 坐标（Phase 4 计划）

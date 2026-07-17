@@ -37,6 +37,7 @@ from sublift.detector.base import Detector
 from sublift.detector.bottom_crop import BottomCropDetector
 from sublift.detector.fixed_region import FixedRegionDetector
 from sublift.extractor.ffmpeg_extractor import FfmpegExtractor
+from sublift.extractor.frame_io import plan_frame_io
 from sublift.ipc.protocol import (
     MSG_CANCEL_JOB,
     MSG_FINALIZE,
@@ -117,6 +118,10 @@ class BridgeHandler:
         self._path_mode: bool = False
         self._path_task: asyncio.Task[None] | None = None
         self._extractor: FfmpegExtractor | None = None
+        # source-frame region（GUI/benchmark）；path mode ROI 路由用
+        self._region_box: list[int] | None = None
+        self._config: Config | None = None
+        self._ocr: OcrEngine | None = None
 
     async def handle(
         self,
@@ -192,6 +197,10 @@ class BridgeHandler:
             self._est_total_frames = 0
 
         raw_region = message.get("region_box")
+        if isinstance(raw_region, list) and len(raw_region) == 4:
+            self._region_box = [int(v) for v in raw_region]
+        else:
+            self._region_box = None
         patrol_msg = message.get("enable_ssim_patrol")
         video_path_log = message.get("video_path")
         raw_profile = message.get("subtitle_profile")
@@ -231,14 +240,25 @@ class BridgeHandler:
             logger.exception("OCR 引擎构造失败")
             return build_done(self._video_id, ok=False, error=str(e))
 
-        detector = _build_detector(raw_region, config)
-        detector_name = type(detector).__name__
-        self._pipeline = Pipeline(
-            detector=detector,
-            ocr=ocr,
-            config=config,
-        )
+        self._config = config
+        self._ocr = ocr
         self._cancelled = False
+
+        # path mode：只存 config/ocr，Pipeline 在 plan_frame_io 成功后构造一次
+        # frame mode：立即构造 FixedRegion / BottomCrop
+        video_path_raw = message.get("video_path")
+        is_path_mode = isinstance(video_path_raw, str) and bool(video_path_raw.strip())
+        if is_path_mode:
+            self._pipeline = None
+            detector_name = "deferred_until_path_plan"
+        else:
+            detector = _build_detector(raw_region, config)
+            detector_name = type(detector).__name__
+            self._pipeline = Pipeline(
+                detector=detector,
+                ocr=ocr,
+                config=config,
+            )
 
         logger.info(
             "start_job received: video_id=%s fps=%.1f engine=%s "
@@ -275,7 +295,7 @@ class BridgeHandler:
             config.subtitle_profile.to_dict() if config.subtitle_profile else None,
         )
         if (
-            isinstance(detector, FixedRegionDetector)
+            not is_path_mode
             and isinstance(raw_region, list)
             and len(raw_region) == 4
         ):
@@ -307,12 +327,22 @@ class BridgeHandler:
         整段 extract+OCR 放在**单一工作线程**中执行（避免 generator 跨线程 next 卡死），
         进度通过共享计数 + asyncio 心跳推送。
         """
-        assert self._pipeline is not None
         path = Path(video_path)
         if not path.is_file():
             self._pipeline = None
             self._path_mode = False
             await push(build_done(self._video_id, ok=False, error=f"视频文件不存在: {video_path}"))
+            return
+
+        if self._config is None or self._ocr is None:
+            self._path_mode = False
+            await push(
+                build_done(
+                    self._video_id,
+                    ok=False,
+                    error="path mode 缺少 config/ocr（start_job 未正确 setup）",
+                )
+            )
             return
 
         video_id = self._video_id
@@ -325,10 +355,72 @@ class BridgeHandler:
             self._fps,
         )
 
-        pipeline = self._pipeline
         est = max(self._est_total_frames, 1)
         msg_q: queue.Queue[tuple[str, Any]] = queue.Queue()
-        self._extractor = FfmpegExtractor(fps=self._fps)
+
+        # 一次 plan 后只构造一次 Pipeline（无占位 detector）
+        region = None
+        if self._region_box is not None:
+            region = BoundingBox(
+                x=self._region_box[0],
+                y=self._region_box[1],
+                width=self._region_box[2],
+                height=self._region_box[3],
+            )
+        try:
+            plan = plan_frame_io(
+                path,
+                region,
+                mode="auto",
+                on_unvalidated_transform="fallback_full",
+                bottom_ratio=self._config.region_bottom_ratio,
+            )
+        except (ValueError, RuntimeError) as e:
+            logger.error("path_mode plan_frame_io failed: %s", e)
+            self._pipeline = None
+            self._path_mode = False
+            await push(build_done(video_id, ok=False, error=str(e)))
+            return
+        except Exception as e:
+            logger.exception("path_mode plan_frame_io failed")
+            self._pipeline = None
+            self._path_mode = False
+            await push(build_done(video_id, ok=False, error=str(e)))
+            return
+
+        if plan.fallback_reason:
+            logger.info(
+                "path_mode ROI disabled: reason=%s region=%s mode=%s",
+                plan.fallback_reason,
+                self._region_box,
+                plan.output_mode,
+            )
+        else:
+            logger.info(
+                "path_mode frame_io: mode=%s crop=%s detector=%s",
+                plan.output_mode,
+                None
+                if plan.output_crop is None
+                else [
+                    plan.output_crop.x,
+                    plan.output_crop.y,
+                    plan.output_crop.width,
+                    plan.output_crop.height,
+                ],
+                type(plan.detector).__name__,
+            )
+
+        pipeline = Pipeline(
+            detector=plan.detector,
+            ocr=self._ocr,
+            config=self._config,
+        )
+        self._pipeline = pipeline
+        self._extractor = FfmpegExtractor(
+            fps=self._fps,
+            output_crop=plan.output_crop,
+            source_info=plan.source,
+        )
 
         def _worker() -> None:
             try:

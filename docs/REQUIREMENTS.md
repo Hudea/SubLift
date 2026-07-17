@@ -116,3 +116,10 @@
 - [x] 固定 GT：CER macro 3.2%、字符准确率 97.6%、usable 92.0%、noise/empty 0
 - [x] Python 与 Swift 自动验证全绿
 - [~] ≥10 分钟非 Zootopia GUI 手工体验验收暂缓；多样化 GT 扩充留待后续
+
+### Phase 4 — ROI 数据通路与真实长流验收（进行中）
+
+- [x] 对有效固定字幕区域实现 ffmpeg crop-before-Python 的 ROI raw RGB 输出；不宣称 codec 级 ROI decode
+- [ ] 同提交 full / roi A/B：固定 GT detection hash 等价，raw bytes、图像构造成本、wall、RSS 与质量门均过验收
+- [ ] 用 ≥10 分钟非 Zootopia 硬字幕视频完成 GUI 首条、进度、取消、重启、导出和 RSS 真实体验验收
+- [ ] 英文/中英混排/不同字幕位置的 GT 扩充后置到下一质量泛化阶段

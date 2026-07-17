@@ -1,0 +1,91 @@
+{
+  "project": "SubLift",
+  "phase": "phase4-roi-data-path",
+  "description": "Phase 4 以 feat-037 的固定负载性能 baseline 为锚，在不改变打轴与 OCR 算法的前提下实现固定字幕区域的 ffmpeg ROI 输出；随后以同提交 A/B、固定 GT 与真实长视频 GUI 验收收口。ROI 指 crop-before-Python，不是 codec 级 ROI decode。",
+  "plan_file": "docs/plans/phase4-roi-data-path.md",
+  "features": [
+    {
+      "id": "feat-038",
+      "name": "固定区域 FFmpeg ROI 输出通路",
+      "description": "对 GUI path mode 与 benchmark 的有效固定 region，ffmpeg 在 rgb24 stdout 前执行 fps 后 exact crop；Pipeline 以 ROI 局部全幅 Region 消费图像，避免把 source region 二次裁剪。保留无 region、legacy frame mode、BottomCrop 和未验证旋转路径的全帧行为。",
+      "module": "src/sublift/extractor/; src/sublift/detector/; src/sublift/pipeline/; src/sublift/ipc/bridge.py; benchmark/",
+      "dependencies": [
+        "feat-037"
+      ],
+      "subtasks": [
+        {
+          "name": "坐标与参数契约",
+          "description": "固定 source-frame、frame-local 与 OCR-crop 三坐标语义；启动前严格校验 output_crop；坐标映射未验证的旋转视频安全回退全帧。"
+        },
+        {
+          "name": "Extractor ROI raw RGB 输出",
+          "description": "FfmpegExtractor 增加可选 output_crop；构造 fps 后 exact crop filter，以 ROI 宽高读取 raw RGB，并保持现有取消、stderr 与错误语义。"
+        },
+        {
+          "name": "Pipeline ROI 局部消费",
+          "description": "引入语义明确的 RoiPassthroughDetector；ROI Region 为 [0,0,w,h]，整幅 ROI 直接透传，SubtitleProfile 与 OcrLine 保持局部坐标。"
+        },
+        {
+          "name": "GUI / benchmark 路由与诊断",
+          "description": "bridge 的固定 region path mode 自动走 ROI；benchmark 提供内部 full / roi A/B；报告记录 output_mode、source_region_box、输出尺寸、字节与裁剪计数。"
+        },
+        {
+          "name": "自动回归",
+          "description": "以合成视频验证像素、尺寸、帧数、时间戳和 exact 行为；覆盖坐标、取消/重启、无 region、legacy frame mode 与 benchmark 报告。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-17 完成；78cecf3 结构收口。实现：plan_frame_io/FrameIOPlan 一次定案 extractor+detector；FfmpegExtractor.output_crop + build_output_vf(fps,format=rgb24,crop:exact=1)；source_info 注入避免二次 probe；RoiPassthroughDetector；Pipeline 全幅几何透传（full_frame_passthrough_count）；bridge path mode auto+fallback_full（setup 只存 config/ocr，plan 后只建一次 Pipeline，无 set_detector）；benchmark frame_output_mode full|roi。验证：ruff/mypy/pytest 绿；tests/test_roi_output_path.py 覆盖像素/路由/plan/matrix。审查：行为轮 Approved with Minor Notes；结构轮1 Changes Requested → 78cecf3 后 Approved with Minor Notes。"
+    },
+    {
+      "id": "feat-039",
+      "name": "ROI A/B 性能与固定 GT 回归",
+      "description": "在同一 clean commit、同机器、同 canonical manifest 下，以 warmup=1 + measured=3 对照 full 与 roi 输出。ROI 与 full 的 detection_hash 必须一致；ROI 的 raw RGB 传输、构造成本、总耗时、RSS、stage coverage 与固定 GT 质量均按计划硬门验收。",
+      "module": "benchmark/; scripts/run_benchmark_manifest.py; src/sublift/diagnostics/; benchmark/README.md",
+      "dependencies": [
+        "feat-038"
+      ],
+      "subtasks": [
+        {
+          "name": "同提交 full / roi 对照",
+          "description": "对相同视频、GT、region、fps、Vision、cjk 和环境分别跑 full 与 roi；每组 1 次预热、3 次独立 measured，记录 median/min/max。"
+        },
+        {
+          "name": "结果等价与质量门",
+          "description": "断言帧数/时间戳序列和 detection_hash 等价；三次 ROI measured 均通过固定 GT F1、precision、usable、CER、noise、empty 门。"
+        },
+        {
+          "name": "性能门与证据归档",
+          "description": "验证 raw bytes、frame_materialize、core wall、RSS、stage coverage 硬门；归档完整 A/B JSON、summary、环境与解释。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-040",
+      "name": "非 Zootopia 长视频 GUI 真实体验验收",
+      "description": "使用至少 10 分钟、非 Zootopia、前 60 秒有硬字幕的本地真实视频，在 GUI 默认 path mode 完整验证首条、进度、取消、重启、导出与 RSS 稳定性。此任务只验收产品体验，不声称跨片源质量泛化。",
+      "module": "apps/macos/; src/sublift/ipc/; docs/phases/phase4.json",
+      "dependencies": [
+        "feat-039"
+      ],
+      "subtasks": [
+        {
+          "name": "完整处理体验",
+          "description": "以实际候选框选择固定字幕区，记录状态顺序、单调进度、10 秒内首条、完成与 SRT 再打开。"
+        },
+        {
+          "name": "取消与重启体验",
+          "description": "处理至少 30 秒视频时间后取消，点击到可再次提取不超过 1 秒；5 秒内重启同一视频且无旧条目、残留进程、socket 错误或卡死。"
+        },
+        {
+          "name": "资源与证据",
+          "description": "记录约 1 分钟、完成时和全程最高 Python RSS，并保留截图、屏幕录制或带时间戳日志；视频内容不提交仓库。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

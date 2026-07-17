@@ -220,6 +220,41 @@
           ]
         }
       ]
+    },
+    {
+      "id": "phase4",
+      "name": "Phase 4 - ROI 数据通路与真实长流验收",
+      "description": "以 feat-037 的可复现性能 baseline 为锚，先对已知固定字幕区域实现 ffmpeg crop-before-Python 的 ROI raw RGB 输出，再以同提交 full/roi A/B、固定 GT 和真实非 Zootopia 长视频 GUI 验收收口。优化的是 RGB 输出与 Python 图像搬运，不是 codec 级 ROI decode。计划见 docs/plans/phase4-roi-data-path.md，细粒度任务见 docs/phases/phase4.json。",
+      "detail_file": "docs/phases/phase4.json",
+      "features": [
+        {
+          "id": "phase4.roi-data-path",
+          "name": "固定区域 ROI 输出通路",
+          "description": "固定 region 的 GUI path mode 与 benchmark 让 ffmpeg 在 raw RGB stdout 前执行 exact crop；Pipeline 改为 ROI 局部全幅消费，避免源坐标二次裁剪。无 region、BottomCrop、legacy frame mode 与未验证旋转保持全帧。覆盖 feat-038。",
+          "status": "done",
+          "covers": [
+            "feat-038"
+          ]
+        },
+        {
+          "id": "phase4.performance-regression",
+          "name": "ROI A/B 性能与固定 GT 回归",
+          "description": "同提交、同机器、同固定负载下比较内部 full / roi 输出；以 detection hash、raw bytes、图像构造成本、wall、RSS、coverage 和 Phase 3 固定 GT 质量门共同验收。覆盖 feat-039。",
+          "status": "not-started",
+          "covers": [
+            "feat-039"
+          ]
+        },
+        {
+          "id": "phase4.long-video-ux",
+          "name": "非 Zootopia 长视频 GUI 真实验收",
+          "description": "用至少 10 分钟本地真实硬字幕视频验证固定选区、首条、单调进度、取消≤1秒、重启、导出和 RSS 稳定性；不把该体验样本当成跨片源 GT。覆盖 feat-040。",
+          "status": "not-started",
+          "covers": [
+            "feat-040"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -189,7 +189,7 @@ class Pipeline:
             self._ensure_subtitle_profile()
 
         with self._perf_span("crop"):
-            crop_image = self._crop_region(frame, self._region.box)
+            crop_image = self._crop_to_region(frame, self._region.box)
         with self._perf_span("color_convert"):
             crop_np = cv2.cvtColor(np.asarray(crop_image), cv2.COLOR_RGB2BGR)
 
@@ -588,7 +588,7 @@ class Pipeline:
         if frame is None or self._region is None:
             return "", 0.0
         with self._perf_span("crop"):
-            crop_image = self._crop_region(frame, self._region.box)
+            crop_image = self._crop_to_region(frame, self._region.box)
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
@@ -634,7 +634,7 @@ class Pipeline:
         if frame is None or self._region is None:
             return "", 0.0
         with self._perf_span("crop"):
-            crop_image = self._crop_region(frame, self._region.box)
+            crop_image = self._crop_to_region(frame, self._region.box)
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
@@ -771,9 +771,24 @@ class Pipeline:
         self._subtitle_profile = self._config.subtitle_profile
         self._reset_segment_ocr_state()
 
-    @staticmethod
-    def _crop_region(frame: Frame, box: BoundingBox) -> Image.Image:
-        """从帧裁剪字幕区域。"""
-        return frame.image.crop(
-            (box.x, box.y, box.x + box.width, box.y + box.height)
+    def _crop_to_region(self, frame: Frame, box: BoundingBox) -> Image.Image:
+        """按 Region box 裁剪；全幅 frame-local 时零拷贝透传。
+
+        ROI 路径下 Region 为 ``[0, 0, w, h]`` 且等于 Frame.image 尺寸，
+        直接返回原图以避免二次 PIL crop（feat-038）。
+        """
+        img = frame.image
+        full_local = (
+            box.x == 0
+            and box.y == 0
+            and box.width == img.width
+            and box.height == img.height
         )
+        if full_local:
+            if self._perf is not None:
+                # 几何全幅透传（含 ROI local full 与 full-frame FixedRegion）
+                self._perf.incr("full_frame_passthrough_count")
+            return img
+        if self._perf is not None:
+            self._perf.incr("pipeline_crop_count")
+        return img.crop((box.x, box.y, box.x + box.width, box.y + box.height))

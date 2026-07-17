@@ -232,7 +232,14 @@ def format_agent_json(
             "confidence": result.config.confidence,
             "temporal_iou_threshold": result.config.match_threshold,
             "region_box": list(result.config.region_box) if result.config.region_box else None,
-            "detector": "fixed_region" if result.config.region_box else "bottom_crop",
+            "frame_output_mode": result.config.frame_output_mode,
+            "detector": (
+                "roi_passthrough"
+                if result.config.region_box and result.config.frame_output_mode == "roi"
+                else "fixed_region"
+                if result.config.region_box
+                else "bottom_crop"
+            ),
             "label": result.config.label,
             "exported_srt": str(result.exported_srt_path) if result.exported_srt_path else None,
         },

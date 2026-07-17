@@ -32,7 +32,8 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         confidence: OCR confidence threshold, default 0.5.
         subtitle_script: target script, default "auto".
         match_threshold: segment match threshold, default 0.5.
-        region_box: optional [x, y, width, height] pixel box.
+        region_box: optional [x, y, width, height] pixel box (source-frame).
+        frame_output_mode: optional "full"|"roi" (default "full"); roi 需 region_box。
         label: optional report suffix.
         video_duration_seconds: optional duration override.
         output_dir: report output directory, default debug/benchmark-reports.
@@ -53,6 +54,8 @@ def load_run_config(manifest_path: Path) -> RunConfig:
     root = _discover_repo_root(manifest_path)
     output_dir = _path(payload, ("output_dir",), root, required=False)
     perf_mode, warmup_runs, measured_runs = _performance(payload)
+    region_box = _region_box(payload)
+    frame_output_mode = _frame_output_mode(payload, region_box=region_box)
     return RunConfig(
         video_path=_required_path(payload, ("video", "video_path"), root),
         ground_truth_path=_required_path(payload, ("ground_truth", "ground_truth_path"), root),
@@ -72,7 +75,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
             exclusive_minimum=0.0,
             maximum=1.0,
         ),
-        region_box=_region_box(payload),
+        region_box=region_box,
         label=_optional_str(payload, "label"),
         video_duration_seconds=_optional_float(
             payload, "video_duration_seconds", exclusive_minimum=0.0
@@ -81,6 +84,7 @@ def load_run_config(manifest_path: Path) -> RunConfig:
         performance_mode=perf_mode,
         warmup_runs=warmup_runs,
         measured_runs=measured_runs,
+        frame_output_mode=frame_output_mode,
     )
 
 
@@ -238,6 +242,25 @@ def _region_box(payload: dict[str, Any]) -> tuple[int, int, int, int] | None:
     if width <= 0 or height <= 0:
         raise ManifestError("region_box 的 width/height 必须大于 0")
     return (x, y, width, height)
+
+
+def _frame_output_mode(
+    payload: dict[str, Any],
+    *,
+    region_box: tuple[int, int, int, int] | None,
+) -> str:
+    """解析 frame_output_mode；缺省 full；roi 需要 region_box。"""
+    if "frame_output_mode" not in payload or payload["frame_output_mode"] is None:
+        return "full"
+    value = payload["frame_output_mode"]
+    if not isinstance(value, str):
+        raise ManifestError("frame_output_mode 必须是字符串")
+    mode = value.strip().lower()
+    if mode not in ("full", "roi"):
+        raise ManifestError("frame_output_mode 必须是 'full' 或 'roi'")
+    if mode == "roi" and region_box is None:
+        raise ManifestError("frame_output_mode=roi 需要 region_box")
+    return mode
 
 
 def _performance(payload: dict[str, Any]) -> tuple[str, int, int]:

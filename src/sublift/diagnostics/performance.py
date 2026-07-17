@@ -432,6 +432,17 @@ class PerformanceRecorder:
                 "realtime_factor": realtime_factor,
                 "frame_count": self._counters.get("frame_count", 0),
                 "raw_output_bytes": self._counters.get("raw_output_bytes", 0),
+                "raw_bytes_per_frame": self._workload.get("raw_bytes_per_frame"),
+                "source_width": self._workload.get("source_width"),
+                "source_height": self._workload.get("source_height"),
+                "output_width": self._workload.get("output_width"),
+                "output_height": self._workload.get("output_height"),
+                "output_mode": self._workload.get("output_mode"),
+                "source_region_box": self._workload.get("source_region_box"),
+                "full_frame_passthrough_count": self._counters.get(
+                    "full_frame_passthrough_count", 0
+                ),
+                "pipeline_crop_count": self._counters.get("pipeline_crop_count", 0),
                 "ocr_calls": self._stages.get(STAGE_OCR, StageStats()).count,
                 "attributed_stage_ms": attributed_ms,
                 "unattributed_ms": unattributed_ms,
