@@ -249,7 +249,7 @@
           "id": "phase4.long-video-ux",
           "name": "非 Zootopia 长视频 GUI 真实验收",
           "description": "用至少 10 分钟本地真实硬字幕视频验证固定选区、首条、单调进度、取消≤1秒、重启、导出和 RSS 稳定性；不把该体验样本当成跨片源 GT。覆盖 feat-040。",
-          "status": "not-started",
+          "status": "done",
           "covers": [
             "feat-040"
           ]

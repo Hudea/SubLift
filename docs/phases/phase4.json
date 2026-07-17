@@ -84,8 +84,8 @@
           "description": "记录约 1 分钟、完成时和全程最高 Python RSS，并保留截图、屏幕录制或带时间戳日志；视频内容不提交仓库。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-17。素材：本地非 Zootopia 真实硬字幕 `01.mp4`（basename only），duration=2533.7s，1920×1080，前 60s 有硬字幕。路径：GUI 默认 path mode 同源 BridgeHandler（非 Mock；非 SwiftUI 点击）。脚本 scripts/feat040_long_video_ux.py。硬门 ALL_PASS：duration≥10min；首条 1.60s≤10s；progress 0→1.0 单调；final_entries=987；同 BridgeHandler cancel（≥30s 视频）latency 3.5ms≤1s → restart_gap 0.62s≤5s 且 processing 前进；SRT export 987=reopen 987（首条「妈妈！」）；RSS peak 326MB 有采样。证据 debug/feat040_ux/（gitignore）。审查轮1 Changes Required（同 handler 重启+SRT 门）已修。不宣称跨片源质量泛化。"
     }
   ]
 }
