@@ -10,27 +10,28 @@
 
 | ID | 名称 | 依赖 | 状态 | Commit |
 |---|---|---|---|---|
-| feat-038 | 固定区域 FFmpeg ROI 输出通路 | feat-037 | **done** | `0e9753f`（+ `593b99d` rgb24 fix） |
-| feat-039 | ROI A/B 性能与固定 GT 回归 | feat-038 | **done** | `fb4a27a` + evidence commit |
-| feat-040 | 非 Zootopia 长视频 GUI 真实验收 | feat-039 | **done** | evidence in phase4.json |
+| feat-038 | 固定区域 FFmpeg ROI 输出通路 | feat-037 | **done** | `4b5eea3` |
+| feat-039 | ROI A/B 性能与固定 GT 回归 | feat-038 | **done** | `a6a1535` |
+| feat-040 | 非 Zootopia 长视频 GUI 真实验收 | feat-039 | **done** | `830266f` |
+| feat-041 | 性能计时归因收口 | feat-039 | **done** | `1b4612b` |
 
 ## 当前执行状态
 
 - **当前 Feature**：无（Phase 4 features 完成）
 - **当前步骤**：Phase 级验收
 
-## feat-039 关键结果（clean fb4a27a）
+## feat-039 / feat-041 关键结果（clean 1b4612b）
 
 | 指标 | full | roi | 门 |
 |---|---:|---:|---|
 | detection_hash | b2d35c1e25f156e1 | b2d35c1e25f156e1 | 相等 |
 | raw_output_bytes | 7,906,636,800 | 636,923,520 | 87/1080 |
-| frame_materialize median ms | 1640 | 220 | ratio 0.134 ≤ 0.25 |
-| core_wall median ms | 10460 | 8702 | ratio 0.832 ≤ 1.05 |
-| peak RSS ratio | — | 0.845 | ≤ 1.05 |
+| frame_materialize median ms | 1912 | 233 | ratio 0.122 ≤ 0.25 |
+| core_wall median ms | 12314 | 9342 | ratio 0.759 ≤ 1.05 |
+| peak RSS ratio | — | 0.836 | ≤ 1.05 |
 | 固定 GT | — | 三次全过 | 是 |
 
-软目标：wall ≤90% full；realtime_factor ≈1.20× full。
+软目标：wall ≤90% full；realtime_factor ≈1.32× full。
 
 ## 审查
 
@@ -48,4 +49,4 @@
 
 ## 下一步
 
-Phase 级 init.sh / swift test 收口 → 最终报告。
+Phase 级验收与正式性能报告均已收口；见 `docs/reports/phase4-roi-performance.md`。

@@ -5,9 +5,30 @@
 
 ---
 
+## ADR-0015 性能 coverage 以排他 Pipeline 编排阶段补齐（2026-07-17）
+
+- **状态**：已确认并已实现（feat-041）。
+- **背景**：ROI A/B 的某次实测中，`frame_materialize` 已显著下降，但
+  `stage_coverage_pct` 有一轮为 98.996%。约 121ms 的 core wall 未归入现有 leaf stages，
+  使总耗时差异无法可靠解释；这段时间来自 `run_frames` 的帧迭代、状态机/Timeline 分派、
+  容器阶段自身与 recorder 固定开销，而非 ROI 像素处理或 OCR 结果变化。
+- **决策**：
+  1. 新增 `pipeline_overhead` 为 coverage leaf stage；它测量 `Pipeline.run_frames()`
+     的外层 wall，并扣除其中互不重叠的既有 leaf stages。
+  2. `finalize` 继续作为容器 stage 排除在 coverage 外；其未嵌套编排成本自然归入
+     `pipeline_overhead`，而内部 `ocr` / `dedupe` 仍仅计一次。
+  3. 新增 `PerformanceRecorder.exclusive_span()` 作为通用排他计时 API；使用方必须只传入
+     彼此不重叠的子阶段。
+- **理由**：以“外层 wall − 内层 leaf”记录编排时间，既能使 coverage 可审计，又不改变
+  ROI、打轴或 OCR 的实际执行路径；把未归因时间静默忽略或降低门槛都会削弱性能结论。
+- **结果**：fake-clock 证明无双计；clean commit 1b4612b 的 canonical Vision A/B 中，ROI
+  三次 coverage 为 99.999778% / 99.999784% / 99.999730%，全部硬门与软目标通过。
+
+---
+
 ## ADR-0014 固定字幕区域自动在 ffmpeg 输出前裁剪，Pipeline 只消费 frame-local 坐标（2026-07-17）
 
-- **状态**：已确认的 Phase 4 架构决策；实现与性能证据待 feat-038 / feat-039。
+- **状态**：已确认并已实现（feat-038/039/040）；ROI filter 为 `fps,format=rgb24,crop:exact=1`。
 - **背景**：feat-037 canonical baseline 显示全帧 raw RGB 输出约 7.91 GB；其中
   extract_wait 约 24.1%、frame_materialize 约 14.8%。GUI 默认 path mode 已只发送
   视频路径和固定 region，Python 端却仍让 ffmpeg 输出完整 1920×1080 RGB，随后 Pipeline

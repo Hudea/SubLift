@@ -257,8 +257,8 @@
         {
           "id": "phase4.performance-attribution",
           "name": "性能计时归因收口",
-          "description": "补齐 Pipeline 外层编排的非重叠计时，消除 performance summary 的未归因时间；以同负载 ROI A/B 复验 coverage，保持结果与质量算法不变。覆盖 feat-041。",
-          "status": "in-progress",
+          "description": "补齐 Pipeline 外层编排的非重叠计时，消除 performance summary 的未归因时间；同负载 clean-commit ROI A/B 的 coverage、质量和性能门全部通过。覆盖 feat-041。",
+          "status": "done",
           "covers": [
             "feat-041"
           ]

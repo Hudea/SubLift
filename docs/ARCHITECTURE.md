@@ -71,6 +71,7 @@ video
 - [extractor 设计](design/extractor.md) — Protocol、ffmpeg 实现、流式采样
 - [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
 - [ROI 数据通路设计（Phase 4 计划）](design/roi-data-path.md) — 固定区域 crop-before-Python、坐标契约与 A/B 验收边界
+- [Phase 4 ROI 性能优化报告](reports/phase4-roi-performance.md) — 正式 clean-commit A/B 结果、性能结论与适用边界
 
 ## 5. 核心数据模型
 
@@ -258,3 +259,4 @@ materialize 与重复 crop 的无效成本，并用同提交 full / roi A/B 与�
 - **ADR-0012**：增量 pipeline、真实进度与取消共享同一任务生命周期
 - **ADR-0013**：SSIM patrol 为内部默认机制，不暴露给 GUI 用户
 - **ADR-0014**：固定字幕区域自动在 ffmpeg 输出前裁剪，Pipeline 只消费 frame-local 坐标（Phase 4 计划）
+- **ADR-0015**：性能 coverage 以排他 `pipeline_overhead` 补齐批量编排时间，避免与 leaf stage 双计
