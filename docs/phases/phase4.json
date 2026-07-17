@@ -59,8 +59,8 @@
           "description": "验证 raw bytes、frame_materialize、core wall、RSS、stage coverage 硬门；归档完整 A/B JSON、summary、环境与解释。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-17 clean commit fb4a27a（git_dirty=false），同机 macOS arm64 / Vision / ffmpeg 8.1。协议：warmup=1 + measured=3 独立进程。manifests: zootopia_feat039_full/roi。HARD GATES PASSED（scripts/compare_roi_ab.py）。关键结果：detection_hash full=roi=b2d35c1e25f156e1（与历史锚一致）；frame_count=1271；raw_bytes_per_frame ROI=501120；raw_output_bytes full=7906636800 / roi=636923520（比例 87/1080）；frame_materialize median full=1640ms roi=220ms ratio=0.134≤0.25；core_wall median full=10460ms roi=8702ms ratio=0.832≤1.05；peak RSS ratio≈0.83≤1.05；stage_coverage≥99.2%；三次 ROI measured 均过固定 GT 门（F1/precision/usable/CER/noise/empty）。软目标也达成：wall ratio 0.83≤0.90，realtime_factor 约 1.20× full。归档：debug/benchmark-reports/feat039_roi_ab/{feat039_full,feat039_roi,ab_summary.json}（不入库）。前置：fix(roi) 593b99d 将 crop 放在 format=rgb24 后以对齐 hash。"
     },
     {
       "id": "feat-040",

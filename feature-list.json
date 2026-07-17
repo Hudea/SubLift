@@ -240,7 +240,7 @@
           "id": "phase4.performance-regression",
           "name": "ROI A/B 性能与固定 GT 回归",
           "description": "同提交、同机器、同固定负载下比较内部 full / roi 输出；以 detection hash、raw bytes、图像构造成本、wall、RSS、coverage 和 Phase 3 固定 GT 质量门共同验收。覆盖 feat-039。",
-          "status": "not-started",
+          "status": "done",
           "covers": [
             "feat-039"
           ]

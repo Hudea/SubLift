@@ -14,6 +14,7 @@ from PIL import Image
 from sublift.config import Config
 from sublift.detector import FixedRegionDetector, RoiPassthroughDetector
 from sublift.detector.base import Detector
+from sublift.detector.bottom_crop import BottomCropDetector
 from sublift.diagnostics.performance import PerformanceMode, PerformanceRecorder
 from sublift.extractor.ffmpeg_extractor import (
     FfmpegExtractor,
@@ -318,6 +319,81 @@ class TestFrameIOPlan:
                 on_unvalidated_transform="error",
             )
 
+    def test_plan_no_region_uses_bottom_crop(self, tmp_path: Path) -> None:
+        """无 region → 全帧 + BottomCrop，永不 ROI。"""
+        video = tmp_path / "v.mp4"
+        plan = plan_frame_io(video, None, mode="auto")
+        assert plan.output_mode == "full_rgb"
+        assert plan.output_crop is None
+        assert isinstance(plan.detector, BottomCropDetector)
+        assert plan.source is None
+
+    def test_plan_roi_without_region_raises(self, tmp_path: Path) -> None:
+        video = tmp_path / "v.mp4"
+        with pytest.raises(ValueError, match="region_box"):
+            plan_frame_io(video, None, mode="roi")
+
+    def test_plan_invalid_mode_raises(self, tmp_path: Path) -> None:
+        video = tmp_path / "v.mp4"
+        with pytest.raises(ValueError, match="mode"):
+            plan_frame_io(
+                video,
+                BoundingBox(0, 180, 320, 60),
+                mode="jpeg",  # type: ignore[arg-type]
+            )
+
+    def test_plan_auto_with_region_uses_roi(self, tmp_path: Path) -> None:
+        """GUI path mode 默认 auto + 有效 region → ROI。"""
+        video = tmp_path / "v.mp4"
+        region = BoundingBox(0, 180, 320, 60)
+        with patch(
+            "sublift.extractor.frame_io.probe_source_frame",
+            return_value=SourceFrameInfo(
+                width=320, height=240, display_transform_ok=True
+            ),
+        ):
+            plan = plan_frame_io(video, region, mode="auto")
+        assert plan.output_mode == "roi_rgb"
+        assert plan.output_crop == region
+        assert isinstance(plan.detector, RoiPassthroughDetector)
+        assert plan.fallback_reason is None
+
+
+class TestSourceBoxOnRoiImageIsWrong:
+    """负向：source-frame box 不得直接注入 ROI Frame（二次裁剪语义错误）。"""
+
+    def test_fixed_region_source_box_on_roi_image_not_passthrough(self) -> None:
+        # 典型 Zootopia 字幕带：source [0,848,1920,87]；ROI 图只有 87 高
+        source_box = BoundingBox(0, 848, 1920, 87)
+        roi_img = Image.new("RGB", (1920, 87), "red")
+        frame = Frame(timestamp_ms=0, image=roi_img)
+        wrong = FixedRegionDetector(source_box).detect(frame)
+        assert wrong.box == source_box  # 仍吐 source 坐标
+
+        pipeline = Pipeline(
+            detector=FixedRegionDetector(source_box),
+            ocr=MockOcrEngine(text="t", confidence=0.9),
+            config=Config(enable_line_select=False),
+        )
+        out = pipeline._crop_to_region(frame, wrong.box)
+        # 不是全幅 frame-local → 走 PIL crop，非零拷贝
+        assert out is not roi_img
+        # 越界 y 导致内容丢失（全黑/空），而非原 ROI 像素
+        assert list(out.get_flattened_data()) != list(roi_img.get_flattened_data())
+
+    def test_roi_passthrough_preserves_pixels(self) -> None:
+        roi_img = Image.new("RGB", (1920, 87), "red")
+        frame = Frame(timestamp_ms=0, image=roi_img)
+        region = RoiPassthroughDetector(1920, 87).detect(frame)
+        assert region.box == BoundingBox(0, 0, 1920, 87)
+        pipeline = Pipeline(
+            detector=RoiPassthroughDetector(1920, 87),
+            ocr=MockOcrEngine(text="t", confidence=0.9),
+            config=Config(enable_line_select=False),
+        )
+        out = pipeline._crop_to_region(frame, region.box)
+        assert out is roi_img
+
 
 class TestFfmpegExtractorRoiUnit:
     def test_output_crop_property(self) -> None:
@@ -425,7 +501,9 @@ class TestFfmpegExtractorRoiIntegration:
         for full, roi in zip(full_frames, roi_frames, strict=True):
             expected = full.image.crop((0, 180, 320, 240))
             assert roi.image.size == expected.size
-            assert list(roi.image.getdata()) == list(expected.getdata())
+            assert list(roi.image.get_flattened_data()) == list(
+                expected.get_flattened_data()
+            )
 
     def test_roi_frame_count_and_timestamps_match_full(self, tmp_path: Path) -> None:
         video = tmp_path / "roi.mp4"
@@ -640,6 +718,58 @@ class TestBridgeRoiRouting:
             asyncio.run(run())
 
         assert captured.get("kwargs", {}).get("output_crop") is None
+        assert not any(
+            m.get("type") == "done" and m.get("ok") is False for m in pushed
+        )
+
+    def test_path_mode_without_region_full_bottom_crop(
+        self, tmp_path: Path
+    ) -> None:
+        """path mode 无 region → 全帧 + BottomCrop，不启用 ROI。"""
+        import asyncio
+
+        from sublift.ipc.bridge import BridgeHandler
+        from sublift.ipc.protocol import build_start_job
+        from sublift.ocr.mock import MockOcrEngine
+
+        video = tmp_path / "v.mp4"
+        _generate_solid_video(video, duration=1.0)
+        bridge = BridgeHandler(ocr_engine_factory=MockOcrEngine)
+        captured: dict[str, Any] = {}
+        detectors_seen: list[type[Any]] = []
+        real_ctor = FfmpegExtractor
+
+        def capture_extractor(*args: Any, **kwargs: Any) -> FfmpegExtractor:
+            captured["kwargs"] = kwargs
+            if bridge._pipeline is not None:
+                detectors_seen.append(type(bridge._pipeline._detector))
+            return real_ctor(*args, **kwargs)
+
+        pushed: list[dict[str, Any]] = []
+
+        async def collect(msg: dict[str, Any]) -> None:
+            pushed.append(msg)
+
+        async def run() -> None:
+            msg = build_start_job(
+                "V1",
+                1.0,
+                "mock",
+                0.5,
+                duration_ms=1000,
+                video_path=str(video),
+            )
+            with patch(
+                "sublift.ipc.bridge.FfmpegExtractor", side_effect=capture_extractor
+            ):
+                await bridge.handle(msg, collect)
+                if bridge._path_task is not None:
+                    await bridge._path_task
+
+        asyncio.run(run())
+
+        assert captured.get("kwargs", {}).get("output_crop") is None
+        assert BottomCropDetector in detectors_seen
         assert not any(
             m.get("type") == "done" and m.get("ok") is False for m in pushed
         )

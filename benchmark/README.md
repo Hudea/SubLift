@@ -196,6 +196,30 @@ uv run --extra vision python scripts/measure_perf_overhead.py
 
 早期 CLI bottom-crop vs GUI 固定区 CER 反差说明：**区域宽度是 OCR 问题**，不是打轴主矛盾。
 
+## feat-039：同提交 full / roi A/B
+
+在同一 clean commit、同机器上对照内部 `frame_output_mode`：
+
+```bash
+uv run python scripts/run_benchmark_manifest.py \
+  benchmark/manifests/zootopia_feat039_full.json --label manifest
+uv run python scripts/run_benchmark_manifest.py \
+  benchmark/manifests/zootopia_feat039_roi.json --label manifest
+uv run python scripts/compare_roi_ab.py \
+  debug/benchmark-reports/feat039_roi_ab/feat039_full/Zootopia_clip_1080p_feat039_full.agent.json \
+  debug/benchmark-reports/feat039_roi_ab/feat039_roi/Zootopia_clip_1080p_feat039_roi.agent.json \
+  --out debug/benchmark-reports/feat039_roi_ab/ab_summary.json
+```
+
+| 项 | 固定值 |
+|---|---|
+| 负载 | 与 feat-037 canonical 相同（Zootopia 1080p / 5fps / region `[0,848,1920,87]` / Vision / cjk） |
+| 协议 | 每组 warmup=1 + measured=3，主统计 median |
+| 硬门 | hash 等价、raw bytes 比例 87/1080、materialize ≤25% full、wall/RSS ≤105% full、coverage ≥99%、固定 GT 质量门 |
+| 输出 | `debug/benchmark-reports/feat039_roi_ab/`（不入库；证据写入 `docs/phases/phase4.json`） |
+
+`frame_output_mode` 默认 `full`；`roi` 需要 `region_box`。结论只能同提交同机比较，不能与跨机器历史数字混比。
+
 ## 相关路径
 
 | 路径 | 说明 |
@@ -204,5 +228,6 @@ uv run --extra vision python scripts/measure_perf_overhead.py
 | `benchmark/manifests/` | 可复现 JSON 配方 |
 | `benchmark/fixtures/` | GT SRT |
 | `scripts/run_benchmark_manifest.py` | CLI 入口 |
+| `scripts/compare_roi_ab.py` | feat-039 full/roi 硬门对照 |
 | `debug/perf_reports/` | 当前性能报告默认根 |
 | `debug/benchmark-reports/` | 历史质量/混合报告根 |
