@@ -203,6 +203,8 @@ feat-039 同提交 A/B + 固定 GT 收口
         ↓
 feat-040 真实长视频 GUI 验收
         ↓
+feat-041 性能计时归因收口
+        ↓
 Phase 4 文档收口
 ~~~
 
@@ -210,12 +212,35 @@ Phase 4 文档收口
 - feat-039 的 detection_hash 不一致时，禁止以“质量门仍通过”收口。
 - feat-040 不用 Python Mock 长流替代；没有真实 GUI 证据，Phase 4 保持 in-progress。
 - 任一性能结论必须同附该次质量结果和环境指纹。
+- feat-041 前，stage coverage 低于 99% 的 A/B 不用于解释端到端 wall 差异；不得把
+  未归因时间直接归咎于 ROI 或 Vision。
+
+### feat-041：性能计时归因收口
+
+**目标**：补齐 `Pipeline.run_frames()` 叶子阶段之间的编排耗时，使 performance summary
+能够解释 core wall，而不改变 ROI 输出、OCR、打轴或质量结果。
+
+**设计**：新增 `pipeline_overhead` 排他 stage。它测量 `run_frames` 的完整 wall，再扣除
+其内部互不重叠的 coverage leaf stages；因此帧迭代、状态机/Timeline 分派、容器阶段自身
+开销与 recorder 固定成本有明确归属，同时不会与 `ocr`、`crop`、`dedupe` 等重复相加。
+`finalize` 继续是容器 stage，不直接进入 coverage；其未嵌套的编排部分归入
+`pipeline_overhead`。
+
+**完成定义（全部必须满足）**：
+
+1. fake-clock 测试证明 `pipeline_overhead + leaf stages = core wall`，且嵌套的
+   `finalize` 不会造成双计；
+2. 既有 off / summary 产出的字幕结果一致，ruff、mypy、pytest 与 `init.sh` 全绿；
+3. canonical full / roi 各 warmup=1 + measured=3 的复验中，每次 ROI measured
+   `stage_coverage_pct ≥ 99%`；
+4. A/B 报告继续记录 detection hash、固定 GT 质量、raw bytes、RSS 与 core wall；若
+   wall 结论仍受 Vision 方差影响，明确标为测量事实而非 ROI 的因果性能承诺。
 
 ## 7. Phase 4 完成定义
 
 Phase 4 仅在以下条件同时满足时标记 done：
 
-1. feat-038、feat-039、feat-040 全部 done，且各自证据写入 phase4.json；
+1. feat-038、feat-039、feat-040、feat-041 全部 done，且各自证据写入 phase4.json；
 2. ROI 输出的坐标、像素、取消与兼容回退自动测试齐全；
 3. canonical A/B 的硬性能与固定 GT 质量门全部通过；
 4. 非 Zootopia ≥10 分钟 GUI 真实验收有可审计证据；

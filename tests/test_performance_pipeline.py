@@ -81,6 +81,7 @@ def test_pipeline_summary_records_stages() -> None:
     assert "crop" in payload["stages"]
     assert "signature" in payload["stages"]
     assert "changepoint" in payload["stages"]
+    assert "pipeline_overhead" in payload["stages"]
     assert payload["stages"]["crop"]["count"] >= 1
     assert payload["completed"] is True
     assert len(entries) >= 1

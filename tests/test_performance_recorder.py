@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from sublift.diagnostics.performance import (
+    PIPELINE_OVERHEAD_CHILD_STAGES,
     STAGE_OCR,
+    STAGE_PIPELINE_OVERHEAD,
     PerformanceMode,
     PerformanceRecorder,
     StageStats,
@@ -121,6 +123,37 @@ def test_attribution_excludes_finalize_container() -> None:
     assert thr["core_wall_ms"] == pytest.approx(17.0)
     assert thr["unattributed_ms"] == pytest.approx(5.0)
     assert thr["stage_coverage_pct"] == pytest.approx(12.0 / 17.0 * 100.0)
+
+
+def test_exclusive_span_records_only_uncovered_pipeline_time() -> None:
+    """排他 span 扣除叶子阶段，但保留 finalize 容器自身的编排时间。"""
+    clock = FakeClock()
+    rec = PerformanceRecorder(mode="summary", clock=clock)
+    rec.mark_core_start()
+
+    with rec.exclusive_span(
+        STAGE_PIPELINE_OVERHEAD,
+        child_stages=PIPELINE_OVERHEAD_CHILD_STAGES,
+    ):
+        clock.advance(3_000_000)  # 帧迭代 / 状态机开销
+        with rec.span(STAGE_OCR, sample=True):
+            clock.advance(10_000_000)
+        clock.advance(2_000_000)  # OCR 后的事件编排
+        with rec.span("finalize"):
+            clock.advance(5_000_000)  # finalize 容器本身
+            with rec.span("dedupe"):
+                clock.advance(2_000_000)
+
+    rec.mark_core_end()
+    payload = rec.to_payload()
+    thr = payload["throughput"]
+
+    # pipeline overhead = 3 + 2 + 5；ocr/dedupe 仍各自独立、无重叠。
+    assert payload["stages"][STAGE_PIPELINE_OVERHEAD]["total_ms"] == pytest.approx(10.0)
+    assert payload["stages"][STAGE_PIPELINE_OVERHEAD]["definition"]
+    assert thr["attributed_stage_ms"] == pytest.approx(22.0)
+    assert thr["unattributed_ms"] == pytest.approx(0.0)
+    assert thr["stage_coverage_pct"] == pytest.approx(100.0)
 
 
 def test_ocr_samples_bounded_and_percentiles() -> None:

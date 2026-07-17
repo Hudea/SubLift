@@ -122,4 +122,5 @@
 - [x] 对有效固定字幕区域实现 ffmpeg crop-before-Python 的 ROI raw RGB 输出；不宣称 codec 级 ROI decode
 - [x] 同提交 full / roi A/B：固定 GT detection hash 等价，raw bytes、图像构造成本、wall、RSS 与质量门均过验收
 - [x] 用 ≥10 分钟非 Zootopia 硬字幕视频完成 path-mode（GUI 默认）首条、进度、取消、重启、导出和 RSS 真实体验验收
+- [~] 性能计时归因：`pipeline_overhead` 已补齐并通过 fake-clock/真实 Vision dirty-tree A/B；待提交后以 clean-commit 协议复跑，收口正式证据
 - [ ] 英文/中英混排/不同字幕位置的 GT 扩充后置到下一质量泛化阶段

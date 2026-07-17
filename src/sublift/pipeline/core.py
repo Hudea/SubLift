@@ -25,6 +25,10 @@ import numpy as np
 
 from sublift.config import DEFAULT_CONFIG, Config
 from sublift.detector.base import Detector
+from sublift.diagnostics.performance import (
+    PIPELINE_OVERHEAD_CHILD_STAGES,
+    STAGE_PIPELINE_OVERHEAD,
+)
 from sublift.extractor.base import Extractor
 from sublift.models import (
     SCRIPT_CJK,
@@ -157,6 +161,16 @@ class Pipeline:
         if perf is None:
             return nullcontext()
         return perf.span(stage, sample=sample)
+
+    def _perf_pipeline_overhead_span(self) -> Any:
+        """记录批量编排的排他耗时，补齐叶子阶段间的 coverage 缺口。"""
+        perf = self._perf
+        if perf is None:
+            return nullcontext()
+        return perf.exclusive_span(
+            STAGE_PIPELINE_OVERHEAD,
+            child_stages=PIPELINE_OVERHEAD_CHILD_STAGES,
+        )
 
     # ------------------------------------------------------------------
     # 流式 API（feat-029）
@@ -738,13 +752,16 @@ class Pipeline:
         """
         if _mark_core and self._perf is not None:
             self._perf.mark_core_start()
-        self._reset_streaming_state()
         try:
-            for frame in frames:
-                event = self.feed(frame)
-                if event is not None:
-                    self.ocr_segment(event)
-            return self.finalize()
+            # 外层编排包含 Iterator 恢复、事件分派、Timeline 调度和 recorder 本身
+            # 的固定开销。exclusive_span 会扣除内部叶子阶段，避免覆盖率双计。
+            with self._perf_pipeline_overhead_span():
+                self._reset_streaming_state()
+                for frame in frames:
+                    event = self.feed(frame)
+                    if event is not None:
+                        self.ocr_segment(event)
+                return self.finalize()
         finally:
             if _mark_core and self._perf is not None:
                 self._perf.mark_core_end()

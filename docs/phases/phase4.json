@@ -86,6 +86,31 @@
       ],
       "status": "done",
       "evidence": "2026-07-17。素材：本地非 Zootopia 真实硬字幕 `01.mp4`（basename only），duration=2533.7s，1920×1080，前 60s 有硬字幕。路径：GUI 默认 path mode 同源 BridgeHandler（非 Mock；非 SwiftUI 点击）。脚本 scripts/feat040_long_video_ux.py。硬门 ALL_PASS：duration≥10min；首条 1.60s≤10s；progress 0→1.0 单调；final_entries=987；同 BridgeHandler cancel（≥30s 视频）latency 3.5ms≤1s → restart_gap 0.62s≤5s 且 processing 前进；SRT export 987=reopen 987（首条「妈妈！」）；RSS peak 326MB 有采样。证据 debug/feat040_ux/（gitignore）。审查轮1 Changes Required（同 handler 重启+SRT 门）已修。不宣称跨片源质量泛化。"
+    },
+    {
+      "id": "feat-041",
+      "name": "性能计时归因收口",
+      "description": "补齐 performance summary 的非重叠阶段归因，使 ROI A/B 中的 core wall、leaf stages 与未归因时间可解释；不改变 ROI、OCR、打轴或质量算法。",
+      "module": "src/sublift/diagnostics/performance.py; src/sublift/pipeline/core.py; tests/test_performance_*.py; docs/design/benchmark.md",
+      "dependencies": [
+        "feat-039"
+      ],
+      "subtasks": [
+        {
+          "name": "排他编排计时",
+          "description": "为 Pipeline.run_frames 增加 pipeline_overhead：用外层 wall 扣除已有叶子 stage，覆盖帧迭代、状态机/Timeline 编排与 recorder 固定开销，禁止与 OCR/crop 等双计。"
+        },
+        {
+          "name": "确定性回归",
+          "description": "用 fake clock 验证 nested leaf/container span 下 attributed、unattributed 与 coverage 的非重叠关系；确认 summary 不改变字幕结果。"
+        },
+        {
+          "name": "真实 ROI A/B 复验",
+          "description": "在同一工作树、同一 canonical full/roi 协议下重跑，要求每次 ROI measured stage_coverage≥99%，同时保留 hash、质量、raw bytes、RSS 与 wall 事实。"
+        }
+      ],
+      "status": "in-progress",
+      "evidence": "2026-07-17 实现与未提交树复验完成。实现：PerformanceRecorder.exclusive_span + pipeline_overhead，Pipeline.run_frames 外层 wall 扣除互不重叠的 coverage leaf stages；报告保留 definition。确定性：fake-clock 测试证明 pipeline_overhead=10ms、ocr+dedupe+overhead=core 22ms、unattributed=0，finalize 不双计。真实 canonical Vision A/B（同工作树，warmup=1 + measured=3，临时报告 /private/tmp/sublift-feat041-reports/）：ROI coverage=99.999739% / 99.999534% / 99.999727%，unattributed=0.028/0.051/0.030ms；full/roi hash=b2d35c1e25f156e1，ROI 三次固定 GT 门全过，raw ratio=87/1080，materialize ratio=0.129，wall ratio=0.839，RSS ratio=0.833，两个软目标均过。./init.sh 与 swift test 全绿。compare_roi_ab 唯一失败 same_clean_commit：两组 git_dirty=true（本功能及用户既有测试均尚未提交）；故不能作为正式 clean-commit 证据，待提交后原协议复跑。"
     }
   ]
 }

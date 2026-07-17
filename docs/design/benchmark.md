@@ -202,6 +202,7 @@ JSON object；相对路径相对**仓库根**（向上找 `pyproject.toml` + `fe
 | `ocr` | `OcrEngine.recognize` wall |
 | `line_select` / `cleanup` / `consensus` | 行级选择与共识（与 Vision 分开） |
 | `dedupe` | 最终合并 |
+| `pipeline_overhead` | `run_frames` 的排他编排时间：帧迭代、状态机/Timeline、容器自身与 recorder 开销；已扣除内部 leaf stages，不与 OCR/crop 双计 |
 | `finalize` | **容器 span**，coverage **排除**，避免与内部 ocr/dedupe 双重计数 |
 
 吞吐字段：`core_wall_ms`、`realtime_factor`、`raw_output_bytes`、`frame_count`、`ocr_calls`、`attributed_stage_ms`、`unattributed_ms`、`stage_coverage_pct`。  

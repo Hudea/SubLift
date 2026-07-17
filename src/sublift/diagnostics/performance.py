@@ -43,6 +43,7 @@ STAGE_CLEANUP = "cleanup"
 STAGE_CONSENSUS = "consensus"
 STAGE_FINALIZE = "finalize"
 STAGE_DEDUPE = "dedupe"
+STAGE_PIPELINE_OVERHEAD = "pipeline_overhead"
 
 # 覆盖率统计用叶子阶段（排除 finalize：其 wall 内嵌 ocr/dedupe，相加会双重计数）
 _COVERAGE_LEAF_STAGES = frozenset(
@@ -59,7 +60,15 @@ _COVERAGE_LEAF_STAGES = frozenset(
         STAGE_CLEANUP,
         STAGE_CONSENSUS,
         STAGE_DEDUPE,
+        STAGE_PIPELINE_OVERHEAD,
     }
+)
+
+# ``pipeline_overhead`` 为 ``Pipeline.run_frames`` 的排他阶段。它覆盖帧迭代、
+# 状态机编排和 recorder 调用等不属于已有叶子阶段的时间；其内部叶子必须在计算时
+# 扣除，避免与既有阶段双重计数。
+PIPELINE_OVERHEAD_CHILD_STAGES = _COVERAGE_LEAF_STAGES - frozenset(
+    {STAGE_PIPELINE_OVERHEAD}
 )
 
 EXTRACT_WAIT_LABEL = (
@@ -67,6 +76,10 @@ EXTRACT_WAIT_LABEL = (
     "not pure codec decode"
 )
 FRAME_MATERIALIZE_LABEL = "Image.frombytes() constructing PIL frames from raw RGB pipe bytes"
+PIPELINE_OVERHEAD_LABEL = (
+    "Pipeline run_frames exclusive wall time not covered by leaf stages "
+    "(iteration, state/timeline orchestration, and recorder overhead)"
+)
 
 
 class PerformanceMode(StrEnum):
@@ -289,6 +302,28 @@ class PerformanceRecorder:
         finally:
             self.add_stage_ns(stage, self._clock() - start, sample=sample)
 
+    @contextmanager
+    def exclusive_span(self, stage: str, *, child_stages: frozenset[str]) -> Iterator[None]:
+        """记录扣除指定子阶段后的排他 wall time。
+
+        ``child_stages`` 必须是彼此不重叠的叶子阶段。该 API 适合为外层编排
+        路径补齐 coverage：外层 wall 先完整计时，再扣除其中已有的叶子 span，
+        从而不把 OCR、crop 等已有成本重复计入。
+        """
+        start = self._clock()
+        before = {
+            name: self._stages.get(name, StageStats()).total_ns for name in child_stages
+        }
+        try:
+            yield
+        finally:
+            elapsed_ns = self._clock() - start
+            child_ns = sum(
+                max(0, self._stages.get(name, StageStats()).total_ns - total_ns)
+                for name, total_ns in before.items()
+            )
+            self.add_stage_ns(stage, max(0, elapsed_ns - child_ns))
+
     def record_segment(
         self,
         *,
@@ -401,6 +436,8 @@ class PerformanceRecorder:
             stages[STAGE_EXTRACT_WAIT]["definition"] = EXTRACT_WAIT_LABEL
         if STAGE_FRAME_MATERIALIZE in stages:
             stages[STAGE_FRAME_MATERIALIZE]["definition"] = FRAME_MATERIALIZE_LABEL
+        if STAGE_PIPELINE_OVERHEAD in stages:
+            stages[STAGE_PIPELINE_OVERHEAD]["definition"] = PIPELINE_OVERHEAD_LABEL
 
         core_ms = self.core_wall_ms()
         video_duration_s = self._workload.get("video_duration_seconds")
