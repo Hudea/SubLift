@@ -1,0 +1,41 @@
+{
+  "project": "SubLift",
+  "phase": "phase4.1-post-roi-throughput",
+  "description": "Phase 4.1 以已完成的 ROI 数据通路为基础，把 GUI 默认 path mode 中串行的 ffmpeg 读取与 Pipeline/OCR 消费改为有界生产者—消费者重叠；保持帧序、字幕结果和固定 GT 质量不变，以真实吞吐、取消/重启与有界内存共同验收。",
+  "plan_file": "docs/plans/phase4.1-post-roi-throughput.md",
+  "features": [
+    {
+      "id": "feat-042",
+      "name": "有界 path-mode 抽帧—Pipeline 重叠",
+      "description": "为 GUI 默认 Python path mode 引入 job-local PathJobSession、容量固定的帧 FIFO 和单消费者 Pipeline。ffmpeg producer 与串行 Pipeline/OCR consumer 可重叠运行；进度按已消费帧计，取消、错误和重启以 session 生命周期隔离。性能记录改为 producer / consumer / end-to-end 三条可解释 lane，禁止把重叠耗时相加成 coverage。",
+      "module": "src/sublift/ipc/bridge.py; src/sublift/extractor/ffmpeg_extractor.py; src/sublift/diagnostics/performance.py; scripts/; tests/; apps/macos/",
+      "dependencies": [
+        "feat-041"
+      ],
+      "subtasks": [
+        {
+          "name": "Job-local 生命周期与所有权",
+          "description": "定义 PathJobSession；producer 独占 FfmpegExtractor/generator，consumer 独占 Pipeline/Vision OCR，外层只持有当前 session 的取消句柄，避免 handler 级共享字段在取消后立即重启时串任务。"
+        },
+        {
+          "name": "有界 FIFO 与正常结束",
+          "description": "以 Queue(maxsize=8) 连接 producer 和 consumer；队列满时短超时等待并检查取消事件，EOF/error 用明确哨兵传递，consumer 仅在消费 EOF 后 finalize。"
+        },
+        {
+          "name": "进度、取消与重启协议",
+          "description": "进度以已消费帧数为准；覆盖 ffmpeg read、满队列等待和 OCR 阻塞三种取消点；旧 session 完全退出且不再推送条目后才允许其完成消息影响 UI。"
+        },
+        {
+          "name": "并发性能口径",
+          "description": "为 end-to-end、producer 与 consumer 建立线程安全且不可相加的计时/队列指标；报告 queue high-watermark、backpressure wait、RSS 和质量结果，避免沿用串行 exclusive_span 的全局差分语义。"
+        },
+        {
+          "name": "回归、真实 path-mode 与 clean-commit A/B",
+          "description": "补齐确定性并发、取消/重启、ROI/full fallback、真实 ffmpeg path-mode 和性能报告测试；以同机 clean commit 的 warmup=1 + measured=3 比较串行基线与重叠实现。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

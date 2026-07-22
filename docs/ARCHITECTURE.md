@@ -72,6 +72,7 @@ video
 - [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
 - [ROI 数据通路设计（Phase 4 计划）](design/roi-data-path.md) — 固定区域 crop-before-Python、坐标契约与 A/B 验收边界
 - [Phase 4 ROI 性能优化报告](reports/phase4-roi-performance.md) — 正式 clean-commit A/B 结果、性能结论与适用边界
+- [Path-mode 有界重叠设计（Phase 4.1 计划）](design/path-mode-overlap.md) — producer / consumer 所有权、取消、进度与并发性能口径
 
 ## 5. 核心数据模型
 
@@ -136,10 +137,10 @@ video
 
 上述结果是固定回归锚点，不是跨片源泛化承诺。当前限制：
 
-- **GT 多样性不足**：主要依赖 Zootopia 中文字幕片段，英文、中英混排、不同字幕位置和不同片源尚未形成固定 GT。
+- **GT 多样性不足**：主要依赖 Zootopia 中文字幕片段；Phase 4 的 ≥10 分钟非 Zootopia 视频只完成了 GUI 体验验收，不是可量化质量 GT。英文、中英混排、不同字幕位置和不同片源仍未形成固定质量集。
 - **混排边界风险**：显式 CJK 画像的边界 cleanup 仍可能误删 `NPD动物警局`、`苹果的iPhone` 一类无空格英文，默认 `auto` 可规避部分风险。
 - **打轴 residual**：极短字幕和 merged cluster（如 #15）仍可能漏检或合并。
-- **长视频 GUI 手工验收暂缓**：自动 4K 内存、首条反馈、取消与重启审计已通过，但尚未用 ≥10 分钟非 Zootopia 视频验证完整交互体验。
+- **path mode 仍为串行调度**：ROI 后的 ffmpeg 读取与 Pipeline/OCR 仍在同一 worker 中交替执行；Phase 4.1 将以有界 producer/consumer 重叠验证吞吐收益、取消隔离和内存边界。
 - **ASS/VTT 仅占位**：当前产品导出 SRT。
 
 ## 10. Phase 2 macOS GUI 架构
@@ -241,7 +242,32 @@ materialize 与重复 crop 的无效成本，并用同提交 full / roi A/B 与�
 等价。架构契约见 [ROI 数据通路设计](design/roi-data-path.md)，任务与硬门见
 [Phase 4 计划](plans/phase4-roi-data-path.md)。
 
-## 13. 架构决策
+## 13. Phase 4.1 ROI 后可重叠流式吞吐（计划）
+
+> 本节描述 `feat-042` 的目标架构；当前 path mode 仍保持第 11.2 节所述的单 worker
+> 串行行为，不能据此把计划当作已实现。
+
+Phase 4.1 只对 GUI 默认 Python path mode 引入一个有界帧 FIFO：producer 独占
+`FfmpegExtractor` / generator，consumer 独占 `Pipeline`、timeline 状态和 Vision OCR。
+这会让抽帧与串行 Pipeline/OCR 重叠，但不并行 OCR、不改变帧序或增加 GUI 开关。
+
+~~~text
+PathJobSession(job_id, cancel_event, Queue(maxsize=8))
+  ├─ producer: FfmpegExtractor.extract() ── Frame / EOF / error ─┐
+  └─ consumer: Pipeline.feed() → ocr_segment() → finalize()      ├─→ coordinator → GUI
+                                                                    ┘
+~~~
+
+每个 job 的 extractor、pipeline、threads、queue 和观测数据都必须 session-local，不能由
+`BridgeHandler` 的跨 job 可变字段互相覆盖。进度按 consumer 已处理帧发送；EOF 被 consumer
+消费后才 `finalize()`；取消须同时打断 ffmpeg read、满队列等待和 OCR 返回后的后续工作，且
+producer、consumer 全部退出后才可以发送 `done`。性能报告将区分 end-to-end、producer 和
+consumer lane；这些 lane 可以重叠，禁止相加为 coverage。
+
+完整不变量、取消状态机与口径见 [Path-mode 有界重叠设计](design/path-mode-overlap.md)，任务
+拆分、质量/吞吐/资源硬门见 [Phase 4.1 计划](plans/phase4.1-post-roi-throughput.md)。
+
+## 14. 架构决策
 
 完整决策记录见 [DECISIONS.md](DECISIONS.md)，要点：
 
