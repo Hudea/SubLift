@@ -171,6 +171,237 @@ class StageStats:
         return payload
 
 
+# feat-043：OCR 内部归因的可信早停原因枚举
+_EARLY_STOP_SINGLE_HIGH_CONF = "single_high_confidence"
+_EARLY_STOP_TWO_FRAME_CONSENSUS = "two_frame_consensus"
+_EARLY_STOP_EXHAUSTED = "representative_frames_exhausted"
+_EARLY_STOP_NO_VALID_SAMPLE = "no_valid_sample"
+_EARLY_STOP_NO_REGION = "no_region"
+_EARLY_STOP_LEGACY = "legacy_path"
+_ALLOWED_EARLY_STOP_REASONS = frozenset(
+    {
+        _EARLY_STOP_SINGLE_HIGH_CONF,
+        _EARLY_STOP_TWO_FRAME_CONSENSUS,
+        _EARLY_STOP_EXHAUSTED,
+        _EARLY_STOP_NO_VALID_SAMPLE,
+        _EARLY_STOP_NO_REGION,
+        _EARLY_STOP_LEGACY,
+    }
+)
+
+# OCR 内部归因的五个子阶段名
+OCR_SUB_INPUT_PREPARE = "ocr.input_prepare"
+OCR_SUB_REQUEST_SETUP = "ocr.request_setup"
+OCR_SUB_VISION_PERFORM = "ocr.vision_perform"
+OCR_SUB_OBSERVATION_MAPPING = "ocr.observation_mapping"
+OCR_SUB_RESIDUAL = "ocr.residual"
+
+# 有界的输入几何样本上限
+_OCR_GEOMETRY_SAMPLE_CAP = 256
+
+
+@dataclass
+class OcrCallDetail:
+    """单次 OCR 调用的内部计时明细（不含文本/图像/box/路径）。
+
+    设计契约：``total_ms ≈ input_prepare + request_setup + vision_perform
+    + observation_mapping + residual``。
+    """
+
+    input_width: int
+    input_height: int
+    input_mode: str  # e.g. "RGB", "L"
+    input_prepare_ms: float
+    request_setup_ms: float
+    vision_perform_ms: float
+    observation_mapping_ms: float
+    residual_ms: float
+    total_ms: float
+    outcome: str  # "success" | "empty" | "error"
+
+    @property
+    def components_ms(self) -> float:
+        """五项内部阶段之和（用于与 parent total_ms 对账）。"""
+        return (
+            self.input_prepare_ms
+            + self.request_setup_ms
+            + self.vision_perform_ms
+            + self.observation_mapping_ms
+            + self.residual_ms
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "input_width": self.input_width,
+            "input_height": self.input_height,
+            "input_mode": self.input_mode,
+            "input_prepare_ms": self.input_prepare_ms,
+            "request_setup_ms": self.request_setup_ms,
+            "vision_perform_ms": self.vision_perform_ms,
+            "observation_mapping_ms": self.observation_mapping_ms,
+            "residual_ms": self.residual_ms,
+            "total_ms": self.total_ms,
+            "outcome": self.outcome,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OcrCallDetail:
+        return cls(
+            input_width=data["input_width"],
+            input_height=data["input_height"],
+            input_mode=data.get("input_mode", "RGB"),
+            input_prepare_ms=data.get("input_prepare_ms", 0.0),
+            request_setup_ms=data.get("request_setup_ms", 0.0),
+            vision_perform_ms=data.get("vision_perform_ms", 0.0),
+            observation_mapping_ms=data.get("observation_mapping_ms", 0.0),
+            residual_ms=data.get("residual_ms", 0.0),
+            total_ms=data["total_ms"],
+            outcome=data["outcome"],
+        )
+
+
+@dataclass
+class OcrBreakdown:
+    """OCR 内部归因有界聚合（summary 模式）。
+
+    内部阶段通过各自 :class:`StageStats` 收集；但不参与 core coverage 相加。
+    """
+
+    call_count: int = 0
+    call_total_ms: float = 0.0
+    input_prepare: StageStats = field(
+        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
+    )
+    request_setup: StageStats = field(
+        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
+    )
+    vision_perform: StageStats = field(
+        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
+    )
+    observation_mapping: StageStats = field(
+        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
+    )
+    residual: StageStats = field(
+        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
+    )
+    # (width, height, mode) → count；有上限桶
+    input_geometry_buckets: dict[tuple[int, int, str], int] = field(default_factory=dict)
+    # 段级决策汇总
+    representative_frames_total: int = 0
+    actual_ocr_calls_total: int = 0
+    early_stop_reasons: dict[str, int] = field(default_factory=dict)
+    accepted_count: int = 0
+    rejected_count: int = 0
+    engine_detail: str = "vision"  # "vision" | "opaque"
+
+    def record_call(
+        self,
+        *,
+        call_detail: OcrCallDetail,
+    ) -> None:
+        """将一次 OCR 调用的内部耗时录入本 breakdown。
+
+        各项以纳秒整形后调用 ``StageStats.add``，几何桶以去重上限记录。
+        """
+        self.call_count += 1
+        self.call_total_ms += call_detail.total_ms
+        self.input_prepare.add(_ms_to_ns_safe(call_detail.input_prepare_ms))
+        self.request_setup.add(_ms_to_ns_safe(call_detail.request_setup_ms))
+        self.vision_perform.add(_ms_to_ns_safe(call_detail.vision_perform_ms))
+        self.observation_mapping.add(_ms_to_ns_safe(call_detail.observation_mapping_ms))
+        self.residual.add(_ms_to_ns_safe(call_detail.residual_ms))
+        # 几何桶：有界去重（first-N-wins，满后永不新增）
+        key = (call_detail.input_width, call_detail.input_height, call_detail.input_mode)
+        buckets_full = len(self.input_geometry_buckets) >= _OCR_GEOMETRY_SAMPLE_CAP
+        if key not in self.input_geometry_buckets and buckets_full:
+            # 已达上限 256 种组合，新几何组合静默丢弃
+            pass
+        else:
+            self.input_geometry_buckets[key] = self.input_geometry_buckets.get(key, 0) + 1
+
+    def record_segment_decision(
+        self,
+        *,
+        representative_frames: int,
+        actual_ocr_calls: int,
+        early_stop_reason: str,
+        accepted: bool,
+    ) -> None:
+        """记录一个字幕段的决策信息到 breakdown 聚合。"""
+        self.representative_frames_total += representative_frames
+        self.actual_ocr_calls_total += actual_ocr_calls
+        reason = early_stop_reason or _EARLY_STOP_EXHAUSTED
+        self.early_stop_reasons[reason] = self.early_stop_reasons.get(reason, 0) + 1
+        if accepted:
+            self.accepted_count += 1
+        else:
+            self.rejected_count += 1
+
+    def to_payload(self) -> dict[str, Any]:
+        """序列化为 agent JSON 的 ``ocr_breakdown`` 块。"""
+        payload: dict[str, Any] = {
+            "call_count": self.call_count,
+            "call_total": {
+                "count": self.call_count,
+                "total_ms": self.call_total_ms,
+                "mean_ms": self.call_total_ms / self.call_count if self.call_count else 0.0,
+            },
+            "input_prepare": self.input_prepare.to_payload(),
+            "request_setup": self.request_setup.to_payload(),
+            "vision_perform": self.vision_perform.to_payload(),
+            "observation_mapping": self.observation_mapping.to_payload(),
+            "residual": self.residual.to_payload(),
+            "input_geometry": [
+                {"width": w, "height": h, "mode": mode, "count": cnt}
+                for (w, h, mode), cnt in (
+                    sorted(self.input_geometry_buckets.items(), key=lambda x: -x[1])[:64]
+                )
+            ],
+            "segment_decisions": {
+                "representative_frames_total": self.representative_frames_total,
+                "actual_ocr_calls_total": self.actual_ocr_calls_total,
+                "early_stop_reasons": dict(self.early_stop_reasons),
+                "accepted": self.accepted_count,
+                "rejected": self.rejected_count,
+            },
+            "accounting": self._accounting_payload(),
+            "engine_detail": self.engine_detail,
+        }
+        return payload
+
+    def _accounting_payload(self) -> dict[str, Any]:
+        components_ms = (
+            ns_to_ms(self.input_prepare.total_ns) or 0.0
+        ) + (
+            ns_to_ms(self.request_setup.total_ns) or 0.0
+        ) + (
+            ns_to_ms(self.vision_perform.total_ns) or 0.0
+        ) + (
+            ns_to_ms(self.observation_mapping.total_ns) or 0.0
+        ) + (
+            ns_to_ms(self.residual.total_ns) or 0.0
+        )
+        parent_ms = self.call_total_ms
+        delta_ms = max(0.0, abs(parent_ms - components_ms))
+        coverage_pct = (
+            min(100.0, components_ms / parent_ms * 100.0) if parent_ms > 0 else None
+        )
+        return {
+            "parent_total_ms": parent_ms,
+            "components_total_ms": components_ms,
+            "residual_total_ms": ns_to_ms(self.residual.total_ns) or 0.0,
+            "delta_ms": delta_ms,
+            "coverage_pct": coverage_pct,
+            "note": "internal stages excluded from core stage coverage; "
+            "parent ocr is the only coverage leaf for ocr wall",
+        }
+
+
+def _ms_to_ns_safe(ms: float) -> int:
+    """毫秒 → 整数纳秒（非负）。"""
+    return max(0, int(ms * 1_000_000.0))
+
+
 @dataclass
 class SegmentTraceRecord:
     """逐字幕段性能记录（不含原始字幕文本）。"""
@@ -184,6 +415,10 @@ class SegmentTraceRecord:
     select_wall_ms: float
     accepted: bool
     output_chars: int
+    # feat-043a 新增
+    representative_selection_ms: float = 0.0
+    early_stop_reason: str = ""
+    ocr_call_details: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -196,6 +431,9 @@ class SegmentTraceRecord:
             "select_wall_ms": self.select_wall_ms,
             "accepted": self.accepted,
             "output_chars": self.output_chars,
+            "representative_selection_ms": self.representative_selection_ms,
+            "early_stop_reason": self.early_stop_reason,
+            "ocr_call_details": self.ocr_call_details,
         }
 
 
@@ -239,6 +477,8 @@ class PerformanceRecorder:
         self._cpu_user_s: float = 0.0
         self._cpu_system_s: float = 0.0
         self._resources_sampled = False
+        # feat-043：OCR 内部归因有界聚合
+        self._ocr_breakdown: OcrBreakdown | None = None
 
         if self._mode is PerformanceMode.TRACE and segment_path is not None:
             segment_path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,8 +575,16 @@ class PerformanceRecorder:
         select_wall_ns: int,
         accepted: bool,
         output_chars: int,
+        # feat-043a 新增
+        representative_selection_ms: float = 0.0,
+        early_stop_reason: str = "",
+        ocr_call_details: list[dict[str, Any]] | None = None,
     ) -> None:
-        """记录逐字幕段成本。summary 模式忽略；trace 写入 JSONL/内存。"""
+        """记录逐字幕段成本。summary 模式忽略；trace 写入 JSONL/内存。
+
+        feat-043a 新增 representative_selection_ms、early_stop_reason
+        与 ocr_call_details，写入 trace JSONL 且不计入 core coverage。
+        """
         if self._mode is not PerformanceMode.TRACE:
             return
         rec = SegmentTraceRecord(
@@ -349,6 +597,9 @@ class PerformanceRecorder:
             select_wall_ms=ns_to_ms(select_wall_ns) or 0.0,
             accepted=accepted,
             output_chars=output_chars,
+            representative_selection_ms=representative_selection_ms,
+            early_stop_reason=early_stop_reason,
+            ocr_call_details=list(ocr_call_details) if ocr_call_details else [],
         )
         self._segment_records.append(rec)
         if self._segment_fh is not None:
@@ -372,6 +623,51 @@ class PerformanceRecorder:
         self._cpu_system_s = float(usage.ru_stime)
         self._resources_sampled = True
         self._environment.setdefault("rss_unit", unit)
+
+    @property
+    def ocr_breakdown(self) -> OcrBreakdown | None:
+        """OCR 内部归因聚合（summary/trace 均可用；off 时为 None）。"""
+        return self._ocr_breakdown
+
+    def ensure_ocr_breakdown(self, *, engine_detail: str = "vision") -> OcrBreakdown:
+        """获取或创建 OCR breakdown；首次调用设定 engine_detail。
+
+        幂等：多次调用返回同一实例；engine_detail 仅首次写入。
+        """
+        if self._ocr_breakdown is None:
+            self._ocr_breakdown = OcrBreakdown(engine_detail=engine_detail)
+        elif engine_detail != "vision" and self._ocr_breakdown.engine_detail == "vision":
+            self._ocr_breakdown.engine_detail = engine_detail
+        return self._ocr_breakdown
+
+    def add_ocr_call_detail(self, detail: OcrCallDetail) -> None:
+        """记录一次 OCR 调用的内部计时明细到 breakdown。
+
+        调用方（Pipeline/Vision）负责每个 OCR recognize 调用后触达。
+        summary/trace 模式下均聚合；不影响 core coverage。
+        """
+        bd = self._ocr_breakdown
+        if bd is not None:
+            bd.record_call(call_detail=detail)
+
+    def record_segment_decision(
+        self,
+        *,
+        representative_frames: int,
+        actual_ocr_calls: int,
+        early_stop_reason: str,
+        accepted: bool,
+    ) -> None:
+        """记录段级决策到 OCR breakdown（summary/trace 通用）。"""
+        bd = self._ocr_breakdown
+        if bd is None:
+            return
+        bd.record_segment_decision(
+            representative_frames=representative_frames,
+            actual_ocr_calls=actual_ocr_calls,
+            early_stop_reason=early_stop_reason,
+            accepted=accepted,
+        )
 
     def set_environment(self, env: dict[str, Any]) -> None:
         self._environment.update(env)
@@ -497,6 +793,12 @@ class PerformanceRecorder:
             payload["segment_count"] = len(self._segment_records)
             if self._segment_path is not None:
                 payload["segment_trace_path"] = str(self._segment_path)
+        # feat-043：OCR 内部归因（独立块，不参与 core coverage 相加）
+        if self._ocr_breakdown is not None and (
+            self._ocr_breakdown.call_count > 0
+            or self._ocr_breakdown.accepted_count + self._ocr_breakdown.rejected_count > 0
+        ):
+            payload["ocr_breakdown"] = self._ocr_breakdown.to_payload()
         return payload
 
 

@@ -30,8 +30,8 @@
           "description": "按 canonical clean-commit 协议运行 off/summary/trace；验证扰动、hash、GT 质量和对账，并在正式报告中给出唯一下一 feature 建议或不优化结论。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "in-progress",
+      "evidence": "代码与自动验证（2026-07-24 审查修复后）：\n\n- ruff clean；mypy no issues（65 src files）；pytest 453 passed；./init.sh 见本会话验证。\n\nfeat-043a：OcrCallDetail / OcrBreakdown 数据模型；SegmentTraceRecord 扩展；PerformanceRecorder ensure/add/record；to_payload 独立 ocr_breakdown；内部对账。\n\nfeat-043b：VisionOcrEngine 可选 timing_callback；无 callback 走 _recognize_untimed 快速路径（无分阶段 perf_counter）；callback 异常 suppress 隔离；Pipeline 接线 + opaque fallback。\n\nfeat-043c：段级 representative_selection_ms / early_stop_reason / ocr_call_details（有界）；隐私扫描无泄漏。\n\nfeat-043d（部分）：benchmark/runner._validate_ocr_breakdown 硬门：\n  1) ocr_breakdown.call_count == stages.ocr.count == throughput.ocr_calls\n  2) 内部 parent 与 stages.ocr.total_ms 交叉对账（max(1ms, 5%)）\n  3) 内部 components 覆盖度 ≥80%、Vision 非零阶段 ≥2、internal delta\n  单测：test_validate_ocr_breakdown_* + test_pipeline_payload_passes_external_ocr_accounting；Vision 单元：callback 异常隔离 / untimed 路径 / detail 五阶段。\n\n仍未关闭（保持 in-progress）：\n- 真实 canonical Vision off/summary/trace（Zootopia ROI、warmup+measured、质量/扰动/hash）\n- 正式报告 docs/reports/phase4.2-ocr-attribution-baseline.md\n- phase 证据写入命令、指标与下一 feature 建议\n"
     }
   ]
 }

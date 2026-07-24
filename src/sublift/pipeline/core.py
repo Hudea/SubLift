@@ -133,6 +133,18 @@ class Pipeline:
         self._trace_recorder = trace_recorder
         self._perf = performance_recorder
 
+        # feat-043b：为 Vision 引擎接线 OCR 内部计时回调
+        self._ocr_has_internal_timing = False
+        if self._perf is not None:
+            self._perf.ensure_ocr_breakdown(engine_detail="vision")
+            if hasattr(self._ocr, "_timing_callback"):
+                object.__setattr__(
+                    self._ocr, "_timing_callback", self._on_ocr_call_detail
+                )
+                self._ocr_has_internal_timing = True
+            else:
+                self._perf.ensure_ocr_breakdown(engine_detail="opaque")
+
         # 流式状态（feed/ocr_segment/finalize 共享）
         self._changepoint = ChangePointDetector(
             config=self._config.change_point,
@@ -154,6 +166,8 @@ class Pipeline:
         self._subtitle_profile: SubtitleProfile | None = config.subtitle_profile
         # feat-034d：段内采样帧，供多帧共识
         self._segment_sample_frames: list[Frame] = []
+        # feat-043c：段内 OCR 调用明细（逐段收集，段闭合时写入 trace）
+        self._segment_call_details: list[dict[str, Any]] = []
 
     def _perf_span(self, stage: str, *, sample: bool = False) -> Any:
         """性能 span；无 recorder 时返回 nullcontext（一次空值判断）。"""
@@ -161,6 +175,48 @@ class Pipeline:
         if perf is None:
             return nullcontext()
         return perf.span(stage, sample=sample)
+
+    def _on_ocr_call_detail(self, detail: object) -> None:
+        """feat-043b：Vision 内部计时回调入口，转发到 recorder 并收集段级明细。"""
+        if self._perf is not None:
+            from sublift.diagnostics.performance import OcrCallDetail
+
+            if isinstance(detail, OcrCallDetail):
+                self._perf.add_ocr_call_detail(detail)
+                # feat-043c：逐段收集调用明细（有界：不超 ocr_consensus_frames）
+                cap = max(1, self._config.ocr_consensus_frames)
+                if len(self._segment_call_details) < cap:
+                    self._segment_call_details.append(detail.to_dict())
+
+    def _record_opaque_ocr_call(
+        self,
+        image: Image.Image,
+        ocr_wall_ns: int,
+        outcome: str = "success",
+    ) -> None:
+        """feat-043b：为非 Vision 引擎记录 opaque OCR breakdown；收集段级明细。"""
+        if self._perf is None or self._ocr_has_internal_timing:
+            return
+        from sublift.diagnostics.performance import OcrCallDetail, ns_to_ms
+
+        total_ms = ns_to_ms(ocr_wall_ns) or 0.0
+        detail = OcrCallDetail(
+            input_width=image.width,
+            input_height=image.height,
+            input_mode=image.mode,
+            input_prepare_ms=0.0,
+            request_setup_ms=0.0,
+            vision_perform_ms=0.0,
+            observation_mapping_ms=0.0,
+            residual_ms=total_ms,
+            total_ms=total_ms,
+            outcome=outcome,
+        )
+        self._perf.add_ocr_call_detail(detail)
+        # feat-043c：逐段收集
+        cap = max(1, self._config.ocr_consensus_frames)
+        if len(self._segment_call_details) < cap:
+            self._segment_call_details.append(detail.to_dict())
 
     def _perf_pipeline_overhead_span(self) -> Any:
         """记录批量编排的排他耗时，补齐叶子阶段间的 coverage 缺口。"""
@@ -250,6 +306,10 @@ class Pipeline:
         """OCR 一个已闭合的段并缓存 raw entry。
 
         重操作（~几百 ms）：调用方应放到线程池，避免阻塞事件循环。
+        **注意**：当前实现不是线程安全的 —— Pipeline 实例状态（包括
+        ``_segment_call_details``、``_closed_entries`` 等）在读/写时无同步。
+        使用线程池时请确保对同一 Pipeline 的 ocr_segment() 调用串行化。
+
         OCR 完成后 raw entry 缓存到内部列表，供 :meth:`finalize` dedupe。
 
         feat-034：多代表帧行级选择 + 共识；低置信稳定中文可放行。
@@ -277,14 +337,27 @@ class Pipeline:
                 select_wall_ns=0,
                 accepted=False,
                 output_chars=0,
+                representative_selection_ms=0.0,
+                early_stop_reason="no_region",
             )
             return entry
 
-        seg_stats = {"ocr_calls": 0, "ocr_ns": 0, "select_ns": 0, "rep_frames": 0}
+        # feat-043c：计时代表帧选取
+        t_rep_sel_start = self._perf.now_ns() if self._perf is not None else 0
+        seg_stats: dict[str, Any] = {
+            "ocr_calls": 0,
+            "ocr_ns": 0,
+            "select_ns": 0,
+            "rep_frames": 0,
+            "early_stop": "",
+        }
         if self._config.enable_line_select:
             text, confidence = self._ocr_segment_with_line_select(event, seg_stats)
         else:
             text, confidence = self._ocr_segment_legacy(event, seg_stats)
+        t_rep_sel_ns = (
+            (self._perf.now_ns() - t_rep_sel_start) if self._perf is not None else 0
+        )
 
         entry = SubtitleEntry(
             start_ms=event.start_ms,
@@ -296,6 +369,15 @@ class Pipeline:
         accepted = bool(text.strip())
         if self._perf is not None and accepted:
             self._perf.mark_first_entry()
+        # feat-043c：段级决策记录到 breakdown（early_stop 统一 fallback）
+        early_stop = str(seg_stats.get("early_stop", "")) or "representative_frames_exhausted"
+        if self._perf is not None:
+            self._perf.record_segment_decision(
+                representative_frames=int(seg_stats["rep_frames"]),
+                actual_ocr_calls=int(seg_stats["ocr_calls"]),
+                early_stop_reason=early_stop,
+                accepted=accepted,
+            )
         self._record_segment_perf(
             event,
             representative_frames=int(seg_stats["rep_frames"]),
@@ -304,7 +386,14 @@ class Pipeline:
             select_wall_ns=int(seg_stats["select_ns"]),
             accepted=accepted,
             output_chars=len(text),
+            representative_selection_ms=(
+                (t_rep_sel_ns / 1_000_000.0) if self._perf is not None else 0.0
+            ),
+            early_stop_reason=early_stop,
+            ocr_call_details=list(self._segment_call_details),
         )
+        # 清理段级明细，为下一段做准备
+        self._segment_call_details = []
         return entry
 
     def finalize(self) -> list[SubtitleEntry]:
@@ -463,13 +552,16 @@ class Pipeline:
         self._segment_first_frame = None
         self._segment_stable_frame = None
         self._segment_sample_frames = []
+        self._segment_call_details = []
 
     def _ocr_segment_legacy(
         self,
         event: SegmentEvent,
-        seg_stats: dict[str, int] | None = None,
+        seg_stats: dict[str, Any] | None = None,
     ) -> tuple[str, float]:
         """旧路径：整区 join + 全局阈值 + 单锚回退。"""
+        if seg_stats is not None:
+            seg_stats["early_stop"] = "legacy_path"
         text, confidence = self._ocr_frame_raw(event.anchor_frame, seg_stats)
         if self._needs_ocr_retry(text, confidence):
             seen_ts = {
@@ -497,9 +589,9 @@ class Pipeline:
     def _ocr_segment_with_line_select(
         self,
         event: SegmentEvent,
-        seg_stats: dict[str, int] | None = None,
+        seg_stats: dict[str, Any] | None = None,
     ) -> tuple[str, float]:
-        """行级选择 + 多帧共识（feat-034c/d）。"""
+        """行级选择 + 多帧共识（feat-034c/d + feat-043c early_stop）。"""
         self._ensure_subtitle_profile()
         profile = self._subtitle_profile
         if profile is None:
@@ -513,12 +605,19 @@ class Pipeline:
                 )
                 self._subtitle_profile = profile
             else:
+                if seg_stats is not None:
+                    seg_stats["early_stop"] = "no_valid_sample"
                 return "", 0.0
 
         frames = self._collect_ocr_frames(event)
         if seg_stats is not None:
             seg_stats["rep_frames"] = len(frames)
+        if not frames:
+            if seg_stats is not None:
+                seg_stats["early_stop"] = "no_valid_sample"
+            return "", 0.0
         samples: list[tuple[str, float]] = []
+        early_stop: str = "representative_frames_exhausted"
 
         for frame in frames:
             text, conf = self._ocr_frame_selected(frame, profile, seg_stats)
@@ -541,13 +640,18 @@ class Pipeline:
                 >= self._config.line_select_min_script
                 and not (profile.script == SCRIPT_CJK and mixed_script)
             ):
+                early_stop = "single_high_confidence"
                 break
             # 相似变体已形成 ≥2 票共识即可提前结束，不要求全文精确相等。
             if (
                 partial.support_votes >= 2
                 and partial.confidence >= self._config.low_conf_threshold
             ):
+                early_stop = "two_frame_consensus"
                 break
+
+        if seg_stats is not None:
+            seg_stats["early_stop"] = early_stop
 
         with self._perf_span("consensus"):
             t0 = self._perf.now_ns() if self._perf is not None else 0
@@ -596,7 +700,7 @@ class Pipeline:
         self,
         frame: Frame | None,
         profile: SubtitleProfile,
-        seg_stats: dict[str, int] | None = None,
+        seg_stats: dict[str, Any] | None = None,
     ) -> tuple[str, float]:
         """单帧 OCR → 行级选择 → (text, conf)。"""
         if frame is None or self._region is None:
@@ -606,11 +710,18 @@ class Pipeline:
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
+            ocr_wall_ns = (self._perf.now_ns() - t0) if self._perf is not None else 0
             if seg_stats is not None and self._perf is not None:
                 seg_stats["ocr_calls"] += 1
-                seg_stats["ocr_ns"] += self._perf.now_ns() - t0
+                seg_stats["ocr_ns"] += ocr_wall_ns
             elif seg_stats is not None:
                 seg_stats["ocr_calls"] += 1
+        # feat-043b：非 Vision 引擎记录 opaque breakdown
+        self._record_opaque_ocr_call(
+            crop_image,
+            ocr_wall_ns,
+            outcome="success" if result.text.strip() else "empty",
+        )
 
         if result.lines:
             with self._perf_span("line_select"):
@@ -643,7 +754,7 @@ class Pipeline:
     def _ocr_frame_raw(
         self,
         frame: Frame | None,
-        seg_stats: dict[str, int] | None = None,
+        seg_stats: dict[str, Any] | None = None,
     ) -> tuple[str, float]:
         if frame is None or self._region is None:
             return "", 0.0
@@ -652,11 +763,18 @@ class Pipeline:
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
+            ocr_wall_ns = (self._perf.now_ns() - t0) if self._perf is not None else 0
             if seg_stats is not None and self._perf is not None:
                 seg_stats["ocr_calls"] += 1
-                seg_stats["ocr_ns"] += self._perf.now_ns() - t0
+                seg_stats["ocr_ns"] += ocr_wall_ns
             elif seg_stats is not None:
                 seg_stats["ocr_calls"] += 1
+        # feat-043b：非 Vision 引擎记录 opaque breakdown
+        self._record_opaque_ocr_call(
+            crop_image,
+            ocr_wall_ns,
+            outcome="success" if result.text.strip() else "empty",
+        )
         if seg_stats is not None and seg_stats.get("rep_frames", 0) == 0:
             seg_stats["rep_frames"] = 1
         return result.text, result.confidence
@@ -671,6 +789,9 @@ class Pipeline:
         select_wall_ns: int,
         accepted: bool,
         output_chars: int,
+        representative_selection_ms: float = 0.0,
+        early_stop_reason: str = "",
+        ocr_call_details: list[dict[str, Any]] | None = None,
     ) -> None:
         perf = self._perf
         if perf is None:
@@ -684,6 +805,9 @@ class Pipeline:
             select_wall_ns=select_wall_ns,
             accepted=accepted,
             output_chars=output_chars,
+            representative_selection_ms=representative_selection_ms,
+            early_stop_reason=early_stop_reason,
+            ocr_call_details=ocr_call_details,
         )
 
     def _ocr_frame(self, frame: Frame | None) -> tuple[str, float]:

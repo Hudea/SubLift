@@ -40,6 +40,10 @@ _QUALITY_CER_MACRO = 0.066
 _QUALITY_NOISE_MAX = 2
 _QUALITY_EMPTY_MAX = 1
 
+# feat-043d：OCR 内部对账质量门
+_OCR_ACCOUNTING_MIN_COVERAGE_PCT = 80.0
+_OCR_COMPONENTS_NON_ZERO_MIN = 2  # Vision 至少 input_prepare 和 vision_perform > 0
+
 # 子进程结果读取：基础超时 + 按视频时长放大
 _WORKER_BASE_TIMEOUT_S = 120.0
 _WORKER_TIMEOUT_PER_VIDEO_S = 10.0
@@ -433,6 +437,9 @@ def _run_once(
         if recorder is not None:
             recorder.sample_resources()
             perf_payload = recorder.to_payload()
+            # feat-043d：OCR 内部对账验证（仅 Vision 引擎且模式非 off）
+            if config.engine == "vision":
+                _validate_ocr_breakdown(perf_payload, relaxed=(mode is PerformanceMode.OFF))
 
         result = RunResult(
             config=config,
@@ -494,6 +501,94 @@ def align_existing_srt(
         video_duration_seconds=dur,
         exported_srt_path=detected_path,
     )
+
+
+def _validate_ocr_breakdown(
+    perf_payload: dict[str, Any],
+    *,
+    relaxed: bool = False,
+) -> None:
+    """feat-043d：验证 OCR 内部归因对账合理性。
+
+    硬门（非 relaxed）：
+    - ``ocr_breakdown.call_count == stages.ocr.count == throughput.ocr_calls``
+    - 内部 parent 与外层 ``stages.ocr`` wall 对账（允许少量 Python 边界开销）
+    - 内部 components 覆盖度 ≥ 80%
+    - Vision 引擎应至少有两个内部阶段非零
+    - 内部 components/parent delta ≤ max(0.1ms, parent*1%)
+    """
+    bd = perf_payload.get("ocr_breakdown")
+    if bd is None:
+        return  # 无 OCR 调用或非 summary/trace 模式，跳过验证
+
+    # --- 调用数三方对账（设计硬门）---
+    call_count = int(bd.get("call_count") or 0)
+    stages = perf_payload.get("stages") or {}
+    stage_ocr = stages.get("ocr") or {}
+    stage_count = int(stage_ocr.get("count") or 0)
+    throughput = perf_payload.get("throughput") or {}
+    thr_calls = int(throughput.get("ocr_calls") or 0)
+    if not relaxed and not (call_count == stage_count == thr_calls):
+        raise RuntimeError(
+            "OCR 调用数对账失败："
+            f"ocr_breakdown.call_count={call_count} "
+            f"stages.ocr.count={stage_count} "
+            f"throughput.ocr_calls={thr_calls} "
+            "（三者必须相等）"
+        )
+
+    accounting = bd.get("accounting")
+    if accounting is None:
+        if not relaxed:
+            raise RuntimeError("ocr_breakdown 缺少 accounting 块，无法对账")
+        return
+
+    coverage = accounting.get("coverage_pct")
+    if (
+        coverage is not None
+        and not relaxed
+        and coverage < _OCR_ACCOUNTING_MIN_COVERAGE_PCT
+    ):
+        raise RuntimeError(
+            f"OCR 内部对账覆盖度不足：{coverage:.1f}% < "
+            f"{_OCR_ACCOUNTING_MIN_COVERAGE_PCT:.0f}%"
+        )
+
+    # Vision 引擎应有非零内部阶段
+    if bd.get("engine_detail") == "vision":
+        non_zero_stages = 0
+        for stage_key in ("input_prepare", "request_setup", "vision_perform",
+                          "observation_mapping", "residual"):
+            stage_data = bd.get(stage_key)
+            if stage_data and stage_data.get("total_ms", 0) > 0:
+                non_zero_stages += 1
+        if non_zero_stages < _OCR_COMPONENTS_NON_ZERO_MIN and not relaxed:
+            raise RuntimeError(
+                f"Vision OCR 内部阶段过少（{non_zero_stages} < "
+                f"{_OCR_COMPONENTS_NON_ZERO_MIN}），可能未正确接线内部计时"
+            )
+
+    # 内部 components vs parent delta
+    parent = float(accounting.get("parent_total_ms") or 0.0)
+    delta = float(accounting.get("delta_ms") or 0.0)
+    max_acceptable_delta = max(0.1, parent * 0.01) + 0.01
+    if delta > max_acceptable_delta and not relaxed:
+        raise RuntimeError(
+            f"OCR 对账 delta 过大：{delta:.3f}ms > {max_acceptable_delta:.3f}ms"
+        )
+
+    # 内部 parent 与外层 stages.ocr wall 对账
+    # 外层 span 包含 recognize 边界的少量 Python 开销，故比内部 parent 略宽
+    outer_ms = float(stage_ocr.get("total_ms") or 0.0)
+    if call_count > 0 and not relaxed:
+        cross_delta = abs(outer_ms - parent)
+        max_cross = max(1.0, max(outer_ms, parent) * 0.05) + 0.01
+        if cross_delta > max_cross:
+            raise RuntimeError(
+                "OCR parent 与 stages.ocr wall 对账失败："
+                f"parent_total_ms={parent:.3f} stages.ocr.total_ms={outer_ms:.3f} "
+                f"delta={cross_delta:.3f}ms > {max_cross:.3f}ms"
+            )
 
 
 def _build_ocr_engine(engine: str) -> VisionOcrEngine | MockOcrEngine:

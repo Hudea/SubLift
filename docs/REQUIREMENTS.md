@@ -131,8 +131,9 @@
 - [x] 两轮真实 Vision A/B 均未满足 end-to-end wall median ≤串行 95%（0.9559、1.0587），代码未合入 main
 - [x] 保留串行 path mode；完整负向证据见 `docs/phases/phase4.1.json`
 
-### Phase 4.2 — OCR 内部性能归因（已立项，未开始）
+### Phase 4.2 — OCR 内部性能归因（进行中）
 
-- [ ] 记录 Vision 输入准备、request 设置、perform、observation 映射和 residual，且不与 `ocr` coverage leaf 双计
-- [ ] `trace` 记录有界的代表帧/调用/早停决策，不落盘文本、图像、box 或绝对路径
-- [ ] 在 canonical Vision off/summary/trace 中通过质量、对账与低扰动硬门，并由数据选择下一 feature
+- [x] 记录 Vision 输入准备、request 设置、perform、observation 映射和 residual，且不与 `ocr` coverage leaf 双计
+- [x] `trace` 记录有界的代表帧/调用/早停决策，不落盘文本、图像、box 或绝对路径
+- [x] 自动对账硬门：`call_count == stages.ocr.count == throughput.ocr_calls`；parent 与外层 ocr wall 交叉校验；off 路径无分阶段计时
+- [ ] 在 canonical Vision off/summary/trace 中通过质量、对账与低扰动硬门，并由数据选择下一 feature（正式报告尚未落地）

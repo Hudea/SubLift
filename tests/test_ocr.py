@@ -224,6 +224,54 @@ class TestVisionOcrEngineUnit:
         engine = VisionOcrEngine()
         assert isinstance(engine, OcrEngine)
 
+    def test_no_callback_uses_untimed_path(self) -> None:
+        """无 timing_callback 时走 _recognize_untimed（产品快速路径）。"""
+        engine = VisionOcrEngine()
+        assert engine._timing_callback is None
+        img = Image.new("RGB", (64, 32), "white")
+        # 无 callback：recognize 与 untimed 返回一致
+        result = engine.recognize(img)
+        untimed = engine._recognize_untimed(img)
+        assert result.text == untimed.text == ""
+        assert result.confidence == untimed.confidence == 0.0
+
+    def test_callback_exception_does_not_break_ocr(self) -> None:
+        """callback 抛异常不得改变 OCR 返回语义。"""
+        def _boom(_detail: object) -> None:
+            raise RuntimeError("observer boom")
+
+        engine = VisionOcrEngine(timing_callback=_boom)
+        img = Image.new("RGB", (64, 32), "white")
+        result = engine.recognize(img)
+        # 空白图仍返回空结果，不被 observer 异常污染
+        assert result.text == ""
+        assert result.confidence == 0.0
+
+    def test_callback_receives_detail_on_success_or_empty(self) -> None:
+        """有 callback 时每次调用产出完整五阶段明细。"""
+        from sublift.diagnostics.performance import OcrCallDetail
+
+        seen: list[OcrCallDetail] = []
+
+        def _collect(detail: OcrCallDetail) -> None:
+            seen.append(detail)
+
+        engine = VisionOcrEngine(timing_callback=_collect)
+        img = Image.new("RGB", (64, 32), "white")
+        engine.recognize(img)
+        assert len(seen) == 1
+        detail = seen[0]
+        assert detail.input_width == 64
+        assert detail.input_height == 32
+        assert detail.outcome in {"success", "empty", "error"}
+        # 五阶段字段存在且非负
+        assert detail.input_prepare_ms >= 0.0
+        assert detail.request_setup_ms >= 0.0
+        assert detail.vision_perform_ms >= 0.0
+        assert detail.observation_mapping_ms >= 0.0
+        assert detail.residual_ms >= 0.0
+        assert detail.total_ms >= 0.0
+
 
 class TestVisionDegradation:
     """Vision 不可用时的降级测试，monkeypatch 模拟。"""

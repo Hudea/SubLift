@@ -292,7 +292,7 @@
           "id": "phase4.2.ocr-attribution",
           "name": "Vision OCR 内部归因与决策基线",
           "description": "将现有粗粒度 ocr wall 扩展为不双计的内部树：PIL/CGImage 输入准备、Vision request 设置、performRequests、observation 映射、残余/自动释放；trace 同时记录段内代表帧、早停原因、输入尺寸和行选择/共识成本。输出 canonical Vision 基线报告与唯一下一项优化建议。覆盖 feat-043。",
-          "status": "not-started",
+          "status": "in-progress",
           "covers": [
             "feat-043"
           ]

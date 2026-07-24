@@ -12,8 +12,11 @@ from sublift.diagnostics.fn_analysis import (
     format_fn_report,
 )
 from sublift.diagnostics.performance import (
+    OcrBreakdown,
+    OcrCallDetail,
     PerformanceMode,
     PerformanceRecorder,
+    SegmentTraceRecord,
     aggregate_run_payloads,
     collect_environment,
     parse_performance_mode,
@@ -34,8 +37,11 @@ from sublift.diagnostics.trace import (
 __all__ = [
     "DetectedSegment",
     "FnClassification",
+    "OcrBreakdown",
+    "OcrCallDetail",
     "PerformanceMode",
     "PerformanceRecorder",
+    "SegmentTraceRecord",
     "ShortSubtitleMetrics",
     "TraceRecord",
     "TraceRecorder",
