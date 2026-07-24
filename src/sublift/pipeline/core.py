@@ -342,7 +342,7 @@ class Pipeline:
             )
             return entry
 
-        # feat-043c：计时代表帧选取
+        # feat-043c：计时完整段内 OCR 决策（trace 字段沿用历史名 representative_selection_ms）
         t_rep_sel_start = self._perf.now_ns() if self._perf is not None else 0
         seg_stats: dict[str, Any] = {
             "ocr_calls": 0,

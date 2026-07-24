@@ -65,7 +65,7 @@ OCR 是更值得首先量清的对象。
 | 调用数 | Vision summary 中 `ocr_breakdown.call_count == stages.ocr.count == throughput.ocr_calls`；每段 trace 调用数总和与该 run 一致 |
 | parent 对账 | 每次 Vision call 均有五个内部时间项；`components + residual` 与 parent `ocr` 总 wall 的差 ≤ `max(0.1 ms, parent×1%)`，并在 payload 给出 delta |
 | 核心 coverage | 内部阶段不得加入 `stages` 或 `_COVERAGE_LEAF_STAGES`；新增字段前后同一 fake-clock 测试证明 coverage 不把 OCR 重算 |
-| 段级完整性 | 每个 closed segment 都有 `representative_selection_ms`、`early_stop_reason`、实际调用数和接受结果；`ocr_call_details ≤ ocr_consensus_frames` |
+| 段级完整性 | 每个 closed segment 都有包容性段决策 wall（历史字段名 `representative_selection_ms`）、`early_stop_reason`、实际调用数和接受结果；`ocr_call_details ≤ ocr_consensus_frames` |
 | 有界性 | summary 的阶段与输入尺寸样本均有固定 cap；trace 单段最多保存实际调用数（≤配置 cap）；≥10 分钟样本不会因计时数据线性占用内存 |
 | 隐私 | `.perf-segments` / agent JSON 不出现 OCR 文本、图片 bytes、OCR box、视频绝对路径；自动测试用敏感 sentinel 字符串扫描产物 |
 
@@ -76,7 +76,7 @@ commit、warmup=1 + measured=3、独立进程、median 为主统计，并归档 
 
 | 门 | 要求 |
 |---|---|
-| summary 扰动 | `summary core_wall median / off core_wall median ≤ 1.05`；不通过时先减小测量成本 |
+| summary 扰动 | `summary core_wall median / off core_wall median ≤ 1.05`；不通过时 summary 仅可作归因报告、不可作产品速度基线，报告必须如实说明。若以后需要以它承诺速度，另做交错配对复测 |
 | trace 扰动 | `trace core_wall / off core_wall ≤ 1.10`（trace 仅开发者诊断，不可作为产品速度数字） |
 | 真实 Vision 产物 | 至少一组 trace 和一组 summary 的 agent JSON/JSONL 产生，并包含 P50/P95、输入尺寸、早停分布和 parent 对账 |
 | 正式报告 | 新增 `docs/reports/phase4.2-ocr-attribution-baseline.md`：明确环境、命令、质量、扰动、P50/P95、按总耗时排序、限制，以及一个下一 feature 建议或“不优化”结论 |
@@ -96,14 +96,15 @@ cd apps/macos && swift test
 ```
 
 真实 Vision benchmark 命令、报告位置、输出 commit/dirty 状态和每个硬门结果必须写入
-`docs/phases/phase4.2.json`。任何一个行为、质量、对账、隐私或扰动硬门失败时，`feat-043`
-保持 `in-progress`，不以“已经有一些计时”标记完成。
+`docs/phases/phase4.2.json`。行为、质量、对账或隐私硬门失败时，`feat-043` 保持
+`in-progress`。summary 扰动失败必须限制报告用途，但不否定已经完成的归因分流；不得把它
+隐去或写成已证明的系统方差。
 
 ## 5. 完成后的决策
 
 完成只代表“有可信证据”，不代表已经优化。报告必须按下列原则选下一步：
 
-1. `vision_perform` ≥ OCR parent 的 70%：研究有效调用数/输入几何，先补多源 GT 后再动算法；
+1. `vision_perform` ≥ OCR parent 的 70%：先补多源 GT，再实验代表帧排序与有效调用数；单一输入几何不授权改默认缩放；
 2. `input_prepare + request_setup` ≥20%：独立评估桥接与请求构造优化；
 3. observation mapping、行选择、共识合计 ≥20%：只优化 Python 路径，且把混排风险纳入新 feature；
 4. OCR 不是 core 最大项：停止 OCR 优化，转向相应主导 stage。

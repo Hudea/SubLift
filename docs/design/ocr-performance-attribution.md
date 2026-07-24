@@ -25,8 +25,8 @@ core wall / coverage leaf
    ├─ observation_mapping: observations → OcrLine / OcrResult
    └─ residual: Python 调用边界、autorelease pool 收尾和未单列成本
 
-segment total（trace/段级，不参与 core coverage）
-├─ representative_selection
+segment decision wall（trace/段级，不参与 core coverage）
+├─ representative_selection（历史字段名；实际为下列完整决策的包容性 wall）
 ├─ n × ocr call（最多 Config.ocr_consensus_frames，当前默认 4）
 ├─ line_select / cleanup / consensus
 └─ acceptance decision + early_stop_reason
@@ -85,7 +85,9 @@ summary 不写原始文本、OCR box、图像、视频绝对路径或每次调�
 }
 ```
 
-允许的 `early_stop_reason` 为 `single_high_confidence`、`two_frame_consensus`、
+`representative_selection_ms` 是历史保留字段名，当前语义为**完整段内 OCR 决策的包容性 wall**，
+而非纯 `_collect_ocr_frames()` 耗时。不得用它比较代表帧收集算法；要研究该成本时，另立窄计时
+字段和基线。允许的 `early_stop_reason` 为 `single_high_confidence`、`two_frame_consensus`、
 `representative_frames_exhausted`、`no_valid_sample`、`no_region`、`legacy_path`。没有提前
 结束时必须显式写 `representative_frames_exhausted`。`ocr_call_details` 数量不超过该段的
 实际调用数，且不超过 `ocr_consensus_frames`；禁止写文本、候选内容、图像 bytes、box 或绝对路径。

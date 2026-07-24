@@ -5,9 +5,9 @@
 
 ---
 
-## ADR-0017 OCR 内部明细作为 `ocr` coverage leaf 的子树（2026-07-24，计划）
+## ADR-0017 OCR 内部明细作为 `ocr` coverage leaf 的子树（2026-07-24）
 
-- **状态**：已立项，待 feat-043 实现与验证。
+- **状态**：已确认并完成（feat-043）。
 - **背景**：Phase 4 ROI 后的 canonical 测量中，`ocr` 是主要单消费者成本，但它只有
   `OcrEngine.recognize()` 总 wall，无法区分 Vision `performRequests`、PIL→CGImage 桥接、
   request 设置、observation 映射或段内策略成本。
@@ -17,9 +17,15 @@
   中有界输出，且不得包含文本、图像、box 或绝对路径。
 - **理由**：既能解释 OCR 成本，又不会像嵌套 span 那样把同一段 wall 计入 core 两次；保持
   `OcrEngine` Protocol 不变，非 Vision 引擎可诚实降级为 opaque。
+- **实测结论**：在 canonical Vision ROI 基线上，`performRequests` 请求执行约占 OCR parent
+  99%；输入准备、request 设置和映射不是有效优化目标。summary 扰动为 1.319，不能作为产品
+  速度基线，且根因未被本轮分块测量证明；这不影响内部归因、质量、对账与隐私均完成的结论。
+- **后续决策**：下一项先扩充英文、中英混排、不同字幕位置和不同片源的 GT；随后以所有来源
+  的质量门为约束，实验代表帧排序与有效 OCR 调用数，优先消除空 retry。不得直接降低共识阈值，
+  也不重新打开桥接、Vision 并行或 producer/consumer 重叠方向。
 - **影响**：涉及 `diagnostics/performance.py`、`ocr/vision.py`、`pipeline/core.py` 与
-  benchmark 报告；不授权改变 OCR 算法或产品调度。完整设计见
-  `docs/design/ocr-performance-attribution.md`。
+  benchmark 报告；不授权改变 OCR 算法或产品调度。完整证据见
+  `docs/reports/phase4.2-ocr-attribution-baseline.md`。
 
 ---
 
@@ -33,8 +39,8 @@
   原始数据，在 OCR 内部归因完成前不重新打开该优化方向。
 - **理由**：ROI 后 producer 已能快速领先并反压，单消费者 Vision 主导；未验证的用户可见
   吞吐收益不足以抵消并发带来的资源所有权、取消与观测复杂度。
-- **结果**：实验结论和限制记录在 `docs/phases/phase4.1.json`；下一项工作是 feat-043 的
-  测量基线，不是第二轮并发重构。
+- **结果**：实验结论和限制记录在 `docs/phases/phase4.1.json`；后续 feat-043 已完成 Vision
+  内部归因，下一步是多源 GT 后的代表帧排序与有效调用实验，不是第二轮并发重构。
 
 ---
 

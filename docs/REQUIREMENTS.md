@@ -90,7 +90,7 @@
 | GT 主要来自单一 Zootopia 片段 | 指标可能过拟合，不能代表泛化 | 后续扩充英文、中英混排、不同位置和不同片源 GT |
 | 显式 CJK 边界清理误删无空格英文 | `NPD动物警局`、`苹果的iPhone` 等合法混排受损 | 默认使用 `auto`；风险记录于 HURDLES，待混排 GT 驱动机制修复 |
 | 短字幕与 merged residual | 少量 timing FN 或合并错误 | 保留 failure cluster，后续按固定 GT/新增 GT 回归 |
-| path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 先归因 OCR consumer。 |
+| path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 已确认 Vision 请求执行主导，下一步先补多源 GT 后研究有效 OCR 调用。 |
 | Apple Vision 在非 macOS/CI 不可用 | 集成覆盖受限 | Mock 闭环测试；平台 API 限定在适配层 |
 
 ## 8. 阶段验收状态
@@ -131,9 +131,10 @@
 - [x] 两轮真实 Vision A/B 均未满足 end-to-end wall median ≤串行 95%（0.9559、1.0587），代码未合入 main
 - [x] 保留串行 path mode；完整负向证据见 `docs/phases/phase4.1.json`
 
-### Phase 4.2 — OCR 内部性能归因（进行中）
+### Phase 4.2 — OCR 内部性能归因（已完成）
 
 - [x] 记录 Vision 输入准备、request 设置、perform、observation 映射和 residual，且不与 `ocr` coverage leaf 双计
 - [x] `trace` 记录有界的代表帧/调用/早停决策，不落盘文本、图像、box 或绝对路径
-- [x] 自动对账硬门：`call_count == stages.ocr.count == throughput.ocr_calls`；parent 与外层 ocr wall 交叉校验；off 路径无分阶段计时
-- [ ] 在 canonical Vision off/summary/trace 中通过质量、对账与低扰动硬门，并由数据选择下一 feature（正式报告尚未落地）
+- [x] 自动对账硬门：summary/trace 内 `call_count == stages.ocr.count == throughput.ocr_calls`；parent 与外层 ocr wall 交叉校验；off 路径无分阶段计时
+- [x] 正式报告 `docs/reports/phase4.2-ocr-attribution-baseline.md`：hash/质量/对账通过；`vision_perform≈99%`；下一方向为多源 GT 后的代表帧排序与有效调用实验
+- [x] feat-043 已作为归因与优化分流任务收口；summary 扰动 1.319 未过，仅限制它不能作为产品速度基线。若未来需要此用途，另做交错 off/summary 配对复测

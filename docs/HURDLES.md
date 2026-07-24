@@ -34,8 +34,8 @@
 - **根本原因**：生产者—消费者只能重叠 extractor 与 consumer 的可并行部分。ROI 后 extractor
   足够快，Vision OCR、signature 与 changepoint 主导 end-to-end；线程/队列调度开销和 Vision
   时机抖动吞没了剩余收益。
-- **解决方案**：回退到串行 path mode，不继续为阈值微调并发。新建 feat-043，先测量 Vision
-  OCR 内部、代表帧与行级后处理的成本，再以数据决定下一项独立优化。
+- **解决方案**：回退到串行 path mode，不继续为阈值微调并发。feat-043 已确认 Vision 请求
+  执行主导；下一步先扩充多源 GT，再以质量门评估代表帧排序与有效 OCR 调用，而非重开并发优化。
 - **相关文件**：`docs/phases/phase4.1.json`、`debug/feat042/ab/`、`debug/feat042/ab_clean/`、
   `docs/plans/phase4.2-ocr-performance-attribution.md`。
 

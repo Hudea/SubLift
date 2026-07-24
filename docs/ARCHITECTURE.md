@@ -74,7 +74,7 @@ video
 - [Phase 4 ROI 性能优化报告](reports/phase4-roi-performance.md) — 正式 clean-commit A/B 结果、性能结论与适用边界
 - [版本化 benchmark 基线](../benchmark/reports/README.md) — 固定 GT 质量锚与当前 ROI 性能归因快照
 - [Path-mode 有界重叠设计（Phase 4.1 已归档）](design/path-mode-overlap.md) — producer / consumer 所有权、取消、进度与并发性能口径；真实 Vision 未达吞吐门，未采纳
-- [OCR 内部性能归因（Phase 4.2 计划）](design/ocr-performance-attribution.md) — Vision 调用内部树、段级 trace、非双计口径与优化决策边界
+- [OCR 内部性能归因（Phase 4.2）](reports/phase4.2-ocr-attribution-baseline.md) — 已完成的 Vision 调用内部树、段级 trace 与下一步优化分流
 
 ## 5. 核心数据模型
 
@@ -142,7 +142,7 @@ video
 - **GT 多样性不足**：主要依赖 Zootopia 中文字幕片段；Phase 4 的 ≥10 分钟非 Zootopia 视频只完成了 GUI 体验验收，不是可量化质量 GT。英文、中英混排、不同字幕位置和不同片源仍未形成固定质量集。
 - **混排边界风险**：显式 CJK 画像的边界 cleanup 仍可能误删 `NPD动物警局`、`苹果的iPhone` 一类无空格英文，默认 `auto` 可规避部分风险。
 - **打轴 residual**：极短字幕和 merged cluster（如 #15）仍可能漏检或合并。
-- **path mode 保持串行调度**：ROI 后的 ffmpeg 读取与 Pipeline/OCR 仍在同一 worker 中交替执行。Phase 4.1 重叠实验已验证机制正确但未稳定越过吞吐门，未采纳；下一步先做 OCR 内部归因。
+- **path mode 保持串行调度**：ROI 后的 ffmpeg 读取与 Pipeline/OCR 仍在同一 worker 中交替执行。Phase 4.1 重叠实验已验证机制正确但未稳定越过吞吐门，未采纳；Phase 4.2 已确认 Vision 请求执行主导，下一步先补多源 GT 后研究有效 OCR 调用。
 - **ASS/VTT 仅占位**：当前产品导出 SRT。
 
 ## 10. Phase 2 macOS GUI 架构
@@ -270,21 +270,20 @@ consumer lane；这些 lane 可以重叠，禁止相加为 coverage。
 完整不变量、取消状态机与口径见 [Path-mode 有界重叠设计](design/path-mode-overlap.md)，实验
 数据与归档决定见 [phase4.1.json](phases/phase4.1.json)。
 
-## 14. Phase 4.2 OCR 内部性能归因（计划）
+## 14. Phase 4.2 OCR 内部性能归因（已完成）
 
-ROI 后的 canonical 实测显示，Vision OCR 是单消费者上的主要成本；但现有 `ocr` 只提供
-整个 `OcrEngine.recognize()` 的 wall，无法判断瓶颈在 PIL→CGImage 桥接、Vision request
-设置、`performRequests`、observation 映射，还是段内代表帧/行级共识策略。Phase 4.2 不改变
-调度、OCR 算法或 GUI，而是将 OCR 记为一个**核心 coverage 叶子**，并在其下另存不参与
-coverage 相加的内部明细树。这样 `core_wall` 仍只计一次 OCR，内部各分项加 residual 后与
-OCR parent 对账。
+Phase 4.2 已证明：在 canonical ROI 负载上，Vision `performRequests` 请求执行持续占 OCR
+parent 的约 99%，而输入准备、request 设置与 observation 映射合计约 1%。它不改变调度、OCR
+算法或 GUI；而是将 OCR 保持为一个**核心 coverage 叶子**，并在其下另存不参与 coverage 相加
+的内部明细树。这样 `core_wall` 仍只计一次 OCR，内部各分项加 residual 后与 OCR parent 对账。
 
 `summary` 只保留有界聚合（调用数、total/mean/max/P50/P95、输入尺寸直方图与早停原因
 计数）；`trace` 才逐段保存最多 `ocr_consensus_frames` 条匿名调用记录，不写字幕文本、图像
 或视频路径。Vision 为可选计时能力，`OcrEngine.recognize(image)` Protocol 不变，非 Vision
-引擎以 opaque OCR 调用降级。完整契约与字段见
-[OCR 内部性能归因设计](design/ocr-performance-attribution.md)，任务与硬门见
-[Phase 4.2 计划](plans/phase4.2-ocr-performance-attribution.md)。
+引擎以 opaque OCR 调用降级。summary 的本轮扰动未通过，故它不能作为产品速度基线；这不改变
+归因结论。完整限制、证据和下一方向见
+[Phase 4.2 正式报告](reports/phase4.2-ocr-attribution-baseline.md)。下一优化先补多源 GT，
+再在质量门内实验代表帧排序与有效 OCR 调用数。
 
 ## 15. 架构决策
 
@@ -306,4 +305,4 @@ OCR parent 对账。
 - **ADR-0014**：固定字幕区域自动在 ffmpeg 输出前裁剪，Pipeline 只消费 frame-local 坐标（Phase 4 计划）
 - **ADR-0015**：性能 coverage 以排他 `pipeline_overhead` 补齐批量编排时间，避免与 leaf stage 双计
 - **ADR-0016**：未通过真实 A/B 吞吐保留门的 path-mode overlap 不进入 main；保留数据作为负向证据
-- **ADR-0017（计划）**：OCR 内部明细是 `ocr` coverage leaf 的子树，不参与 core coverage 相加；先量测后优化
+- **ADR-0017**：OCR 内部明细是 `ocr` coverage leaf 的子树，不参与 core coverage 相加；归因完成后先补多源 GT，再实验代表帧排序与有效调用数
