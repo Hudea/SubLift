@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase4.1-post-roi-throughput",
-  "description": "Phase 4.1 以已完成的 ROI 数据通路为基础，把 GUI 默认 path mode 中串行的 ffmpeg 读取与 Pipeline/OCR 消费改为有界生产者—消费者重叠；保持帧序、字幕结果和固定 GT 质量不变，以真实吞吐、取消/重启与有界内存共同验收。",
+  "description": "Phase 4.1 曾以已完成的 ROI 数据通路为基础，实验性验证 GUI 默认 path mode 的有界生产者—消费者重叠。结果、质量、队列与取消均正确，但两轮真实 Vision A/B 未达到吞吐最低门；实验代码未保留在 main，产品继续使用串行 path mode。本 Phase 归档为负向性能证据，不再继续调优。",
   "plan_file": "docs/plans/phase4.1-post-roi-throughput.md",
   "features": [
     {
@@ -34,8 +34,8 @@
           "description": "补齐确定性并发、取消/重启、ROI/full fallback、真实 ffmpeg path-mode 和性能报告测试；以同机 clean commit 的 warmup=1 + measured=3 比较串行基线与重叠实现。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "archived",
+      "evidence": "2026-07-23 实验候选冻结于 c39cc3ca761bd97bc556f31d00859b9220835720；未合入 main。真实 Vision、canonical Zootopia 1080p ROI、5fps、cjk、每组 warmup=1 + measured=3：两次独立 A/B 的 serial/overlap detection_hash 均为 b2d35c1e25f156e1，固定 GT 质量全过、queue_high_watermark≤8；但 end_to_end wall median 比分别为 0.9559（8121/8496ms，未达≤0.95）和 1.0587（9050/8549ms，回退），第二次首条比 1.077 亦未达≤1.05。取消早期 98ms、重启约2.03s；中途取消点接近任务结束，不能单独证明 Vision in-flight 后零消息。结论：producer/consumer 机制正确但 ROI 后单消费者 Vision 主导，未验证用户可见吞吐收益；回退到 a59e555 的串行路径。原始忽略产物：debug/feat042/ab/、ab_clean/、cancel/、converge/。"
     }
   ]
 }

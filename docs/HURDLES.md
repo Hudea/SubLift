@@ -18,6 +18,29 @@
 
 ---
 
+### ROI 后 producer/consumer 重叠未产生稳定的用户可见吞吐收益
+- **日期**：2026-07-23
+- **状态**：已归档，未采纳（feat-042）。
+- **现象**：在 canonical Zootopia 1080p ROI、5fps、Vision、cjk 上，有界 Queue(maxsize=8)
+  的 overlap 实现保持字幕 hash、固定 GT 质量、队列上限和取消/重启正确，却未达到预设的
+  `end_to_end_wall ≤ serial × 95%`。两轮 warmup=1 + measured=3 的 median 比为 0.9559 和
+  1.0587，后一轮反而更慢。
+- **排查路径**：
+  1. 确认 serial 与 overlap 的 detection hash 均为 `b2d35c1e25f156e1`，排除质量换速度。
+  2. Queue high-watermark 达 8、backpressure 持续数秒，证明 producer 可领先但多数时间被
+     单消费者反压。
+  3. Phase 4 ROI 已将 frame materialize 显著压低，现有归因显示 OCR 是单消费者最大项；
+     producer wall 包含满队列等待，不能当作可再隐藏的独立计算成本。
+- **根本原因**：生产者—消费者只能重叠 extractor 与 consumer 的可并行部分。ROI 后 extractor
+  足够快，Vision OCR、signature 与 changepoint 主导 end-to-end；线程/队列调度开销和 Vision
+  时机抖动吞没了剩余收益。
+- **解决方案**：回退到串行 path mode，不继续为阈值微调并发。新建 feat-043，先测量 Vision
+  OCR 内部、代表帧与行级后处理的成本，再以数据决定下一项独立优化。
+- **相关文件**：`docs/phases/phase4.1.json`、`debug/feat042/ab/`、`debug/feat042/ab_clean/`、
+  `docs/plans/phase4.2-ocr-performance-attribution.md`。
+
+---
+
 ### 显式 CJK cleanup 可能误删句首/句尾无空格英文
 - **日期**：2026-07-12
 - **状态**：待真实 GUI / 混排 GT 验证（当前不定级为 P1）
@@ -217,7 +240,7 @@
   3. **`hysteresis_frames=1`** 补短字幕。
   4. 验收：`baseline-no-filter` F1 91.2% → **95.2%**（R 83.9%→92.0%，P 100%→98.8%）。
 - **仍开放**：merged residual（新闻簇 / 哈啰 等）、单字「砰」。
-- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。报告见 `debug/benchmark-reports/feat034_p1_fix2/`。
+- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。版本化报告见 `benchmark/reports/quality-baseline.md`；原始历史产物见 `debug/benchmark-reports/feat034_p1_fix2/`。
 - **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark-reports/feat033_final/`
 
 ---

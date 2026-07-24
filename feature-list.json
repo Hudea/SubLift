@@ -268,16 +268,33 @@
     {
       "id": "phase4.1",
       "name": "Phase 4.1 - ROI 后可重叠流式吞吐",
-      "description": "在已完成的 ROI 数据通路之上，为 GUI 默认 Python path mode 设计有界 extractor producer 与串行 Pipeline/OCR consumer 的重叠执行；以结果等价、固定 GT、吞吐、取消/重启、有界内存和并发计时口径共同验收。计划见 docs/plans/phase4.1-post-roi-throughput.md，细粒度任务见 docs/phases/phase4.1.json。",
+      "description": "实验性验证 ROI 后 GUI path mode 的有界 extractor producer 与单消费者 Pipeline/OCR 重叠。真实 Vision 下机制、质量和取消正确，但两轮 A/B 均未通过 end-to-end wall≤串行95%的保留门，因此不作为默认架构保留；main 维持串行 path mode。负向证据见 docs/phases/phase4.1.json；原计划保留作历史上下文。",
       "detail_file": "docs/phases/phase4.1.json",
       "features": [
         {
           "id": "phase4.1.path-mode-overlap",
           "name": "有界 path-mode 抽帧—Pipeline 重叠",
           "description": "引入 job-local session、Queue(maxsize=8)、consumer 驱动进度、明确 EOF/error/cancel 协议和并发安全性能 lanes；保持 Pipeline/OCR 单消费者与结果顺序，不并行 OCR、不增加 GUI 开关。覆盖 feat-042。",
-          "status": "not-started",
+          "status": "archived",
           "covers": [
             "feat-042"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "phase4.2",
+      "name": "Phase 4.2 - OCR 内部性能归因",
+      "description": "在保持串行 path mode 与既有 OCR/质量算法不变的前提下，补齐 Vision OCR 调用内部、段内代表帧策略与行级后处理的可解释计时。先形成可信基线和下一项优化的决策证据，不预设或混入速度优化。计划见 docs/plans/phase4.2-ocr-performance-attribution.md，细粒度任务见 docs/phases/phase4.2.json。",
+      "detail_file": "docs/phases/phase4.2.json",
+      "features": [
+        {
+          "id": "phase4.2.ocr-attribution",
+          "name": "Vision OCR 内部归因与决策基线",
+          "description": "将现有粗粒度 ocr wall 扩展为不双计的内部树：PIL/CGImage 输入准备、Vision request 设置、performRequests、observation 映射、残余/自动释放；trace 同时记录段内代表帧、早停原因、输入尺寸和行选择/共识成本。输出 canonical Vision 基线报告与唯一下一项优化建议。覆盖 feat-043。",
+          "status": "not-started",
+          "covers": [
+            "feat-043"
           ]
         }
       ]

@@ -1,0 +1,37 @@
+{
+  "project": "SubLift",
+  "phase": "phase4.2-ocr-performance-attribution",
+  "description": "Phase 4.2 在保持串行 path mode、ROI、打轴和 OCR 行为不变的前提下，为 Vision OCR 建立内部可解释计时、逐段决策 trace 与 canonical 基线。其交付是可信的下一步优化决策，不是预设的速度优化。",
+  "plan_file": "docs/plans/phase4.2-ocr-performance-attribution.md",
+  "features": [
+    {
+      "id": "feat-043",
+      "name": "Vision OCR 内部归因与决策基线",
+      "description": "将既有 `ocr` coverage leaf 细分为不参与 coverage 相加的内部树：输入准备/CGImage、request 设置、Vision perform、observation 映射与 residual；trace 同时记录代表帧、匿名调用尺寸、早停原因、行选择/共识成本及接受结果。以 canonical Vision 的 low-overhead summary/trace 和固定 GT 建立报告，再由数据选择唯一下一项优化方向。",
+      "module": "src/sublift/diagnostics/performance.py; src/sublift/ocr/vision.py; src/sublift/pipeline/core.py; benchmark/; tests/; docs/",
+      "dependencies": [
+        "feat-041"
+      ],
+      "subtasks": [
+        {
+          "name": "有界归因模型与对账",
+          "description": "定义 OCR parent/child/residual、summary 和 trace schema；保证内部项不进入 core coverage，且 samples、geometry buckets 和逐段调用明细均有硬上限。"
+        },
+        {
+          "name": "Vision 可选 observer",
+          "description": "在不改 OcrEngine Protocol 的前提下，为 Vision 接入输入准备、request 设置、perform 与 observation mapping 计时；空/失败调用也可对账，非 Vision 以 opaque fallback 降级。"
+        },
+        {
+          "name": "段内决策 trace",
+          "description": "记录代表帧收集、实际 OCR 调用、输入尺寸、早停原因、行选择/cleanup/consensus 成本和接受结果；禁止落盘文字、图像、OCR box 或绝对路径。"
+        },
+        {
+          "name": "真实基线与优化分流报告",
+          "description": "按 canonical clean-commit 协议运行 off/summary/trace；验证扰动、hash、GT 质量和对账，并在正式报告中给出唯一下一 feature 建议或不优化结论。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

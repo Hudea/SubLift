@@ -59,7 +59,7 @@
 |---|---|---|
 | **性能** | 1080p、5fps 处理速度 ≥ 1× 实时 | ✅ 固定 GT 实测 21.0× 实时 |
 | **离线 / 隐私** | 默认不依赖网络，视频与文本不上传 | ✅ ffmpeg + 本地 Vision 全程本机处理 |
-| **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；4K 自动内存审计、Vision 生命周期修复和 ≥10 分钟真实 GUI 验收均已通过。Phase 4.1 将另验有界重叠队列的吞吐与内存边界。 |
+| **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；4K 自动内存审计、Vision 生命周期修复和 ≥10 分钟真实 GUI 验收均已通过。Phase 4.1 有界重叠实验也验证队列边界，但未通过吞吐保留门，产品保持串行。 |
 | **可分发** | 面向终端用户的独立安装包 | ❌ Phase 2 已明确跳过 `.app` 打包与公证 |
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
 | **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ 开发者环境可构建运行 |
@@ -90,7 +90,7 @@
 | GT 主要来自单一 Zootopia 片段 | 指标可能过拟合，不能代表泛化 | 后续扩充英文、中英混排、不同位置和不同片源 GT |
 | 显式 CJK 边界清理误删无空格英文 | `NPD动物警局`、`苹果的iPhone` 等合法混排受损 | 默认使用 `auto`；风险记录于 HURDLES，待混排 GT 驱动机制修复 |
 | 短字幕与 merged residual | 少量 timing FN 或合并错误 | 保留 failure cluster，后续按固定 GT/新增 GT 回归 |
-| path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg，吞吐受可重叠等待限制；并发改造还可能引入取消/重启竞态 | Phase 4.1 计划以 job-local session、Queue(maxsize=8)、三取消点和 clean-commit A/B 验收；当前不把它当作已实现。 |
+| path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 先归因 OCR consumer。 |
 | Apple Vision 在非 macOS/CI 不可用 | 集成覆盖受限 | Mock 闭环测试；平台 API 限定在适配层 |
 
 ## 8. 阶段验收状态
@@ -125,9 +125,14 @@
 - [x] 性能计时归因：`pipeline_overhead` 已补齐；fake-clock、clean-commit Vision A/B、Python/Swift 验证均通过
 - [ ] 英文/中英混排/不同字幕位置的 GT 扩充后置到下一质量泛化阶段
 
-### Phase 4.1 — ROI 后可重叠流式吞吐（已立项，未开始）
+### Phase 4.1 — ROI 后可重叠流式吞吐（已归档，未采纳）
 
-- [ ] GUI 默认 Python path mode 以 `Queue(maxsize=8)` 重叠 ffmpeg producer 与单消费者 Pipeline/OCR；不并行 OCR、不加 GUI 开关
-- [ ] 结果 hash / 固定 GT 质量与串行对照完全等价；同机 clean-commit A/B 的 end-to-end wall median ≤串行 95%（目标 ≤90%）
-- [ ] 进度按已消费帧，取消覆盖 ffmpeg read / 满队列 / OCR，done ≤1 秒、restart ≤5 秒
-- [ ] 长流队列与 RSS 有界；并发报告分列 end-to-end、producer、consumer，禁止用重叠 lane 相加为 coverage
+- [x] 实验实现的结果 hash、固定 GT、队列上限与取消/重启均通过
+- [x] 两轮真实 Vision A/B 均未满足 end-to-end wall median ≤串行 95%（0.9559、1.0587），代码未合入 main
+- [x] 保留串行 path mode；完整负向证据见 `docs/phases/phase4.1.json`
+
+### Phase 4.2 — OCR 内部性能归因（已立项，未开始）
+
+- [ ] 记录 Vision 输入准备、request 设置、perform、observation 映射和 residual，且不与 `ocr` coverage leaf 双计
+- [ ] `trace` 记录有界的代表帧/调用/早停决策，不落盘文本、图像、box 或绝对路径
+- [ ] 在 canonical Vision off/summary/trace 中通过质量、对账与低扰动硬门，并由数据选择下一 feature

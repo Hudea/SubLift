@@ -157,3 +157,12 @@ cleanup 不删除纯英文、空格分隔英文或夹在中文内部的英文（
 
 Config：`enable_line_select=True`，`subtitle_script="auto"`，`low_conf_threshold=0.28`，`ocr_consensus_frames=4`。
 `enable_line_select=False` 回退整区 join + 全局阈值。
+
+## 性能归因（Phase 4.2 计划）
+
+当前 Pipeline 已记录一次 `OcrEngine.recognize()` 的总 wall；下一步只为 Vision 增加可选的
+内部计时能力，不改变 `OcrEngine` Protocol、识别语言、`OcrResult` 或业务结果。内部树会区分
+PIL/CGImage 输入准备、request 设置、`performRequests`、observation 映射与 residual；这些
+数字是 `ocr` parent 的解释，不会与 parent 一起计入 core coverage。`trace` 还会记录匿名
+输入尺寸、每段最多 4 次调用和早停原因，不记录文本或图片。详细契约见
+[OCR 内部性能归因设计](ocr-performance-attribution.md)。

@@ -1,8 +1,9 @@
 # Path-mode 有界重叠设计（Phase 4.1）
 
-> 本文定义 `feat-042` 的目标架构，**不是当前实现说明**。当前 GUI 默认 path
-> mode 仍在一个 worker 中按“抽一帧 → feed → 可能 OCR”的顺序执行。任务状态和实际
-> 验证证据以 [phase4.1.json](../phases/phase4.1.json) 为准；完整执行与验收见
+> 本文保留 `feat-042` 的目标架构，**不是当前实现说明**。实验实现的结果、质量、队列与
+> 取消均正确，但两轮真实 Vision A/B 未达到吞吐保留门，故未合入 main。当前 GUI 默认 path
+> mode 仍在一个 worker 中按“抽一帧 → feed → 可能 OCR”的顺序执行。实际证据以
+> [phase4.1.json](../phases/phase4.1.json) 为准；完整历史验收见
 > [phase4.1-post-roi-throughput.md](../plans/phase4.1-post-roi-throughput.md)。
 
 ## 1. 决策与问题

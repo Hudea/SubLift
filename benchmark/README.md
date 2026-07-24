@@ -149,7 +149,9 @@ uv run --extra vision python scripts/measure_perf_overhead.py
 
 ## 当前回归锚点
 
-> 固定 Zootopia 片段；**不**代表跨片源泛化。数字来自 Phase 3 收口与 feat-037 干净树测量；最新实跑以 `debug/` 下报告为准。
+> 固定 Zootopia 片段；**不**代表跨片源泛化。已验收的质量与当前 ROI 性能结论见
+> [版本化基线报告](reports/README.md)。`debug/` 只保存本地重跑原始产物，不能自动取代
+> 已提交的基线快照。
 
 ### 素材
 
@@ -171,7 +173,8 @@ uv run --extra vision python scripts/measure_perf_overhead.py
 | usable_subtitle_recall | **92.0%** |
 | text.noise / text.empty | **0 / 0** |
 
-参考产物目录（历史）：`debug/benchmark-reports/feat034_p1_fix2/`。
+版本化结论：[固定 GT 质量基线](reports/quality-baseline.md)。原始历史产物仍在本地
+`debug/benchmark-reports/feat034_p1_fix2/`。
 
 ### 性能协议与量级（feat-037）
 
@@ -184,7 +187,9 @@ uv run --extra vision python scripts/measure_perf_overhead.py
 | 默认输出 | `debug/perf_reports/` |
 
 干净树一次归档量级（commit 期实测，供对照）：core 中位约 **11.2 s**（~**22.8×** 实时）；OCR ~41%、`extract_wait` ~24%、`frame_materialize` ~15%；`raw_output_bytes` ≈ **7.91 GB（7.36 GiB）**/ 次；阶段 coverage ~99%。  
-当前工作区重跑结果以 `debug/perf_reports/feat037_perf_baseline/` 为准。
+上述 feat-037 数字是 ROI 前的历史性能模式基线。当前默认 ROI 路径的 clean-commit A/B、
+完整 coverage 与阶段归因见[性能归因基线](reports/performance-attribution-baseline.md)；本地
+重跑仍输出到 `debug/`。
 
 ### 历史备注（非现行验收主口径）
 

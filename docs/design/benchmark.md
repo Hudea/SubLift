@@ -174,6 +174,8 @@ JSON object；相对路径相对**仓库根**（向上找 `pyproject.toml` + `fe
 | `.gt_cases.csv` | 每条 GT 命运 |
 | `.det_cases.csv` | 每条 detection 命运 |
 | `.summary.md` | 人读结论 + 可选 Performance 总表 |
+
+Phase 4.2 的 trace 将在既有逐段记录上增加有界 OCR 调用明细；仍不包含原始字幕文本。
 | `.perf-segments/*.jsonl` | 仅 `trace`：逐字幕段成本（**无原始字幕文本**） |
 
 诊断阅读顺序：`.summary.md` 结论 → failure_clusters → `.gt_cases.csv` / `.det_cases.csv` 定位 → 必要时 trace / pipeline 诊断脚本。
@@ -189,6 +191,11 @@ JSON object；相对路径相对**仓库根**（向上找 `pyproject.toml` + `fe
 | `off` | 不创建 recorder；报告无 `performance`（单 run 默认） |
 | `summary` | 有界阶段聚合；OCR 固定上限样本求 p50/p95 |
 | `trace` | summary + 逐段 JSONL |
+
+Phase 4.2 将在不改变 `ocr` 作为 core coverage leaf 的前提下，增加 Vision 调用的内部
+breakdown 与段内决策字段：内部明细不进入 `stages` 相加，而在独立 `ocr_breakdown` 树中与
+parent OCR 对账。字段、隐私边界与验收见
+[OCR 内部性能归因设计](ocr-performance-attribution.md)。
 
 ### 6.2 阶段口径（叶子阶段计入 coverage）
 

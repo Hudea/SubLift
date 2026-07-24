@@ -5,6 +5,39 @@
 
 ---
 
+## ADR-0017 OCR 内部明细作为 `ocr` coverage leaf 的子树（2026-07-24，计划）
+
+- **状态**：已立项，待 feat-043 实现与验证。
+- **背景**：Phase 4 ROI 后的 canonical 测量中，`ocr` 是主要单消费者成本，但它只有
+  `OcrEngine.recognize()` 总 wall，无法区分 Vision `performRequests`、PIL→CGImage 桥接、
+  request 设置、observation 映射或段内策略成本。
+- **决策**：保留 `ocr` 为 core coverage 的唯一 leaf；新增的输入准备、request 设置、
+  perform、observation 映射和 residual 作为 `ocr_breakdown` 子树，不进入 `stages` 或
+  coverage 相加。`components + residual` 必须与 parent OCR 对账。逐段调用明细仅在 trace
+  中有界输出，且不得包含文本、图像、box 或绝对路径。
+- **理由**：既能解释 OCR 成本，又不会像嵌套 span 那样把同一段 wall 计入 core 两次；保持
+  `OcrEngine` Protocol 不变，非 Vision 引擎可诚实降级为 opaque。
+- **影响**：涉及 `diagnostics/performance.py`、`ocr/vision.py`、`pipeline/core.py` 与
+  benchmark 报告；不授权改变 OCR 算法或产品调度。完整设计见
+  `docs/design/ocr-performance-attribution.md`。
+
+---
+
+## ADR-0016 未通过真实吞吐门的 path-mode overlap 不进入 main（2026-07-24）
+
+- **状态**：已确认；feat-042 归档，main 保持串行 path mode。
+- **背景**：有界 producer/consumer 实验保持 detection hash `b2d35c1e25f156e1`、固定 GT
+  质量、Queue≤8、取消与重启均正确。两轮 Vision A/B 的 end-to-end median 比却分别为
+  0.9559 和 1.0587，均未满足预先设定的 ≤0.95 保留门。
+- **决策**：不为接近阈值继续调度微调，不把实验代码作为默认路径合入 main。保留可复核的
+  原始数据，在 OCR 内部归因完成前不重新打开该优化方向。
+- **理由**：ROI 后 producer 已能快速领先并反压，单消费者 Vision 主导；未验证的用户可见
+  吞吐收益不足以抵消并发带来的资源所有权、取消与观测复杂度。
+- **结果**：实验结论和限制记录在 `docs/phases/phase4.1.json`；下一项工作是 feat-043 的
+  测量基线，不是第二轮并发重构。
+
+---
+
 ## ADR-0015 性能 coverage 以排他 Pipeline 编排阶段补齐（2026-07-17）
 
 - **状态**：已确认并已实现（feat-041）。
