@@ -7,6 +7,7 @@
 ## 特性
 
 - **Apple Vision OCR**：默认中英双语识别（zh-Hans + en-US），通过 PyObjC 桥接
+- **PaddleOCR 跨平台引擎**：rapidocr PP-OCRv6，onnxruntime 后端，可选安装
 - **像素差异打轴**：双信号帧签名（前景占比 + dHash）+ 三态状态机，时间轴稳定
 - **OCR 后置与段内共识**：每段最多识别 4 个代表帧，按字幕画像选行并用跨帧共识抑制背景文字
 - **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
@@ -28,9 +29,11 @@ git clone <repo>
 cd SubLift
 ./init.sh                  # 安装依赖并运行标准验证
 uv sync --extra vision     # 仅需单独补装 Vision 依赖时使用
+uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
+> PaddleOCR 首次运行自动下载模型到 `~/.cache/sublift/rapidocr-models`（约 30MB，需联网）。
 
 ## 使用
 
@@ -39,6 +42,7 @@ uv run sublift extract <video> -o output.srt
 uv run sublift extract clip.mkv --fps 5 -o out.srt
 uv run sublift extract clip.mkv --script cjk -o out.srt    # 已知中文字幕轨
 uv run sublift extract clip.mkv --engine mock -o out.srt   # 无 Vision 时跑流程
+uv run sublift extract clip.mkv --engine paddle -o out.srt  # 跨平台 PaddleOCR
 ```
 
 ### CLI 参数
@@ -49,7 +53,7 @@ uv run sublift extract clip.mkv --engine mock -o out.srt   # 无 Vision 时跑�
 | `-o, --output` | output.srt | 输出字幕文件路径 |
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
-| `--engine` | vision | OCR 引擎（vision / mock） |
+| `--engine` | vision | OCR 引擎（vision / mock / paddle） |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）
@@ -70,7 +74,7 @@ swift run SubLiftMac
 - **实时反馈**：段闭合后增量显示字幕，处理阶段、百分比和相对实时处理倍速均来自真实帧进度
 - **快速取消**：提取中可终止 ffmpeg 与后台任务，取消后可重新开始
 - **字幕编辑**：双击文本修改、合并/拆分条目
-- **引擎切换**：工具栏/设置中切换 vision / mock
+- **引擎切换**：工具栏/设置中切换 vision / paddle / mock
 - **SRT 导出**：点击「导出 SRT」选择保存路径
 
 > 处理 mkv 需要系统已安装 ffmpeg，否则 UI 会提示 `brew install ffmpeg`。
@@ -101,4 +105,4 @@ Benchmark 入口与指标说明见 [benchmark/README.md](benchmark/README.md)（
 
 ### 技术栈
 
-Python 3.12+ / Swift 5.9+ / uv / SwiftPM / Pillow / NumPy / OpenCV / PyObjC（Vision+Quartz）/ ffmpeg
+Python 3.12+ / Swift 5.9+ / uv / SwiftPM / Pillow / NumPy / OpenCV / PyObjC（Vision+Quartz）/ rapidocr（PaddleOCR）/ ffmpeg

@@ -41,8 +41,8 @@ check "ffmpeg"  ffmpeg  true
 # Python 版本检查（>=3.12，通过 uv 管理的版本）
 echo
 if command -v uv >/dev/null 2>&1; then
-    py_version=$(uv run --extra vision python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    py_ok=$(uv run --extra vision python -c 'import sys; print(1 if sys.version_info >= (3, 12) else 0)')
+    py_version=$(uv run --extra vision --extra paddle python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+    py_ok=$(uv run --extra vision --extra paddle python -c 'import sys; print(1 if sys.version_info >= (3, 12) else 0)')
     if [ "$py_ok" = "1" ]; then
         printf "${GREEN}[OK]${NC}  python 版本 -> %s (>=3.12, via uv)\n" "$py_version"
         pass=$((pass + 1))
@@ -57,12 +57,12 @@ echo "=============================="
 echo " 依赖同步"
 echo "=============================="
 echo
-# Phase 2 GUI 默认使用 Apple Vision；带上 optional extra，避免普通 uv sync 修剪 PyObjC。
-if uv sync --extra vision 2>&1; then
-    printf "${GREEN}[OK]${NC}  uv sync --extra vision 成功\n"
+# Phase 2 GUI 默认使用 Apple Vision；Phase 5 加 PaddleOCR；带上 optional extras，避免普通 uv sync 修剪可选依赖。
+if uv sync --extra vision --extra paddle 2>&1; then
+    printf "${GREEN}[OK]${NC}  uv sync --extra vision --extra paddle 成功\n"
     pass=$((pass + 1))
 else
-    printf "${RED}[FAIL]${NC} uv sync --extra vision 失败\n"
+    printf "${RED}[FAIL]${NC} uv sync --extra vision --extra paddle 失败\n"
     fail=$((fail + 1))
 fi
 
@@ -92,9 +92,9 @@ run_check() {
     fi
 }
 
-run_check "ruff check ."   uv run --extra vision ruff check .
-run_check "mypy src"       uv run --extra vision mypy src
-run_check "pytest"         uv run --extra vision pytest
+run_check "ruff check ."   uv run --extra vision --extra paddle ruff check .
+run_check "mypy src"       uv run --extra vision --extra paddle mypy src
+run_check "pytest"         uv run --extra vision --extra paddle pytest
 
 echo
 echo "=============================="

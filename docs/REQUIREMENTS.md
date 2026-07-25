@@ -32,7 +32,7 @@
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。
 - **F12 配置文件** ❌：尚不支持 `sublift.toml` / `--config`。
 - **F13 引擎对照模式** ❌：尚未提供产品化的多引擎并行对照。
-- **F14 PaddleOCR 第二引擎** ❌：接口已预留，未接入。
+- **F14 PaddleOCR 第二引擎** ✅：已通过 rapidocr PP-OCRv6 接入，`--engine paddle` CLI/GUI 可选。
 
 ### 3.2 Benchmark 与可观察性
 

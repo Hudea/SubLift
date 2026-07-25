@@ -24,6 +24,117 @@
           "description": "ocr/__init__.py 导出 PaddleOcrEngine / is_paddle_available，加入 __all__。"
         }
       ],
+      "status": "done",
+      "evidence": "uv sync --extra paddle OK (rapidocr 3.9.2 + onnxruntime 1.28.0); isinstance(PaddleOcrEngine(), OcrEngine) = True; models downloaded to ~/.cache/sublift/rapidocr-models (PP-OCRv6_det_small.onnx + ch_ppocr_mobile_v2.0_cls_mobile.onnx + PP-OCRv6_rec_small.onnx); RuntimeError match 'PaddleOCR 不可用' on monkeypatch _PADDLE_AVAILABLE=False; ruff/mypy clean; commit 649915a"
+    },
+    {
+      "id": "feat-05002",
+      "name": "CLI + IPC server 接线",
+      "description": "cli.py 与 ipc/server.py 的 --engine choices 加 paddle，_build_ocr_engine / main() factory 加 paddle 分支。不可用时提示 uv sync --extra paddle。server 端 BridgeHandler(ocr_engine_factory=PaddleOcrEngine) 透传。CLI 端到端 uv run sublift extract <视频> --engine paddle -o out.srt 跑通产出合理字幕。",
+      "module": "src/sublift/cli.py; src/sublift/ipc/server.py",
+      "dependencies": [
+        "feat-05001"
+      ],
+      "subtasks": [
+        {
+          "name": "CLI 接线",
+          "description": "cli.py --engine choices 加 paddle；_build_ocr_engine 加 paddle 分支（不可用提示 uv sync --extra paddle）；返回类型注解加 PaddleOcrEngine。"
+        },
+        {
+          "name": "IPC server 接线",
+          "description": "server.py --engine choices 加 paddle；main() 加 factory 分支 from sublift.ocr.paddle import PaddleOcrEngine -> BridgeHandler(ocr_engine_factory=PaddleOcrEngine).handle。"
+        },
+        {
+          "name": "CLI 端到端验证",
+          "description": "uv run sublift extract <视频> --engine paddle -o out.srt 跑通，产出合理字幕（与 vision 结果肉眼可比）。"
+        }
+      ],
+      "status": "done",
+      "evidence": "cli.py --engine paddle choices + _build_ocr_engine paddle branch with is_paddle_available check; server.py --engine paddle + BridgeHandler(ocr_engine_factory=PaddleOcrEngine); test_cli.py unknown engine test updated (paddle -> nonexistent); ruff/mypy/pytest 450 passed 9 skipped; commit 521bffa"
+    },
+    {
+      "id": "feat-05003",
+      "name": "GUI 引擎选择接线",
+      "description": "Swift 端 OcrEngineName 加 case paddle；SettingsView + SubLiftMacApp 两处 Picker 加 PaddleOCR 选项；PipelineClient.start(engine:) 已透传任意 String 无需改。swift build 成功，GUI 可选 PaddleOCR 跑通提取。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/Messages.swift; apps/macos/Sources/SubLiftMac/UI/SettingsView.swift; apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+      "dependencies": [
+        "feat-05001"
+      ],
+      "subtasks": [
+        {
+          "name": "OcrEngineName 扩展",
+          "description": "Messages.swift OcrEngineName 加 case paddle；更新注释（原「paddle 留待 Phase 3」改为已实现）。"
+        },
+        {
+          "name": "Picker 接线",
+          "description": "SettingsView.swift + SubLiftMacApp.swift 两处 Picker 加 Text(\"PaddleOCR (跨平台)\").tag(OcrEngineName.paddle)。"
+        },
+        {
+          "name": "GUI 构建与验证",
+          "description": "swift build 成功；GUI 设置选 PaddleOCR 跑通提取（依赖已装 paddle extra 的 venv）。"
+        }
+      ],
+      "status": "done",
+      "evidence": "Messages.swift OcrEngineName case paddle + updated comment; SettingsView.swift Picker 'PaddleOCR (跨平台)'; SubLiftMacApp.swift Picker 'PaddleOCR'; MessagesTests ocrEngineRawValues verify paddle rawValue + allCases.contains(.paddle); swift build OK; swift test 139 tests passed; commit 671ffa3"
+    },
+    {
+      "id": "feat-05004",
+      "name": "测试 + 文档收尾",
+      "description": "tests/test_ocr.py 加 TestPaddleOcrEngine（单测 + 降级 + 集成 skipif 无 rapidocr，复用 _make_text_image）。文档：design/ocr.md 加 PaddleOcrEngine 章节；README 加安装/用法（含首次下载模型提示）；REQUIREMENTS F14 状态 ❌->✅；DECISIONS 增 ADR（引擎选型 + 模型缓存策略 + 编号规则变更）。./init.sh 全绿。",
+      "module": "tests/test_ocr.py; docs/design/ocr.md; README.md; docs/REQUIREMENTS.md; docs/DECISIONS.md",
+      "dependencies": [
+        "feat-05002",
+        "feat-05003"
+      ],
+      "subtasks": [
+        {
+          "name": "测试",
+          "description": "tests/test_ocr.py 加 TestPaddleOcrEngine：isinstance OcrEngine 单测；monkeypatch _PADDLE_AVAILABLE=False 降级抛 RuntimeError；@integration + skipif 集成测试识别 Hello/你好世界/空白图返空，复用 _make_text_image。"
+        },
+        {
+          "name": "设计文档",
+          "description": "design/ocr.md：模块职责表加 paddle.py 行；加 PaddleOcrEngine 章节（实现 + 模型缓存 + 三规格 + 不接归因契约）；跨平台演进指引把 paddle 从示例变实例。"
+        },
+        {
+          "name": "README + 需求 + 决策",
+          "description": "README 加 uv sync --extra paddle 与 --engine paddle 说明（含首次下载提示）；REQUIREMENTS F14 ❌->✅；DECISIONS 增 ADR（rapidocr v6 + onnxruntime 选型 + ~/.cache/sublift/rapidocr-models 缓存 + Phase 5 起编号规则 feat-05<阶段><序号>）。"
+        },
+        {
+          "name": "全量验证",
+          "description": "uv run pytest / ruff / mypy / swift test / ./init.sh 全绿，无回归。"
+        }
+      ],
+      "status": "done",
+      "evidence": "test_ocr.py: TestPaddleOcrEngineUnit (2 tests) + TestPaddleDegradation (1 test) + TestPaddleOcrEngineIntegration (3 tests: Hello, 你好世界, empty); design/ocr.md PaddleOcrEngine section + module table; README.md paddle install/usage/GUI; REQUIREMENTS.md F14 ✅; DECISIONS.md ADR-0018; init.sh updated to --extra vision --extra paddle; ./init.sh 8/8 passed; 450 passed 9 skipped; commit 03ff8e0"
+    }
+  ]
+}
+{
+  "project": "SubLift",
+  "phase": "phase5-paddle-ocr",
+  "description": "Phase 5.0 接入 PaddleOCR 作为第二个 OCR 引擎，与 Apple Vision 并列可选。采用 rapidocr>=3.9.0 + onnxruntime（PP-OCRv6 small 默认），onnxruntime 后端无 paddlepaddle 依赖。核心层（pipeline/bridge）零修改，OcrEngine Protocol 不变；PaddleOcrEngine 不接 Phase 4.2 归因系统（契约允许）。推进 REQUIREMENTS F14 从「接口已预留未接入」到已接入。编号规则变更：Phase 5 起 feat id 采用「阶段+序号」编码 feat-05001 起。",
+  "plan_file": "docs/plans/phase5.md",
+  "features": [
+    {
+      "id": "feat-05001",
+      "name": "PaddleOcrEngine 引擎实现 + 依赖接入",
+      "description": "新建 src/sublift/ocr/paddle.py，实现 OcrEngine Protocol，产出带 lines 的 OcrResult（from_lines）。模仿 vision.py 优雅降级：模块级 _PADDLE_AVAILABLE 标志 + is_paddle_available() + 不可用时抛 RuntimeError。依赖 rapidocr>=3.9.0 + onnxruntime 作为 paddle optional-dep；模型缓存覆盖为 ~/.cache/sublift/rapidocr-models（不走 site-packages 默认）。PP-OCRv6 small 默认，暴露 model_type 参数。rapidocr result.boxes 四角点转 BoundingBox 包围盒。",
+      "module": "src/sublift/ocr/paddle.py; src/sublift/ocr/__init__.py; pyproject.toml",
+      "dependencies": [],
+      "subtasks": [
+        {
+          "name": "依赖接入",
+          "description": "pyproject.toml 加 paddle optional-dep group（rapidocr>=3.9.0 + onnxruntime>=1.16）+ mypy override（rapidocr.* / rapidocr_onnxruntime.* ignore_missing_imports）；uv sync --extra paddle 成功，首次模型落到 ~/.cache/sublift/rapidocr-models。"
+        },
+        {
+          "name": "引擎实现",
+          "description": "paddle.py：_PADDLE_AVAILABLE/is_paddle_available + PaddleOcrEngine(model_type='small', model_root_dir=None)；构造 RapidOCR(params={Global.model_root_dir, Det.model_type, Rec.model_type})；recognize 转 ndarray 调用，result.txts is None 返空，四角点 boxes 转包围盒 BoundingBox，zip txts/scores 成 OcrLine 排序后 from_lines；异常兜底返空不崩。"
+        },
+        {
+          "name": "导出",
+          "description": "ocr/__init__.py 导出 PaddleOcrEngine / is_paddle_available，加入 __all__。"
+        }
+      ],
       "status": "not-started",
       "evidence": ""
     },

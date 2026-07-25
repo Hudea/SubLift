@@ -258,6 +258,7 @@ struct ContentView: View {
 
                 Picker("", selection: $defaultEngine) {
                     Text("Apple Vision").tag(OcrEngineName.vision)
+                    Text("PaddleOCR").tag(OcrEngineName.paddle)
                     Text("Mock 引擎").tag(OcrEngineName.mock)
                 }
                 .labelsHidden()

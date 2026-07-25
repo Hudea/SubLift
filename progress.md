@@ -2,6 +2,38 @@
 
 ## 当前状态
 
+- **最后更新：** 2026-07-26（Phase 5.0 PaddleOCR 引擎接入完成）
+- **当前 Phase：** phase5-paddle-ocr（已完成）
+- **当前功能：** 全部 4 个 feat 已完成（feat-05001 ~ feat-05004）
+- **分支：** feat/ocr-model-support（从 main=7a56ce8 切出，worktree /Volumes/lab/pp/SubLift-ocr）
+- **说明：** PaddleOCR 第二引擎已接入（rapidocr 3.9.2 + onnxruntime，PP-OCRv6 small）。CLI `--engine paddle`、IPC server、GUI Picker 全链路接线完成。REQUIREMENTS F14 ✅。init.sh 8/8 全绿。
+
+## 进行中
+
+- 无（Phase 5.0 已完成，待用户确认后提交）
+
+## 近期完成（最近 5 个）
+
+- [x] **feat-05004 测试+文档收尾**：test_ocr.py 加 6 个 PaddleOcrEngine 测试；design/ocr.md + README + REQUIREMENTS F14 ✅ + DECISIONS ADR-0018；init.sh 更新装 vision+paddle extras。
+- [x] **feat-05003 GUI 引擎选择**：OcrEngineName case paddle + SettingsView/SubLiftMacApp Picker 接线；swift build/test 全绿。
+- [x] **feat-05002 CLI+IPC 接线**：--engine paddle choices + factory 分支；test_cli 更新。
+- [x] **feat-05001 PaddleOcrEngine 引擎**：paddle.py 实现 OcrEngine Protocol；rapidocr 依赖接入；模型缓存 ~/.cache/sublift/rapidocr-models。
+- [x] **Phase 5.0 规划落成**：plan/phase5.json/feature-list 三产物。
+
+## 阻塞项 / 风险
+
+- [ ] **merged residual / #15 砰**：非 034 主目标，仍开放。
+- [ ] **ground truth 素材有限**：性能 baseline 同 Zootopia 片源，不冒充泛化。
+
+## 近期决策
+
+- **Phase 5 PaddleOCR 引擎选型**：rapidocr>=3.9.0 + onnxruntime（PP-OCRv6 small，非 rapidocr-onnxruntime 1.x 停更线）；模型缓存覆盖为 ~/.cache/sublift/rapidocr-models；PaddleOcrEngine 不接 Phase 4.2 归因（契约允许）。见 ADR-0018。
+
+> 完整决策记录见 `docs/DECISIONS.md`
+# 会话进度日志
+
+## 当前状态
+
 - **最后更新：** 2026-07-25（Phase 5.0 规划落成，待开始执行）
 - **当前 Phase：** phase5-paddle-ocr（规划完成，未开工）
 - **当前功能：** feat-05001 PaddleOcrEngine 引擎实现 + 依赖接入（not-started）

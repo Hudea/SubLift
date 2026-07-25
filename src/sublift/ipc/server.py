@@ -184,8 +184,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--engine",
         default="vision",
-        choices=["vision", "mock"],
-        help="OCR 引擎（默认 vision，测试可用 mock）",
+        choices=["vision", "mock", "paddle"],
+        help="OCR 引擎（默认 vision，测试可用 mock，跨平台可用 paddle）",
     )
     return parser
 
@@ -212,6 +212,13 @@ def main(argv: list[str] | None = None) -> None:
 
         handler_factory = lambda: BridgeHandler(  # noqa: E731
             ocr_engine_factory=MockOcrEngine
+        ).handle
+    elif args.engine == "paddle":
+        from sublift.ipc.bridge import BridgeHandler
+        from sublift.ocr.paddle import PaddleOcrEngine
+
+        handler_factory = lambda: BridgeHandler(  # noqa: E731
+            ocr_engine_factory=PaddleOcrEngine
         ).handle
     else:
         handler_factory = None  # 默认用 VisionOcrEngine

@@ -66,7 +66,7 @@ class TestParserDefaults:
         """未知 engine 被 argparse choices 拒绝。"""
         parser = build_parser()
         with pytest.raises(SystemExit):
-            parser.parse_args(["extract", "v.mp4", "--engine", "paddle"])
+            parser.parse_args(["extract", "v.mp4", "--engine", "nonexistent"])
 
     def test_extract_script_cjk(self) -> None:
         parser = build_parser()

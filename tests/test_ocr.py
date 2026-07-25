@@ -1,6 +1,7 @@
 """OCR 引擎模块（ocr）测试。
 
 Mock 单测默认运行；Vision 单测需 PyObjC，集成测试需 macOS + Vision。
+PaddleOcrEngine 单测需 rapidocr，集成测试需模型已下载。
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sublift.models import BoundingBox, OcrLine, OcrResult
 from sublift.ocr.base import OcrEngine
 from sublift.ocr.mock import MockOcrEngine
+from sublift.ocr.paddle import PaddleOcrEngine, is_paddle_available
 from sublift.ocr.vision import (
     VisionOcrEngine,
     _collect_results,
@@ -364,3 +366,71 @@ class TestVisionOcrEngineIntegration:
             assert line.box.y >= 0
         # 兼容汇总应与 lines 一致
         assert result.text == "\n".join(line.text for line in result.lines)
+
+
+@pytest.mark.skipif(not is_paddle_available(), reason="rapidocr 未安装")
+class TestPaddleOcrEngineUnit:
+    """PaddleOcrEngine 单测，需 rapidocr。"""
+
+    def test_is_ocr_engine(self) -> None:
+        engine = PaddleOcrEngine()
+        assert isinstance(engine, OcrEngine)
+
+    def test_default_model_dir(self) -> None:
+        from pathlib import Path
+
+        from sublift.ocr.paddle import DEFAULT_MODEL_DIR
+
+        expected = Path.home() / ".cache" / "sublift" / "rapidocr-models"
+        assert str(DEFAULT_MODEL_DIR) == str(expected)
+
+
+class TestPaddleDegradation:
+    """PaddleOCR 不可用时的降级测试，monkeypatch 模拟。"""
+
+    def test_unavailable_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """_PADDLE_AVAILABLE 为 False 时实例化抛 RuntimeError。"""
+        import sublift.ocr.paddle as paddle_mod
+
+        monkeypatch.setattr(paddle_mod, "_PADDLE_AVAILABLE", False)
+        with pytest.raises(RuntimeError, match="PaddleOCR 不可用"):
+            PaddleOcrEngine()
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not is_paddle_available(), reason="rapidocr 未安装")
+class TestPaddleOcrEngineIntegration:
+    """PaddleOcrEngine 真实识别集成测试，需 rapidocr + 模型已下载。"""
+
+    def test_recognize_hello(self) -> None:
+        """PaddleOCR 应识别出 'Hello' 英文文本。"""
+        img = _make_text_image("Hello")
+        engine = PaddleOcrEngine()
+        result = engine.recognize(img)
+        assert result.text != ""
+        assert "hello" in result.text.lower()
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_recognize_chinese(self) -> None:
+        """PaddleOCR 默认支持中文，应识别出中文文本。"""
+        img = _make_text_image(
+            "你好世界",
+            width=500,
+            height=120,
+            font_path="/System/Library/Fonts/STHeiti Light.ttc",
+            font_size=50,
+        )
+        engine = PaddleOcrEngine()
+        result = engine.recognize(img)
+        assert result.text != ""
+        assert "你好世界" in result.text
+        assert 0.0 <= result.confidence <= 1.0
+
+    def test_recognize_empty_image(self) -> None:
+        """纯色空白图应返回空文本。"""
+        img = Image.new("RGB", (200, 100), "white")
+        engine = PaddleOcrEngine()
+        result = engine.recognize(img)
+        assert result.text == ""
+        assert result.confidence == 0.0
+        assert result.lines == ()

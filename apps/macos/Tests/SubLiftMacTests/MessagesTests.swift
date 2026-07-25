@@ -333,6 +333,8 @@ struct MessagesTests {
     @Test
     func ocrEngineRawValues() {
         #expect(OcrEngineName.vision.rawValue == "vision")
+        #expect(OcrEngineName.paddle.rawValue == "paddle")
+        #expect(OcrEngineName.allCases.contains(.paddle))
     }
 
     @Test

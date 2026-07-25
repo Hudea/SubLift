@@ -26,10 +26,11 @@ public enum MessageType: String, Codable {
 // MARK: - Engine
 
 /// OCR 引擎标识，与 Python `ENGINES` 集合对齐。
-/// paddle 留待 Phase 3 跨平台实现。
+/// paddle: Phase 5.0 跨平台引擎已实现（rapidocr PP-OCRv6）。
 public enum OcrEngineName: String, Codable, CaseIterable {
     case vision
     case mock
+    case paddle
 }
 
 // MARK: - LogLevel

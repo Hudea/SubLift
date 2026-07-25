@@ -53,7 +53,7 @@ def is_vision_available() -> bool:
 
 def _import_objc() -> Any:
     """延迟导入 PyObjC 运行时（仅 recognize 路径需要）。"""
-    import objc  # type: ignore[import-untyped]
+    import objc
 
     return objc
 

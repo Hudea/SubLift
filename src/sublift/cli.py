@@ -12,7 +12,13 @@ from sublift.detector import BottomCropDetector
 from sublift.export import SrtExporter
 from sublift.extractor import FfmpegExtractor
 from sublift.models import SCRIPT_AUTO, SCRIPT_VALUES
-from sublift.ocr import MockOcrEngine, VisionOcrEngine, is_vision_available
+from sublift.ocr import (
+    MockOcrEngine,
+    PaddleOcrEngine,
+    VisionOcrEngine,
+    is_paddle_available,
+    is_vision_available,
+)
 from sublift.pipeline import Pipeline
 
 
@@ -44,9 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     extract_parser.add_argument(
         "--engine",
-        choices=["vision", "mock"],
+        choices=["vision", "mock", "paddle"],
         default="vision",
-        help="OCR 引擎（默认 vision；mock 用于无 Vision 环境的流程验证）",
+        help="OCR 引擎（默认 vision；mock 用于流程验证；paddle 跨平台）",
     )
     extract_parser.add_argument(
         "--script",
@@ -180,7 +186,9 @@ def _run_extract(
     print(f"完成：{len(entries)} 条字幕 → {output}（耗时 {elapsed:.1f}s）")
 
 
-def _build_ocr_engine(engine: str) -> VisionOcrEngine | MockOcrEngine:
+def _build_ocr_engine(
+    engine: str,
+) -> VisionOcrEngine | MockOcrEngine | PaddleOcrEngine:
     """构造 OCR 引擎。"""
     if engine == "vision":
         if not is_vision_available():
@@ -194,6 +202,15 @@ def _build_ocr_engine(engine: str) -> VisionOcrEngine | MockOcrEngine:
         return VisionOcrEngine()
     if engine == "mock":
         return MockOcrEngine(text="[mock subtitle]", confidence=1.0)
+    if engine == "paddle":
+        if not is_paddle_available():
+            print(
+                "错误：PaddleOCR 不可用。请安装可选依赖：\n"
+                "  uv sync --extra paddle",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        return PaddleOcrEngine()
     print(f"错误：未知引擎: {engine}", file=sys.stderr)
     sys.exit(1)
 

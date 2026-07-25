@@ -30,6 +30,10 @@ vision = [
     "pyobjc-framework-Vision>=10.0",
     "pyobjc-framework-Quartz>=10.0",
 ]
+paddle = [
+    "rapidocr>=3.9.0",
+    "onnxruntime>=1.16",
+]
 
 [project.scripts]
 sublift = "sublift.cli:main"
@@ -79,11 +83,15 @@ warn_redundant_casts = true
 files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
-module = ["Vision.*", "Quartz.*", "CoreGraphics.*", "Foundation.*"]
+module = ["Vision.*", "Quartz.*", "CoreGraphics.*", "Foundation.*", "objc.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["benchmark.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["rapidocr.*", "rapidocr_onnxruntime.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

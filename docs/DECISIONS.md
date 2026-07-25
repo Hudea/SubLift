@@ -5,6 +5,26 @@
 
 ---
 
+## ADR-0018 PaddleOCR 引擎选型与接入（2026-07-26）
+
+- **状态**：已确认并完成（feat-05001 ~ feat-05004）。
+- **背景**：项目自 Phase 1 起预留 PaddleOCR 第二引擎接口（F14），Phase 4.2 归因契约明确允许
+  非 Vision 引擎不实现 observer，为接入扫清协议障碍。
+- **决策**：
+  - 依赖栈：`rapidocr>=3.9.0` + `onnxruntime>=1.16`（PP-OCRv6 small 默认，onnxruntime 后端）。
+    不选 `rapidocr-onnxruntime` 1.x（停在 PP-OCRv4，已停更）。
+  - 模型缓存：覆盖 rapidocr 默认 site-packages 落点为 `~/.cache/sublift/rapidocr-models`，
+    跨 venv 复用，不污染 site-packages。
+  - 编号规则变更：Phase 5 起 feat id 采用「阶段+序号」编码 `feat-05001` 起（`05`=Phase 5，
+    `0`=小阶段 5.0，`001`=序号）；Phase 1-4 旧编号 `feat-001~043` 保持不动。
+  - 不接 Phase 4.2 归因：`PaddleOcrEngine` 不实现 `timing_callback`，契约允许。
+- **理由**：rapidocr 3.9 起默认 PP-OCRv6 det+rec small，中文精度优于 v4；onnxruntime 后端
+  无 paddlepaddle 重依赖，pip 直装，几十 MB，跨平台。符合项目「通用可选依赖」定位。
+- **影响**：新增 `ocr/paddle.py`、`pyproject.toml` paddle extra、CLI/IPC/GUI 接线；
+  核心层（pipeline/bridge）零修改，`OcrEngine` Protocol 不变。
+
+---
+
 ## ADR-0017 OCR 内部明细作为 `ocr` coverage leaf 的子树（2026-07-24）
 
 - **状态**：已确认并完成（feat-043）。
