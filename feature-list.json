@@ -298,6 +298,42 @@
           ]
         }
       ]
+    },
+    {
+      "id": "phase5",
+      "name": "Phase 5.0 - PaddleOCR 引擎接入",
+      "description": "接入 PaddleOCR 作为第二个 OCR 引擎，与 Apple Vision 并列可选，推进 REQUIREMENTS F14 从「接口已预留未接入」到已接入。采用 rapidocr>=3.9.0 + onnxruntime（PP-OCRv6 small 默认，onnxruntime 后端无 paddlepaddle 依赖）；模型缓存覆盖为 ~/.cache/sublift/rapidocr-models。核心层（pipeline/bridge）零修改，OcrEngine Protocol 不变；PaddleOcrEngine 不接 Phase 4.2 归因系统（契约允许）。不做引擎自动路由、多引擎对照模式与跨平台抽象层。编号规则变更：Phase 5 起 feat id 采用「阶段+序号」编码 feat-05001 起，Phase 1-4 旧编号 feat-001~043 保持不动。计划见 docs/plans/phase5.md，细粒度任务见 docs/phases/phase5.json。",
+      "detail_file": "docs/phases/phase5.json",
+      "features": [
+        {
+          "id": "phase5.engine",
+          "name": "PaddleOcrEngine 引擎实现与依赖接入",
+          "description": "新建 src/sublift/ocr/paddle.py 实现 OcrEngine Protocol，产出带 lines 的 OcrResult（from_lines）；模仿 vision.py 优雅降级（_PADDLE_AVAILABLE + is_paddle_available + 不可用抛 RuntimeError）。rapidocr>=3.9.0 + onnxruntime 作为 paddle optional-dep；PP-OCRv6 small 默认暴露 model_type；rapidocr 四角点 boxes 转 BoundingBox 包围盒。覆盖 feat-05001。",
+          "status": "not-started",
+          "covers": [
+            "feat-05001"
+          ]
+        },
+        {
+          "id": "phase5.wiring",
+          "name": "CLI + IPC server + GUI 全链路接线",
+          "description": "cli.py 与 ipc/server.py 的 --engine 加 paddle 分支（不可用提示 uv sync --extra paddle，server factory 透传 PaddleOcrEngine）；GUI OcrEngineName 加 case paddle，SettingsView + SubLiftMacApp 两处 Picker 加选项（PipelineClient 已透传无需改）。CLI --engine paddle 端到端跑通；swift build 成功且 GUI 可选 PaddleOCR。覆盖 feat-05002、feat-05003。",
+          "status": "not-started",
+          "covers": [
+            "feat-05002",
+            "feat-05003"
+          ]
+        },
+        {
+          "id": "phase5.test-docs",
+          "name": "测试与文档收尾",
+          "description": "tests/test_ocr.py 加 TestPaddleOcrEngine（单测 + 降级 + 集成 skipif 无 rapidocr）；design/ocr.md 加 PaddleOcrEngine 章节；README 加安装/用法（含首次下载模型提示）；REQUIREMENTS F14 ❌->✅；DECISIONS 增 ADR（引擎选型 + 模型缓存策略 + 编号规则变更）。./init.sh 全绿无回归。覆盖 feat-05004。",
+          "status": "not-started",
+          "covers": [
+            "feat-05004"
+          ]
+        }
+      ]
     }
   ]
 }
