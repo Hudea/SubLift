@@ -22,7 +22,9 @@ classifiers = [
 dependencies = [
     "pillow>=10.0.0",
     "numpy>=1.26.0",
-    "opencv-python-headless>=4.8.0",
+    # RapidOCR 也依赖 opencv-python。统一使用同一发行包，避免 paddle extra
+    # 同时安装 headless/full 两份 cv2 并发生文件覆盖。
+    "opencv-python>=4.8.0,<5.0.0",
 ]
 
 [project.optional-dependencies]
@@ -31,7 +33,7 @@ vision = [
     "pyobjc-framework-Quartz>=10.0",
 ]
 paddle = [
-    "rapidocr>=3.9.0",
+    "rapidocr>=3.9.0,<4.0.0",
     "onnxruntime>=1.16",
 ]
 
@@ -97,7 +99,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
-addopts = "-ra --strict-markers --cov=sublift --cov-report=term-missing"
+# 默认质量基线只运行单元测试；集成测试（包括首次构造 PaddleOcrEngine
+# 可能下载模型的用例）必须显式通过 ``pytest -m integration`` 运行。
+addopts = "-ra --strict-markers --cov=sublift --cov-report=term-missing -m 'not integration'"
 markers = [
     "integration: 需要外部资源（视频/ffmpeg/Vision）的集成测试",
 ]

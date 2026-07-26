@@ -59,7 +59,7 @@ def _run(bridge: BridgeHandler, msg: dict[str, Any]) -> dict[str, Any] | None:
 class TestStartJob:
     def test_start_job_returns_progress_ready(self) -> None:
         bridge = _make_handler()
-        msg = build_start_job("V1", 5.0, "vision", 0.5)
+        msg = build_start_job("V1", 5.0, "mock", 0.5)
         response = _run(bridge, msg)
         assert response is not None
         assert response["type"] == "progress"
@@ -68,22 +68,42 @@ class TestStartJob:
 
     def test_start_job_with_duration_estimates_frames(self) -> None:
         bridge = _make_handler()
-        msg = build_start_job("V1", 5.0, "vision", 0.5, duration_ms=10000)
+        msg = build_start_job("V1", 5.0, "mock", 0.5, duration_ms=10000)
         response = _run(bridge, msg)
         assert response is not None
         assert response["stage"] == "ready"
 
     def test_start_job_invalid_engine_returns_error(self) -> None:
         bridge = _make_handler()
-        msg = build_start_job("V1", 5.0, "paddle", 0.5)
+        msg = build_start_job("V1", 5.0, "nonexistent", 0.5)
         response = _run(bridge, msg)
         assert response is not None
         assert response["type"] == "error"
 
+    def test_start_job_engine_mismatch_returns_done_error_and_can_restart(self) -> None:
+        """服务端绑定 mock 时，不得把请求 vision 静默当作 mock 执行。"""
+        bridge = _make_handler()
+
+        response = _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+
+        assert response == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": False,
+            "error": "engine 不匹配: server 使用 'mock'，start_job 请求 'vision'",
+        }
+        assert bridge._pipeline is None
+
+        # 拒绝不一致请求不污染 handler；同连接的下一任务可正常开始。
+        recovered = _run(bridge, build_start_job("V2", 5.0, "mock", 0.5))
+        assert recovered is not None
+        assert recovered["type"] == "progress"
+        assert recovered["stage"] == "ready"
+
     def test_start_job_with_region_box_uses_fixed_detector(self) -> None:
         bridge = _make_handler()
         msg = build_start_job(
-            "V1", 5.0, "vision", 0.5, region_box=[0, 800, 1920, 200]
+            "V1", 5.0, "mock", 0.5, region_box=[0, 800, 1920, 200]
         )
         _run(bridge, msg)
         assert bridge._pipeline is not None
@@ -108,7 +128,7 @@ class TestStartJob:
         msg = build_start_job(
             "V1",
             5.0,
-            "vision",
+            "mock",
             0.5,
             region_box=[0, 800, 1920, 100],
             subtitle_profile=profile,
@@ -119,7 +139,7 @@ class TestStartJob:
 
     def test_start_job_without_region_box_uses_bottom_crop(self) -> None:
         bridge = _make_handler()
-        msg = build_start_job("V1", 5.0, "vision", 0.5)
+        msg = build_start_job("V1", 5.0, "mock", 0.5)
         _run(bridge, msg)
         assert bridge._pipeline is not None
         assert isinstance(bridge._pipeline._detector, BottomCropDetector)
@@ -149,7 +169,7 @@ class TestFrame:
 
     def test_frame_returns_progress(self) -> None:
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         jpeg = _make_jpeg()
         msg = build_frame("V1", 1000, jpeg)
         response = _run(bridge, msg)
@@ -159,7 +179,7 @@ class TestFrame:
 
     def test_frame_invalid_jpeg_returns_error(self) -> None:
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         msg = build_frame("V1", 1000, b"not a jpeg")
         response = _run(bridge, msg)
         assert response is not None
@@ -168,7 +188,7 @@ class TestFrame:
 
     def test_frame_invalid_base64_returns_error(self) -> None:
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         msg: dict[str, Any] = {
             "type": "frame",
             "video_id": "V1",
@@ -180,6 +200,61 @@ class TestFrame:
         assert response is not None
         assert response["type"] == "error"
 
+    def test_frame_ocr_error_returns_done_with_original_message_and_clears_state(self) -> None:
+        """legacy frame mode 的 OCR 失败必须可传递到客户端，不能断开 UDS。"""
+        bridge = _make_handler()
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
+        pipeline = bridge._pipeline
+        assert pipeline is not None
+
+        original_error = "Paddle OCR 模型执行失败"
+        with (
+            patch.object(pipeline, "feed", return_value=object()),
+            patch.object(
+                pipeline,
+                "ocr_segment",
+                side_effect=RuntimeError(original_error),
+            ),
+        ):
+            response = _run(bridge, build_frame("V1", 1000, _make_jpeg()))
+
+        assert response == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": False,
+            "error": original_error,
+        }
+        assert bridge._pipeline is None
+        assert bridge._ocr is None
+
+        # 失败后不能复用部分推进的 Pipeline，但应允许明确重启。
+        recovered = _run(bridge, build_start_job("V2", 5.0, "mock", 0.5))
+        assert recovered is not None
+        assert recovered["type"] == "progress"
+
+    def test_finalize_error_returns_done_with_original_message_and_clears_state(self) -> None:
+        bridge = _make_handler()
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
+        pipeline = bridge._pipeline
+        assert pipeline is not None
+
+        original_error = "Paddle OCR finalize 失败"
+        with patch.object(
+            pipeline,
+            "finalize",
+            side_effect=RuntimeError(original_error),
+        ):
+            response = _run(bridge, build_finalize("V1"))
+
+        assert response == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": False,
+            "error": original_error,
+        }
+        assert bridge._pipeline is None
+        assert bridge._ocr is None
+
 
 class TestStreamingPush:
     """流式 push_entry 推送测试（feat-029）。"""
@@ -187,7 +262,7 @@ class TestStreamingPush:
     def test_frame_triggers_push_entry_on_segment_close(self) -> None:
         """段闭合时 bridge 应通过 push 推送 push_entry 消息。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5, region_box=[0, 100, 320, 120]))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5, region_box=[0, 100, 320, 120]))
 
         pushed: list[dict[str, Any]] = []
 
@@ -219,7 +294,7 @@ class TestStreamingPush:
     def test_finalize_returns_entries_is_final(self) -> None:
         """finalize 应返回 entries 消息且 is_final=True。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5, region_box=[0, 100, 320, 120]))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5, region_box=[0, 100, 320, 120]))
         jpeg = _make_jpeg()
         _run(bridge, build_frame("V1", 0, jpeg))
         response = _run(bridge, build_finalize("V1"))
@@ -239,7 +314,7 @@ class TestStreamingPush:
     def test_finalize_empty_frames_returns_empty_entries(self) -> None:
         """start_job 后不推任何帧直接 finalize。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         response = _run(bridge, build_finalize("V1"))
         assert response is not None
         assert response["type"] == "entries"
@@ -250,7 +325,7 @@ class TestStreamingPush:
 class TestCancelJob:
     def test_cancel_returns_done_cancelled(self) -> None:
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         response = _run(bridge, build_cancel_job("V1"))
         assert response is not None
         assert response["type"] == "done"
@@ -260,7 +335,7 @@ class TestCancelJob:
     def test_cancel_clears_pipeline(self) -> None:
         """cancel 后再 finalize 应报错（pipeline 已清空）。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         jpeg = _make_jpeg()
         _run(bridge, build_frame("V1", 0, jpeg))
         _run(bridge, build_cancel_job("V1"))
@@ -271,7 +346,7 @@ class TestCancelJob:
     def test_frame_after_cancel_returns_error(self) -> None:
         """cancel 后再推帧应报错。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
         _run(bridge, build_cancel_job("V1"))
         jpeg = _make_jpeg()
         response = _run(bridge, build_frame("V1", 0, jpeg))
@@ -283,7 +358,7 @@ class TestSafetyLimits:
     def test_jpeg_size_limit(self) -> None:
         """超过 MAX_JPEG_BYTES 应返回 error。"""
         bridge = _make_handler()
-        _run(bridge, build_start_job("V1", 5.0, "vision", 0.5))
+        _run(bridge, build_start_job("V1", 5.0, "mock", 0.5))
 
         big_jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * (MAX_JPEG_BYTES + 1)
         msg = build_frame("V1", 1000, big_jpeg)
@@ -321,7 +396,7 @@ class TestPathMode:
     def test_missing_video_path_returns_done_error(self) -> None:
         bridge = _make_handler()
         msg = build_start_job(
-            "V1", 5.0, "vision", 0.5, video_path="/nonexistent/no_video.mp4"
+            "V1", 5.0, "mock", 0.5, video_path="/nonexistent/no_video.mp4"
         )
         pushed: list[dict[str, Any]] = []
 
@@ -352,7 +427,7 @@ class TestPathMode:
         msg = build_start_job(
             "V1",
             2.0,
-            "vision",
+            "mock",
             0.5,
             duration_ms=1000,
             video_path=str(video),
@@ -386,7 +461,7 @@ class TestPathMode:
         msg = build_start_job(
             "V1",
             sample_fps,
-            "vision",
+            "mock",
             0.5,
             duration_ms=2000,
             video_path=str(video),
@@ -419,10 +494,10 @@ class TestPathMode:
         bridge = _make_handler()
         _run(
             bridge,
-            build_start_job("V1", 5.0, "vision", 0.5, video_path="/no/such.mp4"),
+            build_start_job("V1", 5.0, "mock", 0.5, video_path="/no/such.mp4"),
         )
         # 失败后 pipeline 已清空；重新 frame mode start
-        resp = _run(bridge, build_start_job("V2", 5.0, "vision", 0.5))
+        resp = _run(bridge, build_start_job("V2", 5.0, "mock", 0.5))
         assert resp is not None
         assert resp["type"] == "progress"
         assert resp["stage"] == "ready"
@@ -440,7 +515,7 @@ class TestPathMode:
         msg = build_start_job(
             "V1",
             2.0,
-            "vision",
+            "mock",
             0.5,
             duration_ms=1000,
             video_path=str(video),
@@ -481,7 +556,7 @@ class TestPathMode:
         msg1 = build_start_job(
             "V1",
             2.0,
-            "vision",
+            "mock",
             0.5,
             duration_ms=5000,
             video_path=str(video),
@@ -501,7 +576,7 @@ class TestPathMode:
             msg2 = build_start_job(
                 "V2",
                 2.0,
-                "vision",
+                "mock",
                 0.5,
                 duration_ms=5000,
                 video_path=str(video),

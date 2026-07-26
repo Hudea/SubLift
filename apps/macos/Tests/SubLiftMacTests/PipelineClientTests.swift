@@ -108,4 +108,33 @@ final class PipelineClientTests: XCTestCase {
             XCTAssertEqual(error as? PipelineClientError, .incompleteBody)
         }
     }
+
+    // MARK: - LocalizedError
+
+    func testServerErrorLocalizedMessagePreservesPythonMessage() throws {
+        // feat-05004 P1#4：serverError 携带的 Python 端消息（如 uv sync / 网络错误）
+        // 必须通过 errorDescription 透传，不得退化为系统默认文案。
+        let message = "PaddleOCR 不可用。请安装可选依赖：uv sync --extra paddle"
+        let error = PipelineClientError.serverError(message)
+        XCTAssertEqual(error.errorDescription, message)
+        XCTAssertTrue(error.localizedDescription.contains("uv sync --extra paddle"))
+    }
+
+    func testAllErrorsHaveLocalizedDescription() throws {
+        // 所有 case 都应给出可读 errorDescription，不返回 nil / 通用文案。
+        let cases: [PipelineClientError] = [
+            .incompleteLengthPrefix,
+            .incompleteBody,
+            .serverStartTimeout,
+            .socketCreateFailed(1),
+            .socketConnectFailed(2),
+            .socketWriteFailed(3),
+            .serverError("boom"),
+            .connectionClosed,
+        ]
+        for c in cases {
+            XCTAssertNotNil(c.errorDescription)
+            XCTAssertFalse(c.errorDescription?.isEmpty ?? true)
+        }
+    }
 }

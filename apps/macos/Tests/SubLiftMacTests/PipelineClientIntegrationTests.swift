@@ -8,8 +8,19 @@ import XCTest
 /// 本地运行：`swift test --filter PipelineClientIntegrationTests`
 final class PipelineClientIntegrationTests: XCTestCase {
 
-    /// Python 解释器路径（项目根 .venv/bin/python）。
-    private let pythonPath = "/Volumes/lab/pp/SubLift/.venv/bin/python"
+    /// 复用客户端的运行时仓库定位，避免测试绑定开发者本机的绝对路径。
+    private var pythonPath: String { PipelineClient.defaultPythonPath }
+
+    func testPythonPathResolvesFromCurrentRepository() throws {
+        let repoRoot = try XCTUnwrap(PipelineClient.findRepoRoot())
+        let expectedPath = repoRoot.appendingPathComponent(".venv/bin/python").path
+
+        XCTAssertEqual(pythonPath, expectedPath)
+        XCTAssertTrue(
+            FileManager.default.isExecutableFile(atPath: pythonPath),
+            "当前仓库的 Python venv 不可执行: \(pythonPath)"
+        )
+    }
 
     func testStartAndHandshakeWithPythonServer() throws {
         let client = PipelineClient()
@@ -52,7 +63,7 @@ final class PipelineClientIntegrationTests: XCTestCase {
         let startJob = StartJobMessage(
             videoId: "VID-001",
             fps: 5.0,
-            engine: .vision,
+            engine: .mock,
             confidenceThreshold: 0.5,
             regionBox: [0, 0, 320, 240],
             durationMs: 1000
@@ -123,7 +134,7 @@ final class PipelineClientIntegrationTests: XCTestCase {
         let startJob = StartJobMessage(
             videoId: "PATH-MODE-001",
             fps: 2.0,
-            engine: .vision,
+            engine: .mock,
             confidenceThreshold: 0.5,
             regionBox: [0, 180, 320, 60],
             durationMs: 1_000,
@@ -147,6 +158,32 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertTrue(entries.isFinal ?? true)
         XCTAssertGreaterThan(progressCount, 0, "path mode 应推送 progress")
         XCTAssertGreaterThanOrEqual(lastPct, 0)
+    }
+
+    /// server 启动时已绑定 mock，start_job 请求 vision 必须得到可读业务错误，
+    /// 不能静默用 mock 执行或退化为 UDS 断连。
+    func testEngineMismatchSurfacesServerError() throws {
+        let client = PipelineClient()
+        defer { client.stop() }
+
+        XCTAssertTrue(try client.start(pythonExecutable: pythonPath, engine: "mock"))
+        let startJob = StartJobMessage(
+            videoId: "ENGINE-MISMATCH-001",
+            fps: 5.0,
+            engine: .vision,
+            confidenceThreshold: 0.5
+        )
+
+        XCTAssertThrowsError(
+            try client.request(startJob, expecting: ProgressMessage.self)
+        ) { error in
+            XCTAssertEqual(
+                error as? PipelineClientError,
+                .serverError(
+                    "engine 不匹配: server 使用 'mock'，start_job 请求 'vision'"
+                )
+            )
+        }
     }
 
     /// 连续 start/stop 两个客户端互不影响（取消/重试独占 client 的基础保证）。

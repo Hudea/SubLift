@@ -12,7 +12,8 @@
 起就在需求（F14）与各 Phase plan 中显式预留、反复推迟的「第二引擎」，现在落地。
 
 **目标：** 用户通过 `--engine paddle`（CLI）或设置面板选择 PaddleOCR（GUI）即可完成与 Vision
-等价的字幕提取流程；核心层（pipeline / bridge）零修改，`OcrEngine` Protocol 不变。
+等价的字幕提取流程；Pipeline 与 `OcrEngine` Protocol 保持不变，bridge/server 在审查整改中
+增加引擎一致性校验和可读的失败传递。
 
 **为什么现在做：**
 
@@ -31,7 +32,7 @@
 
 - 新增 `src/sublift/ocr/paddle.py`：`PaddleOcrEngine` + `is_paddle_available()`，实现
   `OcrEngine` Protocol，产出带 `lines` 的 `OcrResult`（`from_lines`）。
-- 依赖：`rapidocr>=3.9.0` + `onnxruntime`（onnxruntime 后端，无 paddlepaddle 依赖），
+- 依赖：`rapidocr>=3.9.0,<4.0.0` + `onnxruntime`（onnxruntime 后端，无 paddlepaddle 依赖），
   PP-OCRv6 small 默认模型，作为 `paddle` optional-dep group。
 - 模型缓存：覆盖 rapidocr 默认的 site-packages 落点为 `~/.cache/sublift/rapidocr-models`，
   跨 venv 复用。
@@ -69,8 +70,8 @@
 - `ipc/bridge.py`：`BridgeHandler(ocr_engine_factory, ocr_engine_kwargs)`，构造调
   `self._ocr_engine_factory(**self._ocr_engine_kwargs)`。**接入点不变**——paddle factory 透传即可。
   bridge 现传 `subtitle_profile` 给 Pipeline，与引擎无关。
-- GUI `Messages.swift`：`OcrEngineName` enum = `{vision, mock}`，注释「paddle 留待 Phase 3」。
-- GUI `SettingsView.swift` + `SubLiftMacApp.swift`：两处 Picker（vision/mock）。
+- 接入前的 GUI `Messages.swift`：`OcrEngineName` 仅有 Vision 与 Mock 两个值，注释「paddle 留待 Phase 3」。
+- 接入前的 `SettingsView.swift` + `SubLiftMacApp.swift`：两处 Picker 仅显示 Vision 与 Mock。
   `PipelineClient.start(engine:)` 透传任意 String 给 `--engine`，无需改。
 - `design/ocr.md` §跨平台演进指引：已给 `ocr/paddle.py` 模板（新建文件 + 实现 recognize + 满足 Protocol）。
 - `REQUIREMENTS.md` F14：PaddleOCR 第二引擎，❌ 接口已预留未接入。
@@ -80,7 +81,7 @@
 
 ### 4.1 依赖栈选型（ADR 待落）
 
-选用 `rapidocr>=3.9.0`（统一主线包）+ `onnxruntime`，**不选** `rapidocr-onnxruntime` 1.x
+选用 `rapidocr>=3.9.0,<4.0.0`（锁定当前 3.x API 主线）+ `onnxruntime`，**不选** `rapidocr-onnxruntime` 1.x
 （后者停在 PP-OCRv4，已基本停更）。理由：
 
 - rapidocr 3.9.0 起默认 PP-OCRv6 det+rec small，中文（zh-Hans）精度优于 v4。
@@ -116,7 +117,8 @@ venv 重建即丢失，不理想。本引擎覆盖为用户缓存目录：
 - 首次 `RapidOCR()` 自动下载（惰性，SHA256 校验）：`PP-OCRv6_det_small.onnx` +
   `ch_PP-LCNet_x1_0_textline_ori_cls_server.onnx`（cls）+ `PP-OCRv6_rec_small.onnx` +
   `ppocr_keys_v1.txt`（字典），约几十 MB，之后复用。
-- 离线环境可用 `python -m rapidocr download_models` 预下载到 `model_root_dir`（文档说明）。
+- 离线前应通过项目引擎构造预下载，确保写入 `model_root_dir`：
+  `uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; PaddleOcrEngine()"`。
 
 ## 5. 任务拆分
 
@@ -153,7 +155,7 @@ feat-05001 (引擎实现 + 依赖) ─┬─ feat-05002 (CLI + IPC server)
 
 ### 6.1 `pyproject.toml`
 
-- `[project.optional-dependencies]` 加 `paddle = ["rapidocr>=3.9.0", "onnxruntime>=1.16"]`
+- `[project.optional-dependencies]` 加 `paddle = ["rapidocr>=3.9.0,<4.0.0", "onnxruntime>=1.16"]`
 - `[[tool.mypy.overrides]]` 加 `module = ["rapidocr.*", "rapidocr_onnxruntime.*"]` →
   `ignore_missing_imports = true`（无 stub）
 
@@ -170,13 +172,14 @@ feat-05001 (引擎实现 + 依赖) ─┬─ feat-05002 (CLI + IPC server)
   - 构造 `RapidOCR(params={"Global.model_root_dir": str(root), "Det.model_type": model_type,
     "Rec.model_type": model_type})` 存为实例属性
 - `recognize(image) -> OcrResult`:
-  - `np.array(image.convert("RGB"))` 转 ndarray
-  - `result = self._engine(arr)`
+  - 直接把 `PIL.Image` 传给 RapidOCR，使其按 PIL 输入路径完成 RGB→BGR 转换
+  - `result = self._engine(image)`
   - `result.txts is None` → `OcrResult.from_lines([])`（即 `OcrResult("", 0.0, lines=())`）
   - 遍历 `result.boxes`（四角点）算包围盒 → `BoundingBox`，与 `result.txts`/`result.scores`
     zip 成 `OcrLine` 列表，按 `(y, x)` 排序
   - `OcrResult.from_lines(lines)`
-  - 异常兜底 → `OcrResult.from_lines([])`，不崩 IPC server
+  - 仅 `result.txts is None` 表示无识别结果并返回空 `OcrResult`；模型加载、推理和 box
+    映射等运行时异常向上传播，由调用边界报告为失败，不能伪装成空字幕
 
 ### 6.3 `src/sublift/ocr/__init__.py`
 
@@ -227,7 +230,7 @@ feat-05001 (引擎实现 + 依赖) ─┬─ feat-05002 (CLI + IPC server)
 
 | 约束 | 说明 | 缓解 |
 |---|---|---|
-| 首次下载需联网 | rapidocr 首跑从 modelscope.cn 下几十 MB 模型 | 文档与 CLI 输出提示；离线可用 `python -m rapidocr download_models` 预下载 |
+| 首次下载需联网 | rapidocr 首跑从 modelscope.cn 下几十 MB 模型 | CLI 显示无 traceback 的可操作错误；离线前用 `uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; PaddleOcrEngine()"` 预下载 |
 | 模型落点 | rapidocr 默认写 site-packages，venv 重建丢失 | 覆盖 `Global.model_root_dir` 到 `~/.cache/sublift/rapidocr-models` |
 | 不接归因 | Phase 4.2 归因为 Vision 五阶段设计 | 契约允许 Paddle 不实现 observer；paddle.py 不接 `timing_callback` |
 | box 格式转换 | rapidocr boxes 是四角点 (N,4,2)，OcrLine.box 是矩形 | 取 axis-aligned 包围盒转 BoundingBox，clamp 到图像范围 |
@@ -242,9 +245,8 @@ feat-05001 (引擎实现 + 依赖) ─┬─ feat-05002 (CLI + IPC server)
 ### 8.1 feat-05001（引擎实现 + 依赖）
 
 - [ ] `uv sync --extra paddle` 成功（退出 0），`python -c "import rapidocr"` 退出 0
-- [ ] `PaddleOcrEngine()` 构造后，`ls ~/.cache/sublift/rapidocr-models` 含 det / cls / rec
-      三个 `.onnx` + rec 字典文件；且 site-packages 内 `rapidocr/models/` **不存在**
-      （证明 `model_root_dir` 覆盖生效，未走默认落点）
+- [ ] `PaddleOcrEngine()` 构造后，`~/.cache/sublift/rapidocr-models` 含引擎所需的 det / cls /
+      rec 模型与字典文件；模型缓存路径由 `Global.model_root_dir` 覆盖
 - [ ] `isinstance(PaddleOcrEngine(), OcrEngine)` 为 True（单测断言）
 - [ ] 不可用时抛 `RuntimeError`（单测 monkeypatch `_PADDLE_AVAILABLE=False`，match "PaddleOCR 不可用"）
 - [ ] `uv run ruff check .` 退出 0；`uv run mypy src tests` no issues
@@ -254,6 +256,8 @@ feat-05001 (引擎实现 + 依赖) ─┬─ feat-05002 (CLI + IPC server)
 - [ ] `uv run sublift extract <视频> --engine paddle -o out.srt` 退出 0；产出 SRT sanity 通过：
       条数 > 0、非空文本条目 > 0、起止时间码单调递增
 - [ ] 未装 paddle extra 时 `--engine paddle` 退出非 0，stderr 含 `uv sync --extra paddle`
+- [ ] paddle extra 已安装但 `PaddleOcrEngine()` 构造失败时，CLI 退出非 0，stderr 含失败原因、
+      网络/预下载建议，且不含 traceback
 - [ ] IPC server `--engine paddle` 启动不报错；有跨进程测试覆盖（start_job engine=paddle
       -> progress(ready) 往返，skipif 无 rapidocr）
 

@@ -41,6 +41,7 @@ src/sublift/
     base.py                # OcrEngine Protocol
     mock.py                # MockOcrEngine（测试用）
     vision.py              # VisionOcrEngine（Apple Vision，PyObjC）
+    paddle.py              # PaddleOcrEngine（rapidocr / PP-OCRv6，可选）
   export/                  # 串联层：字幕导出
     base.py                # Exporter Protocol（format + export 双方法）
     srt.py                 # SRT 实现
@@ -67,7 +68,7 @@ video
 详细设计见各模块文档：
 
 - [pipeline 设计](design/pipeline.md) — 帧签名、状态机、时间轴、去重、编排
-- [ocr 设计](design/ocr.md) — Protocol、Vision 实现、Mock、跨平台演进
+- [ocr 设计](design/ocr.md) — Protocol、Vision / Paddle 实现、Mock、跨平台演进
 - [extractor 设计](design/extractor.md) — Protocol、ffmpeg 实现、流式采样
 - [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
 - [ROI 数据通路设计（Phase 4 计划）](design/roi-data-path.md) — 固定区域 crop-before-Python、坐标契约与 A/B 验收边界
@@ -110,9 +111,10 @@ video
 | ffmpeg / ffprobe | 抽帧 + 探测 | 系统依赖（subprocess 调用） |
 | Pillow | 图像中立表示 | 必需 |
 | NumPy | 数组运算 | 必需 |
-| opencv-python-headless | 自适应二值化、形态学、SSIM | 必需 |
+| opencv-python | 自适应二值化、形态学、SSIM；与 rapidocr 共用同一 `cv2` 发行包 | 必需 |
 | pyobjc-framework-Vision | Apple Vision OCR | macOS 可选 |
 | pyobjc-framework-Quartz | CGImage/CGDataProvider | macOS 可选 |
+| rapidocr + onnxruntime | PaddleOCR（PP-OCRv6） | `paddle` 可选依赖，跨平台候选 |
 | pytest / ruff / mypy | 测试 / lint / 类型检查 | dev |
 
 ## 8. 配置
@@ -215,7 +217,7 @@ SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 ### 10.5 关键约束
 
 - **历史 Phase 2 约束**：Phase 2 尽量不改 Python 核心；Phase 3 已明确解除该约束，以实现增量 pipeline、统一抽帧和 OCR 行级选择。
-- **平台 API 隔离**：Apple Vision 在 GUI 端仅用于字幕区域候选框检测（`VisionTextDetector.swift`），OCR 仍由 Python 端 `ocr/vision.py` 执行。
+- **平台 API 隔离**：Apple Vision 在 GUI 端仅用于字幕区域候选框检测（`VisionTextDetector.swift`）；Python OCR 由用户所选的 `ocr/vision.py` 或 `ocr/paddle.py` 执行。
 - **无分发包**：Phase 2 不做独立 `.app` 打包与 Apple 公证（ADR-0009），GUI 通过 `swift run SubLiftMac` 在开发者环境运行。
 
 ## 11. phase3-opt-perf 架构
@@ -306,3 +308,4 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 - **ADR-0015**：性能 coverage 以排他 `pipeline_overhead` 补齐批量编排时间，避免与 leaf stage 双计
 - **ADR-0016**：未通过真实 A/B 吞吐保留门的 path-mode overlap 不进入 main；保留数据作为负向证据
 - **ADR-0017**：OCR 内部明细是 `ocr` coverage leaf 的子树，不参与 core coverage 相加；归因完成后先补多源 GT，再实验代表帧排序与有效调用数
+- **ADR-0018**：PaddleOCR 采用 rapidocr PP-OCRv6 + onnxruntime，模型缓存放在用户缓存目录；作为可选第二 OCR 引擎接入

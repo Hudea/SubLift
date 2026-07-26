@@ -32,7 +32,7 @@
 | `VideoPreview.swift` | `AVPlayerLayer` 视频预览 + 播放/暂停/seek 控制条 + PlayerModel。 |
 | `RegionOverlay.swift` | 候选框叠加、候选列表、多选交互与合并区域预览。 |
 | `SubtitleList.swift` | 字幕列表、文本编辑、合并/拆分/导出 SRT 按钮。 |
-| `SettingsView.swift` | OCR 引擎选择（vision / mock），`@AppStorage("default_engine")` 持久化。 |
+| `SettingsView.swift` | OCR 引擎选择（vision / paddle / mock），`@AppStorage("default_engine")` 持久化。 |
 | `TimeFormatter.swift` | 毫秒 → `HH:MM:SS.mmm` 纯函数工具。 |
 
 ## IPC 协议
@@ -61,6 +61,8 @@
 
 默认 path mode 不发送 `frame` / `finalize`。`start_job` 请求在后端处理期间保持打开，
 同一连接先收到 `progress` / `push_entry`，最后以 `entries(is_final=true)` 作为主响应。
+服务进程启动时的 `--engine` 是实际 OCR 引擎的权威来源；若与 `start_job.engine` 不一致，
+服务端返回带原文的 `done(ok=false)`，不会静默以另一引擎执行。
 
 ### 流式边界与安全保障
 

@@ -190,6 +190,26 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _build_bridge_handler(engine: str) -> Any:
+    """按 server 启动参数构造一条连接专用的 BridgeHandler。
+
+    ``--engine`` 是实际工厂的唯一权威来源；BridgeHandler 同时保存该名称，以在
+    ``start_job.engine`` 不一致时返回可由客户端消费的 ``done(ok=false)``，而不是
+    静默以另一引擎执行。
+    """
+    from sublift.ipc.bridge import BridgeHandler
+
+    if engine == "mock":
+        from sublift.ocr.mock import MockOcrEngine
+
+        return BridgeHandler(ocr_engine_factory=MockOcrEngine, engine_name=engine)
+    if engine == "paddle":
+        from sublift.ocr.paddle import PaddleOcrEngine
+
+        return BridgeHandler(ocr_engine_factory=PaddleOcrEngine, engine_name=engine)
+    return BridgeHandler(engine_name=engine)
+
+
 def main(argv: list[str] | None = None) -> None:
     """CLI 入口。
 
@@ -205,23 +225,9 @@ def main(argv: list[str] | None = None) -> None:
         stream=sys.stderr,
     )
 
-    # 根据 --engine 参数选择 OCR 引擎工厂
-    if args.engine == "mock":
-        from sublift.ipc.bridge import BridgeHandler
-        from sublift.ocr.mock import MockOcrEngine
-
-        handler_factory = lambda: BridgeHandler(  # noqa: E731
-            ocr_engine_factory=MockOcrEngine
-        ).handle
-    elif args.engine == "paddle":
-        from sublift.ipc.bridge import BridgeHandler
-        from sublift.ocr.paddle import PaddleOcrEngine
-
-        handler_factory = lambda: BridgeHandler(  # noqa: E731
-            ocr_engine_factory=PaddleOcrEngine
-        ).handle
-    else:
-        handler_factory = None  # 默认用 VisionOcrEngine
+    # 每条 UDS 连接独占一个状态机；--engine 既选择工厂，也传入 handler 的
+    # 协议一致性校验，防止 start_job.engine 静默覆盖真实执行引擎。
+    handler_factory = lambda: _build_bridge_handler(args.engine).handle  # noqa: E731
 
     try:
         asyncio.run(serve_once(args.socket, handler_factory=handler_factory))

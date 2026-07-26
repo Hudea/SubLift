@@ -11,6 +11,14 @@ RuntimeError 提示安装可选依赖。
 OcrResult.text/confidence 由 from_lines 兼容 join（\\n + 均值 conf）。
 
 不接 Phase 4.2 归因系统（timing_callback），契约允许。
+
+输入约定：直接传 PIL.Image 给 RapidOCR，由其 LoadImage 对 PIL 来源做
+RGB->BGR 转换；切勿传 RGB ndarray（RapidOCR 按 BGR 消费 ndarray，会致
+彩色字幕 R/B 通道颠倒）。
+
+故障语义：仅「无识别结果」（result.txts is None）返回空 OcrResult；
+运行时故障（模型加载 / ONNX 推理 / API 不兼容 / box 映射异常）向上传播，
+由 bridge 转为作业失败（done ok=False），不被伪装成空字幕。
 """
 
 from __future__ import annotations
@@ -102,59 +110,70 @@ class PaddleOcrEngine:
     def recognize(self, image: Image.Image) -> OcrResult:
         """用 PaddleOCR 识别图像中的文字。
 
-        异常兜底返回空 OcrResult，不崩溃。
+        直接传 PIL.Image 给 RapidOCR（由其对 PIL 来源做 RGB->BGR 转换）。
+        仅「无识别结果」返回空 OcrResult；运行时故障向上传播为作业失败，
+        不伪装成空字幕。
 
         Args:
             image: PIL.Image 图像。
 
         Returns:
             带 ``lines`` 的 OCR 结果；``text``/``confidence`` 为兼容汇总。
-            无识别结果或异常时返回 OcrResult("", 0.0)。
+            无识别结果时返回 OcrResult("", 0.0)。
+
+        Raises:
+            Exception: rapidocr 推理 / 模型加载 / box 映射等运行时故障，
+                向上传播由 bridge 转为 done(ok=False)。
         """
-        try:
-            arr = np.array(image.convert("RGB"))
-            result = self._engine(arr)
+        # 传 PIL.Image：RapidOCR 的 LoadImage 对 PIL 来源做 RGB->BGR；
+        # 传 RGB ndarray 会被按 BGR 消费，致彩色字幕 R/B 颠倒。
+        #（RapidOCR 运行时支持 PIL，但其 stub 的 __call__ 仅标注 str/ndarray/bytes/Path）
+        result = self._engine(image)  # type: ignore[arg-type]
+        img_w, img_h = image.size
 
-            # rapidocr 返回类型是联合类型；当传入 ndarray 时为 RapidOCROutput
-            if result.txts is None:  # type: ignore[union-attr]
-                return OcrResult.from_lines([])
+        # rapidocr 返回类型是联合类型；当传入 PIL 时为 RapidOCROutput
+        if result.txts is None:  # type: ignore[union-attr]
+            return OcrResult.from_lines([])
 
-            lines: list[OcrLine] = []
-            boxes = result.boxes  # type: ignore[union-attr]
-            txts: tuple[str, ...] = result.txts  # type: ignore[union-attr]
-            scores_raw = result.scores or ()  # type: ignore[union-attr]
+        lines: list[OcrLine] = []
+        boxes = result.boxes  # type: ignore[union-attr]
+        txts: tuple[str, ...] = result.txts  # type: ignore[union-attr]
+        scores_raw = result.scores or ()  # type: ignore[union-attr]
 
-            if boxes is None:
-                return OcrResult.from_lines([])
-
-            for i, (box_corners, text) in enumerate(zip(boxes, txts, strict=True)):
-                if not text.strip():
-                    continue
-                # 四角点 → axis-aligned 包围盒
-                xs = box_corners[:, 0]
-                ys = box_corners[:, 1]
-                x_min = int(np.floor(xs.min()))
-                y_min = int(np.floor(ys.min()))
-                x_max = int(np.ceil(xs.max()))
-                y_max = int(np.ceil(ys.max()))
-                # clamp 到图像范围
-                img_h, img_w = arr.shape[:2]
-                x_min = max(0, min(x_min, img_w))
-                y_min = max(0, min(y_min, img_h))
-                x_max = max(0, min(x_max, img_w))
-                y_max = max(0, min(y_max, img_h))
-                bbox = BoundingBox(
-                    x=x_min,
-                    y=y_min,
-                    width=x_max - x_min,
-                    height=y_max - y_min,
-                )
-                conf = scores_raw[i] if i < len(scores_raw) else 0.0
-                lines.append(OcrLine(text=text, confidence=conf, box=bbox))
-
-            # 稳定行序：上→下，同 y 左→右
+        # boxes 缺失但 txts 非空：用整图占位 box 保留文本（对齐 vision.py 降级策略）
+        fallback_box = BoundingBox(x=0, y=0, width=img_w, height=img_h)
+        if boxes is None:
+            for i, text in enumerate(txts):
+                if text.strip():
+                    conf = scores_raw[i] if i < len(scores_raw) else 0.0
+                    lines.append(OcrLine(text=text, confidence=conf, box=fallback_box))
             lines.sort(key=lambda line: (line.box.y, line.box.x))
             return OcrResult.from_lines(lines)
-        except Exception:
-            logger.debug("PaddleOCR recognize 异常，返回空结果", exc_info=True)
-            return OcrResult.from_lines([])
+
+        for i, (box_corners, text) in enumerate(zip(boxes, txts, strict=True)):
+            if not text.strip():
+                continue
+            # 四角点 -> axis-aligned 包围盒
+            xs = box_corners[:, 0]
+            ys = box_corners[:, 1]
+            x_min = int(np.floor(xs.min()))
+            y_min = int(np.floor(ys.min()))
+            x_max = int(np.ceil(xs.max()))
+            y_max = int(np.ceil(ys.max()))
+            # clamp 到图像范围
+            x_min = max(0, min(x_min, img_w))
+            y_min = max(0, min(y_min, img_h))
+            x_max = max(0, min(x_max, img_w))
+            y_max = max(0, min(y_max, img_h))
+            bbox = BoundingBox(
+                x=x_min,
+                y=y_min,
+                width=x_max - x_min,
+                height=y_max - y_min,
+            )
+            conf = scores_raw[i] if i < len(scores_raw) else 0.0
+            lines.append(OcrLine(text=text, confidence=conf, box=bbox))
+
+        # 稳定行序：上->下，同 y 左->右
+        lines.sort(key=lambda line: (line.box.y, line.box.x))
+        return OcrResult.from_lines(lines)

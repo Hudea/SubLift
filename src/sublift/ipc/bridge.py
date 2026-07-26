@@ -39,6 +39,7 @@ from sublift.detector.fixed_region import FixedRegionDetector
 from sublift.extractor.ffmpeg_extractor import FfmpegExtractor
 from sublift.extractor.frame_io import plan_frame_io
 from sublift.ipc.protocol import (
+    ENGINES,
     MSG_CANCEL_JOB,
     MSG_FINALIZE,
     MSG_FRAME,
@@ -82,6 +83,19 @@ def _build_detector(
     return BottomCropDetector(bottom_ratio=config.region_bottom_ratio)
 
 
+def _infer_engine_name(ocr_engine_factory: type[OcrEngine]) -> str | None:
+    """返回内置 OCR 工厂对应的协议引擎名。
+
+    不直接导入可选 Paddle 依赖，避免仅为做契约校验而改变导入/下载行为。
+    """
+    factory_path = f"{ocr_engine_factory.__module__}.{ocr_engine_factory.__name__}"
+    return {
+        "sublift.ocr.vision.VisionOcrEngine": "vision",
+        "sublift.ocr.mock.MockOcrEngine": "mock",
+        "sublift.ocr.paddle.PaddleOcrEngine": "paddle",
+    }.get(factory_path)
+
+
 class BridgeHandler:
     """IPC handler：path mode（后端 ffmpeg）或 frame mode（Swift 推帧）。
 
@@ -95,19 +109,37 @@ class BridgeHandler:
         self,
         ocr_engine_factory: type[OcrEngine] | None = None,
         ocr_engine_kwargs: dict[str, Any] | None = None,
+        engine_name: str | None = None,
     ) -> None:
         """初始化 bridge handler。
 
         Args:
             ocr_engine_factory: OCR 引擎类（默认 VisionOcrEngine，测试可传 MockOcrEngine）。
             ocr_engine_kwargs: OCR 引擎构造参数。
+            engine_name: 此 server 实际绑定的 OCR 引擎名。省略时会从内置引擎
+                工厂推断；自定义工厂必须显式提供，避免 ``start_job.engine``
+                与实际工厂静默不一致。
         """
         if ocr_engine_factory is None:
             from sublift.ocr.vision import VisionOcrEngine
 
             ocr_engine_factory = VisionOcrEngine
+            if engine_name is None:
+                engine_name = "vision"
+
+        if engine_name is None:
+            engine_name = _infer_engine_name(ocr_engine_factory)
+        if engine_name is None:
+            raise ValueError(
+                "自定义 ocr_engine_factory 必须显式提供 engine_name，"
+                "以保证 start_job.engine 与实际引擎一致"
+            )
+        if engine_name not in ENGINES:
+            raise ValueError(f"未知 engine_name: {engine_name!r}")
+
         self._ocr_engine_factory = ocr_engine_factory
         self._ocr_engine_kwargs = ocr_engine_kwargs or {}
+        self._engine_name = engine_name
 
         self._pipeline: Pipeline | None = None
         self._video_id: str = ""
@@ -185,9 +217,21 @@ class BridgeHandler:
 
     def _setup_pipeline(self, message: dict[str, Any]) -> dict[str, Any] | None:
         """根据 start_job 构造 Pipeline。成功返回 None，失败返回 done/error。"""
-        self._video_id = message["video_id"]
-        self._fps = float(message["fps"])
+        video_id = message["video_id"]
         engine = message["engine"]
+
+        # server 的启动参数在进程启动时已经决定实际工厂。客户端字段仍保留在
+        # 协议中用于端到端可观测性，但不得覆盖或伪装该选择。
+        if engine != self._engine_name:
+            error = (
+                "engine 不匹配: "
+                f"server 使用 {self._engine_name!r}，start_job 请求 {engine!r}"
+            )
+            logger.warning("%s (video_id=%s)", error, video_id)
+            return build_done(video_id, ok=False, error=error)
+
+        self._video_id = video_id
+        self._fps = float(message["fps"])
         confidence_threshold = float(message["confidence_threshold"])
         self._duration_ms = int(message.get("duration_ms", 0) or 0)
 
@@ -316,6 +360,25 @@ class BridgeHandler:
                 match,
             )
         return None
+
+    def _fail_frame_mode_job(self, video_id: str, error: Exception) -> dict[str, Any]:
+        """终止发生内部错误的 legacy frame-mode 任务。
+
+        frame mode 逐帧请求仍复用同一条 UDS 连接。OCR 或 Pipeline 失败时若只让
+        异常冒泡，server 会关闭 socket，Swift 端只能得到 ``connectionClosed``。
+        这里把业务失败转成带原始错误文本的 ``done(ok=false)``，并丢弃可能已
+        部分推进的 Pipeline，避免后续 frame/finalize 使用半坏状态。
+        """
+        logger.exception("frame mode job failed: video_id=%s", video_id)
+        if self._pipeline is not None:
+            self._pipeline.cancel()
+        self._pipeline = None
+        self._ocr = None
+        self._config = None
+        self._region_box = None
+        self._path_mode = False
+        self._cancelled = True
+        return build_done(video_id, ok=False, error=str(error))
 
     async def _run_path_mode(
         self,
@@ -597,12 +660,21 @@ class BridgeHandler:
 
         frame = Frame(timestamp_ms=ts_ms, image=image)
 
-        # 流式推进打轴（<1ms）
-        event = self._pipeline.feed(frame)
+        pipeline = self._pipeline
+        try:
+            # 流式推进打轴（<1ms）
+            event = pipeline.feed(frame)
 
-        # 段闭合 → OCR（放线程池避免阻塞 event loop）→ push_entry
-        if event is not None:
-            entry = await asyncio.to_thread(self._pipeline.ocr_segment, event)
+            # 段闭合 → OCR（放线程池避免阻塞 event loop）
+            entry = (
+                await asyncio.to_thread(pipeline.ocr_segment, event)
+                if event is not None
+                else None
+            )
+        except Exception as e:
+            return self._fail_frame_mode_job(video_id, e)
+
+        if entry is not None:
             await push(build_push_entry(video_id, {
                 "start_ms": entry.start_ms,
                 "end_ms": entry.end_ms,
@@ -613,7 +685,7 @@ class BridgeHandler:
         # 进度
         pct = 0.0
         if self._est_total_frames > 0:
-            pct = min(self._pipeline.processed_count / self._est_total_frames, 1.0)
+            pct = min(pipeline.processed_count / self._est_total_frames, 1.0)
 
         return build_progress(
             video_id, STAGE_PROCESSING, pct, 0
@@ -628,7 +700,11 @@ class BridgeHandler:
 
         video_id = message["video_id"]
 
-        entries = await asyncio.to_thread(self._pipeline.finalize)
+        pipeline = self._pipeline
+        try:
+            entries = await asyncio.to_thread(pipeline.finalize)
+        except Exception as e:
+            return self._fail_frame_mode_job(video_id, e)
 
         entry_dicts = [
             {
@@ -644,7 +720,7 @@ class BridgeHandler:
         logger.info(
             "finalize: video_id=%s processed_frames=%d entries=%d empty_text=%d",
             video_id,
-            self._pipeline.processed_count,
+            pipeline.processed_count,
             len(entries),
             empty_n,
         )

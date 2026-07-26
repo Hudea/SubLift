@@ -109,6 +109,40 @@ class TestMainEntry:
         captured = capsys.readouterr()
         assert "uv sync --extra vision" in captured.err
 
+    def test_extract_paddle_initialization_failure_is_actionable(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Paddle 已安装但模型初始化失败时，不暴露 traceback。"""
+        video = tmp_path / "video.mp4"
+        video.write_bytes(b"\x00")
+
+        from sublift.extractor.ffmpeg_extractor import VideoInfo
+
+        monkeypatch.setattr(
+            "sublift.extractor.ffmpeg_extractor.probe_video",
+            lambda v: VideoInfo(320, 240, 5000),
+        )
+        monkeypatch.setattr("sublift.cli.is_paddle_available", lambda: True)
+
+        def raise_initialization_error() -> None:
+            raise RuntimeError("模型下载失败：网络不可达")
+
+        monkeypatch.setattr("sublift.cli.PaddleOcrEngine", raise_initialization_error)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["extract", str(video), "--engine", "paddle"])
+
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "PaddleOCR 初始化失败" in captured.err
+        assert "模型下载失败：网络不可达" in captured.err
+        assert "检查网络后重试" in captured.err
+        assert "uv run --extra paddle python -c" in captured.err
+        assert "Traceback" not in captured.out + captured.err
+
     def test_extract_mock_engine_writes_srt(
         self,
         tmp_path: Path,

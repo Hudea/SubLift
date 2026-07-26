@@ -134,6 +134,11 @@ class TestStartJob:
         with pytest.raises(ProtocolError, match="engine"):
             validate(msg)
 
+    def test_paddle_engine_accepted(self) -> None:
+        """feat-05002: paddle 是合法 engine，GUI 选 paddle 时 start_job 应通过校验。"""
+        msg = build_start_job(VIDEO_ID, 5.0, "paddle", 0.5)
+        validate(msg)  # 不抛即通过
+
     def test_missing_fps(self) -> None:
         msg = {
             "type": MSG_START_JOB,

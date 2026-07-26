@@ -210,7 +210,20 @@ def _build_ocr_engine(
                 file=sys.stderr,
             )
             sys.exit(1)
-        return PaddleOcrEngine()
+        try:
+            return PaddleOcrEngine()
+        except Exception as exc:
+            detail = str(exc) or type(exc).__name__
+            print(
+                "错误：PaddleOCR 初始化失败，无法加载或下载识别模型。\n"
+                f"  原因：{detail}\n"
+                "  请检查网络后重试；首次运行需要下载模型。\n"
+                "  也可先预下载模型：\n"
+                '  uv run --extra paddle python -c "from sublift.ocr import '
+                'PaddleOcrEngine; PaddleOcrEngine()"',
+                file=sys.stderr,
+            )
+            sys.exit(1)
     print(f"错误：未知引擎: {engine}", file=sys.stderr)
     sys.exit(1)
 

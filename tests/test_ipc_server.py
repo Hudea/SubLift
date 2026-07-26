@@ -14,6 +14,7 @@ import struct
 import uuid
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -35,6 +36,17 @@ from sublift.ipc.server import (
 from sublift.ocr.mock import MockOcrEngine
 
 
+def _make_jpeg() -> bytes:
+    """生成 frame-mode 测试用的有效 JPEG。"""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 32), color="black").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
 def _pack(message: dict[str, object]) -> bytes:
     """手工打包一条分帧消息，用于单测。"""
     body = json.dumps(message, ensure_ascii=False).encode("utf-8")
@@ -47,6 +59,19 @@ def _parse_response(chunks: bytes) -> dict[str, object]:
     body = chunks[LENGTH_PREFIX_SIZE : LENGTH_PREFIX_SIZE + length]
     result: dict[str, object] = json.loads(body.decode("utf-8"))
     return result
+
+
+def _parse_responses(chunks: bytes) -> list[dict[str, object]]:
+    """解析 writer 捕获的全部分帧响应。"""
+    responses: list[dict[str, object]] = []
+    offset = 0
+    while offset < len(chunks):
+        (length,) = struct.unpack(">I", chunks[offset : offset + LENGTH_PREFIX_SIZE])
+        body_start = offset + LENGTH_PREFIX_SIZE
+        body_end = body_start + length
+        responses.append(json.loads(chunks[body_start:body_end].decode("utf-8")))
+        offset = body_end
+    return responses
 
 
 class _MockStreamWriter:
@@ -197,6 +222,38 @@ class TestHandleConnection:
         assert isinstance(message, str)
         assert "video_id" in message
 
+    def test_frame_ocr_failure_returns_done_over_framed_connection(self) -> None:
+        """OCR 异常应以 done(ok=false) 回传，而不是由 server 关闭 socket。"""
+
+        async def scenario() -> tuple[bytes, BridgeHandler]:
+            reader = asyncio.StreamReader()
+            writer = _MockStreamWriter()
+            bridge = self._make_handler()
+            reader.feed_data(_pack(build_start_job("V1", 5.0, "mock", 0.5)))
+            reader.feed_data(_pack(build_frame("V1", 1000, _make_jpeg())))
+            reader.feed_eof()
+
+            with (
+                patch("sublift.ipc.bridge.Pipeline.feed", return_value=object()),
+                patch(
+                    "sublift.ipc.bridge.Pipeline.ocr_segment",
+                    side_effect=RuntimeError("Paddle OCR 原始错误"),
+                ),
+            ):
+                await handle_connection(reader, writer, handler=bridge.handle)
+            return writer.chunks, bridge
+
+        chunks, bridge = asyncio.run(scenario())
+        responses = _parse_responses(chunks)
+        assert responses[0]["type"] == "progress"
+        assert responses[1] == {
+            "type": "done",
+            "video_id": "V1",
+            "ok": False,
+            "error": "Paddle OCR 原始错误",
+        }
+        assert bridge._pipeline is None
+
 
 class TestBusinessMessageStubs:
     """feat-015/016：业务消息的 handler 分发（用 MockOcrEngine）。"""
@@ -212,7 +269,7 @@ class TestBusinessMessageStubs:
             writer = _MockStreamWriter()
             bridge = self._make_handler()
             reader.feed_data(
-                _pack(build_start_job("V1", 5.0, "vision", 0.5))
+                _pack(build_start_job("V1", 5.0, "mock", 0.5))
             )
             reader.feed_eof()
             await handle_connection(reader, writer, handler=bridge.handle)
@@ -234,7 +291,7 @@ class TestBusinessMessageStubs:
             bridge = self._make_handler()
             # 先 start_job
             reader.feed_data(
-                _pack(build_start_job("V1", 5.0, "vision", 0.5))
+                _pack(build_start_job("V1", 5.0, "mock", 0.5))
             )
             # 再 frame（用一个最小有效 JPEG）
             from PIL import Image
@@ -385,7 +442,7 @@ class TestServeOnce:
 
                 # 2. start_job → progress(stage=ready)
                 await write_message(
-                    writer, build_start_job("V1", 5.0, "vision", 0.5, region_box=[0, 0, 1920, 1080])
+                    writer, build_start_job("V1", 5.0, "mock", 0.5, region_box=[0, 0, 1920, 1080])
                 )
                 responses.append(await read_message(reader))
 

@@ -2,7 +2,7 @@
 
 ## 1. 项目目标
 
-为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Python CLI 与 macOS SwiftUI 开发者版本；跨平台是长期目标，不属于 Phase 3 已交付范围。
+为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Python CLI 与 macOS SwiftUI 开发者版本；PaddleOCR 已作为可选 CLI/GUI 引擎接入，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
 
 ## 2. 用户与使用场景
 
@@ -22,7 +22,7 @@
 - **F1 视频输入** ✅：通过 ffmpeg 支持 mp4 / mkv / mov 等主流容器及 H.264 / H.265。
 - **F2 帧采样** ✅：按可配置采样率抽帧，默认 5fps；CLI、benchmark 与 GUI path mode 统一使用 Python `FfmpegExtractor`。
 - **F3 字幕区域** ✅：CLI 默认裁剪画面下部 30%，支持固定区域；GUI 用 Vision 检测文字候选框并由用户多选字幕框。
-- **F4 OCR 识别** ✅：统一 `OcrEngine` 接口；Apple Vision 返回逐行 `OcrLine(text, confidence, box)`，保留 Mock 引擎用于测试。
+- **F4 OCR 识别** ✅：统一 `OcrEngine` 接口；Apple Vision 与 PaddleOCR（rapidocr PP-OCRv6）均返回逐行 `OcrLine(text, confidence, box)`，保留 Mock 引擎用于测试。
 - **F5 时间轴生成** ✅：双信号帧签名、变化点状态机与 SSIM patrol 生成 `start_ms` / `end_ms`。
 - **F6 去重与合并** ✅：相邻同文去重、短空洞桥接与重叠处理；仍有少量 merged residual。
 - **F7 字幕导出** ⚠️：SRT 已完成；ASS、VTT 只有接口占位。
@@ -32,7 +32,7 @@
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。
 - **F12 配置文件** ❌：尚不支持 `sublift.toml` / `--config`。
 - **F13 引擎对照模式** ❌：尚未提供产品化的多引擎并行对照。
-- **F14 PaddleOCR 第二引擎** ✅：已通过 rapidocr PP-OCRv6 接入，`--engine paddle` CLI/GUI 可选。
+- **F14 PaddleOCR 第二引擎** ✅：已通过 rapidocr PP-OCRv6 + onnxruntime 接入，`--engine paddle` CLI/GUI 可选；首次模型下载后离线推理，模型缓存位于 `~/.cache/sublift/rapidocr-models`。
 
 ### 3.2 Benchmark 与可观察性
 
@@ -50,7 +50,7 @@
 - **F23 字幕区域选择** ✅：Vision 候选框 + 用户多选；无选择时回退下部裁剪。
 - **F24 批量处理队列** ❌：当前一次处理一个视频。
 - **F25 导出对话框** ✅：选择保存位置并导出 SRT。
-- **F26 引擎管理 UI** ✅：vision / mock 选择通过 UserDefaults 持久化。
+- **F26 引擎管理 UI** ✅：vision / paddle / mock 选择通过 UserDefaults 持久化。
 - **F27 独立 `.app` 分发** ❌：按 ADR-0009 跳过；当前通过 SwiftPM 构建运行。
 
 ## 4. 非功能需求
@@ -58,12 +58,12 @@
 | 维度 | 要求 | 当前状态 |
 |---|---|---|
 | **性能** | 1080p、5fps 处理速度 ≥ 1× 实时 | ✅ 固定 GT 实测 21.0× 实时 |
-| **离线 / 隐私** | 默认不依赖网络，视频与文本不上传 | ✅ ffmpeg + 本地 Vision 全程本机处理 |
+| **离线 / 隐私** | 视频与文本不上传；已缓存模型时不依赖网络 | ✅ Vision 全程本机处理；PaddleOCR 仅首次下载模型需要联网，之后本机推理 |
 | **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；4K 自动内存审计、Vision 生命周期修复和 ≥10 分钟真实 GUI 验收均已通过。Phase 4.1 有界重叠实验也验证队列边界，但未通过吞吐保留门，产品保持串行。 |
 | **可分发** | 面向终端用户的独立安装包 | ❌ Phase 2 已明确跳过 `.app` 打包与公证 |
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
-| **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ 开发者环境可构建运行 |
-| **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ 架构已留路；Windows/Linux 与通用 OCR 尚未交付 |
+| **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ macOS 开发者环境可构建运行；PaddleOCR 是不依赖 Vision 的可选 OCR 引擎 |
+| **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
 
 ## 5. 输入输出规范
 
@@ -80,7 +80,7 @@
 ## 6. 不在当前范围内
 
 - 软字幕轨提取、实时直播流、字幕翻译、云端 SaaS
-- ASS / VTT 完整导出、PaddleOCR、配置文件、批量 GUI 队列
+- ASS / VTT 完整导出、配置文件、批量 GUI 队列
 - 独立 `.app` 分发、公证，以及 Windows / Linux 产品交付
 
 ## 7. 关键风险与权衡
@@ -92,12 +92,13 @@
 | 短字幕与 merged residual | 少量 timing FN 或合并错误 | 保留 failure cluster，后续按固定 GT/新增 GT 回归 |
 | path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 已确认 Vision 请求执行主导，下一步先补多源 GT 后研究有效 OCR 调用。 |
 | Apple Vision 在非 macOS/CI 不可用 | 集成覆盖受限 | Mock 闭环测试；平台 API 限定在适配层 |
+| PaddleOCR 首次模型下载失败 | 首次 `--engine paddle` 无法启动 | CLI 给出不含 traceback 的失败原因与预下载命令；模型缓存后离线复用 |
 
 ## 8. 阶段验收状态
 
 ### Phase 1 — CLI MVP
 
-- [x] CLI、ffmpeg 抽帧、Vision OCR、时间轴、去重与 SRT 导出闭环
+- [x] CLI、ffmpeg 抽帧、Vision / PaddleOCR（可选）与 Mock、时间轴、去重和 SRT 导出闭环
 - [x] Python lint、strict mypy、单元测试与 `./init.sh` 全绿
 - [x] 真实视频端到端产出可加载 SRT
 
@@ -105,7 +106,7 @@
 
 - [x] 拖拽、预览、候选区域多选、字幕编辑与 SRT 导出
 - [x] SwiftUI ↔ Python UDS 闭环，mkv 走系统 ffmpeg
-- [x] vision / mock 设置持久化
+- [x] vision / paddle / mock 设置持久化
 - [~] 独立 `.app` 分发与公证经用户决定跳过（ADR-0009）
 
 ### Phase 3 — 优化与基本可用

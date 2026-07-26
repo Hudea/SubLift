@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFont
 
@@ -239,6 +240,7 @@ class TestVisionOcrEngineUnit:
 
     def test_callback_exception_does_not_break_ocr(self) -> None:
         """callback 抛异常不得改变 OCR 返回语义。"""
+
         def _boom(_detail: object) -> None:
             raise RuntimeError("observer boom")
 
@@ -370,11 +372,7 @@ class TestVisionOcrEngineIntegration:
 
 @pytest.mark.skipif(not is_paddle_available(), reason="rapidocr 未安装")
 class TestPaddleOcrEngineUnit:
-    """PaddleOcrEngine 单测，需 rapidocr。"""
-
-    def test_is_ocr_engine(self) -> None:
-        engine = PaddleOcrEngine()
-        assert isinstance(engine, OcrEngine)
+    """PaddleOcrEngine 单测，不触发模型下载。"""
 
     def test_default_model_dir(self) -> None:
         from pathlib import Path
@@ -383,6 +381,119 @@ class TestPaddleOcrEngineUnit:
 
         expected = Path.home() / ".cache" / "sublift" / "rapidocr-models"
         assert str(DEFAULT_MODEL_DIR) == str(expected)
+
+
+class TestPaddleRecognizeContract:
+    """recognize() 映射逻辑单测，用假 RapidOCR 注入，不下载模型。
+
+    覆盖：四角点 box -> BoundingBox 包围盒、行序排序、boxes=None 降级、
+    无结果返回空、运行时故障向上传播（不伪装空字幕）。
+    """
+
+    @staticmethod
+    def _make_engine(monkeypatch: pytest.MonkeyPatch, fake_engine: object) -> PaddleOcrEngine:
+        """绕过 __init__（不下载模型），注入假 RapidOCR 实例。
+
+        fake_engine 须为 callable：``fake_engine(image) -> 输出对象``，
+        输出对象需有 ``txts`` / ``boxes`` / ``scores`` 属性（用 SimpleNamespace 构造）。
+        """
+        monkeypatch.setattr("sublift.ocr.paddle._PADDLE_AVAILABLE", True)
+        engine = PaddleOcrEngine.__new__(PaddleOcrEngine)
+        engine._engine = fake_engine  # type: ignore[assignment]
+        return engine
+
+    @staticmethod
+    def _fake_engine_calling(
+        txts: tuple[str, ...] | None,
+        boxes: np.ndarray | None,
+        scores: tuple[float, ...] | None,
+    ) -> object:
+        """构造一个 callable 假引擎，调用时返回带 txts/boxes/scores 的输出。"""
+        output = SimpleNamespace(txts=txts, boxes=boxes, scores=scores)
+
+        def _call(_image: object) -> object:
+            return output
+
+        return _call
+
+    def test_box_mapping_and_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """四角点 -> BoundingBox 包围盒；行按 (y, x) 排序。"""
+        # 两个框：下方在左、上方在右，验证排序后上->下、同 y 左->右
+        box_top_right = np.array([[200, 0], [300, 0], [300, 40], [200, 40]], dtype=float)
+        box_bottom_left = np.array([[0, 100], [150, 100], [150, 140], [0, 140]], dtype=float)
+        fake = self._fake_engine_calling(
+            txts=("下", "上"),
+            boxes=np.array([box_bottom_left, box_top_right]),
+            scores=(0.9, 0.8),
+        )
+        engine = self._make_engine(monkeypatch, fake)
+        result = engine.recognize(Image.new("RGB", (320, 200)))
+        # 排序后「上」(y=0) 在前，「下」(y=100) 在后
+        assert [ln.text for ln in result.lines] == ["上", "下"]
+        assert result.lines[0].box.x == 200  # 上框 clamp 后 x
+        assert result.lines[1].box.x == 0
+        assert result.lines[0].confidence == 0.8
+        assert result.lines[1].confidence == 0.9
+
+    def test_boxes_none_keeps_text(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """boxes 缺失但 txts 非空：用整图占位 box 保留文本。"""
+        fake = self._fake_engine_calling(
+            txts=("你好",),
+            boxes=None,
+            scores=(0.7,),
+        )
+        engine = self._make_engine(monkeypatch, fake)
+        result = engine.recognize(Image.new("RGB", (100, 50)))
+        assert result.text == "你好"
+        assert len(result.lines) == 1
+        assert result.lines[0].box == BoundingBox(x=0, y=0, width=100, height=50)
+
+    def test_no_result_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """result.txts is None（真无识别结果）返回空 OcrResult。"""
+        fake = self._fake_engine_calling(txts=None, boxes=None, scores=None)
+        engine = self._make_engine(monkeypatch, fake)
+        result = engine.recognize(Image.new("RGB", (100, 50)))
+        assert result.text == ""
+        assert result.confidence == 0.0
+        assert result.lines == ()
+
+    def test_colored_pil_input_preserves_rapidocr_rgb_bgr_contract(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """彩色 PIL 输入须由 RapidOCR 转 BGR，不能先转 RGB ndarray。
+
+        RapidOCR 对 PIL.Image 会做 RGB -> BGR 转换，而 ndarray 会被直接
+        按 BGR 消费。这里用纯红像素模拟该分支：若 recognize() 回退为
+        ``np.asarray(image)``，fake engine 会看到错误的 BGR 通道顺序。
+        """
+
+        class _ColorSensitiveRapidOcr:
+            def __call__(self, image: Image.Image | np.ndarray) -> object:
+                # 模拟 RapidOCR：PIL 来源转 RGB -> BGR，ndarray 则按 BGR 消费。
+                bgr = np.asarray(image)[:, :, ::-1] if isinstance(image, Image.Image) else image
+
+                assert tuple(bgr[0, 0]) == (0, 0, 255)
+                return SimpleNamespace(
+                    txts=("红色字幕",),
+                    boxes=np.array([[[0, 0], [20, 0], [20, 10], [0, 10]]]),
+                    scores=(0.99,),
+                )
+
+        engine = self._make_engine(monkeypatch, _ColorSensitiveRapidOcr())
+        result = engine.recognize(Image.new("RGB", (40, 20), color=(255, 0, 0)))
+        assert result.text == "红色字幕"
+        assert result.confidence == pytest.approx(0.99)
+
+    def test_runtime_failure_propagates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """引擎运行时故障向上传播，不伪装成空字幕。"""
+
+        class _Boom:
+            def __call__(self, _img: object) -> None:
+                raise RuntimeError("ONNX 推理失败")
+
+        engine = self._make_engine(monkeypatch, _Boom())
+        with pytest.raises(RuntimeError, match="ONNX 推理失败"):
+            engine.recognize(Image.new("RGB", (100, 50)))
 
 
 class TestPaddleDegradation:
@@ -400,7 +511,16 @@ class TestPaddleDegradation:
 @pytest.mark.integration
 @pytest.mark.skipif(not is_paddle_available(), reason="rapidocr 未安装")
 class TestPaddleOcrEngineIntegration:
-    """PaddleOcrEngine 真实识别集成测试，需 rapidocr + 模型已下载。"""
+    """PaddleOcrEngine 真实识别集成测试，需 rapidocr + 模型已下载。
+
+    标 integration：构造 PaddleOcrEngine() 会触发模型下载，不应纳入默认
+    pytest / init.sh（冷缓存离线环境会失败）。
+    """
+
+    def test_is_ocr_engine(self) -> None:
+        """构造真实引擎，满足 OcrEngine Protocol。"""
+        engine = PaddleOcrEngine()
+        assert isinstance(engine, OcrEngine)
 
     def test_recognize_hello(self) -> None:
         """PaddleOCR 应识别出 'Hello' 英文文本。"""

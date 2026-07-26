@@ -94,7 +94,9 @@ run_check() {
 
 run_check "ruff check ."   uv run --extra vision --extra paddle ruff check .
 run_check "mypy src"       uv run --extra vision --extra paddle mypy src
-run_check "pytest"         uv run --extra vision --extra paddle pytest
+# 默认基线排除集成测试：其中 Paddle 集成测试首次构造模型可能触发下载。
+# 需外部资源的验证由开发者显式运行：uv run pytest -m integration。
+run_check "pytest"         uv run --extra vision --extra paddle pytest -m "not integration"
 
 echo
 echo "=============================="

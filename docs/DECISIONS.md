@@ -5,13 +5,29 @@
 
 ---
 
+## ADR-0019 IPC OCR 引擎以服务进程绑定为准（2026-07-26）
+
+- **状态**：已确认并完成（Phase 5 审查整改）。
+- **背景**：server 启动参数已选择 OCR 工厂，但 `start_job.engine` 过去只写日志；两者不一致时，
+  请求会静默以另一引擎执行。legacy frame mode 的 OCR 故障还会冒泡并关闭 UDS。
+- **决策**：`--engine` 是实际 OCR 引擎的唯一权威来源。BridgeHandler 保存该名称，并在
+  `start_job.engine` 不一致时返回 `done(ok=false)`；frame/finalize 的运行时故障也返回保留
+  原文的 `done(ok=false)` 并清理任务状态。Swift 在解码前把 `done(ok=false)` 和协议 `error`
+  统一映射为 `PipelineClientError.serverError`。
+- **理由**：客户端声明与实际执行必须可观测且不可伪装；可读业务错误比 UDS 断连更可恢复，
+  并允许同一连接随后显式重启任务。
+- **影响**：IPC 测试必须让 mock server 与 mock 请求一致，并新增 mismatch、frame/finalize
+  故障、状态清理、重启与真实 Swift UDS 回归。
+
+---
+
 ## ADR-0018 PaddleOCR 引擎选型与接入（2026-07-26）
 
 - **状态**：已确认并完成（feat-05001 ~ feat-05004）。
 - **背景**：项目自 Phase 1 起预留 PaddleOCR 第二引擎接口（F14），Phase 4.2 归因契约明确允许
   非 Vision 引擎不实现 observer，为接入扫清协议障碍。
 - **决策**：
-  - 依赖栈：`rapidocr>=3.9.0` + `onnxruntime>=1.16`（PP-OCRv6 small 默认，onnxruntime 后端）。
+  - 依赖栈：`rapidocr>=3.9.0,<4.0.0` + `onnxruntime>=1.16`（PP-OCRv6 small 默认，onnxruntime 后端）。
     不选 `rapidocr-onnxruntime` 1.x（停在 PP-OCRv4，已停更）。
   - 模型缓存：覆盖 rapidocr 默认 site-packages 落点为 `~/.cache/sublift/rapidocr-models`，
     跨 venv 复用，不污染 site-packages。
@@ -21,7 +37,8 @@
 - **理由**：rapidocr 3.9 起默认 PP-OCRv6 det+rec small，中文精度优于 v4；onnxruntime 后端
   无 paddlepaddle 重依赖，pip 直装，几十 MB，跨平台。符合项目「通用可选依赖」定位。
 - **影响**：新增 `ocr/paddle.py`、`pyproject.toml` paddle extra、CLI/IPC/GUI 接线；
-  核心层（pipeline/bridge）零修改，`OcrEngine` Protocol 不变。
+  Pipeline 与 `OcrEngine` Protocol 保持不变。审查整改后，bridge/server 显式校验
+  `start_job.engine` 与进程绑定引擎一致，并把 frame-mode 运行时故障返回为可读协议错误。
 
 ---
 

@@ -106,7 +106,7 @@ public final class PipelineClient: @unchecked Sendable {
     /// 启动 Python 子进程并连接 UDS。
     /// - Parameters:
     ///   - pythonExecutable: Python 解释器路径（开发期默认 `.venv/bin/python`）
-    ///   - engine: OCR 引擎（"vision" 或 "mock"，默认 "vision"）
+    ///   - engine: OCR 引擎（"vision"、"paddle" 或 "mock"，默认 "vision"）
     /// - Returns: 是否成功握手（发 hello 收 bye）
     @discardableResult
     public func start(
@@ -198,7 +198,10 @@ public final class PipelineClient: @unchecked Sendable {
     ) throws -> R? {
         let packed = try Self.packMessage(message)
         try writeAll(packed)
-        return try readMessageDecoded(as: responseType)
+        guard let dict = try readMessageAny() else { return nil }
+        try Self.throwIfServerError(dict)
+        let bodyData = try JSONSerialization.data(withJSONObject: dict)
+        return try JSONDecoder().decode(responseType, from: bodyData)
     }
 
     /// 发送一条 Codable 消息并读取响应，支持在主响应前接收增量 push_entry / progress。
@@ -225,6 +228,7 @@ public final class PipelineClient: @unchecked Sendable {
             guard let dict = try readMessageAny() else {
                 throw PipelineClientError.connectionClosed
             }
+            try Self.throwIfServerError(dict)
             let type = dict["type"] as? String
             if type == "push_entry" {
                 let bodyData = try JSONSerialization.data(withJSONObject: dict)
@@ -244,17 +248,8 @@ public final class PipelineClient: @unchecked Sendable {
                 continue
             }
             if type == "done" {
-                let ok = dict["ok"] as? Bool ?? false
-                if !ok {
-                    let err = dict["error"] as? String ?? "unknown error"
-                    throw PipelineClientError.serverError(err)
-                }
                 // path mode 失败用 done；成功主响应是 entries，忽略 ok=true 的 done
                 continue
-            }
-            if type == "error" {
-                let err = dict["message"] as? String ?? "protocol error"
-                throw PipelineClientError.serverError(err)
             }
             let bodyData = try JSONSerialization.data(withJSONObject: dict)
             return try JSONDecoder().decode(responseType, from: bodyData)
@@ -262,6 +257,20 @@ public final class PipelineClient: @unchecked Sendable {
     }
 
     // MARK: - Private
+
+    /// 将 Python 端的业务失败统一映射为可本地化展示的 serverError。
+    /// 非流式 legacy frame mode 与流式 path mode 都复用此分支。
+    private static func throwIfServerError(_ dict: [String: Any]) throws {
+        let type = dict["type"] as? String
+        if type == "done", (dict["ok"] as? Bool ?? false) == false {
+            let error = dict["error"] as? String ?? "unknown error"
+            throw PipelineClientError.serverError(error)
+        }
+        if type == "error" {
+            let error = dict["message"] as? String ?? "protocol error"
+            throw PipelineClientError.serverError(error)
+        }
+    }
 
     /// JSON 数字（常为 NSNumber）→ Double。
     private static func jsonDouble(_ value: Any?) -> Double {
@@ -466,4 +475,30 @@ public enum PipelineClientError: Error, Equatable {
     case serverError(String)
     /// 对端关闭连接（含用户取消关闭 socket）。
     case connectionClosed
+}
+
+extension PipelineClientError: LocalizedError {
+    /// 暴露可操作的错误文案，避免 `error.localizedDescription` 退化为系统默认文案。
+    /// 特别是 `serverError` 携带的 Python 端消息（如 `uv sync --extra paddle`、
+    /// 网络或缓存错误）需要透传给用户。
+    public var errorDescription: String? {
+        switch self {
+        case .serverError(let message):
+            return message
+        case .incompleteLengthPrefix:
+            return "与提取服务通信失败：长度前缀不完整。"
+        case .incompleteBody:
+            return "与提取服务通信失败：消息体不完整。"
+        case .serverStartTimeout:
+            return "提取服务启动超时。"
+        case .socketCreateFailed(let errno):
+            return "创建 socket 失败（errno \(errno)）。"
+        case .socketConnectFailed(let errno):
+            return "连接提取服务失败（errno \(errno)）。"
+        case .socketWriteFailed(let errno):
+            return "向提取服务写入失败（errno \(errno)）。"
+        case .connectionClosed:
+            return "与提取服务的连接已关闭。"
+        }
+    }
 }

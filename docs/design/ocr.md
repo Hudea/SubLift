@@ -111,14 +111,17 @@ PIL.Image
 ### 依赖与安装
 
 ```bash
-uv sync --extra paddle   # rapidocr>=3.9.0 + onnxruntime>=1.16
+uv sync --extra paddle   # rapidocr>=3.9.0,<4.0.0 + onnxruntime>=1.16
 ```
 
 首次运行自动下载模型到 `~/.cache/sublift/rapidocr-models`（约 30MB），跨 venv 复用。离线环境可预下载：
 
 ```bash
-python -m rapidocr download_models
+uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; PaddleOcrEngine()"
 ```
+
+> 通过 `PaddleOcrEngine()` 构造才能把模型写入
+> `~/.cache/sublift/rapidocr-models`；不要使用不带该缓存配置的 RapidOCR 下载命令。
 
 ### 模型规格
 
@@ -131,9 +134,13 @@ engine = PaddleOcrEngine(model_type="medium")  # 中文漏字多时升级
 ### 实现要点
 
 - 优雅降级：模块级 `_PADDLE_AVAILABLE` 标志，不可用时实例化抛 `RuntimeError`
+- 输入约定：直接传 `PIL.Image` 给 RapidOCR（由其对 PIL 来源做 RGB->BGR 转换）；
+  切勿传 RGB ndarray（RapidOCR 按 BGR 消费 ndarray，致彩色字幕 R/B 颠倒）
 - 四角点转包围盒：rapidocr `result.boxes` shape `(N, 4, 2)` → axis-aligned `BoundingBox`
 - 行级输出：与 Vision 一致，按 `(box.y, box.x)` 排序，`OcrResult.from_lines` 汇总
-- 异常兆底：`recognize` 异常返回空 `OcrResult`，不崩 IPC server
+- 故障语义：仅「无识别结果」（`result.txts is None`）返回空 `OcrResult`；
+  运行时故障（推理 / 模型加载 / box 映射）向上传播，由 bridge 转为 `done(ok=False)`，
+  不伪装成空字幕
 - 不接 Phase 4.2 归因：`PaddleOcrEngine` 不实现 `timing_callback`（契约允许）
 
 ## 跨平台演进指引

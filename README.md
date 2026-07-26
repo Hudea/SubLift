@@ -2,7 +2,7 @@
 
 硬字幕（烧录字幕）提取工具——从视频画面中自动识别字幕，生成可编辑的 SRT 文件。
 
-本地离线运行，隐私优先，视频与识别文本不离开本机。
+本地运行、隐私优先，视频与识别文本不离开本机。Vision 可直接离线使用；PaddleOCR 首次下载模型后也在本机离线推理。
 
 ## 特性
 
@@ -16,7 +16,7 @@
 
 ## 环境要求
 
-- macOS 13+（Apple Silicon 推荐；Vision 依赖）
+- macOS 13+（当前 GUI 与 Vision 引擎；Apple Silicon 推荐）
 - Python 3.12+
 - ffmpeg（含 ffprobe）
 - uv（包管理）
@@ -33,7 +33,13 @@ uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
-> PaddleOCR 首次运行自动下载模型到 `~/.cache/sublift/rapidocr-models`（约 30MB，需联网）。
+> PaddleOCR 首次运行会下载模型到 `~/.cache/sublift/rapidocr-models`（需联网），之后可离线推理。可预先下载：
+
+```bash
+uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; PaddleOcrEngine()"
+```
+
+> 若 PaddleOCR 初始化失败，CLI 会显示失败原因、网络重试提示和上述预下载命令，不会输出 Python traceback。
 
 ## 使用
 
@@ -42,7 +48,7 @@ uv run sublift extract <video> -o output.srt
 uv run sublift extract clip.mkv --fps 5 -o out.srt
 uv run sublift extract clip.mkv --script cjk -o out.srt    # 已知中文字幕轨
 uv run sublift extract clip.mkv --engine mock -o out.srt   # 无 Vision 时跑流程
-uv run sublift extract clip.mkv --engine paddle -o out.srt  # 跨平台 PaddleOCR
+uv run sublift extract clip.mkv --engine paddle -o out.srt  # PaddleOCR（无需 Vision）
 ```
 
 ### CLI 参数
@@ -53,7 +59,7 @@ uv run sublift extract clip.mkv --engine paddle -o out.srt  # 跨平台 PaddleOC
 | `-o, --output` | output.srt | 输出字幕文件路径 |
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
-| `--engine` | vision | OCR 引擎（vision / mock / paddle） |
+| `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 首次运行需下载模型 |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）
@@ -84,7 +90,7 @@ swift run SubLiftMac
 ```bash
 ./init.sh                     # 环境检查 + 验证基线
 uv run pytest                 # Python 单元测试
-uv run pytest -m integration  # 集成测试（需 ffmpeg / Vision）
+uv run pytest -m integration  # 集成测试（需外部视频、ffmpeg、Vision 或 Paddle 模型）
 uv run ruff check .           # lint
 uv run mypy src tests         # 类型检查（strict）
 ```

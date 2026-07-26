@@ -40,8 +40,8 @@ MSG_HELLO = "hello"
 MSG_BYE = "bye"
 MSG_ERROR = "error"
 
-# engine 合法值（paddle 留待 Phase 3 跨平台实现）
-ENGINES = frozenset({"vision", "mock"})
+# engine 合法值
+ENGINES = frozenset({"vision", "mock", "paddle"})
 
 # log level 合法值
 LOG_LEVELS = frozenset({"debug", "info", "warn", "error"})
@@ -82,7 +82,8 @@ def build_start_job(
     Args:
         video_id: 任务标识（Swift 端 UUID.uuidString）。
         fps: 采样帧率。
-        engine: OCR 引擎名（目前仅 "vision"）。
+        engine: OCR 引擎名（"vision" / "mock" / "paddle"）。服务端实际引擎由
+            启动时的 ``--engine`` 绑定；两者不一致会返回 ``done(ok=false)``。
         confidence_threshold: OCR 置信度阈值。
         region_box: 可选字幕区域 [x, y, width, height]，None 用默认检测。
         duration_ms: 视频时长（毫秒），用于估算总帧数和进度百分比。
