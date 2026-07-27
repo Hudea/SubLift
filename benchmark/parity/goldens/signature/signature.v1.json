@@ -1,0 +1,78 @@
+{
+  "golden_schema_version": 1,
+  "kind": "signature",
+  "oracle": {
+    "oracle_commit": "46952a6846f662fdc4d6c894ef56bcfdf4a5ef85",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "opencv_version": "4.13.0",
+    "numpy_version": "2.5.0",
+    "ffmpeg_version": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "macos_version": "26.5.2",
+    "vision_note": null,
+    "git_dirty": false,
+    "signature_config_fingerprint": "sha256:e4a3b960aa968662173c5fc7f3cb3ed0c5d28f0740c0372f2f47c1258aeefa94"
+  },
+  "signature_config": {
+    "block_size_ratio": 0.08,
+    "adaptive_c": 12,
+    "hash_size": 8
+  },
+  "fixtures": [
+    {
+      "name": "empty",
+      "pixel_semantics": "rgb24",
+      "asset": "empty.rgb",
+      "input_asset_sha256": "sha256:ea120126a10b2458792ba83c186bddedf23cc19b8963407e66f44898d722aaba",
+      "width": 128,
+      "height": 64,
+      "timestamp_ms": 0,
+      "fg_ratio": 0.0,
+      "dhash": 0
+    },
+    {
+      "name": "subtitle",
+      "pixel_semantics": "rgb24",
+      "asset": "subtitle.rgb",
+      "input_asset_sha256": "sha256:ea91d8970874328cc0974148656a9527e939fb9e845733994426a79cc84d7966",
+      "width": 128,
+      "height": 64,
+      "timestamp_ms": 200,
+      "fg_ratio": 0.021484375,
+      "dhash": 3156016
+    },
+    {
+      "name": "subtitle_b",
+      "pixel_semantics": "rgb24",
+      "asset": "subtitle_b.rgb",
+      "input_asset_sha256": "sha256:25adc74d788e71ae038f6919a22468b9abda96a7e0b9332564fe270879ebaf28",
+      "width": 128,
+      "height": 64,
+      "timestamp_ms": 400,
+      "fg_ratio": 0.025390625,
+      "dhash": 3163248
+    },
+    {
+      "name": "bgr_quirk",
+      "pixel_semantics": "bgr24_as_rgb_gray_quirk",
+      "asset": "bgr_quirk.rgb",
+      "input_asset_sha256": "sha256:cc274b87d26dc595f13feb23f869e7046b9aef8b527f4108b74f304b14fb4193",
+      "width": 128,
+      "height": 64,
+      "timestamp_ms": 600,
+      "fg_ratio": 0.01953125,
+      "dhash": 1578008
+    },
+    {
+      "name": "gray8",
+      "pixel_semantics": "gray8",
+      "asset": "gray8.rgb",
+      "input_asset_sha256": "sha256:3664b3eeb89f70a03e9114840b9755f58aaa02c9eb713e6f850933fe9091d4cb",
+      "width": 128,
+      "height": 64,
+      "timestamp_ms": 800,
+      "fg_ratio": 0.021484375,
+      "dhash": 3156016
+    }
+  ]
+}

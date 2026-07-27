@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。当前启动 6.0 Bootstrap。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。当前子阶段 6.1 Pure pipeline。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -357,9 +357,15 @@
         {
           "id": "phase6.pure-pipeline",
           "name": "6.1 Pure pipeline 算法 parity",
-          "description": "迁移 signature → changepoint → timeline → dedupe → line_select，逐模块 golden parity。仍不切换产品路径。任务开干前写入 phase6.json（feat-061xx）与 docs/cpp 设计文档。",
-          "status": "not-started",
-          "covers": []
+          "description": "迁移 signature → changepoint → timeline → dedupe → line_select，逐模块 golden parity。仍不切换产品路径。设计：docs/cpp/phase6.1-pure-pipeline.md。覆盖 feat-06101~06105。",
+          "status": "done",
+          "covers": [
+            "feat-06101",
+            "feat-06102",
+            "feat-06103",
+            "feat-06104",
+            "feat-06105"
+          ]
         },
         {
           "id": "phase6.pipeline-runtime",

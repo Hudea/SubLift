@@ -114,6 +114,40 @@ else
     fail=$((fail + 1))
 fi
 
+# Signature parity (feat-06101): keep committed golden aligned with Python oracle.
+if uv run --extra vision --extra paddle python scripts/parity/dump_signature.py --check \
+    >/tmp/sublift_parity_signature.log 2>&1; then
+    printf "${GREEN}[OK]${NC}  signature parity golden (--check)\n"
+    pass=$((pass + 1))
+else
+    printf "${RED}[FAIL]${NC} signature parity golden (--check)\n"
+    cat /tmp/sublift_parity_signature.log 2>/dev/null || true
+    fail=$((fail + 1))
+fi
+
+# Changepoint parity (feat-06102).
+if uv run --extra vision --extra paddle python scripts/parity/dump_changepoint.py --check \
+    >/tmp/sublift_parity_changepoint.log 2>&1; then
+    printf "${GREEN}[OK]${NC}  changepoint parity golden (--check)\n"
+    pass=$((pass + 1))
+else
+    printf "${RED}[FAIL]${NC} changepoint parity golden (--check)\n"
+    cat /tmp/sublift_parity_changepoint.log 2>/dev/null || true
+    fail=$((fail + 1))
+fi
+
+for _parity_mod in timeline dedupe line_select; do
+    if uv run --extra vision --extra paddle python "scripts/parity/dump_${_parity_mod}.py" --check \
+        >"/tmp/sublift_parity_${_parity_mod}.log" 2>&1; then
+        printf "${GREEN}[OK]${NC}  ${_parity_mod} parity golden (--check)\n"
+        pass=$((pass + 1))
+    else
+        printf "${RED}[FAIL]${NC} ${_parity_mod} parity golden (--check)\n"
+        cat "/tmp/sublift_parity_${_parity_mod}.log" 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+done
+
 if command -v cmake >/dev/null 2>&1; then
     # Prefer Ninja when present; otherwise use CMake default generator.
     # Build argv as a non-empty array so bash 3.2 + set -u never expands an empty [@].

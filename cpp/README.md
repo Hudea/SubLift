@@ -8,7 +8,7 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 - CMake ≥ 3.20
 - C++20 compiler (AppleClang / Clang / GCC)
 - Network on first configure (FetchContent downloads nlohmann/json; Catch2 only if tests ON)
-- Optional: OpenCV (`find_package` only; not linked in 6.0 stubs)
+- Optional: OpenCV 4.x (`core`+`imgproc`) for signature parity (feat-06101). Soft-discover: missing OpenCV disables signature, configure still succeeds. macOS: `brew install opencv@4` then reconfigure. Hard-require: `-DSUBLIFT_REQUIRE_OPENCV=ON`
 - Optional: system `ffmpeg` on `PATH` (used later by extractor; not required to build stubs)
 
 ## Target graph
@@ -39,6 +39,8 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | `SUBLIFT_ENABLE_VISION` | OFF | Build `sublift_vision_macos` |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |
 | `SUBLIFT_BUILD_TESTS` | ON | Catch2 + CTest |
+| `SUBLIFT_ENABLE_OPENCV` | ON | Prefer signature pipeline when OpenCV is found |
+| `SUBLIFT_REQUIRE_OPENCV` | OFF | Fail configure if OpenCV missing |
 
 ## Dependency policy
 
@@ -46,7 +48,7 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 |---|---|
 | Catch2 | FetchContent, pin `v3.7.1` (only test framework) |
 | nlohmann/json | FetchContent, pin `v3.11.3` |
-| OpenCV | System `find_package` optional; not linked in 06002 |
+| OpenCV | System `find_package` soft-optional (`core`/`imgproc`); PRIVATE to `sublift_core` when found. Prefer **opencv@4** (parity with Python `cv2` 4.x) |
 | ffmpeg | System executable later; not vendored |
 
 ## Build & test

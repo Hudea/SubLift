@@ -1,0 +1,41 @@
+{
+  "name": "stable_persistence",
+  "change_point_config": {
+    "presence_threshold": 0.01,
+    "hysteresis_frames": 1,
+    "change_threshold": 10,
+    "enable_ssim_verify": false,
+    "ssim_threshold": 0.95,
+    "ssim_window_size": 7,
+    "enable_ssim_patrol": true,
+    "ssim_patrol_interval": 3,
+    "ssim_patrol_threshold": 0.92,
+    "ssim_patrol_use_mask": true
+  },
+  "frames": [
+    {
+      "timestamp_ms": 0,
+      "foreground_ratio": 0.05,
+      "dhash": 170,
+      "crop": null
+    },
+    {
+      "timestamp_ms": 200,
+      "foreground_ratio": 0.05,
+      "dhash": 170,
+      "crop": null
+    },
+    {
+      "timestamp_ms": 400,
+      "foreground_ratio": 0.05,
+      "dhash": 170,
+      "crop": null
+    },
+    {
+      "timestamp_ms": 600,
+      "foreground_ratio": 0.05,
+      "dhash": 170,
+      "crop": null
+    }
+  ]
+}

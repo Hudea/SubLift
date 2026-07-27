@@ -127,7 +127,7 @@ feat-06001
 - [ ] architecture / parity / worker-ipc / engine-matrix 四契约在 `docs/cpp/README` 可索引
 - [ ] `cpp/` 可构建（有 CMake 时）；Python `./init.sh` 仍绿
 - [ ] 产品默认仍 Python
-- [ ] 下一刀：`feat-06101` signature parity（新开 6.1 文档与任务）
+- [x] 下一刀：`feat-06101` signature parity — 设计见 [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md)
 
 ## 6. 风险
 

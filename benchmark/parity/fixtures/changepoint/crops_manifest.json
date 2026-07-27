@@ -1,0 +1,20 @@
+{
+  "crops": [
+    {
+      "name": "text_a",
+      "asset": "crops/text_a.rgb",
+      "pixel_semantics": "rgb24",
+      "width": 320,
+      "height": 80,
+      "input_asset_sha256": "sha256:3de9d4596a9b903a0bb5c781b672a704e719cf446d62343b31a5ec4056172e48"
+    },
+    {
+      "name": "text_b",
+      "asset": "crops/text_b.rgb",
+      "pixel_semantics": "rgb24",
+      "width": 320,
+      "height": 80,
+      "input_asset_sha256": "sha256:fe0da2572a727e58f5871795946de58bbecdc0dbd3caf15e4f2218f5cb1cd27a"
+    }
+  ]
+}

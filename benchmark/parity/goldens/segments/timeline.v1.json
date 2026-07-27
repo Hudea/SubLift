@@ -1,0 +1,118 @@
+{
+  "golden_schema_version": 1,
+  "kind": "timeline",
+  "oracle": {
+    "oracle_commit": "c7dce468df16fd8ecb2b9701ffec2e365927665b",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "git_dirty": true
+  },
+  "scenarios": [
+    {
+      "name": "single_segment",
+      "events": [
+        {
+          "event_type": "IN",
+          "timestamp_ms": 0,
+          "prev_end_ms": null
+        },
+        {
+          "event_type": "OUT",
+          "timestamp_ms": 1000,
+          "prev_end_ms": null
+        }
+      ],
+      "finalize_ms": null,
+      "segments": [
+        {
+          "start_ms": 0,
+          "end_ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "change_splits",
+      "events": [
+        {
+          "event_type": "IN",
+          "timestamp_ms": 0,
+          "prev_end_ms": null
+        },
+        {
+          "event_type": "CHANGE",
+          "timestamp_ms": 500,
+          "prev_end_ms": 500
+        },
+        {
+          "event_type": "OUT",
+          "timestamp_ms": 1000,
+          "prev_end_ms": null
+        }
+      ],
+      "finalize_ms": null,
+      "segments": [
+        {
+          "start_ms": 0,
+          "end_ms": 500
+        },
+        {
+          "start_ms": 500,
+          "end_ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "open_finalized",
+      "events": [
+        {
+          "event_type": "IN",
+          "timestamp_ms": 0,
+          "prev_end_ms": null
+        }
+      ],
+      "finalize_ms": 2000,
+      "segments": [
+        {
+          "start_ms": 0,
+          "end_ms": 2000
+        }
+      ]
+    },
+    {
+      "name": "multiple_segments",
+      "events": [
+        {
+          "event_type": "IN",
+          "timestamp_ms": 0,
+          "prev_end_ms": null
+        },
+        {
+          "event_type": "OUT",
+          "timestamp_ms": 1000,
+          "prev_end_ms": null
+        },
+        {
+          "event_type": "IN",
+          "timestamp_ms": 2000,
+          "prev_end_ms": null
+        },
+        {
+          "event_type": "OUT",
+          "timestamp_ms": 3000,
+          "prev_end_ms": null
+        }
+      ],
+      "finalize_ms": null,
+      "segments": [
+        {
+          "start_ms": 0,
+          "end_ms": 1000
+        },
+        {
+          "start_ms": 2000,
+          "end_ms": 3000
+        }
+      ]
+    }
+  ]
+}

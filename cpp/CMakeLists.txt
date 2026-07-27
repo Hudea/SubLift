@@ -21,12 +21,51 @@ endif()
 option(SUBLIFT_ENABLE_VISION "Build sublift_vision_macos (ObjC++/Vision)" OFF)
 option(SUBLIFT_SANITIZE "Enable ASan+UBSan (Debug configs)" OFF)
 option(SUBLIFT_BUILD_TESTS "Build Catch2 tests and register CTest" ON)
+# Soft default ON: prefer signature pipeline when OpenCV is installed.
+# Missing OpenCV auto-disables (does not hard-fail configure). Force hard fail
+# with -DSUBLIFT_REQUIRE_OPENCV=ON (dev machines with expected brew opencv@4).
+option(SUBLIFT_ENABLE_OPENCV
+  "Build signature pipeline when OpenCV is available (feat-06101)" ON)
+option(SUBLIFT_REQUIRE_OPENCV
+  "Fail configure if OpenCV is missing (implies enabling signature)" OFF)
 
-find_package(OpenCV QUIET)
-if(OpenCV_FOUND)
-  message(STATUS "OpenCV found: ${OpenCV_VERSION} (not linked in feat-06002 stubs)")
+# OpenCV: private impl detail of the signature pipeline (feat-06101). Linked
+# PRIVATE into sublift_core only — no cv::Mat on the public API
+# (architecture.md §3). Soft discovery keeps models/image builds working
+# without a system OpenCV install (architecture.md §2.1 optional OpenCV).
+if(SUBLIFT_REQUIRE_OPENCV)
+  set(SUBLIFT_ENABLE_OPENCV ON)
+endif()
+
+if(SUBLIFT_ENABLE_OPENCV)
+  # Homebrew opencv@4 is keg-only; help find_package locate it.
+  if(APPLE)
+    execute_process(
+      COMMAND brew --prefix opencv@4
+      OUTPUT_VARIABLE _brew_opencv_prefix
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      ERROR_QUIET
+      RESULT_VARIABLE _brew_opencv_rc)
+    if(_brew_opencv_rc EQUAL 0 AND _brew_opencv_prefix)
+      list(APPEND CMAKE_PREFIX_PATH "${_brew_opencv_prefix}")
+    endif()
+  endif()
+  if(SUBLIFT_REQUIRE_OPENCV)
+    find_package(OpenCV REQUIRED COMPONENTS core imgproc)
+  else()
+    find_package(OpenCV QUIET COMPONENTS core imgproc)
+  endif()
+  if(OpenCV_FOUND)
+    message(STATUS "OpenCV ${OpenCV_VERSION} enabled (signature pipeline)")
+  else()
+    set(SUBLIFT_ENABLE_OPENCV OFF)
+    message(WARNING
+      "OpenCV not found; signature pipeline disabled "
+      "(models/image still build). Install: brew install opencv@4 "
+      "(then reconfigure). Hard-require with -DSUBLIFT_REQUIRE_OPENCV=ON.")
+  endif()
 else()
-  message(STATUS "OpenCV not found (optional; OK for 06002)")
+  message(STATUS "OpenCV disabled (signature excluded; models/image still build)")
 endif()
 
 if(SUBLIFT_SANITIZE)

@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0 含 feat-06001~06005（含 IPC/引擎/cutover 设计冻结）；进 6.1 前必须全部 done。契约见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0（feat-06001~06005）done；6.1 pure pipeline（feat-06101~06105）进行中。契约与子阶段设计见 docs/cpp/。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -126,6 +126,131 @@
       ],
       "status": "done",
       "evidence": "2026-07-26：docs/cpp/worker-ipc-contract.md + engine-matrix-and-cutover.md 定稿；ARCHITECTURE §1.1、REQUIREMENTS 引言、README 文档节回链 docs/cpp；tests/fixtures/ipc/ 含 path_mode_mock_success.messages.jsonl 与 README；ADR-0021。设计冻结完成，无 C++ worker 实现代码。jq empty phase6.json feature-list.json OK。"
+    },
+    {
+      "id": "feat-06101",
+      "name": "Signature parity",
+      "description": "在 sublift_core 实现 compute_signature / dHash / hamming / SSIM（含 foreground SSIM）与 Python signature.py 行为 parity。扩展 dump_signature.py 与 benchmark/parity/goldens/signature；Catch2 [parity][signature] 对照冻结 golden（L0 dhash/timestamp exact，L1 fg_ratio epsilon）。复现色域怪癖路径，不顺手修算法。不切换产品路径。",
+      "module": "cpp/include/sublift/signature.hpp; cpp/src/core/signature.cpp; cpp/tests/parity/signature_parity_test.cpp; scripts/parity/dump_signature.py; benchmark/parity/goldens/signature/; docs/cpp/phase6.1-pure-pipeline.md",
+      "dependencies": [
+        "feat-06004"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ signature API",
+          "description": "FrameSignature 类型与 compute_signature(ImageView, ts, SignatureConfig)；公共 API 不以 cv::Mat 为边界。"
+        },
+        {
+          "name": "Dump + golden",
+          "description": "dump_signature.py；fixture metadata 声明像素语义；oracle_commit + input_asset_sha256。"
+        },
+        {
+          "name": "Parity 测试",
+          "description": "C++ load golden 与 candidate 比较；单元小图单测；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: signature.hpp + signature.cpp 实现 compute_signature/compute_dhash/hamming_distance/compute_ssim/compute_foreground_ssim；OpenCV PRIVATE 链接 sublift_core（SUBLIFT_ENABLE_OPENCV option，brew opencv@4 4.14.0），公共 API 无 cv::Mat。scripts/parity/gen_signature_fixtures.py 生成 5 个确定性 .rgb fixture（empty/subtitle/subtitle_b/bgr_quirk/gray8，覆盖 rgb24/bgr24_as_rgb_gray_quirk 色域怪癖/gray8 路径）；dump_signature.py 产 golden envelope（oracle_commit、input_asset_sha256、signature_config_fingerprint）。benchmark/parity/goldens/signature/signature.v1.json。test_support/signature_golden.cpp：load_signature_golden + diff_signature（L0 dhash/timestamp_ms exact，L1 fg_ratio abs_rel epsilon）。ctest 36/36 含 [signature] 单元 + [parity][signature] bit-exact dhash（C++ OpenCV 4.14 vs Python cv2 4.13）。色域怪癖按现状复现（BGR 字节走 COLOR_RGB2GRAY），未修。init.sh 加 signature parity --check，11/11 绿；ruff/mypy/pytest 绿。产品路径未动。"
+    },
+    {
+      "id": "feat-06102",
+      "name": "Changepoint parity",
+      "description": "在 sublift_core 实现 ChangePointDetector 状态机与 Python changepoint.py 事件流 parity。golden events.jsonl（event_type/timestamp_ms/prev_end_ms）L0 exact。覆盖默认 ChangePointConfig 与至少一条迟滞/CHANGE fixture。不要求 TraceRecorder 旁路。不切换产品路径。",
+      "module": "cpp/include/sublift/changepoint.hpp; cpp/src/core/changepoint.cpp; cpp/tests/parity/changepoint_parity_test.cpp; scripts/parity/dump_changepoint.py; benchmark/parity/goldens/events/",
+      "dependencies": [
+        "feat-06101"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ detector",
+          "description": "State/EventType/StateEvent 与 process/reset；消费 FrameSignature + 可选 crop。"
+        },
+        {
+          "name": "Dump + golden",
+          "description": "dump_changepoint.py → events.jsonl + oracle envelope。"
+        },
+        {
+          "name": "Parity 测试",
+          "description": "事件序列 L0 exact；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: ChangePointDetector in sublift_core (process/reset); 7 golden scenarios (default IN/OUT, dHash CHANGE, hyst=2, jitter, patrol crops); dump_changepoint --check; ctest [changepoint]+[parity][changepoint]; reproduced Python falsy timestamp_ms=0 quirk; no TraceRecorder/product path switch."
+    },
+    {
+      "id": "feat-06103",
+      "name": "Timeline parity",
+      "description": "在 sublift_core 实现 TimelineBuilder 与 Python timeline.py parity。golden segments.jsonl（start_ms/end_ms）L0 exact；finalize_open_segment 语义一致。输入可为 changepoint golden 事件流。不实现代表帧/OCR 调度。不切换产品路径。",
+      "module": "cpp/include/sublift/timeline.hpp; cpp/src/core/timeline.cpp; cpp/tests/parity/timeline_parity_test.cpp; scripts/parity/dump_timeline.py; benchmark/parity/goldens/segments/",
+      "dependencies": [
+        "feat-06102"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ TimelineBuilder",
+          "description": "consume/finalize_open_segment/build/reset 对齐 Python。"
+        },
+        {
+          "name": "Dump + golden",
+          "description": "dump_timeline.py → segments.jsonl。"
+        },
+        {
+          "name": "Parity 测试",
+          "description": "段边界 L0 exact；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: TimelineBuilder C++ parity; timeline.v1.json 4 scenarios; unit+parity ctest green."
+    },
+    {
+      "id": "feat-06104",
+      "name": "Dedupe parity",
+      "description": "在 sublift_core 实现 merge_entries 4-pass 与 Python dedupe.py parity。合成 SubtitleEntry fixture → entries.jsonl；覆盖 merge_gap_ms/min_duration_ms/drop_empty_text。text NFC L0 exact。不切换产品路径。",
+      "module": "cpp/include/sublift/dedupe.hpp; cpp/src/core/dedupe.cpp; cpp/tests/parity/dedupe_parity_test.cpp; scripts/parity/dump_dedupe.py; benchmark/parity/goldens/entries/",
+      "dependencies": [
+        "feat-06003"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ merge_entries",
+          "description": "4-pass 顺序与归一化规则对齐 Python。"
+        },
+        {
+          "name": "Dump + golden",
+          "description": "dump_dedupe.py；true/false drop_empty_text 覆盖。"
+        },
+        {
+          "name": "Parity 测试",
+          "description": "entries L0 exact；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: merge_entries 4-pass C++ parity; dedupe.v1.json 6 scenarios; unit+parity ctest green."
+    },
+    {
+      "id": "feat-06105",
+      "name": "Line select parity",
+      "description": "在 sublift_core 实现 select_line/score_line/consensus_text/cleanup 等 pure API 与 Python line_select.py parity。固定 OcrLine+SubtitleProfile fixture，无 Vision。text NFC exact；分数 L1 epsilon。不实现 Pipeline OCR 编排。不切换产品路径。",
+      "module": "cpp/include/sublift/line_select.hpp; cpp/src/core/line_select.cpp; cpp/tests/parity/line_select_parity_test.cpp; scripts/parity/dump_line_select.py; benchmark/parity/goldens/line_select/",
+      "dependencies": [
+        "feat-06003"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ line_select pure API",
+          "description": "选行、共识、文本清理与 script 评分对齐 Python。"
+        },
+        {
+          "name": "Dump + golden",
+          "description": "dump_line_select.py → 决策/文本 golden。"
+        },
+        {
+          "name": "Parity 测试",
+          "description": "索引/text L0；分数 L1；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: line_select pure APIs C++ (UTF-8 codepoint edit_distance); line_select.v1.json cases; unit+parity ctest green."
     }
   ]
 }

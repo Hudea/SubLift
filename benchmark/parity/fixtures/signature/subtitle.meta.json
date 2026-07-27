@@ -1,0 +1,12 @@
+{
+  "name": "subtitle",
+  "pixel_semantics": "rgb24",
+  "width": 128,
+  "height": 64,
+  "timestamp_ms": 200,
+  "config": {
+    "block_size_ratio": 0.08,
+    "adaptive_c": 12,
+    "hash_size": 8
+  }
+}

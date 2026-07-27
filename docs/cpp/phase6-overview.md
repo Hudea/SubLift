@@ -105,6 +105,8 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 
 ## 9. 当前状态
 
-- **进行中子阶段：** 6.0 Bootstrap — [phase6.0-bootstrap.md](phase6.0-bootstrap.md)
-- **下一实现刀：** `feat-06002`（含 target 图落地）
-- **6.1 前门：** 通过 `feat-06005` 设计契约验收
+- **6.0 Bootstrap：** **done** — [phase6.0-bootstrap.md](phase6.0-bootstrap.md)
+- **进行中子阶段：** 6.1 Pure pipeline — [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md)
+- **已完成：** `feat-06101` signature parity（bit-exact dhash parity 绿；OpenCV 4.14 vs cv2 4.13）
+- **下一实现刀：** `feat-06102` changepoint parity
+- **产品路径：** 仍 Python

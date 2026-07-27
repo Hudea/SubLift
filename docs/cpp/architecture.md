@@ -56,7 +56,7 @@
 | 构建 | CMake ≥ 3.20 + CTest | out-of-source `build/cpp` |
 | 测试框架 | **Catch2 v3**（FetchContent 或系统包） | 与 GTest 二选一后**禁止并行**；选定 Catch2 |
 | JSON | **nlohmann/json**（FetchContent） | Worker 与 golden 共用 |
-| OpenCV | **可选** `find_package(OpenCV)`；core 图像类型见 §3，不在 API 表面强制 `cv::Mat` | 无 OpenCV 时仍可编译 models 测试 |
+| OpenCV | **软可选** `find_package(OpenCV QUIET)`；`SUBLIFT_ENABLE_OPENCV` 默认 ON，**找不到则自动关闭** signature（models/image 仍可编）；硬失败用 `SUBLIFT_REQUIRE_OPENCV=ON`。core 图像类型见 §3，不在 API 表面强制 `cv::Mat` | 6.1+ 本机开发推荐 `brew install opencv@4`；CI/无 OpenCV 环境不硬挂 configure |
 | 链接 | 默认 **静态** `sublift_*` 进 worker/cli；系统 OpenCV 可 dynamic | 避免产品静默混用两套 OpenCV ABI |
 | Symbol visibility | 默认 hidden；仅 C API（若有）显式 export | 为日后 `.app` 做准备 |
 | 依赖获取 | FetchContent 仅用于 Catch2 + nlohmann；OpenCV/ffmpeg **系统安装** | 不 vendor 整棵 OpenCV |

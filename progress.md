@@ -2,12 +2,13 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-27（6.0 审查整改：init.sh / int32 / parity 门）
+- **最后更新：** 2026-07-27（6.1 独立审查加固）
 - **当前 Phase：** phase6-native-cpp-core
-- **子阶段 6.0：** **done**（feat-06001 ~ feat-06005；审查 P0/P1 已修）
-- **下一刀：** Phase **6.1** pure pipeline（`feat-06101` signature）
+- **子阶段 6.0：** **done**
+- **子阶段 6.1：** **done**（feat-06101–06105 + 审查加固）
+- **下一刀：** Phase **6.2** Pipeline 流式 API（`feat-062xx`，开干前拆任务）
 - **分支：** `refactor/cpp`
-- **说明：** 产品默认路径仍为 Python；C++ 地基与冻结 Oracle 就绪。
+- **说明：** 产品默认路径仍为 Python。
 
 ## 进行中
 
@@ -15,22 +16,23 @@
 
 ## 近期完成（最近 5 个）
 
-- [x] **6.0 审查整改**：init.sh bash3.2 空数组；ImageBuffer/models int64；require_i32 范围；parse object 守卫；init 接入 dump_config --check；Config==；nlohmann 挪到 test_support（ctest 29/29）
-- [x] **feat-06004** Parity harness + 冻结 Config oracle
-- [x] **feat-06003** ImageBuffer / 强类型 box / 完整 Config
-- [x] **feat-06002** C++ CMake multi-target + Catch2
-- [x] **feat-06005 / 06001** 设计与文档
+- [x] **6.1 审查加固**：cleanup/SSIM veto/dedupe multipass/Unicode ws/NFC compare/CHANGE fail-fast；ctest 71/71
+- [x] **feat-06105** Line select pure API parity
+- [x] **feat-06104** Dedupe merge_entries parity
+- [x] **feat-06103** TimelineBuilder parity
+- [x] **feat-06102** Changepoint detector parity
 
 ## 阻塞项 / 风险
 
 - [ ] **merged residual / #15 砰**
 - [ ] **ground truth 素材有限**
 - [ ] **Paddle cutover**：6.6 后 paddle 仍 Python worker
-- [ ] **C++ parity**：须复现历史行为怪癖（色域等）
+- [ ] **C++ parity**：色域/timestamp falsy-0 等怪癖须继续复现
 
 ## 近期决策
 
-- **ADR-0021 P1 契约** + **ADR-0020 Phase 6**
-- **6.0 完成定义**：地基就绪即可进 6.1，不切换产品路径
+- **6.1 完成**：pure pipeline 五模块 C++ + golden；产品路径未切换
+- **timestamp_ms=0 falsy**：复现 Python `or` 语义（06102）
+- **edit_distance UTF-8 codepoint**：对齐 Python 字符串语义（06105）
 
 > 完整决策记录见 `docs/DECISIONS.md`

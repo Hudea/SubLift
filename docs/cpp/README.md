@@ -11,9 +11,10 @@
 |---|---|
 | [NAMING.md](NAMING.md) | feat 编号与子阶段命名规则（规范） |
 | [phase6-overview.md](phase6-overview.md) | Phase 6 总览：目标、路线、非目标 |
-| [phase6.0-bootstrap.md](phase6.0-bootstrap.md) | **6.0 启动子阶段**任务与验收（当前） |
+| [phase6.0-bootstrap.md](phase6.0-bootstrap.md) | 6.0 Foundation / Bootstrap（**done**） |
+| [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md) | **6.1 Pure pipeline** 算法 parity（当前） |
 
-### 架构与契约（进 6.1 前须就绪）
+### 架构与契约
 
 | 文件 | 用途 | 关联 feat |
 |---|---|---|
@@ -39,4 +40,4 @@
 3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock）；paddle 见引擎矩阵。
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision**；target 依赖图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
-6. **进 6.1 前**：`feat-06001`–`feat-06005` 全部 done。
+6. **6.1 当前**：pure pipeline 逐模块 golden；产品路径仍 Python。`feat-06101` done；下一刀 `feat-06102` changepoint。
