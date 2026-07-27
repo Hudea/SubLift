@@ -5,6 +5,53 @@
 
 ---
 
+## ADR-0021 Phase 6 P1 契约：Oracle、Target、IPC、引擎矩阵（2026-07-26）
+
+- **状态**：已确认（设计冻结）；实现分属 feat-06002–06005 / 6.5–6.6。
+- **背景**：6.0 起步文档方向正确，但 Oracle 若写成「当前 main」、Image 可占位后换类型、
+  「同协议」忽略时序、以及「6.6 全面切 C++」与「不实现 Paddle」冲突，将在 6.1+ 返工。
+- **决策**：
+  1. **Oracle** 必须钉扎 `oracle_commit`、运行时版本、素材 SHA256、完整 Config、`golden_schema_version`；
+     比较优先中间量（signature/events/段/代表帧/OCR 决策），规则见 `docs/cpp/parity-contract.md`。
+  2. **图像** 使用 `ImageBuffer`/`ImageView` 与显式像素格式；禁止公共 API 以裸 buffer 占位后再改
+     `cv::Mat`；完整 `Config` 对齐 Python；见 `docs/cpp/architecture.md`。
+  3. **CMake targets** 拆分 `sublift_core` / `ffmpeg` / `vision_macos` / `worker` / `cli` /
+     `test_support`；工具链锁定 Catch2 + nlohmann/json。
+  4. **Worker 兼容** 以时序与所有权为准（progress/push_entry/entries/done、cancel、video_id），
+     见 `docs/cpp/worker-ipc-contract.md`；非「消息 type 字符串相同即可」。
+  5. **引擎矩阵**：6.6 后 vision/mock → C++ worker；**paddle → 仍 Python worker**；capability
+     诚实暴露；禁止静默 fallback。Cutover 含质量、运行时、ASan 与 `SUBLIFT_RUNTIME` 回滚，
+     见 `docs/cpp/engine-matrix-and-cutover.md`。
+  6. **进 6.1 门槛**：`feat-06001`–`feat-06005` 全部 done。
+- **理由**：把返工点前移到设计门；保留已交付 paddle，同时允许 vision 路径 native cutover。
+- **影响**：强化 06002–06004；新增设计型 `feat-06005`；主 `ARCHITECTURE`/`REQUIREMENTS`/`README`
+  回链 `docs/cpp/`。
+
+---
+
+## ADR-0020 Phase 6 Native C++ Core 与编号规则（2026-07-26）
+
+- **状态**：已确认；子阶段 6.0 Bootstrap 启动（`feat-06001` 文档落地，实现 feat 待推进）。
+- **背景**：Phase 1–5 已完成 CLI、macOS GUI、质量/性能锚、ROI 通路与 PaddleOCR 第二引擎。
+  Phase 4.2 证明 Vision 请求执行主导耗时，C++ 化收益在分发与跨平台 core，而非 OCR 数量级加速。
+- **决策**：
+  1. 正式开启 **Phase 6 — Native C++ Core Migration**。迁移计划与设计文档放在 **`docs/cpp/`**；
+     任务证据仍在 `docs/phases/phase6.json`。
+  2. **策略**：保留模块边界与 SwiftUI；**UDS + JSON 暂时保留**；Python Worker → C++ Worker
+    （按引擎矩阵）；`sublift_core` 不依赖 ObjC/Swift/Vision。**冻结 Oracle**，C++ 为 Candidate。
+  3. **第一阶段不做**：libav、Swift↔C++ 直连、边迁边改算法、删除仓库内 Python oracle。
+  4. **编号**：`feat-<PP><S><FF>`——`PP` 两位阶段（`06`）、`S` 一位子阶段（`0`=6.0）、
+     `FF` 两位 feature（`01` 起）。例：`feat-06001`、`feat-06101`。规范见 `docs/cpp/NAMING.md`。
+     Phase 5 的 `feat-05001` 等历史 ID 不改写；Phase 1–4 的 `feat-001~043` 并存。
+  5. **6.0 范围**：文档与 P1 契约、CMake targets、models/完整 Config、parity、IPC/引擎/cutover
+     设计冻结；**产品路径零切换**。进 6.1 前 `feat-06001`–`06005` done。
+- **理由**：接口与 benchmark 已成熟，适合 runtime 收口；UDS 不传全帧图像，非瓶颈且利于隔离；
+  子阶段可独立验收，符合 AGENTS 一次一功能。
+- **影响**：新增 `docs/cpp/`、`docs/phases/phase6.json`、`feature-list` phase6 块；后续 `cpp/` 源码树。
+  不改变当前 Python CLI/GUI 默认行为，直至 6.6 cutover（见 ADR-0021 矩阵）。
+
+---
+
 ## ADR-0019 IPC OCR 引擎以服务进程绑定为准（2026-07-26）
 
 - **状态**：已确认并完成（Phase 5 审查整改）。

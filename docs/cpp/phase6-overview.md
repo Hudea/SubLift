@@ -1,0 +1,110 @@
+# Phase 6 — Native C++ Core Migration（总览）
+
+> 设计源头（本文件）+ 契约（`docs/cpp/*.md`）+ 子阶段文档  
+> 任务跟踪：`docs/phases/phase6.json`  
+> 编号规范：`docs/cpp/NAMING.md`  
+> 项目级功能块：`feature-list.json` → `phases[phase6]`
+
+## 1. 主题与动机
+
+**主题：** 在**不推翻**现有模块边界的前提下，将 Python Runtime 逐步替换为 **C++ Core**；  
+SwiftUI 与 UDS/JSON IPC **暂时保留**，先把 Python Worker 换成 C++ Worker（按引擎矩阵）。
+
+**动机（是 / 不是）：**
+
+| 是 | 不是 |
+|---|---|
+| 原生 `.app` 不再依赖嵌入 Python | 指望 Vision OCR 从 ~50ms 变 ~10ms |
+| CLI / GUI / 未来跨平台共享同一 native core | 边迁移边改打轴/OCR 算法 |
+| 数据结构、线程与内存所有权更清晰 | 第一阶段上 libav / Swift↔C++ 直连 |
+| 后续接 ONNX/Paddle 原生 runtime 更自然 | 大爆炸式「把每个 .py 译成 .cpp」 |
+
+Phase 4.2 已表明：canonical ROI 下 Vision `performRequests` 占 OCR parent ~99%。  
+C++ 化是 **产品与架构收口**，不是 OCR 热路径微优化。
+
+## 2. 目标架构与 Target 图
+
+高层数据流：
+
+```text
+SwiftUI ──UDS/JSON──► sublift-worker (C++ 或按引擎选 Python)
+                         │
+CLI ─────────────────────►│  lib targets（见 architecture.md）
+                         ▼
+                    SubtitleEntry
+Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
+```
+
+**可执行依赖图与工具链锁定**见 [architecture.md](architecture.md)（`sublift_core` / `sublift_ffmpeg` / `sublift_vision_macos` / `sublift_worker` / `sublift_cli` / `sublift_test_support`）。
+
+硬约束：
+
+1. `sublift_core` **不得**依赖 Swift、Objective-C、Apple Vision。
+2. Vision 仅存在于 `sublift_vision_macos`（`.mm`）。
+3. 第一阶段 FFmpeg **保持 subprocess**，不上 libav。
+4. 行为以 **冻结 Oracle** 为准（`oracle_commit` + 环境 + golden），**不是**「未钉扎的当前 main 尖端」。见 [parity-contract.md](parity-contract.md)。
+
+## 3. 子阶段路线图
+
+| 子阶段 | 前缀 | 目标 | 产品路径 |
+|---|---|---|---|
+| **6.0 Bootstrap** | `feat-060xx` | 文档、CMake targets、models/完整 Config、parity 冻结、**IPC/引擎/cutover 契约** | **零切换** |
+| **6.1 Pure pipeline** | `feat-061xx` | signature → … → line_select golden parity | 仍 Python |
+| **6.2 Pipeline** | `feat-062xx` | C++ `feed` / `ocr_segment` / `finalize` / `cancel` | 仍 Python |
+| **6.3 Extractor** | `feat-063xx` | ffmpeg subprocess + ROI + 索引时间戳 | 仍 Python |
+| **6.4 Vision** | `feat-064xx` | ObjC++ Vision adapter | 仍 Python |
+| **6.5 Worker** | `feat-065xx` | 按 [worker-ipc-contract.md](worker-ipc-contract.md) 实现 | 可双轨 |
+| **6.6 Cutover** | `feat-066xx` | 按 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 默认化 | vision/mock→C++；paddle→Python |
+| **6.7+** | `feat-067xx`… | 部署/去 Python 产品依赖等 | 后置 |
+
+**进入 6.1 的硬门槛：** `feat-06001`–`feat-06005` 全部 `done`。
+
+## 4. 全局验收原则
+
+```text
+冻结 Oracle (commit + env + golden_schema)
+        │
+        ├─ Python dump  ─→ golden / result_A
+        └─ C++ Candidate ─→ result_B
+                │
+                └─ L0–L2 exact/epsilon → L3 GT 水位 → 运行时门 → cutover
+```
+
+- 中间量（signature、events、段边界、代表帧、OCR 决策）优先于「只比 SRT」。
+- 固定 GT 参考水位见 benchmark 文档（F1/CER/usable 等）。
+- Cutover **另含** cancel/restart、wall/RSS、ASan、回滚开关——见引擎/cutover 契约。
+
+## 5. 技术栈
+
+见 [architecture.md §2.1](architecture.md)（C++20、CMake、Catch2、nlohmann/json、OpenCV 可选、ffmpeg 可执行文件）。
+
+**明确不引入（6.x 默认）：** Boost、Qt、libav*、重型 DI/async 框架。
+
+## 6. 与 Phase 5 / Paddle 的关系
+
+- Phase 5.0（PaddleOCR）**已完成**。
+- C++ **6.0–6.6 不实现**原生 Paddle；cutover 后 **paddle 显式走 Python worker**，vision/mock 走 C++。  
+  完整矩阵与禁止静默 fallback：见 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md)。
+
+## 7. 非目标（全 Phase 6 默认）
+
+- 不把 `.py` 逐文件机械翻译当成功标准。
+- 不在迁移中「顺手」修 signature 色域、时间戳语义、行选阈值。
+- 不上 libav、不做 Swift C++ interop 单进程合并。
+- 不删除仓库内 Python（oracle / benchmark / paddle）。
+- 不把完整 Phase 4.2 归因树作为 6.0–6.5 必达项。
+
+## 8. 契约索引（P1）
+
+| 主题 | 文档 |
+|---|---|
+| Target / 图像 / Config | [architecture.md](architecture.md) |
+| Oracle / golden / rounding | [parity-contract.md](parity-contract.md) |
+| Worker 时序与所有权 | [worker-ipc-contract.md](worker-ipc-contract.md) |
+| 引擎矩阵与 cutover/回滚 | [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) |
+
+## 9. 当前状态
+
+- **进行中子阶段：** 6.0 Bootstrap — [phase6.0-bootstrap.md](phase6.0-bootstrap.md)
+- **下一实现刀：** `feat-06002`（含 target 图落地）
+- **6.1 前门：** 通过 `feat-06005` 设计契约验收

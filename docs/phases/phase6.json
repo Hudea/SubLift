@@ -1,0 +1,131 @@
+{
+  "project": "SubLift",
+  "phase": "phase6-native-cpp-core",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0 含 feat-06001~06005（含 IPC/引擎/cutover 设计冻结）；进 6.1 前必须全部 done。契约见 docs/cpp/。",
+  "plan_file": "docs/cpp/phase6-overview.md",
+  "features": [
+    {
+      "id": "feat-06001",
+      "name": "文档与跟踪体系 + 编号规则",
+      "description": "在 docs/cpp/ 落地 Phase 6 总览、6.0 bootstrap 设计与 NAMING 规范；创建 docs/phases/phase6.json；feature-list 增加 phase6；DECISIONS 记录开启 Phase 6 与编号规则；progress 导航更新。零产品代码行为变更。",
+      "module": "docs/cpp/; docs/phases/phase6.json; feature-list.json; docs/DECISIONS.md; progress.md",
+      "dependencies": [],
+      "subtasks": [
+        {
+          "name": "docs/cpp 目录与索引",
+          "description": "README.md 索引；NAMING.md 编号规则；phase6-overview.md 总览；phase6.0-bootstrap.md 启动任务设计。"
+        },
+        {
+          "name": "跟踪文件",
+          "description": "phase6.json 登记 6.0 features；feature-list.json 增加 phase6 功能块；progress.md 指向 6.0。"
+        },
+        {
+          "name": "ADR",
+          "description": "DECISIONS 增补：开启 Phase 6、UDS/Worker 策略摘要、feat-06SFF 编号规则。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-26：新增 docs/cpp 起步文档；phase6.json；feature-list phase6；ADR-0020。后续同日补齐 P1 契约与 feat-06005（见各契约文件与 ADR-0021）。"
+    },
+    {
+      "id": "feat-06002",
+      "name": "C++ 工程骨架 + CMake target 图",
+      "description": "建立 cpp/ 与 CMake：按 docs/cpp/architecture.md 声明 sublift_core / sublift_ffmpeg / sublift_worker / sublift_cli / sublift_test_support 等 target 壳（vision 可 option 关）；锁定 C++20、Catch2 v3、nlohmann/json 策略、默认静态库与 hidden visibility、OpenCV 可选。CTest smoke≥1。文档含 target 依赖图与构建命令。不实现算法；不改 Python 产品路径。",
+      "module": "cpp/CMakeLists.txt; cpp/README.md; cpp/src/; cpp/tests/; docs/cpp/architecture.md",
+      "dependencies": [
+        "feat-06001"
+      ],
+      "subtasks": [
+        {
+          "name": "Target 图落地",
+          "description": "CMake 中声明 multi-target 与依赖方向；core 不链 ObjC/Vision；与 architecture.md §2 一致。"
+        },
+        {
+          "name": "工具链锁定",
+          "description": "Catch2 v3 + nlohmann/json 获取方式写入 cpp/README；OpenCV find 可选；sanitize option 预留。"
+        },
+        {
+          "name": "Smoke 测试",
+          "description": "至少一个 CTest 用例通过。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug OK; cmake --build build/cpp OK; ctest --test-dir build/cpp --output-on-failure → 3/3 passed (version, nlohmann_json, test_support). Targets: sublift_core/ffmpeg/test_support/worker/cli STATIC|EXE shells; SUBLIFT_ENABLE_VISION default OFF + APPLE guard; Catch2 v3.7.1 only when SUBLIFT_BUILD_TESTS; nlohmann/json v3.11.3; OpenCV find optional unlinked; hidden visibility + static default; cpp/README target graph. Review: init Ninja fallback + Catch2 gate fixed. No src/sublift or apps/macos product changes."
+    },
+    {
+      "id": "feat-06003",
+      "name": "models / 完整 Config / ImageBuffer 契约",
+      "description": "实现 docs/cpp/architecture.md §3：ImageBuffer/ImageView（所有权、RGB24/BGR24/Gray8、stride、ROI 共享 view、禁止公共 API 以 cv::Mat 为边界）；强类型 SourceBox/FrameLocalBox/OcrCropBox；几何 int32_t 与 timestamp_ms int64_t；完整 Config 对齐 src/sublift/config.py 全部字段（含嵌套 Signature/ChangePoint）。单测锁定默认 Config 快照。禁止裸 vector 占位后换类型。",
+      "module": "cpp/include/sublift/models.hpp; cpp/include/sublift/config.hpp; cpp/include/sublift/image.hpp; cpp/tests/",
+      "dependencies": [
+        "feat-06002"
+      ],
+      "subtasks": [
+        {
+          "name": "图像类型",
+          "description": "ImageBuffer/ImageView 与格式枚举；ROI view 语义单测。"
+        },
+        {
+          "name": "几何与 models",
+          "description": "强类型 box、Frame、OcrLine/Result、SubtitleProfile/Entry、SCRIPT_*。"
+        },
+        {
+          "name": "完整 Config",
+          "description": "全部顶层字段默认值与 Python 一致；字段级单测或 golden。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: image.hpp/models.hpp/config.hpp + image.cpp/models.cpp; ctest 26/26 pass (image ROI share/clone, SCRIPT_*, from_crop/from_selection, full Config snapshot vs config.py). Strong SourceBox/FrameLocalBox/OcrCropBox; timestamp_ms int64_t; no OpenCV in public headers (rg clean). No pipeline algorithms."
+    },
+    {
+      "id": "feat-06004",
+      "name": "Parity harness + 冻结 Oracle",
+      "description": "落地 docs/cpp/parity-contract.md：Oracle 必须含 oracle_commit、语言/OpenCV/ffmpeg/OS 版本、素材 SHA256、完整 Config、golden_schema_version；L0–L4 与字段 epsilon；bankers_round 与 NFC；golden 中间量清单（signature/events/segments/ocr_decisions 等）。可运行：dump 默认 Config + metadata + C++ compare。禁止将 Oracle 定义为未钉扎的 main。",
+      "module": "docs/cpp/parity-contract.md; scripts/parity/; cpp/tests/parity/; benchmark/parity/",
+      "dependencies": [
+        "feat-06003"
+      ],
+      "subtasks": [
+        {
+          "name": "契约定稿",
+          "description": "parity-contract.md schema v1 与字段表可执行。"
+        },
+        {
+          "name": "Config golden 端到端",
+          "description": "Python dump + oracle metadata + C++ compare 自动化绿。"
+        },
+        {
+          "name": "6.1 扩展指南",
+          "description": "文档说明如何增加 signature/events golden。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: scripts/parity/dump_config.py dump+--check OK; golden benchmark/parity/goldens/config/default_config.v1.json (schema v1, oracle_commit, config_fingerprint); C++ load_config_golden+diff_config; ctest 27/27 incl. [parity][config] kDefaultConfig vs frozen golden. parity-contract §9/§10. ruff clean on dump script. No product path change."
+    },
+    {
+      "id": "feat-06005",
+      "name": "设计冻结：Worker IPC / 引擎矩阵 / Cutover 回滚",
+      "description": "验收 docs/cpp/worker-ipc-contract.md 与 engine-matrix-and-cutover.md：协议时序（progress/push_entry/entries/done）、path/frame 状态机、单 job 所有权、cancel≤1s/restart≤5s、video_id 与迟到消息、capability handshake；引擎矩阵 vision/mock→C++、paddle→Python、禁止静默 fallback；CLI 形态；cutover 质量+运行时+ASan 门与回滚开关。至少 1 个 IPC 期望消息序夹具格式说明。主文档 ARCHITECTURE/REQUIREMENTS/README 回链 docs/cpp。本 feat 不实现 C++ worker。",
+      "module": "docs/cpp/worker-ipc-contract.md; docs/cpp/engine-matrix-and-cutover.md; docs/ARCHITECTURE.md; docs/REQUIREMENTS.md; README.md; tests/fixtures/ipc/ 或文档内夹具示例",
+      "dependencies": [
+        "feat-06001"
+      ],
+      "subtasks": [
+        {
+          "name": "Worker/IPC 契约",
+          "description": "时序、状态机、所有权、错误与 fixture 要求成文。"
+        },
+        {
+          "name": "引擎矩阵与 cutover/回滚",
+          "description": "解决全面 cutover 与无原生 Paddle 的冲突；双 worker 策略与门禁列表。"
+        },
+        {
+          "name": "发现性回链",
+          "description": "ARCHITECTURE §1.1、REQUIREMENTS 引言、README 文档节指向 docs/cpp。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-26：docs/cpp/worker-ipc-contract.md + engine-matrix-and-cutover.md 定稿；ARCHITECTURE §1.1、REQUIREMENTS 引言、README 文档节回链 docs/cpp；tests/fixtures/ipc/ 含 path_mode_mock_success.messages.jsonl 与 README；ADR-0021。设计冻结完成，无 C++ worker 实现代码。jq empty phase6.json feature-list.json OK。"
+    }
+  ]
+}

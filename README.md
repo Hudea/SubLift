@@ -22,6 +22,12 @@
 - uv（包管理）
 - Xcode 15+ 或 SwiftPM（仅 GUI 构建需要）
 
+## 文档
+
+- [架构（当前 Python 产品路径）](docs/ARCHITECTURE.md)
+- [需求规格](docs/REQUIREMENTS.md)
+- **[Phase 6 C++ 迁移计划与契约](docs/cpp/README.md)**（进行中：Oracle/parity、Worker IPC、引擎矩阵与 cutover）
+
 ## 安装
 
 ```bash

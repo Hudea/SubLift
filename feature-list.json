@@ -334,6 +334,41 @@
           ]
         }
       ]
+    },
+    {
+      "id": "phase6",
+      "name": "Phase 6 - Native C++ Core Migration",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。当前启动 6.0 Bootstrap。",
+      "detail_file": "docs/phases/phase6.json",
+      "features": [
+        {
+          "id": "phase6.foundation",
+          "name": "6.0 Foundation / Bootstrap",
+          "description": "迁移文档与编号（docs/cpp）；CMake multi-target 图与工具链；ImageBuffer+完整 Config；冻结 Oracle 的 parity harness；Worker IPC/引擎矩阵/cutover 回滚设计冻结。产品路径零切换。进 6.1 前 feat-06001~06005 须全部完成。覆盖 feat-06001~06005。",
+          "status": "done",
+          "covers": [
+            "feat-06001",
+            "feat-06002",
+            "feat-06003",
+            "feat-06004",
+            "feat-06005"
+          ]
+        },
+        {
+          "id": "phase6.pure-pipeline",
+          "name": "6.1 Pure pipeline 算法 parity",
+          "description": "迁移 signature → changepoint → timeline → dedupe → line_select，逐模块 golden parity。仍不切换产品路径。任务开干前写入 phase6.json（feat-061xx）与 docs/cpp 设计文档。",
+          "status": "not-started",
+          "covers": []
+        },
+        {
+          "id": "phase6.pipeline-runtime",
+          "name": "6.2+ Pipeline / Extractor / Vision / Worker / Cutover",
+          "description": "C++ Pipeline 流式 API、ffmpeg subprocess 复刻、Vision .mm、UDS worker 协议兼容、benchmark 门后默认 cutover；其后可去 Python 产品 runtime。子阶段 6.2–6.7，开干前拆 feat-062xx 起。",
+          "status": "not-started",
+          "covers": []
+        }
+      ]
     }
   ]
 }

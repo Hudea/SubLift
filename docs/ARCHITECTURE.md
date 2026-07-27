@@ -6,6 +6,21 @@
 - **平台 API 隔离**：平台特定 API（Apple Vision）只能出现在 `ocr/vision.py`，核心层只依赖 Protocol
 - **串联层不实现单一能力**：pipeline / export 组合能力模块，处理流程逻辑
 
+## 1.1 Phase 6 — Native C++ Core（进行中）
+
+> **当前产品默认路径仍是本文下列 Python 架构。**  
+> Phase 6 将 Python Runtime 逐步替换为 C++ Core（SwiftUI + UDS 保留，Worker 优先替换）。
+
+| | 说明 |
+|---|---|
+| 计划与契约 | **[`docs/cpp/`](cpp/README.md)**（总览、architecture、parity、worker-ipc、引擎矩阵/cutover） |
+| 任务跟踪 | [`docs/phases/phase6.json`](phases/phase6.json) |
+| 行为 Oracle | **冻结** `oracle_commit` + golden（见 `docs/cpp/parity-contract.md`），不是未钉扎的 main 尖端 |
+| 引擎 cutover | vision/mock → C++ Worker；paddle → 仍 Python（见 `docs/cpp/engine-matrix-and-cutover.md`） |
+| 实现树 | `cpp/`（自 feat-06002 起） |
+
+Python 侧 `docs/design/*` 在 cutover 前仍是算法语义叙述源；与 C++ 冲突时以冻结 golden 为准。
+
 ## 2. 分层架构
 
 | 层 | 模块 | 职责 |

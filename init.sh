@@ -100,6 +100,43 @@ run_check "pytest"         uv run --extra vision --extra paddle pytest -m "not i
 
 echo
 echo "=============================="
+echo " C++（可选，Phase 6）"
+echo "=============================="
+echo
+# Config parity: keep committed golden aligned with Python DEFAULT_CONFIG.
+if uv run --extra vision --extra paddle python scripts/parity/dump_config.py --check \
+    >/tmp/sublift_parity_config.log 2>&1; then
+    printf "${GREEN}[OK]${NC}  config parity golden (--check)\n"
+    pass=$((pass + 1))
+else
+    printf "${RED}[FAIL]${NC} config parity golden (--check)\n"
+    cat /tmp/sublift_parity_config.log 2>/dev/null || true
+    fail=$((fail + 1))
+fi
+
+if command -v cmake >/dev/null 2>&1; then
+    # Prefer Ninja when present; otherwise use CMake default generator.
+    # Build argv as a non-empty array so bash 3.2 + set -u never expands an empty [@].
+    cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug)
+    if command -v ninja >/dev/null 2>&1; then
+        cmake_cmd+=(-G Ninja)
+    fi
+    if "${cmake_cmd[@]}" >/tmp/sublift_cpp_cmake.log 2>&1 \
+        && cmake --build build/cpp >/tmp/sublift_cpp_build.log 2>&1 \
+        && ctest --test-dir build/cpp --output-on-failure >/tmp/sublift_cpp_ctest.log 2>&1; then
+        printf "${GREEN}[OK]${NC}  cmake/ctest (cpp/)\n"
+        pass=$((pass + 1))
+    else
+        printf "${RED}[FAIL]${NC} cmake/ctest (cpp/)\n"
+        tail -n 40 /tmp/sublift_cpp_cmake.log /tmp/sublift_cpp_build.log /tmp/sublift_cpp_ctest.log 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+else
+    printf "${YELLOW}[SKIP]${NC} cmake 未安装（可选；Phase 6 见 cpp/README.md）\n"
+fi
+
+echo
+echo "=============================="
 echo " 汇总"
 echo "=============================="
 printf "通过: ${GREEN}%d${NC}  失败: ${RED}%d${NC}\n" "$pass" "$fail"

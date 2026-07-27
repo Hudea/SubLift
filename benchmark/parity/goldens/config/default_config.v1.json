@@ -1,0 +1,50 @@
+{
+  "golden_schema_version": 1,
+  "kind": "config",
+  "oracle": {
+    "oracle_commit": "2121326506ff647b235eac1fa22e9122e1e79a88",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "opencv_version": "4.13.0",
+    "numpy_version": "2.5.0",
+    "ffmpeg_version": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "macos_version": "26.5.2",
+    "vision_note": null,
+    "input_asset_sha256": null,
+    "config_fingerprint": "sha256:df08c466a1b85774ef9da200420f57a99adec7ede78780887c7d8ed41ae77e40",
+    "git_dirty": true
+  },
+  "config": {
+    "sample_fps": 5.0,
+    "region_bottom_ratio": 0.3,
+    "confidence_threshold": 0.5,
+    "merge_gap_ms": 1000,
+    "min_duration_ms": 500,
+    "ocr_anchor_delay_frames": 2,
+    "drop_empty_text": false,
+    "subtitle_profile": null,
+    "subtitle_script": "auto",
+    "enable_line_select": true,
+    "low_conf_threshold": 0.28,
+    "ocr_consensus_frames": 4,
+    "line_select_min_score": 0.28,
+    "line_select_min_script": 0.12,
+    "signature": {
+      "block_size_ratio": 0.08,
+      "adaptive_c": 12,
+      "hash_size": 8
+    },
+    "change_point": {
+      "presence_threshold": 0.01,
+      "hysteresis_frames": 1,
+      "change_threshold": 10,
+      "enable_ssim_verify": false,
+      "ssim_threshold": 0.95,
+      "ssim_window_size": 7,
+      "enable_ssim_patrol": true,
+      "ssim_patrol_interval": 3,
+      "ssim_patrol_threshold": 0.92,
+      "ssim_patrol_use_mask": true
+    }
+  }
+}
