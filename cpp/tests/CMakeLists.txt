@@ -7,6 +7,7 @@ set(_sublift_test_srcs
   timeline_test.cpp
   dedupe_test.cpp
   line_select_test.cpp
+  ocr_test.cpp
   parity/config_parity_test.cpp
   parity/timeline_parity_test.cpp
   parity/dedupe_parity_test.cpp
@@ -16,8 +17,12 @@ if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_test_srcs
     signature_test.cpp
     changepoint_test.cpp
+    pipeline_feed_test.cpp
+    pipeline_ocr_test.cpp
+    pipeline_finalize_test.cpp
     parity/signature_parity_test.cpp
     parity/changepoint_parity_test.cpp
+    parity/pipeline_parity_test.cpp
   )
 endif()
 
@@ -53,15 +58,18 @@ if(SUBLIFT_ENABLE_OPENCV)
   set(_sig_fixtures "${PROJECT_SOURCE_DIR}/../benchmark/parity/fixtures/signature")
   set(_cp_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/events/changepoint.v1.json")
   set(_cp_fixtures "${PROJECT_SOURCE_DIR}/../benchmark/parity/fixtures/changepoint")
+  set(_pl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/pipeline/pipeline.v1.json")
   sublift_stringify_path(_sig_golden_esc "${_sig_golden}")
   sublift_stringify_path(_sig_fixtures_esc "${_sig_fixtures}")
   sublift_stringify_path(_cp_golden_esc "${_cp_golden}")
   sublift_stringify_path(_cp_fixtures_esc "${_cp_fixtures}")
+  sublift_stringify_path(_pl_golden_esc "${_pl_golden}")
   target_compile_definitions(sublift_tests PRIVATE
     "SUBLIFT_PARITY_GOLDEN_SIGNATURE=\"${_sig_golden_esc}\""
     "SUBLIFT_PARITY_FIXTURE_SIGNATURE=\"${_sig_fixtures_esc}\""
     "SUBLIFT_PARITY_GOLDEN_CHANGEPOINT=\"${_cp_golden_esc}\""
     "SUBLIFT_PARITY_FIXTURE_CHANGEPOINT=\"${_cp_fixtures_esc}\""
+    "SUBLIFT_PARITY_GOLDEN_PIPELINE=\"${_pl_golden_esc}\""
   )
 endif()
 

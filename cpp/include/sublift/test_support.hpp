@@ -134,4 +134,74 @@ struct ChangepointGolden {
     const std::string& scenario_name,
     const OracleMeta* oracle = nullptr);
 
+// ---------------------------------------------------------------------------
+// Pipeline golden (feat-06205)
+// ---------------------------------------------------------------------------
+
+struct PipelineFrameGolden {
+  std::int64_t ts{0};
+  std::string pattern;            // "empty" | "subA" | "subB" | "subCyan"
+  std::string action{"feed"};     // "feed" | "cancel" | "finalize"
+};
+
+struct PipelineMockOcrGolden {
+  std::string mode;  // "fixed" | "sequence"
+  struct Line {
+    std::string text;
+    double confidence{0.0};
+    OcrCropBox box{};
+  };
+  struct Result {
+    std::string text;
+    double confidence{0.0};
+    std::vector<Line> lines;
+  };
+  std::vector<Result> results;
+};
+
+struct PipelineSegmentEventGolden {
+  std::int64_t start_ms{0};
+  std::int64_t end_ms{0};
+  std::optional<std::int64_t> anchor_ts{};
+  std::vector<std::int64_t> fallback_ts{};
+};
+
+struct PipelineEntryGolden {
+  std::int64_t start_ms{0};
+  std::int64_t end_ms{0};
+  std::string text;
+  double confidence{0.0};
+};
+
+struct PipelineScenarioGolden {
+  std::string name;
+  Config config;  // default + scenario overrides applied
+  std::vector<PipelineFrameGolden> frames;
+  std::string detector_kind;  // "fixed_full"
+  PipelineMockOcrGolden mock_ocr;
+  std::vector<PipelineSegmentEventGolden> expected_segment_events;
+  std::vector<PipelineEntryGolden> expected_raw_entries;
+  int expected_ocr_calls{0};
+  std::vector<PipelineEntryGolden> expected_final_entries;
+};
+
+struct PipelineGolden {
+  OracleMeta oracle;  // config_fingerprint holds default-config fingerprint
+  std::vector<PipelineScenarioGolden> scenarios;
+};
+
+/// Load pipeline golden envelope (schema v1). Throws std::runtime_error.
+[[nodiscard]] PipelineGolden load_pipeline_golden(
+    const std::filesystem::path& path);
+
+/// Compare candidate segment events / raw entries / final entries / ocr_calls
+/// against expected. nullopt if all equal; else human-readable mismatch.
+[[nodiscard]] std::optional<std::string> diff_pipeline(
+    const std::vector<PipelineSegmentEventGolden>& cand_events,
+    const std::vector<PipelineEntryGolden>& cand_raw,
+    const std::vector<PipelineEntryGolden>& cand_final,
+    int cand_ocr_calls,
+    const PipelineScenarioGolden& expected,
+    const OracleMeta* oracle = nullptr);
+
 }  // namespace sublift::test_support

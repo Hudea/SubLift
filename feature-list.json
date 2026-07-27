@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。当前子阶段 6.1 Pure pipeline。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0/6.1/6.2 done；下一子阶段 6.3 Extractor（feat-063xx，设计待登记/实现）。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -368,9 +368,22 @@
           ]
         },
         {
+          "id": "phase6.pipeline-stream",
+          "name": "6.2 Pipeline 流式编排 parity",
+          "description": "C++ Pipeline feed/ocr_segment/finalize/cancel；IDetector/IOcrEngine + Mock；合成帧 golden。仍不切换产品路径。设计：docs/cpp/phase6.2-pipeline.md。覆盖 feat-06201~06205。",
+          "status": "done",
+          "covers": [
+            "feat-06201",
+            "feat-06202",
+            "feat-06203",
+            "feat-06204",
+            "feat-06205"
+          ]
+        },
+        {
           "id": "phase6.pipeline-runtime",
-          "name": "6.2+ Pipeline / Extractor / Vision / Worker / Cutover",
-          "description": "C++ Pipeline 流式 API、ffmpeg subprocess 复刻、Vision .mm、UDS worker 协议兼容、benchmark 门后默认 cutover；其后可去 Python 产品 runtime。子阶段 6.2–6.7，开干前拆 feat-062xx 起。",
+          "name": "6.3+ Extractor / Vision / Worker / Cutover",
+          "description": "ffmpeg subprocess 复刻、Vision .mm、UDS worker、benchmark 门后 cutover；其后可去 Python 产品 runtime。开干前拆 feat-063xx 起。",
           "status": "not-started",
           "covers": []
         }

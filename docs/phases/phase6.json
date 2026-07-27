@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0（feat-06001~06005）done；6.1 pure pipeline（feat-06101~06105）进行中。契约与子阶段设计见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0/6.1/6.2 done（含 phase-review 加固）；下一子阶段 6.3 Extractor（feat-063xx）。契约与子阶段设计见 docs/cpp/。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -251,6 +251,135 @@
       ],
       "status": "done",
       "evidence": "2026-07-27: line_select pure APIs C++ (UTF-8 codepoint edit_distance); line_select.v1.json cases; unit+parity ctest green."
+    },
+    {
+      "id": "feat-06201",
+      "name": "IDetector / IOcrEngine + Mock OCR + FixedRegionDetector",
+      "description": "在 sublift_core 定义 IDetector::detect 与 IOcrEngine::recognize(ImageView)（无 cv::Mat/PIL 公共边界）。实现 MockOcrEngine（固定结果与按调用序号 sequence）与 FixedRegionDetector。单测覆盖序列顺序与固定 Region。不实现 feed 编排；不接 Vision/ffmpeg；不切换产品路径。",
+      "module": "cpp/include/sublift/detector.hpp; cpp/include/sublift/ocr.hpp; cpp/src/core/*mock*; cpp/tests/ocr_test.cpp; docs/cpp/phase6.2-pipeline.md",
+      "dependencies": [
+        "feat-06105"
+      ],
+      "subtasks": [
+        {
+          "name": "接口头文件",
+          "description": "IDetector / IOcrEngine 虚接口与生命周期约定。"
+        },
+        {
+          "name": "Mock + Fixed detector",
+          "description": "MockOcrEngine 固定/sequence；FixedRegionDetector。"
+        },
+        {
+          "name": "单测",
+          "description": "Mock 顺序与 detect 返回；ctest 绿。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: cpp/include/sublift/ocr.hpp (IOcrEngine::recognize(const ImageView&)) + detector.hpp (IDetector::detect(const Frame&) → optional<Region>)，公共边界无 cv::Mat/PIL。header-only 测试双 mock_ocr.hpp (MockOcrEngine 固定 text/conf、from_lines、sequence 按调用序推进 + 越界 throw std::out_of_range 对齐 Python IndexError、call_count) 与 fixed_detector.hpp (FixedRegionDetector 忽略帧尺寸返回构造 Region)。sublift_core 无新增 .cpp，保持纯净。cpp/tests/ocr_test.cpp 6 例 [ocr]/[detector]：固定/lines 均值 conf/sequence 顺序+exhaustion/IDetector& IOcrEngine& 多态注入/FixedRegion 跨帧尺寸不变。ctest 77/77 绿 (49–54 为新例)。未实现 feed 编排；未接 Vision/ffmpeg；产品路径未动。"
+    },
+    {
+      "id": "feat-06202",
+      "name": "Pipeline::feed 打轴路径",
+      "description": "实现 Pipeline::feed：首帧 detect、ROI crop、RGB→BGR 怪癖后 signature/changepoint/timeline、段开闭与 SegmentEvent（anchor/fallback 帧 ts）。IN 返回 nullopt；OUT/CHANGE 返回段事件。帧所有权在 Pipeline 内 deep-copy/shared。cancel 后 feed 空操作。单测纯时序（Mock OCR 调用次数为 0）。不实现 ocr_segment 文本。不切换产品路径。",
+      "module": "cpp/include/sublift/pipeline.hpp; cpp/src/core/pipeline.cpp; cpp/tests/pipeline_feed_test.cpp",
+      "dependencies": [
+        "feat-06201",
+        "feat-06102",
+        "feat-06103"
+      ],
+      "subtasks": [
+        {
+          "name": "SegmentEvent + 状态字段",
+          "description": "对齐 open/delay/stable/sample/anchor_frames。"
+        },
+        {
+          "name": "feed 控制流",
+          "description": "IN/OUT/CHANGE 与色域/怪癖路径。"
+        },
+        {
+          "name": "单测",
+          "description": "合成帧序列段边界与代表帧 ts。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-27: cpp/include/sublift/pipeline.hpp (SegmentEvent 持有 owned Frame + Pipeline 类) + cpp/src/core/pipeline.cpp (feed 控制流 None/IN/OUT/CHANGE 逐行对齐 core.py 235-303；_open_segment/_on_stable_frame/_record_sample_frame/_close_segment/_crop_to_region/_ensure_subtitle_profile 全 parity)。两 P0 决策：帧所有权用 ImageBuffer::clone deep-copy（入驻 clone/出驻 move，closing_frame clone 入 fallback；changepoint store_anchor_crop 已深拷 crop 故 bgr_view 局部安全）；色域用显式 R↔B 字节交换产 BGR24 标签 buffer 喂 compute_signature/changepoint（不可仅改标签--字节序未变则非怪癖）。cancel 仅设 cancelled_ 标志（完整 reset 留 06204）；ocr_segment/finalize 抛 std::logic_error stub。pipeline.cpp 进 SUBLIFT_ENABLE_OPENCV 块（依赖 signature/changepoint），源码不直接 include OpenCV。cpp/tests/pipeline_feed_test.cpp 9 例 [pipeline]：detect 失败/单 IN/IN->OUT(delay 未达 first anchor)/零 OCR counting/delay=0 即刻锁/delay=2 第3帧锁@600/CHANGE(旧段 close+新段 open@change_ms, OUT start=400 非 600)/cancel no-op/ROI crop。合成帧 128x64 bg=40 + 亮 band（subA/subB ham=8），enable_ssim_patrol=false 求确定性（默认配置行为归 06205 golden）。ctest 86/86 绿（77->86，+9）；OpenCV-OFF 配置编译通过（pipeline gated out）。debug 验证 C++ dhash/fg 与 Python oracle 一致（subA fg=0.0215 dh=0x302830, subB fg=0.0273 dh=0x604460, ham=8）。审核子代理通过：无确认缺陷，10 项 parity 全对齐；采纳 S1 加 convert_rgb_to_bgr 格式断言。产品路径未动。"
+    },
+    {
+      "id": "feat-06203",
+      "name": "Pipeline::ocr_segment",
+      "description": "实现 ocr_segment：enable_line_select 真/假两路径；Mock OCR 下 raw SubtitleEntry 写入 closed_entries；代表帧重试与 consensus/cleanup/should_accept 与 Python 一致。文档声明非线程安全。单测 Mock sequence 文本 L0。不切换产品路径。",
+      "module": "cpp/src/core/pipeline.cpp; cpp/tests/pipeline_ocr_test.cpp",
+      "dependencies": [
+        "feat-06202",
+        "feat-06105"
+      ],
+      "subtasks": [
+        {
+          "name": "legacy 路径",
+          "description": "整区 join + threshold + fallback 重试。"
+        },
+        {
+          "name": "line_select 路径",
+          "description": "多帧 select/consensus/accept。"
+        },
+        {
+          "name": "单测",
+          "description": "Mock lines/sequence 断言 text/conf。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: cpp/include/sublift/pipeline.hpp 加 ocr_segment 声明 + SegStats 内部结构 + 私有 OCR helper（ocr_segment_legacy/with_line_select/ocr_frame_selected/ocr_frame_raw/collect_ocr_frames/needs_ocr_retry）+ closed_entries_ 成员；cpp/src/core/pipeline.cpp 实现 ocr_segment 双路径逐行对齐 core.py 305-397/557-683/685-780/822-825。region-None 分支直接返回空 entry 并 push closed_entries_ 不调 OCR。legacy 路径：anchor 采纳/fallback 重试/seen_ts dedup（含 -1 sentinel）/非空 fallback 保留/更高 conf fallback 覆盖/阈值下 blank text 但保留 conf。line_select 路径：collect_ocr_frames（anchor+fallbacks dedup+ocr_consensus_frames cap）/ensure_subtitle_profile+from_crop fallback/single high-confidence 早停（含 mixed CJK+latin 例外）/two-frame consensus 早停/consensus 后 cleanup/should_accept 拒绝保留 conf/no-lines engine 兼容。SegStats 仅局部控制流（early_stop 不写 trace/perf）。线程安全文档声明与 Python 一致。cpp/tests/pipeline_ocr_test.cpp 16 例 [pipeline][ocr]（region-None/legacy 6 例/line_select 9 例含 mixed CJK+latin）；cpp/tests/pipeline_test_helpers.hpp 抽出共享 helper（FirstNullDetector/NeverDetectDetector/base_cfg/empty_frame/subA/subB/full_detector）；pipeline_feed_test.cpp 改用 helper。审查子代理通过：逐行核对 legacy/line_select/region-None 三条路径 parity，normalize_ocr_text 判空与 .strip() 在所有空白场景等价，无 P0/P1。采纳 P3 覆盖建议补 3 例：legacy 非空低 conf fallback 保留后 blanked、line_select 全空 samples consensus 空返、line_select sub-low-conf consensus 被 should_accept 拒绝保留 conf。ctest 102/102 绿（86->102，+16）；产品路径未动。"
+    },
+    {
+      "id": "feat-06204",
+      "name": "Pipeline::finalize + cancel",
+      "description": "finalize：关闭末开段并 OCR，merge_entries 返回最终列表。cancel：标志 + 重置状态，后续 feed 拒绝。单测 open 段 finalize 与 cancel 语义。不切换产品路径。",
+      "module": "cpp/src/core/pipeline.cpp; cpp/tests/pipeline_finalize_test.cpp",
+      "dependencies": [
+        "feat-06203",
+        "feat-06104"
+      ],
+      "subtasks": [
+        {
+          "name": "finalize",
+          "description": "末段 + dedupe。"
+        },
+        {
+          "name": "cancel",
+          "description": "清理与拒绝后续 feed。"
+        },
+        {
+          "name": "单测",
+          "description": "覆盖 open 段与 cancel。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: close_segment 加 clear_open 参数（默认 true 保持 feed 路径不变，finalize 用 false）。finalize 实现：open 段 -> timeline.finalize_open_segment(last_timestamp_ms_) + build() -> close_segment(clear_open=false) -> ocr_segment(event) push closed_entries_ -> reset open_segment_start_ms_ + reset_segment_ocr_state -> merge_entries 返回（closed_entries_ 不清空，幂等）。cancel 实现 11 行逐行对齐 core.py 436-446：cancelled_=true（永久拒绝）/changepoint.reset/timeline.reset/region.reset/anchor_frames.clear/closed_entries.clear/open_segment_start_ms.reset/processed_count=0/last_timestamp_ms=0/reset_segment_ocr_state/subtitle_profile_=config.subtitle_profile。头文件加 subtitle_profile() accessor（parity Python @property）+ 更新 6.2 scope docstring。cpp/tests/pipeline_finalize_test.cpp 11 例 [pipeline][finalize/cancel]：finalize 无 open 段空/有 closed_entries_、finalize 有 open 段末段关闭+OCR+merge、finalize 幂等（二次不 re-OCR）、cancel 后 feed 永久 nullopt（Python 语义不 re-detect，CountingDetector 验证）、cancel 后 processed_count=0、cancel 后 region_ 空（ocr_segment region-None 旁证）、cancel 后 subtitle_profile_ 回 config 默认、cancel 后 ocr_segment region-None 分支、finalize+cancel 双向交互。pipeline_feed_test.cpp 的 cancel 用例断言改为 processed_count==0（对齐 Python cancel reset 语义）。审查子代理通过：逐行核对 finalize/cancel/close_segment(clear_open) 三处 parity，std::move 语义在 clear_open=false 路径由 finalize 统一收尾无 use-after-move，无 P0/P1。ctest 113/113 绿（102->113，+11）；init.sh 15/15 绿。产品路径未动。"
+    },
+    {
+      "id": "feat-06205",
+      "name": "Pipeline 端到端 parity harness",
+      "description": "dump_pipeline.py + pipeline.v1.json golden（段事件、代表帧 ts、OCR 决策、raw/final entries）；C++ [parity][pipeline] 离线比对；init.sh --check。至少覆盖单段 IN/OUT、CHANGE 两段、line_select on、finalize 开段、cancel。Mock only。不切换产品路径。",
+      "module": "scripts/parity/dump_pipeline.py; benchmark/parity/goldens/pipeline/; cpp/tests/parity/pipeline_parity_test.cpp; init.sh",
+      "dependencies": [
+        "feat-06204"
+      ],
+      "subtasks": [
+        {
+          "name": "Python dump",
+          "description": "合成帧 + Mock 跑 Python Pipeline 写 golden。"
+        },
+        {
+          "name": "C++ parity 测试",
+          "description": "load golden + candidate 比对 L0。"
+        },
+        {
+          "name": "init 门禁",
+          "description": "dump_pipeline --check 接入 init.sh。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28 初版 e2e harness + 同日 phase-review 加固：scripts/parity/dump_pipeline.py + pipeline.v1.json **8 scenarios**（原 6 + chromatic_bgr_quirk_in_out + merge_adjacent_same_text）；MockOcrEngine fixed/sequence 均递增 call_count（feed 零 OCR 断言有效）；subCyan 色带单测/golden 锁 RGB→BGR 怪癖；init.sh -DSUBLIFT_REQUIRE_OPENCV=ON；convert_rgb_to_bgr Release throw；Pipeline/IDetector/IOcrEngine 禁拷贝；SegmentEvent 所有权 wipe 回归；merge_gap 场景 raw≠final。ctest **117/117**；dump_pipeline --check OK；产品路径未动。"
     }
   ]
 }

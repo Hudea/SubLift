@@ -1,0 +1,657 @@
+{
+  "golden_schema_version": 1,
+  "kind": "pipeline",
+  "oracle": {
+    "oracle_commit": "e58f18ca2e6877a3f7cf071bdd9f74f76ac6f67d",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "opencv_version": "4.13.0",
+    "numpy_version": "2.5.0",
+    "ffmpeg_version": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "macos_version": "26.5.2",
+    "vision_note": null,
+    "git_dirty": false,
+    "config_fingerprint": "sha256:f6f5bc6668793e21689df37b0e52da4e1ba4659810c1e7480ef3476851a19f9e"
+  },
+  "frame_geometry": {
+    "width": 128,
+    "height": 64,
+    "pixel_format": "rgb24",
+    "bg_value": 40,
+    "fg_value": 240,
+    "patterns": {
+      "empty": {
+        "type": "blank"
+      },
+      "subA": {
+        "type": "band",
+        "x0": 48,
+        "x1": 80,
+        "y0": 44,
+        "y1": 60
+      },
+      "subB": {
+        "type": "band",
+        "x0": 40,
+        "x1": 88,
+        "y0": 46,
+        "y1": 58
+      },
+      "subCyan": {
+        "type": "band",
+        "x0": 48,
+        "x1": 80,
+        "y0": 44,
+        "y1": 60,
+        "rgb": [
+          0,
+          255,
+          255
+        ]
+      }
+    }
+  },
+  "default_config_overrides": {
+    "change_point.enable_ssim_patrol": false
+  },
+  "scenarios": [
+    {
+      "name": "single_in_out",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        },
+        {
+          "ts": 600,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "你好",
+            "confidence": 0.9,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400,
+            600
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "你好",
+          "confidence": 0.9
+        }
+      ],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "你好",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "name": "change_two_segments",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0,
+        "change_point.change_threshold": 5
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subB"
+        },
+        {
+          "ts": 600,
+          "pattern": "subB"
+        },
+        {
+          "ts": 800,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "旧字",
+            "confidence": 0.9,
+            "lines": []
+          },
+          {
+            "text": "新字",
+            "confidence": 0.85,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 400,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400
+          ]
+        },
+        {
+          "start_ms": 400,
+          "end_ms": 800,
+          "anchor_ts": 600,
+          "fallback_ts": [
+            800
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 400,
+          "text": "旧字",
+          "confidence": 0.9
+        },
+        {
+          "start_ms": 400,
+          "end_ms": 800,
+          "text": "新字",
+          "confidence": 0.85
+        }
+      ],
+      "expected_ocr_calls": 2,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 400,
+          "text": "旧字",
+          "confidence": 0.9
+        },
+        {
+          "start_ms": 400,
+          "end_ms": 800,
+          "text": "新字",
+          "confidence": 0.85
+        }
+      ]
+    },
+    {
+      "name": "line_select_on",
+      "config_overrides": {
+        "enable_line_select": true,
+        "confidence_threshold": 0.5,
+        "ocr_anchor_delay_frames": 0,
+        "min_duration_ms": 0,
+        "subtitle_script": "cjk"
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        },
+        {
+          "ts": 600,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "",
+            "confidence": 0.0,
+            "lines": [
+              {
+                "text": "你好世界",
+                "confidence": 0.9,
+                "box": {
+                  "x": 48,
+                  "y": 44,
+                  "width": 32,
+                  "height": 16
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400,
+            600
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "你好世界",
+          "confidence": 0.9
+        }
+      ],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "你好世界",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "name": "cancel_does_not_pollute",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        },
+        {
+          "ts": 600,
+          "pattern": "empty"
+        },
+        {
+          "ts": 800,
+          "action": "cancel",
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "x",
+            "confidence": 0.9,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400,
+            600
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "x",
+          "confidence": 0.9
+        }
+      ],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": []
+    },
+    {
+      "name": "finalize_open_segment",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "尾段",
+            "confidence": 0.88,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [],
+      "expected_raw_entries": [],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 400,
+          "text": "尾段",
+          "confidence": 0.88
+        }
+      ]
+    },
+    {
+      "name": "single_in_out_default_delay",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        },
+        {
+          "ts": 600,
+          "pattern": "subA"
+        },
+        {
+          "ts": 800,
+          "pattern": "subA"
+        },
+        {
+          "ts": 1000,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "延迟锚",
+            "confidence": 0.92,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 1000,
+          "anchor_ts": 600,
+          "fallback_ts": [
+            200,
+            400,
+            800,
+            1000
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 1000,
+          "text": "延迟锚",
+          "confidence": 0.92
+        }
+      ],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 1000,
+          "text": "延迟锚",
+          "confidence": 0.92
+        }
+      ]
+    },
+    {
+      "name": "chromatic_bgr_quirk_in_out",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subCyan"
+        },
+        {
+          "ts": 400,
+          "pattern": "subCyan"
+        },
+        {
+          "ts": 600,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "青带",
+            "confidence": 0.91,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400,
+            600
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "青带",
+          "confidence": 0.91
+        }
+      ],
+      "expected_ocr_calls": 1,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "青带",
+          "confidence": 0.91
+        }
+      ]
+    },
+    {
+      "name": "merge_adjacent_same_text",
+      "config_overrides": {
+        "enable_line_select": false,
+        "confidence_threshold": 0.0,
+        "min_duration_ms": 0,
+        "merge_gap_ms": 1000
+      },
+      "frames": [
+        {
+          "ts": 0,
+          "pattern": "empty"
+        },
+        {
+          "ts": 200,
+          "pattern": "subA"
+        },
+        {
+          "ts": 400,
+          "pattern": "subA"
+        },
+        {
+          "ts": 600,
+          "pattern": "empty"
+        },
+        {
+          "ts": 800,
+          "pattern": "subA"
+        },
+        {
+          "ts": 1000,
+          "pattern": "subA"
+        },
+        {
+          "ts": 1200,
+          "pattern": "empty"
+        }
+      ],
+      "detector": {
+        "kind": "fixed_full"
+      },
+      "mock_ocr_setup": {
+        "mode": "sequence",
+        "results": [
+          {
+            "text": "同一段",
+            "confidence": 0.9,
+            "lines": []
+          },
+          {
+            "text": "同一段",
+            "confidence": 0.88,
+            "lines": []
+          }
+        ]
+      },
+      "expected_segment_events": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "anchor_ts": 200,
+          "fallback_ts": [
+            400,
+            600
+          ]
+        },
+        {
+          "start_ms": 800,
+          "end_ms": 1200,
+          "anchor_ts": 800,
+          "fallback_ts": [
+            1000,
+            1200
+          ]
+        }
+      ],
+      "expected_raw_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 600,
+          "text": "同一段",
+          "confidence": 0.9
+        },
+        {
+          "start_ms": 800,
+          "end_ms": 1200,
+          "text": "同一段",
+          "confidence": 0.88
+        }
+      ],
+      "expected_ocr_calls": 2,
+      "expected_final_entries": [
+        {
+          "start_ms": 200,
+          "end_ms": 1200,
+          "text": "同一段",
+          "confidence": 0.9
+        }
+      ]
+    }
+  ]
+}

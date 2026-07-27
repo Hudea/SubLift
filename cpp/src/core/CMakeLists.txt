@@ -7,7 +7,7 @@ set(_sublift_core_srcs
   line_select.cpp
 )
 if(SUBLIFT_ENABLE_OPENCV)
-  list(APPEND _sublift_core_srcs signature.cpp changepoint.cpp)
+  list(APPEND _sublift_core_srcs signature.cpp changepoint.cpp pipeline.cpp)
 endif()
 
 add_library(sublift_core STATIC ${_sublift_core_srcs})

@@ -148,10 +148,23 @@ for _parity_mod in timeline dedupe line_select; do
     fi
 done
 
+# Pipeline end-to-end parity (feat-06205).
+if uv run --extra vision --extra paddle python scripts/parity/dump_pipeline.py --check \
+    >/tmp/sublift_parity_pipeline.log 2>&1; then
+    printf "${GREEN}[OK]${NC}  pipeline parity golden (--check)\n"
+    pass=$((pass + 1))
+else
+    printf "${RED}[FAIL]${NC} pipeline parity golden (--check)\n"
+    cat /tmp/sublift_parity_pipeline.log 2>/dev/null || true
+    fail=$((fail + 1))
+fi
+
 if command -v cmake >/dev/null 2>&1; then
     # Prefer Ninja when present; otherwise use CMake default generator.
     # Build argv as a non-empty array so bash 3.2 + set -u never expands an empty [@].
-    cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug)
+    # Phase 6.2+ Pipeline / signature parity requires OpenCV: hard-fail configure
+    # if missing so init is not green with the entire deliverable compiled out.
+    cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON)
     if command -v ninja >/dev/null 2>&1; then
         cmake_cmd+=(-G Ninja)
     fi

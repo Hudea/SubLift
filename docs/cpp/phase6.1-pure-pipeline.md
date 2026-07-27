@@ -228,7 +228,7 @@ scripts/parity/
 - [ ] `ctest` 全绿（含 parity）；`./init.sh`（Python 侧）全绿
 - [ ] 产品默认仍为 Python
 - [ ] `feature-list.json` → `phase6.pure-pipeline` = `done`，`covers` 填齐
-- [ ] 下一刀准备：`feat-06201` Pipeline 流式 API（新开 6.2 文档）
+- [x] 下一刀准备：`feat-06201` — 设计见 [phase6.2-pipeline.md](phase6.2-pipeline.md)
 
 ## 8. 风险
 
