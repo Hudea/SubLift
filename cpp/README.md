@@ -9,7 +9,7 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 - C++20 compiler (AppleClang / Clang / GCC)
 - Network on first configure (FetchContent downloads nlohmann/json; Catch2 only if tests ON)
 - Optional: OpenCV 4.x (`core`+`imgproc`) for signature parity (feat-06101). Soft-discover: missing OpenCV disables signature, configure still succeeds. macOS: `brew install opencv@4` then reconfigure. Hard-require: `-DSUBLIFT_REQUIRE_OPENCV=ON`
-- Optional: system `ffmpeg` on `PATH` (used later by extractor; not required to build stubs)
+- Optional: system `ffmpeg`/`ffprobe` on `PATH` (extractor integration + extract parity). Not required to build; pure/golden offline tests still run without them.
 
 ## Target graph
 
@@ -49,7 +49,7 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | Catch2 | FetchContent, pin `v3.7.1` (only test framework) |
 | nlohmann/json | FetchContent, pin `v3.11.3` |
 | OpenCV | System `find_package` soft-optional (`core`/`imgproc`); PRIVATE to `sublift_core` when found. Prefer **opencv@4** (parity with Python `cv2` 4.x) |
-| ffmpeg | System executable later; not vendored |
+| ffmpeg / ffprobe | System executables (subprocess only; no libav). Not vendored |
 
 ## Build & test
 
@@ -62,6 +62,17 @@ ctest --test-dir build/cpp --output-on-failure
 ```
 
 Binaries land in `build/cpp/bin/` (`sublift_cli`, `sublift_worker`, `sublift_tests`).
+
+### ffmpeg / ffprobe integration skip policy (Phase 6.3)
+
+| Case | Behavior |
+|---|---|
+| `ffmpeg`/`ffprobe` resolve OK (`sublift::ffmpeg::available()`) | Probe, full/ROI extract, and `[parity][extractor][extract]` run live |
+| Not on PATH / not resolvable | Those tests **runtime-skip** via Catch `WARN` + early `return` (case still reports **PASS** so `ctest` stays green offline) |
+| Pure contracts + `[parity][extractor][pure]` | Always run; no spawn |
+| Mid-flight cancel | Unit-only (`extractor_full_test`); not locked in frozen golden (timing-sensitive) |
+
+There is **no** `SUBLIFT_REQUIRE_FFMPEG` hard-fail yet; optional future: CTest `LABELS integration` + env to fail when extract L0 never ran. CI without ffmpeg still validates pure + offline golden load.
 
 Optional vision shell (macOS):
 

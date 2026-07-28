@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0/6.1/6.2 done（含 phase-review 加固）；下一子阶段 6.3 Extractor（feat-063xx）。契约与子阶段设计见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.3 done（含 phase-review 加固）；下一子阶段 6.4 Vision（feat-064xx）。契约与子阶段设计见 docs/cpp/。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -379,7 +379,132 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28 初版 e2e harness + 同日 phase-review 加固：scripts/parity/dump_pipeline.py + pipeline.v1.json **8 scenarios**（原 6 + chromatic_bgr_quirk_in_out + merge_adjacent_same_text）；MockOcrEngine fixed/sequence 均递增 call_count（feed 零 OCR 断言有效）；subCyan 色带单测/golden 锁 RGB→BGR 怪癖；init.sh -DSUBLIFT_REQUIRE_OPENCV=ON；convert_rgb_to_bgr Release throw；Pipeline/IDetector/IOcrEngine 禁拷贝；SegmentEvent 所有权 wipe 回归；merge_gap 场景 raw≠final。ctest **117/117**；dump_pipeline --check OK；产品路径未动。"
+      "evidence": "2026-07-28 初版 e2e harness + 同日 phase-review 加固：dump_pipeline + pipeline.v1.json **8 scenarios**（+ chromatic_bgr_quirk_in_out + merge_adjacent_same_text）；MockOcrEngine fixed/sequence 均递增 call_count；subCyan 锁 RGB→BGR；init.sh SUBLIFT_REQUIRE_OPENCV=ON；convert_rgb_to_bgr Release throw；Pipeline/接口禁拷贝；ctest **117/117**；dump_pipeline --check OK；产品路径未动。"
+    },
+    {
+      "id": "feat-06301",
+      "name": "纯契约：几何/vf/display matrix + IExtractor",
+      "description": "无 spawn 落地 validate_output_crop、build_output_vf、display transform 保守判定、SourceFrameInfo/VideoInfo 类型与 IExtractor 接口。表驱动单测锁字符串与几何；不调用真实 ffmpeg。目标 sublift_ffmpeg 或 core 纯逻辑。产品路径不切换。",
+      "module": "cpp/include/sublift/extractor.hpp; cpp/include/sublift/ffmpeg.hpp; cpp/src/ffmpeg/; cpp/tests/extractor_pure_test.cpp; docs/cpp/phase6.3-extractor.md",
+      "dependencies": [
+        "feat-06205"
+      ],
+      "subtasks": [
+        {
+          "name": "类型与 IExtractor",
+          "description": "SourceFrameInfo/VideoInfo；IExtractor::cancel 等接口可编译。"
+        },
+        {
+          "name": "validate_output_crop + build_output_vf",
+          "description": "与 Python 错误语义与 vf 字符串 L0 一致。"
+        },
+        {
+          "name": "display matrix assess",
+          "description": "rotate/side_data/16.16 恒等规则与 Python 一致；JSON fixture 单测。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 validate_output_crop、build_output_vf、assess_display_transform/is_identity_display_matrix 与 IExtractor 接口，C++20 纯逻辑无 spawn。Fix P1 整型加法溢出、P2 json null 回退与 NaN/Inf fps 边界。Catch2 extractor_pure_test (4 例表驱动用例全绿)；./init.sh 16/16 绿；两轮 code_reviewer 审查 APPROVED。产品路径未动。"
+    },
+    {
+      "id": "feat-06302",
+      "name": "ffprobe：resolve bin + probe",
+      "description": "解析 ffmpeg/ffprobe 候选路径；probe_source_frame（w/h + display_transform_ok）；probe_duration_ms；错误附 stderr 尾。合成视频 integration 与 Python 对齐。不抽帧 pipe。",
+      "module": "cpp/src/ffmpeg/resolve_bin.cpp; probe.cpp; cpp/tests/extractor_probe_test.cpp",
+      "dependencies": [
+        "feat-06301"
+      ],
+      "subtasks": [
+        {
+          "name": "bin resolve",
+          "description": "候选列表与 Python 同序；缺失时报错。"
+        },
+        {
+          "name": "probe_source_frame + duration",
+          "description": "ffprobe JSON；duration 失败返回 0。"
+        },
+        {
+          "name": "单测",
+          "description": "短合成视频；无 ffprobe 时标记/跳过策略文档化。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 resolve_ffmpeg_bin、resolve_ffprobe_bin、probe_source_frame、probe_duration_ms 与 probe_video。POSIX posix_spawnp + pipe + poll (60s/10s 超时、SIGTERM/SIGKILL 降级、stderr tail 2000 chars 压平)。Fix P1 EINTR 管道处理与 extern C environ。Catch2 extractor_probe_test (含纯逻辑 + 真实合成 320x240 视频 integration 测试全绿)；./init.sh 16/16 绿；两轮 code_reviewer 审查 APPROVED。产品路径未动。"
+    },
+    {
+      "id": "feat-06303",
+      "name": "FfmpegExtractor 全帧 extract + cancel",
+      "description": "subprocess 全帧 RGB24 image2pipe；timestamp_ms=int(i/fps*1000)；stdin DEVNULL + stderr 临时文件；cancel terminate/kill。合成视频帧数/ts/尺寸 L0。不做 ROI。",
+      "module": "cpp/src/ffmpeg/ffmpeg_extractor.cpp; cpp/tests/extractor_full_test.cpp",
+      "dependencies": [
+        "feat-06302"
+      ],
+      "subtasks": [
+        {
+          "name": "spawn + 读帧循环",
+          "description": "cmd 形与 Python 对齐；不足一帧结束。"
+        },
+        {
+          "name": "cancel",
+          "description": "协作 flag + 杀子进程；已 cancel extract 空。"
+        },
+        {
+          "name": "错误诊断",
+          "description": "非 0 退出附 stderr 尾；缺文件明确错误。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 FfmpegExtractor 全帧 extract + cancel。subprocess image2pipe rgb24，DEVNULL stdin，临时 stderr log 文件 (RAII 自动清理)，timestamp_ms 算式对齐 Python，原子 cancel + ProcGuard SIGTERM/SIGKILL 降级防护。Fix P0 stdout FD 泄漏/僵尸进程、P1 waitpid 锁并发误杀与 isnan fps 校验。Catch2 extractor_full_test (全帧 1fps/2fps, ROI, cancel, 异常/损坏文件等全绿)；./init.sh 16/16 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06304",
+      "name": "ROI crop + plan_frame_io + BottomCrop/RoiPassthrough",
+      "description": "output_crop 路径 frame-local ROI；spawn 前严格校验禁止静默全帧。plan_frame_io auto/full/roi 与 display_transform 回退。实现 BottomCropDetector 与 RoiPassthroughDetector。产品路径不切换。",
+      "module": "cpp/src/ffmpeg/plan_frame_io.cpp; cpp/src/core/bottom_crop*; roi_passthrough*; cpp/tests/extractor_roi_test.cpp",
+      "dependencies": [
+        "feat-06303"
+      ],
+      "subtasks": [
+        {
+          "name": "ROI extract",
+          "description": "vf crop exact=1；输出尺寸=crop；非法 crop 失败。"
+        },
+        {
+          "name": "plan_frame_io",
+          "description": "mode 与 fallback_reason 对齐 Python frame_io.py。"
+        },
+        {
+          "name": "detectors",
+          "description": "BottomCrop + RoiPassthrough；禁止 source box 二次裁剪。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 ROI crop 规划、plan_frame_io 模式路由、BottomCropDetector 与 RoiPassthroughDetector。FrameIOPlan 多态 IDetector::is_equal 比较，BottomCrop height*ratio 坐标与 RoiPassthrough [0,0,w,h] frame-local 契约对齐。Fix P1 detector equality 遗漏与 P2 transform_note 空串回退。Catch2 extractor_roi_test (含纯逻辑与合成视频 integration 测试全绿)；./init.sh 16/16 绿；两轮 code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06305",
+      "name": "Extractor 端到端 golden harness",
+      "description": "dump_extractor.py + extractor.v1.json（帧数/ts/尺寸/像素抽样）；C++ [parity][extractor]；init.sh --check。覆盖全帧 1fps/2fps、ROI、非法 crop、cancel 行为。不上 libav；产品路径不切换。",
+      "module": "scripts/parity/dump_extractor.py; benchmark/parity/goldens/extractor/; cpp/tests/parity/extractor_parity_test.cpp; init.sh",
+      "dependencies": [
+        "feat-06304"
+      ],
+      "subtasks": [
+        {
+          "name": "Python dump",
+          "description": "oracle 抽帧写 golden + --check。"
+        },
+        {
+          "name": "C++ parity 测试",
+          "description": "load golden + candidate L0 比对。"
+        },
+        {
+          "name": "init 门禁",
+          "description": "dump_extractor --check 接入 init.sh。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 Extractor Golden harness。dump_extractor.py 生成与 --check 校验 extractor.v1.json (包含 pure_validate_crop, pure_build_vf, pure_assess_display, pure_plan_frame_io 与 4 组合成视频 1.0fps/2.0fps/ROI/cancel 抽帧 sampled RGB 像素 L0)；sublift_test_support 拓展 load_extractor_golden；Catch2 extractor_parity_test 全量 Parity 校验全绿；init.sh 接入 extractor parity golden (--check) (17/17 绿)；code_reviewer 审查 PASS。产品路径未动。 同日 phase-review 加固：plan_frame_io_pure（display_transform fallback/error、mode=roi）；detector_type 断言；golden 扩 pure_plan/illegal_crop/ROI 像素；ctest 132/132；dump_extractor --check OK。"
     }
   ]
 }

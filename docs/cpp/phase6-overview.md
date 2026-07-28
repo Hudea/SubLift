@@ -107,6 +107,7 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 
 - **6.0 Bootstrap：** **done** — [phase6.0-bootstrap.md](phase6.0-bootstrap.md)
 - **6.1 Pure pipeline：** **done** — [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md)
-- **6.2 Pipeline 流式编排：** **done** — [phase6.2-pipeline.md](phase6.2-pipeline.md)（feat-06201–06205；含 phase-review 加固）
-- **下一实现刀 / 子阶段：** **6.3** Extractor（`feat-063xx`）
+- **6.2 Pipeline 流式编排：** **done** — [phase6.2-pipeline.md](phase6.2-pipeline.md)（feat-06201–06205）
+- **6.3 FFmpeg Extractor：** **done** — [phase6.3-extractor.md](phase6.3-extractor.md)（feat-06301–06305；含 phase-review 加固）
+- **下一实现刀 / 子阶段：** **6.4** Vision OCR（`feat-064xx`）
 - **产品路径：** 仍 Python

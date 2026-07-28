@@ -14,6 +14,7 @@
 | [phase6.0-bootstrap.md](phase6.0-bootstrap.md) | 6.0 Foundation / Bootstrap（**done**） |
 | [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md) | 6.1 Pure pipeline 算法 parity（**done**） |
 | [phase6.2-pipeline.md](phase6.2-pipeline.md) | 6.2 Pipeline 流式编排（**done**） |
+| [phase6.3-extractor.md](phase6.3-extractor.md) | 6.3 FFmpeg Extractor（**done**） |
 
 ### 架构与契约
 
@@ -41,4 +42,4 @@
 3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock）；paddle 见引擎矩阵。
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision**；target 依赖图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
-6. **6.2 done**：Pipeline 流式编排 parity（含 review 加固）；产品路径仍 Python。下一子阶段 **6.3 Extractor**。
+6. **6.3 done**：FFmpeg Extractor parity（含 phase-review 加固）；产品路径仍 Python。下一子阶段 **6.4 Vision**。

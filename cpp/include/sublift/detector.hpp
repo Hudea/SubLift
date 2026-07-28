@@ -27,6 +27,12 @@ struct IDetector {
   /// Detect the subtitle region for `frame`. `nullopt` when no region is
   /// resolved (pipeline defers opening a segment).
   [[nodiscard]] virtual std::optional<Region> detect(const Frame& frame) = 0;
+
+  /// Polymorphic equality check for detectors.
+  [[nodiscard]] virtual bool is_equal(const IDetector& other) const noexcept {
+    (void)other;
+    return false;
+  }
 };
 
 }  // namespace sublift

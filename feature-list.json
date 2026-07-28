@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0/6.1/6.2 done；下一子阶段 6.3 Extractor（feat-063xx，设计待登记/实现）。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.3 done；下一子阶段 6.4 Vision（feat-064xx，设计待提交）。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -381,9 +381,22 @@
           ]
         },
         {
-          "id": "phase6.pipeline-runtime",
-          "name": "6.3+ Extractor / Vision / Worker / Cutover",
-          "description": "ffmpeg subprocess 复刻、Vision .mm、UDS worker、benchmark 门后 cutover；其后可去 Python 产品 runtime。开干前拆 feat-063xx 起。",
+          "id": "phase6.extractor",
+          "name": "6.3 FFmpeg Extractor 行为复刻",
+          "description": "系统 ffmpeg/ffprobe subprocess：全帧+ROI crop-before-C++、索引时间戳、cancel、plan_frame_io、BottomCrop/RoiPassthrough；golden parity。不上 libav；产品路径仍 Python。设计：docs/cpp/phase6.3-extractor.md。覆盖 feat-06301~06305。",
+          "status": "done",
+          "covers": [
+            "feat-06301",
+            "feat-06302",
+            "feat-06303",
+            "feat-06304",
+            "feat-06305"
+          ]
+        },
+        {
+          "id": "phase6.runtime-cutover",
+          "name": "6.4+ Vision / Worker / Cutover",
+          "description": "Vision .mm、UDS worker、benchmark 门后 cutover；其后可去 Python 产品 runtime。开干前拆 feat-064xx 起。",
           "status": "not-started",
           "covers": []
         }

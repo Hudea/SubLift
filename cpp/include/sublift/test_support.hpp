@@ -1,12 +1,17 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <string>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "sublift/config.hpp"
+#include "sublift/extractor.hpp"
+#include "sublift/models.hpp"
 #include "sublift/signature.hpp"
 
 namespace sublift::test_support {
@@ -203,5 +208,87 @@ struct PipelineGolden {
     int cand_ocr_calls,
     const PipelineScenarioGolden& expected,
     const OracleMeta* oracle = nullptr);
+
+// ---------------------------------------------------------------------------
+// Extractor golden (feat-06305)
+// ---------------------------------------------------------------------------
+
+struct ExtractorValidateCropGolden {
+  std::string name;
+  std::optional<SourceBox> crop;
+  std::int32_t source_width{0};
+  std::int32_t source_height{0};
+  bool expected_ok{true};
+  std::optional<std::string> expected_error_contains;
+};
+
+struct ExtractorBuildVfGolden {
+  std::string name;
+  double fps{1.0};
+  std::optional<SourceBox> crop;
+  std::string expected_vf;
+};
+
+struct ExtractorAssessDisplayGolden {
+  std::string name;
+  nlohmann::json stream_json;
+  bool expected_ok{true};
+  std::optional<std::string> expected_note;
+};
+
+struct ExtractorPlanFrameIoGolden {
+  std::string name;
+  std::optional<SourceBox> region_box;
+  std::string mode;
+  /// When set, C++ calls plan_frame_io_pure with this source (no ffprobe).
+  std::optional<SourceFrameInfo> source;
+  /// "fallback_full" | "error" (Python TransformPolicy)
+  std::string on_unvalidated_transform{"fallback_full"};
+  bool expected_ok{true};
+  std::optional<std::string> expected_error_contains;
+  std::optional<SourceBox> expected_output_crop;
+  std::string expected_output_mode;
+  std::string expected_detector_type;
+  std::optional<std::string> expected_fallback_reason;
+};
+
+struct ExtractorSampledPixelGolden {
+  std::int32_t x{0};
+  std::int32_t y{0};
+  std::array<int, 3> rgb{0, 0, 0};  // [R, G, B]
+};
+
+struct ExtractorFrameGolden {
+  int frame_index{0};
+  std::int64_t timestamp_ms{0};
+  std::vector<ExtractorSampledPixelGolden> sampled_pixels;
+};
+
+struct ExtractorExtractScenarioGolden {
+  std::string name;
+  double fps{1.0};
+  std::optional<SourceBox> crop;
+  bool cancel_before_extract{false};
+  bool expected_ok{true};
+  std::optional<std::string> expected_error_contains;
+  int expected_frame_count{0};
+  std::vector<std::int64_t> expected_timestamps_ms;
+  std::int32_t expected_width{0};
+  std::int32_t expected_height{0};
+  std::vector<ExtractorFrameGolden> frames;
+};
+
+struct ExtractorGolden {
+  OracleMeta oracle;
+  std::vector<ExtractorValidateCropGolden> pure_validate_crop;
+  std::vector<ExtractorBuildVfGolden> pure_build_vf;
+  std::vector<ExtractorAssessDisplayGolden> pure_assess_display;
+  std::vector<ExtractorPlanFrameIoGolden> pure_plan_frame_io;
+  std::vector<ExtractorExtractScenarioGolden> extract_scenarios;
+};
+
+/// Load extractor golden envelope (schema v1). Throws std::runtime_error on error.
+[[nodiscard]] ExtractorGolden load_extractor_golden(
+    const std::filesystem::path& path);
 
 }  // namespace sublift::test_support

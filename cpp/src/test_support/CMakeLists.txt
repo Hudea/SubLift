@@ -4,6 +4,7 @@ add_library(sublift_test_support STATIC
   signature_golden.cpp
   changepoint_golden.cpp
   pipeline_golden.cpp
+  extractor_golden.cpp
   sha256.cpp
   unicode_nfc.cpp
 )

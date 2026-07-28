@@ -1,0 +1,626 @@
+{
+  "golden_schema_version": 1,
+  "kind": "extractor",
+  "oracle": {
+    "oracle_commit": "d8d361daad9c050f0e0bc2a3c4250d67a25391fd",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "ffmpeg_version": "ffmpeg version 8.1 Copyright (c) 2000-2026 the FFmpeg developers",
+    "ffprobe_version": "ffprobe version 8.1 Copyright (c) 2007-2026 the FFmpeg developers",
+    "git_dirty": false
+  },
+  "pure_validate_crop": [
+    {
+      "name": "valid_crop",
+      "crop": {
+        "x": 10,
+        "y": 10,
+        "width": 160,
+        "height": 120
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": true,
+      "expected_error_contains": null
+    },
+    {
+      "name": "edge_touch",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 320,
+        "height": 240
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": true,
+      "expected_error_contains": null
+    },
+    {
+      "name": "negative_x",
+      "crop": {
+        "x": -1,
+        "y": 10,
+        "width": 160,
+        "height": 120
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 的 x/y 不能为负"
+    },
+    {
+      "name": "negative_y",
+      "crop": {
+        "x": 10,
+        "y": -1,
+        "width": 160,
+        "height": 120
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 的 x/y 不能为负"
+    },
+    {
+      "name": "zero_width",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 120
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 的 width/height 必须为正"
+    },
+    {
+      "name": "zero_height",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 160,
+        "height": 0
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 的 width/height 必须为正"
+    },
+    {
+      "name": "out_of_bounds",
+      "crop": {
+        "x": 200,
+        "y": 100,
+        "width": 160,
+        "height": 180
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 越界"
+    },
+    {
+      "name": "overflow_y",
+      "crop": {
+        "x": 0,
+        "y": 200,
+        "width": 160,
+        "height": 50
+      },
+      "source_width": 320,
+      "source_height": 240,
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 越界"
+    }
+  ],
+  "pure_build_vf": [
+    {
+      "name": "full_frame_1fps",
+      "fps": 1.0,
+      "crop": null,
+      "expected_vf": "fps=1.0"
+    },
+    {
+      "name": "roi_crop_1fps",
+      "fps": 1.0,
+      "crop": {
+        "x": 10,
+        "y": 10,
+        "width": 160,
+        "height": 120
+      },
+      "expected_vf": "fps=1.0,format=rgb24,crop=160:120:10:10:exact=1"
+    }
+  ],
+  "pure_assess_display": [
+    {
+      "name": "identity_stream",
+      "stream_json": {
+        "width": 320,
+        "height": 240,
+        "tags": {
+          "rotate": "0"
+        }
+      },
+      "expected_ok": true,
+      "expected_note": null
+    },
+    {
+      "name": "rotate_90_tag",
+      "stream_json": {
+        "width": 320,
+        "height": 240,
+        "tags": {
+          "rotate": "90"
+        }
+      },
+      "expected_ok": false,
+      "expected_note": "stream.tags.rotate='90'"
+    },
+    {
+      "name": "fixed_point_identity_side_data",
+      "stream_json": {
+        "width": 320,
+        "height": 240,
+        "side_data_list": [
+          {
+            "side_data_type": "Display Matrix",
+            "displaymatrix": "65536 0 0 0 65536 0 0 0 1073741824"
+          }
+        ]
+      },
+      "expected_ok": true,
+      "expected_note": null
+    }
+  ],
+  "pure_plan_frame_io": [
+    {
+      "name": "no_region_auto",
+      "region_box": null,
+      "mode": "auto",
+      "source": null,
+      "on_unvalidated_transform": "fallback_full",
+      "expected_ok": true,
+      "expected_error_contains": null,
+      "expected_output_crop": null,
+      "expected_output_mode": "full_rgb",
+      "expected_detector_type": "bottomcrop",
+      "expected_fallback_reason": null
+    },
+    {
+      "name": "region_full",
+      "region_box": {
+        "x": 10,
+        "y": 10,
+        "width": 160,
+        "height": 120
+      },
+      "mode": "full",
+      "source": null,
+      "on_unvalidated_transform": "fallback_full",
+      "expected_ok": true,
+      "expected_error_contains": null,
+      "expected_output_crop": null,
+      "expected_output_mode": "full_rgb",
+      "expected_detector_type": "fixedregion",
+      "expected_fallback_reason": null
+    },
+    {
+      "name": "region_auto_roi_success",
+      "region_box": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "mode": "auto",
+      "source": {
+        "width": 320,
+        "height": 240,
+        "display_transform_ok": true,
+        "transform_note": null
+      },
+      "on_unvalidated_transform": "fallback_full",
+      "expected_ok": true,
+      "expected_error_contains": null,
+      "expected_output_crop": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "expected_output_mode": "roi_rgb",
+      "expected_detector_type": "roipassthrough",
+      "expected_fallback_reason": null
+    },
+    {
+      "name": "region_roi_success",
+      "region_box": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "mode": "roi",
+      "source": {
+        "width": 320,
+        "height": 240,
+        "display_transform_ok": true,
+        "transform_note": null
+      },
+      "on_unvalidated_transform": "error",
+      "expected_ok": true,
+      "expected_error_contains": null,
+      "expected_output_crop": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "expected_output_mode": "roi_rgb",
+      "expected_detector_type": "roipassthrough",
+      "expected_fallback_reason": null
+    },
+    {
+      "name": "auto_transform_fallback",
+      "region_box": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "mode": "auto",
+      "source": {
+        "width": 320,
+        "height": 240,
+        "display_transform_ok": false,
+        "transform_note": "rotate=90"
+      },
+      "on_unvalidated_transform": "fallback_full",
+      "expected_ok": true,
+      "expected_error_contains": null,
+      "expected_output_crop": null,
+      "expected_output_mode": "full_rgb",
+      "expected_detector_type": "fixedregion",
+      "expected_fallback_reason": "rotate=90"
+    },
+    {
+      "name": "roi_transform_error",
+      "region_box": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "mode": "roi",
+      "source": {
+        "width": 320,
+        "height": 240,
+        "display_transform_ok": false,
+        "transform_note": "rotate=90"
+      },
+      "on_unvalidated_transform": "error",
+      "expected_ok": false,
+      "expected_error_contains": "显示变换",
+      "expected_output_crop": null,
+      "expected_output_mode": null,
+      "expected_detector_type": null,
+      "expected_fallback_reason": null
+    },
+    {
+      "name": "auto_transform_error_policy",
+      "region_box": {
+        "x": 0,
+        "y": 180,
+        "width": 320,
+        "height": 60
+      },
+      "mode": "auto",
+      "source": {
+        "width": 320,
+        "height": 240,
+        "display_transform_ok": false,
+        "transform_note": "rotate=90"
+      },
+      "on_unvalidated_transform": "error",
+      "expected_ok": false,
+      "expected_error_contains": "显示变换",
+      "expected_output_crop": null,
+      "expected_output_mode": null,
+      "expected_detector_type": null,
+      "expected_fallback_reason": null
+    }
+  ],
+  "extract_scenarios": [
+    {
+      "name": "extract_full_1fps",
+      "fps": 1.0,
+      "crop": null,
+      "expected_ok": true,
+      "expected_frame_count": 3,
+      "expected_timestamps_ms": [
+        0,
+        1000,
+        2000
+      ],
+      "expected_width": 320,
+      "expected_height": 240,
+      "frames": [
+        {
+          "frame_index": 0,
+          "timestamp_ms": 0,
+          "sampled_pixels": [
+            {
+              "x": 0,
+              "y": 0,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 0,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 0,
+              "y": 239,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 239,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 160,
+              "y": 120,
+              "rgb": [
+                254,
+                254,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "frame_index": 1,
+          "timestamp_ms": 1000,
+          "sampled_pixels": [
+            {
+              "x": 0,
+              "y": 0,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 0,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 0,
+              "y": 239,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 239,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 160,
+              "y": 120,
+              "rgb": [
+                254,
+                254,
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "frame_index": 2,
+          "timestamp_ms": 2000,
+          "sampled_pixels": [
+            {
+              "x": 0,
+              "y": 0,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 0,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 0,
+              "y": 239,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 319,
+              "y": 239,
+              "rgb": [
+                255,
+                255,
+                255
+              ]
+            },
+            {
+              "x": 160,
+              "y": 120,
+              "rgb": [
+                254,
+                254,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extract_full_2fps",
+      "fps": 2.0,
+      "crop": null,
+      "expected_ok": true,
+      "expected_frame_count": 6,
+      "expected_timestamps_ms": [
+        0,
+        500,
+        1000,
+        1500,
+        2000,
+        2500
+      ],
+      "expected_width": 320,
+      "expected_height": 240,
+      "frames": []
+    },
+    {
+      "name": "extract_roi_crop",
+      "fps": 1.0,
+      "crop": {
+        "x": 10,
+        "y": 10,
+        "width": 160,
+        "height": 120
+      },
+      "expected_ok": true,
+      "expected_frame_count": 3,
+      "expected_timestamps_ms": [
+        0,
+        1000,
+        2000
+      ],
+      "expected_width": 160,
+      "expected_height": 120,
+      "frames": [
+        {
+          "frame_index": 0,
+          "timestamp_ms": 0,
+          "sampled_pixels": [
+            {
+              "x": 0,
+              "y": 0,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 159,
+              "y": 0,
+              "rgb": [
+                254,
+                254,
+                0
+              ]
+            },
+            {
+              "x": 0,
+              "y": 119,
+              "rgb": [
+                0,
+                0,
+                0
+              ]
+            },
+            {
+              "x": 159,
+              "y": 119,
+              "rgb": [
+                254,
+                254,
+                0
+              ]
+            },
+            {
+              "x": 80,
+              "y": 60,
+              "rgb": [
+                255,
+                0,
+                254
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extract_cancel_pre",
+      "fps": 1.0,
+      "crop": null,
+      "cancel_before_extract": true,
+      "expected_ok": true,
+      "expected_frame_count": 0,
+      "expected_timestamps_ms": [],
+      "expected_width": 0,
+      "expected_height": 0,
+      "frames": []
+    },
+    {
+      "name": "extract_illegal_crop",
+      "fps": 1.0,
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 1000,
+        "height": 1000
+      },
+      "expected_ok": false,
+      "expected_error_contains": "output_crop 越界",
+      "expected_frame_count": 0,
+      "expected_timestamps_ms": [],
+      "expected_width": 0,
+      "expected_height": 0,
+      "frames": []
+    }
+  ]
+}

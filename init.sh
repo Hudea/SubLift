@@ -159,6 +159,17 @@ else
     fail=$((fail + 1))
 fi
 
+# Extractor parity golden (feat-06305).
+if uv run --extra vision --extra paddle python scripts/parity/dump_extractor.py --check \
+    >/tmp/sublift_parity_extractor.log 2>&1; then
+    printf "${GREEN}[OK]${NC}  extractor parity golden (--check)\n"
+    pass=$((pass + 1))
+else
+    printf "${RED}[FAIL]${NC} extractor parity golden (--check)\n"
+    cat /tmp/sublift_parity_extractor.log 2>/dev/null || true
+    fail=$((fail + 1))
+fi
+
 if command -v cmake >/dev/null 2>&1; then
     # Prefer Ninja when present; otherwise use CMake default generator.
     # Build argv as a non-empty array so bash 3.2 + set -u never expands an empty [@].

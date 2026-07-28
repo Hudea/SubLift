@@ -8,10 +8,15 @@ set(_sublift_test_srcs
   dedupe_test.cpp
   line_select_test.cpp
   ocr_test.cpp
+  extractor_pure_test.cpp
+  extractor_probe_test.cpp
+  extractor_full_test.cpp
+  extractor_roi_test.cpp
   parity/config_parity_test.cpp
   parity/timeline_parity_test.cpp
   parity/dedupe_parity_test.cpp
   parity/line_select_parity_test.cpp
+  parity/extractor_parity_test.cpp
 )
 if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_test_srcs
@@ -42,15 +47,18 @@ sublift_stringify_path(_config_golden_esc "${_config_golden}")
 set(_tl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/segments/timeline.v1.json")
 set(_dd_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/entries/dedupe.v1.json")
 set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/line_select.v1.json")
+set(_ext_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/extractor/extractor.v1.json")
 sublift_stringify_path(_tl_golden_esc "${_tl_golden}")
 sublift_stringify_path(_dd_golden_esc "${_dd_golden}")
 sublift_stringify_path(_ls_golden_esc "${_ls_golden}")
+sublift_stringify_path(_ext_golden_esc "${_ext_golden}")
 
 target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_TIMELINE=\"${_tl_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_DEDUPE=\"${_dd_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_LINE_SELECT=\"${_ls_golden_esc}\""
+  "SUBLIFT_PARITY_GOLDEN_EXTRACTOR=\"${_ext_golden_esc}\""
 )
 
 if(SUBLIFT_ENABLE_OPENCV)
@@ -76,6 +84,7 @@ endif()
 target_link_libraries(sublift_tests
   PRIVATE
     sublift_test_support
+    sublift_ffmpeg
     Catch2::Catch2WithMain
 )
 
