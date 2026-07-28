@@ -10,19 +10,38 @@ EngineFactory::EngineFactory(std::string bound_engine)
     : bound_engine_(std::move(bound_engine)) {}
 
 std::vector<std::string> EngineFactory::supported_engines() const {
-  std::vector<std::string> engines;
-  if (sublift::is_vision_available()) {
-    engines.push_back("vision");
+#if !SUBLIFT_HAS_OPENCV
+  // Mock/Vision can be constructed in isolation, but neither can produce a
+  // subtitle job without the signature/changepoint Pipeline.  Do not let a
+  // protocol-only diagnostic Worker advertise a runnable engine.
+  return {};
+#else
+  // A Worker process owns exactly one engine selected at launch.  Advertising
+  // every engine installed on the machine would make the handshake claim that
+  // a later start_job can be accepted when validate_engine() must reject it.
+  if (bound_engine_ == "vision" && !sublift::is_vision_available()) {
+    return {};
   }
-  engines.push_back("mock");
-  return engines;
+  if (bound_engine_ == "mock" || bound_engine_ == "vision") {
+    return {bound_engine_};
+  }
+  return {};
+#endif
 }
 
 std::vector<std::string> EngineFactory::capabilities() const {
+#if !SUBLIFT_HAS_OPENCV
+  return {};
+#else
   return {"path_mode", "frame_mode", "push_entry", "cancel"};
+#endif
 }
 
 std::optional<std::string> EngineFactory::validate_engine(const std::string& requested_engine) const {
+#if !SUBLIFT_HAS_OPENCV
+  (void)requested_engine;
+  return "C++ worker 缺少 OpenCV 签名流水线，不能处理任务；请以 SUBLIFT_ENABLE_OPENCV=ON 重建";
+#else
   if (requested_engine == "paddle") {
     return "paddle 引擎不支持在 C++ worker 中运行，请选用 Python worker";
   }
@@ -36,10 +55,17 @@ std::optional<std::string> EngineFactory::validate_engine(const std::string& req
     return "不支持的 OCR 引擎: '" + requested_engine + "'";
   }
   return std::nullopt;
+#endif
 }
 
 std::unique_ptr<sublift::IOcrEngine> EngineFactory::create_engine(
     const std::string& mock_text, double mock_confidence) const {
+#if !SUBLIFT_HAS_OPENCV
+  (void)mock_text;
+  (void)mock_confidence;
+  throw std::runtime_error(
+      "C++ worker was built without the OpenCV-backed signature pipeline");
+#else
   if (bound_engine_ == "vision") {
     if (!sublift::is_vision_available()) {
       throw std::runtime_error("Apple Vision OCR is not available at runtime");
@@ -50,6 +76,7 @@ std::unique_ptr<sublift::IOcrEngine> EngineFactory::create_engine(
     return std::make_unique<sublift::MockOcrEngine>(mock_text, mock_confidence);
   }
   throw std::runtime_error("Unknown bound_engine: " + bound_engine_);
+#endif
 }
 
 }  // namespace sublift::worker

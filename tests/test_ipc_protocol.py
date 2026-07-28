@@ -147,6 +147,11 @@ class TestStartJob:
         with pytest.raises(ProtocolError, match="fps"):
             validate(msg)
 
+    @pytest.mark.parametrize("fps", [0, -1.0, float("inf"), float("nan")])
+    def test_non_positive_or_non_finite_fps_rejected(self, fps: float) -> None:
+        with pytest.raises(ProtocolError, match="fps"):
+            validate(build_start_job(VIDEO_ID, fps, "vision", 0.5))
+
     def test_invalid_subtitle_profile_script(self) -> None:
         msg = build_start_job(
             VIDEO_ID,
@@ -174,6 +179,39 @@ class TestStartJob:
         msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=[1, 2, "3", 4])  # type: ignore[list-item]
         with pytest.raises(ProtocolError, match="region_box"):
             validate(msg)
+
+    @pytest.mark.parametrize("region_box", [[-1, 0, 10, 10], [0, 0, 0, 10], [0, 0, 10, -1]])
+    def test_region_box_requires_non_negative_origin_and_positive_size(
+        self, region_box: list[int]
+    ) -> None:
+        with pytest.raises(ProtocolError, match="region_box"):
+            validate(build_start_job(VIDEO_ID, 5.0, "vision", 0.5, region_box=region_box))
+
+    def test_subtitle_profile_requires_complete_geometry_or_script_only(self) -> None:
+        invalid_profile = {
+            "script": "cjk",
+            "center_x": 10,
+            "center_y": 5,
+            "height": 0,
+            "y_min": 0,
+            "y_max": 10,
+        }
+        with pytest.raises(ProtocolError, match="几何"):
+            validate(
+                build_start_job(VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=invalid_profile)
+            )
+
+        script_only_profile = {
+            "script": "cjk",
+            "center_x": 0,
+            "center_y": 0,
+            "height": 0,
+            "y_min": 0,
+            "y_max": 0,
+        }
+        validate(
+            build_start_job(VIDEO_ID, 5.0, "vision", 0.5, subtitle_profile=script_only_profile)
+        )
 
 
 class TestFrame:

@@ -1,3 +1,11 @@
+## Batch / cutover entry
+
+- **Golden script list (single source):** `golden_registry.py`
+- **Run all correctness + runtime + GT:**
+  `uv run python scripts/parity/check_cutover_gate.py --check`
+- **Parity only (fail-fast):**
+  `uv run python scripts/parity/check_cutover_gate.py --check --parity-only`
+
 # Parity dump scripts
 
 Frozen-oracle helpers for Phase 6. Contract: [`docs/cpp/parity-contract.md`](../../docs/cpp/parity-contract.md).

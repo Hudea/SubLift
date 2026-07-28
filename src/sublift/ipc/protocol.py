@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 type VideoId = str
@@ -280,6 +281,9 @@ def validate(message: dict[str, Any]) -> None:
 
     if msg_type == MSG_START_JOB:
         _require_float(message, "fps")
+        fps = float(message["fps"])
+        if not math.isfinite(fps) or fps <= 0:
+            raise ProtocolError(f"fps 必须为有限正数: {message['fps']!r}")
         _require_str(message, "engine")
         if message["engine"] not in ENGINES:
             raise ProtocolError(f"engine 非法: {message['engine']!r}")
@@ -365,6 +369,9 @@ def _optional_region_box(message: dict[str, Any]) -> None:
     for v in box:
         if not isinstance(v, int) or isinstance(v, bool):
             raise ProtocolError(f"region_box 含非整数: {v!r}")
+    x, y, width, height = box
+    if x < 0 or y < 0 or width <= 0 or height <= 0:
+        raise ProtocolError(f"region_box 必须为非负原点和正尺寸: {box!r}")
 
 
 def _optional_subtitle_profile(message: dict[str, Any]) -> None:
@@ -377,12 +384,28 @@ def _optional_subtitle_profile(message: dict[str, Any]) -> None:
     from sublift.models import SCRIPT_VALUES, SubtitleProfile
 
     try:
-        SubtitleProfile.from_dict(profile)
+        parsed = SubtitleProfile.from_dict(profile)
     except ValueError as e:
         raise ProtocolError(str(e)) from e
     # script 已在 from_dict 校验；再保证 keys 可序列化
     if profile.get("script") not in SCRIPT_VALUES and "script" in profile:
         raise ProtocolError(f"subtitle_profile.script 非法: {profile.get('script')!r}")
+    script_only = (
+        parsed.center_x == 0
+        and parsed.center_y == 0
+        and parsed.height == 0
+        and parsed.y_min == 0
+        and parsed.y_max == 0
+    )
+    if not script_only and (
+        parsed.center_x < 0
+        or parsed.center_y < 0
+        or parsed.height <= 0
+        or parsed.y_min < 0
+        or parsed.y_max < parsed.y_min
+        or not parsed.y_min <= parsed.center_y <= parsed.y_max
+    ):
+        raise ProtocolError("subtitle_profile 几何非法")
 
 
 def _require_entries(message: dict[str, Any]) -> None:

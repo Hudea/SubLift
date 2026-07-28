@@ -11,6 +11,7 @@
 #include "engine_factory.hpp"
 #include "framing.hpp"
 #include "protocol.hpp"
+#include "sublift/vision.hpp"
 
 using namespace sublift::ipc;
 using namespace sublift::worker;

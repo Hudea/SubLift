@@ -10,7 +10,6 @@ from unittest.mock import patch
 from scripts.parity.check_cutover_gate import (
     CANCEL_MAX_S,
     RESTART_MAX_S,
-    WORKER_BIN,
     CutoverGateReport,
     GtL3MetricRow,
     GtL3Result,
@@ -21,6 +20,7 @@ from scripts.parity.check_cutover_gate import (
     run_cutover_gate,
     run_gt_l3_check,
 )
+from scripts.parity.golden_registry import PARITY_SCRIPTS
 
 
 def test_correctness_checks_execution() -> None:
@@ -135,10 +135,32 @@ def test_run_cutover_gate_skip_runtime(tmp_path: Path) -> None:
     assert "# Phase 6.6 Cutover Gate 验证报告" in report_file.read_text(encoding="utf-8")
 
 
+def test_golden_registry_matches_correctness_suite() -> None:
+    assert len(PARITY_SCRIPTS) == 10
+    results = run_correctness_checks()
+    assert [r.name for r in results] == [n for n, _ in PARITY_SCRIPTS]
+
+
+def test_run_cutover_gate_parity_only() -> None:
+    report = run_cutover_gate(check=True, parity_only=True)
+    assert report.correctness_passed is True
+    assert len(report.parity_results) == 10
+    assert report.runtime_skipped is True
+    assert report.gt_result is None
+    assert report.all_passed is True
+
+
 def test_missing_worker_fails_runtime_without_skip(tmp_path: Path) -> None:
     """GATE-05: missing sublift_worker must fail when not --skip-runtime."""
     report_file = tmp_path / "gate_missing_worker.md"
-    with patch("scripts.parity.check_cutover_gate.WORKER_BIN", tmp_path / "no_such_worker"):
+    missing = tmp_path / "no_such_worker"
+    with patch(
+        "scripts.parity.check_cutover_gate.resolve_worker_bin",
+        return_value=None,
+    ), patch(
+        "scripts.parity.check_cutover_gate.worker_bin",
+        return_value=missing,
+    ):
         report = run_cutover_gate(
             check=True,
             skip_runtime=False,
@@ -220,12 +242,16 @@ def test_cli_cutover_gate_script_execution(tmp_path: Path) -> None:
 def test_cli_missing_worker_exits_nonzero_without_skip(tmp_path: Path) -> None:
     """CLI path: missing worker must exit 1 when not --skip-runtime."""
     report_file = tmp_path / "cli_fail.md"
-    # Force WORKER_BIN to a missing path by patching env via a tiny inline runner
-    # that imports and overrides — simpler: monopatched process via python -c
+    missing = tmp_path / "missing" / "sublift_worker"
     code = f"""
 from pathlib import Path
 import scripts.parity.check_cutover_gate as g
-g.WORKER_BIN = Path({str(tmp_path / "missing")!r}) / "sublift_worker"
+
+def _missing() -> Path:
+    return Path({str(missing)!r})
+
+g.worker_bin = _missing
+g.resolve_worker_bin = lambda *a, **k: None
 report = g.run_cutover_gate(
     check=True,
     skip_runtime=False,
@@ -235,6 +261,4 @@ report = g.run_cutover_gate(
 raise SystemExit(0 if report.all_passed else 1)
 """
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
-    assert proc.returncode == 1
-    # Sanity: binary path used in test truly missing
-    assert not WORKER_BIN.exists() or True  # local may have binary; assertion is exit code
+    assert proc.returncode == 1, proc.stderr + proc.stdout

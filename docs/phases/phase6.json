@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 done：vision/mock 产品默认 C++ worker；paddle 仍 Python；SUBLIFT_RUNTIME=python 回滚；cutover 门（parity + runtime cancel/restart/RSS + GT L3 接线/ADR-0022 豁免）见 docs/reports/phase6.6-cutover-gate.md。设计 docs/cpp/phase6.6-cutover.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 仍 Python；SUBLIFT_RUNTIME=python 回滚；完整 Python/C++/Swift/init 标准门已恢复。06607 已恢复无 OpenCV sanitizer 对照，并将退出崩溃收窄到 OpenCV/TBB 依赖链。cutover 门（parity + runtime cancel/restart/RSS + GT L3 接线/ADR-0022 豁免）见 docs/reports/phase6.6-cutover-gate.md。发布仍需有固定 GT 资产的 --require-gt，以及解决 macOS Homebrew OpenCV/TBB 下 ASan 退出崩溃，详见 docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md。设计 docs/cpp/phase6.6-cutover.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -754,7 +754,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28: 落地 Vision 装配 + IPC 夹具 / worker CLI。EngineFactory 支持 SUBLIFT_ENABLE_VISION=ON 调度 VisionOcrEngine（环境不可用时显式拒绝，绝不静默 fallback）；dump_ipc_session.py 录制并校验 path_mock_session.v1.json 序列；tests/ipc/test_cpp_worker.py 6 项进程 e2e；init.sh 在 cmake/ctest 成功后 fail-not-skip 运行 pytest tests/ipc/test_cpp_worker.py（二进制存在时）；ipc session parity golden 门禁；cpp/README.md 双轨 Opt-in。产品默认仍 Python。Round1 fix 2026-07-28 补齐 post-build e2e 门禁。"
+      "evidence": "2026-07-28: 落地 Vision 装配 + IPC 夹具 / worker CLI。EngineFactory 支持 SUBLIFT_ENABLE_VISION=ON 调度 VisionOcrEngine（环境不可用时显式拒绝，绝不静默 fallback）；dump_ipc_session.py 录制并校验 path_mock_session.v1.json 序列；tests/ipc/test_cpp_worker.py 6 项进程 e2e；init.sh 在 cmake/ctest 成功后 fail-not-skip 运行 pytest tests/ipc/test_cpp_worker.py（二进制存在时）；ipc session parity golden 门禁；cpp/README.md 双轨 Opt-in。产品默认仍 Python。Round1 fix 2026-07-28 补齐 post-build e2e 门禁。审查复验（2026-07-28）发现：当前 ffmpeg 不含 drawtext filter，而该进程 E2E 夹具未检查生成命令退出码，导致 path-mode / cancel 两例把缺失 fixture 误报为 Worker 失败（pytest 495 passed / 2 failed）。在修复自包含 fixture 前，不能再引用本条的 init 全绿作为当前验证证据；详见 docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md。"
     },
     {
       "id": "feat-06601",
@@ -829,7 +829,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28: 落地 CLI cutover 路径。sublift extract 扩展 --runtime {python,cpp} 参数支持，集成 resolve_runtime 解析；实现 _find_sublift_worker_bin (SUBLIFT_WORKER_PATH > build/cpp/bin/sublift_worker > PATH) 与 _run_extract_cpp (UDS IPC hello->bye 握手、start_job path mode 提帧、progress/entries/error 消息流处理与 proc.kill 孤儿进程防护)；新增 TestCliCutoverRouting 覆盖 --runtime 参数解析、环境变量 SUBLIFT_RUNTIME 路由、Paddle 强覆盖提示、缺失二进制退出与 C++ Worker Mock 调度；./init.sh 20/20 绿；code_reviewer 审查 PASS。"
+      "evidence": "2026-07-28: 落地 CLI cutover 路径。sublift extract 扩展 --runtime {python,cpp} 参数支持，集成 resolve_runtime 解析；实现 _find_sublift_worker_bin (SUBLIFT_WORKER_PATH > build/cpp/bin/sublift_worker > PATH) 与 _run_extract_cpp (UDS IPC hello->bye 握手、start_job path mode 提帧、progress/entries/error 消息流处理与 proc.kill 孤儿进程防护)；新增 TestCliCutoverRouting 覆盖 --runtime 参数解析、环境变量 SUBLIFT_RUNTIME 路由、Paddle 强覆盖提示、缺失二进制退出与 C++ Worker Mock 调度；./init.sh 20/20 绿；code_reviewer 审查 PASS。2026-07-29：将 CLI 与门禁的 worker 定位收敛为 shared resolve_worker_bin，优先 cpp-rel Release，再回退 Debug/PATH；补充对应单元测试。"
     },
     {
       "id": "feat-06604",
@@ -855,7 +855,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28 + phase-review 加固：scripts/parity/check_cutover_gate.py。正确性：10 项 parity golden --check。运行时：Wall（硬门 ×1.30+0.05s）、Cancel≤1s、Restart≤5s（同连接测量硬失败）、Peak RSS 比值；缺 WORKER_BIN 时 runtime_passed=False 整体 FAIL（非 soft-PASS）；--skip-runtime 为唯一逃逸。GT L3：有固定 clip 时实测；缺失时 ADR-0022 WAIVED（gt_l3_waived），--require-gt 发布硬门 fail-closed。报告 docs/reports/phase6.6-cutover-gate.md 含 gates_run/gates_missing 与 scoped conclusion（不得声称 live L3 已满）。pytest tests/test_cutover_gate.py + test_cli 覆盖；init 接入 gate。"
+      "evidence": "2026-07-28 + phase-review 加固：scripts/parity/check_cutover_gate.py。正确性：10 项 parity golden --check。运行时：Wall（硬门 ×1.30+0.05s）、Cancel≤1s、Restart≤5s（同连接测量硬失败）、Peak RSS 比值；缺 worker 时 runtime_passed=False 整体 FAIL（非 soft-PASS）；--skip-runtime 为唯一逃逸。GT L3：有固定 clip 时实测；缺失时 ADR-0022 WAIVED（gt_l3_waived），--require-gt 发布硬门 fail-closed。报告 docs/reports/phase6.6-cutover-gate.md 含 gates_run/gates_missing 与 scoped conclusion（不得声称 live L3 已满）。pytest tests/test_cutover_gate.py + test_cli 覆盖；init 接入 gate。2026-07-29：以 golden_registry 作为唯一 10 项列表，移除平行 check_all_goldens.py 与 --skip-parity 分支；init 在构建后只调用一次完整 cutover gate，另提供 --parity-only 的 fail-fast 入口。"
     },
     {
       "id": "feat-06605",
@@ -880,7 +880,61 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28: 默认翻转完成。Python runtime.py 与 Swift RuntimePolicy.swift / PipelineClient.swift 的 default_runtime 正式切为 cpp；CLI 与 macOS GUI 默认基于 C++ Native Core (sublift_worker) 运行；paddle 引擎保持 100% 强路由 Python (paddle_override)；显式 SUBLIFT_RUNTIME=python 可 100% 干净回滚；pytest (488/488 绿), Swift XCTest (139/139 绿), ./init.sh (21/21 绿)；Phase 6 全量 28 个 features 彻底完成。"
+      "evidence": "2026-07-28: 默认翻转完成。Python runtime.py 与 Swift RuntimePolicy.swift / PipelineClient.swift 的 default_runtime 正式切为 cpp；CLI 与 macOS GUI 默认基于 C++ Native Core (sublift_worker) 运行；paddle 引擎保持 100% 强路由 Python (paddle_override)；显式 SUBLIFT_RUNTIME=python 可 100% 干净回滚；pytest (488/488 绿), Swift XCTest (139/139 绿), ./init.sh (21/21 绿)；Phase 6 全量 28 个 features 彻底完成。审查复验（2026-07-28）：当前完整 pytest 为 495 passed / 2 failed，根因是 Worker E2E 测试的 drawtext fixture 未校验 ffmpeg 退出码，并非本条默认路由断言失败；同时 live GT L3 仍按 ADR-0022 豁免。完成前的历史验证证据不得再被当作当前全绿结论，详见 docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md。"
+    },
+    {
+      "id": "feat-06606",
+      "name": "C++ Worker hardening：验证、协议与输入防护",
+      "description": "按 2026-07-28 迁移质量审查收口默认 C++ Worker：修复可移植 E2E 视频夹具；实现 bye→EOF；令 capability 与进程绑定引擎一致；为 legacy JPEG frame 增加字节/格式/像素/溢出限制并拒绝非法协议几何；对齐 init 与架构文档。保持 UDS/C++ Core/Python Paddle 边界，禁止借机改 OCR 或算法。计划见 docs/cpp/phase6.6-hardening.md。",
+      "module": "tests/ipc/test_cpp_worker.py; cpp/src/worker/; cpp/tests/worker_*; init.sh; docs/ARCHITECTURE.md; docs/cpp/",
+      "dependencies": [
+        "feat-06605"
+      ],
+      "subtasks": [
+        {
+          "name": "可移植 E2E fixture",
+          "description": "使用不依赖 drawtext 的 ffmpeg 生成方式并校验退出码/产物；cancel 等待 Worker 就绪。"
+        },
+        {
+          "name": "IPC lifecycle 与 capability",
+          "description": "客户端 bye 后关闭连接并清理；握手 engines 仅包含当前进程可受理的 bound engine；补充 conformance 测试。"
+        },
+        {
+          "name": "legacy frame 防护与协议校验",
+          "description": "限制 base64/JPEG 大小、JPEG 格式、解压像素和乘法溢出；拒绝 fps/box/profile 的非法几何。"
+        },
+        {
+          "name": "默认验证与主文档",
+          "description": "init 执行 mypy src tests，并在默认 C++ 产品路径下 fail-closed；ARCHITECTURE 对齐 runtime matrix。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28：根据 docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md 完成系统性 hardening。E2E fixture 改用 testsrc 并校验 ffmpeg 结果（pytest tests/ipc/test_cpp_worker.py 9/9）；C++ bye→EOF、绑定引擎 capability、JPEG/base64/像素/溢出防护、socket 路径和 fps/box/profile fail-closed；Python protocol 同步输入约束；init 改为 mypy src tests 且 CMake 缺失 fail-closed；ARCHITECTURE/IPC contract 对齐。验证：ruff 0 error、mypy src tests 70 files、pytest 508 selected passed/23 deselected、CTest 152/152、Swift 30 XCTest + 139 Swift Testing、./init.sh 退出 0。残余 release gate：GT L3 按 ADR-0022 waived；SUBLIFT_SANITIZE=ON 编译后任何 linked OpenCV/TBB 进程（含 --version）退出 134，栈在 Homebrew TBB InitOnce 析构，未作为本 feature 绿灯。"
+    },
+    {
+      "id": "feat-06607",
+      "name": "Sanitizer 无 OpenCV 对照 + Worker 能力边界",
+      "description": "恢复 SUBLIFT_ENABLE_OPENCV=OFF 下的可构建诊断 Worker，用它将 ASan 退出异常与产品 Pipeline 分离；诊断 Worker 必须诚实地不宣告 engine/capability 并拒绝作业。不得改变默认 OpenCV 产品路径或将该构建当作发布豁免。计划见 docs/cpp/phase6.6-sanitizer-isolation.md。",
+      "module": "cpp/src/worker/CMakeLists.txt; cpp/src/worker/bridge_no_opencv.cpp; cpp/src/worker/engine_factory.cpp; cpp/tests/worker_protocol_test.cpp; docs/cpp/",
+      "dependencies": [
+        "feat-06606"
+      ],
+      "subtasks": [
+        {
+          "name": "可构建诊断 Worker",
+          "description": "CMake 在 OpenCV 关闭时选择无 Pipeline 的 Bridge 实现，避免引用被排除的 Pipeline。"
+        },
+        {
+          "name": "能力宣告 fail-closed",
+          "description": "无 OpenCV 时 handshake 不宣告 engine/capability，start_job 给出明确错误。"
+        },
+        {
+          "name": "ASan 对照复核",
+          "description": "无 OpenCV 与 OpenCV ASan Worker 运行同一 --version 探针，记录依赖退出问题是否仍在。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-29：修复了 SUBLIFT_ENABLE_OPENCV=OFF 与 Worker 的错误依赖边界：CMake 根据 OpenCV 能力选择 bridge.cpp（产品）或 bridge_no_opencv.cpp（诊断），并以 SUBLIFT_HAS_OPENCV 将 EngineFactory 的 engine/capability 声明与实现对齐。无 OpenCV Worker 保留 hello/协议诊断，但 engines=[]、capabilities=[]，任何 start_job 明确拒绝，不能被误作可用 runtime。验证：标准 OpenCV build + CTest 152/152；ASan + OpenCV OFF 的 Worker otool 无 OpenCV/TBB，--version exit 0，真实 UDS hello/start_job 对照 PASS；相同 ASan + OpenCV 4.14 构建 --version（detect_leaks=0）仍 exit 134，栈在 Homebrew TBB 2023.1.0 InitOnce 析构。ruff clean、mypy 70 files、pytest 508 selected/23 deselected、Worker E2E 9/9、Swift 30 XCTest + 139 Swift Testing、./init.sh exit 0。结论：消除了无 OpenCV 配置失效，并确认 sanitizer 退出崩溃依赖 OpenCV/TBB 链；发布 gate 未通过。"
     }
   ]
 }

@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "engine_factory.hpp"
 #include "protocol.hpp"
+#include "sublift/vision.hpp"
 
 using namespace sublift::ipc;
 
@@ -39,6 +41,28 @@ TEST_CASE("Capability ByeMsg honest representation", "[worker][ipc][protocol]") 
   std::string json_str = serialize_message(bye);
   REQUIRE(json_str.find(R"("runtime":"cpp")") != std::string::npos);
   REQUIRE(json_str.find("paddle") == std::string::npos);
+}
+
+TEST_CASE("EngineFactory only advertises the engine bound to this Worker process",
+          "[worker][ipc][protocol]") {
+  sublift::worker::EngineFactory mock_factory("mock");
+#if SUBLIFT_HAS_OPENCV
+  REQUIRE(mock_factory.supported_engines() == std::vector<std::string>{"mock"});
+
+  sublift::worker::EngineFactory vision_factory("vision");
+  const auto vision_engines = vision_factory.supported_engines();
+  if (sublift::is_vision_available()) {
+    REQUIRE(vision_engines == std::vector<std::string>{"vision"});
+  } else {
+    REQUIRE(vision_engines.empty());
+  }
+#else
+  REQUIRE(mock_factory.supported_engines().empty());
+  REQUIRE(mock_factory.capabilities().empty());
+  const auto error = mock_factory.validate_engine("mock");
+  REQUIRE(error.has_value());
+  REQUIRE(error->find("OpenCV") != std::string::npos);
+#endif
 }
 
 TEST_CASE("Table-driven parsing and serialization of all 12 message types", "[worker][ipc][protocol]") {
@@ -286,5 +310,23 @@ TEST_CASE("Schema validation errors and invalid inputs", "[worker][ipc][protocol
       "confidence_threshold": 0.6
     })";
     REQUIRE_THROWS_AS(parse_message(bad_type), ProtocolError);
+  }
+
+  SECTION("fps and geometry fail closed") {
+    REQUIRE_THROWS_AS(parse_message(R"({
+      "type":"start_job", "video_id":"v1", "fps":0,
+      "engine":"mock", "confidence_threshold":0.6
+    })"), ProtocolError);
+    REQUIRE_THROWS_AS(parse_message(R"({
+      "type":"start_job", "video_id":"v1", "fps":1,
+      "engine":"mock", "confidence_threshold":0.6,
+      "region_box":[0,0,0,10]
+    })"), ProtocolError);
+    REQUIRE_THROWS_AS(parse_message(R"({
+      "type":"start_job", "video_id":"v1", "fps":1,
+      "engine":"mock", "confidence_threshold":0.6,
+      "subtitle_profile":{"script":"cjk","center_x":1,"center_y":5,
+      "height":0,"y_min":0,"y_max":10}
+    })"), ProtocolError);
   }
 }

@@ -18,6 +18,32 @@
 
 ---
 
+### macOS ASan 在 OpenCV/TBB 退出期崩溃，阻断发布级 sanitizer 门
+- **日期**：2026-07-29
+- **状态**：未解决；已完成最小隔离与可复现对照（feat-06607）。
+- **现象**：`SUBLIFT_SANITIZE=ON` 的 `sublift_worker --version` 即使不启动 IPC、Pipeline 或
+  视频处理，也会在输出版本后以 134 退出。栈落在 Homebrew TBB 2023.1.0 的
+  `tbb::detail::r1::__TBB_InitOnce` 析构；关闭 LeakSanitizer 不改变结果。
+- **排查路径**：
+  1. 确认常规 Debug/Release Worker 退出正常，且 `--version` 在 `main` 中直接 return。
+  2. 确认动态链为 Worker → OpenCV 4.14 → TBB 2023.1.0；ASan 只作用于本项目 target。
+  3. 修复 OpenCV OFF 时 `Pipeline` 源码被排除、Worker 仍引用它的链接缺陷，产出不宣告
+     engine/capability、明确拒绝作业的诊断 Worker。
+  4. 用同一 ASan 配置比较：无 OpenCV/TBB 的诊断 Worker `--version` exit 0；重新链接
+     OpenCV/TBB 后同命令稳定 exit 134。
+- **根本原因**：已确认崩溃依赖 OpenCV/TBB 加载后的退出清理链；TBB 的
+  `release_resources()` 通过 `destroy_system_topology_ptr` 间接跳转到无效地址。尚不能断言
+  是 TBB 版本、macOS/AppleClang 组合，还是依赖初始化状态交互中的具体哪一项。
+- **当前解决方案**：修复无 OpenCV 配置，使其可作为 sanitizer 诊断基线；产品 Worker 仍要求
+  OpenCV，绝不将诊断构建作为回退或发布豁免。
+- **后续方案**：在发布 runner 以相同 AppleClang 重建 OpenCV/TBB（优先验证 `WITH_TBB=OFF`
+  或兼容 TBB），分别复跑 ASan；只有 OpenCV 产品路径的 sanitizer 完整通过才关闭此门。
+- **相关文件**：`cpp/src/worker/CMakeLists.txt`、`cpp/src/worker/bridge_no_opencv.cpp`、
+  `cpp/src/worker/engine_factory.cpp`、`docs/cpp/phase6.6-sanitizer-isolation.md`、
+  `docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md`。
+
+---
+
 ### ROI 后 producer/consumer 重叠未产生稳定的用户可见吞吐收益
 - **日期**：2026-07-23
 - **状态**：已归档，未采纳（feat-042）。

@@ -45,7 +45,13 @@ async def read_framed_msg(reader: asyncio.StreamReader) -> dict[str, Any]:
     return cast(dict[str, Any], res)
 
 
-async def generate_synthetic_video(tmp_dir: Path) -> Path:
+async def generate_synthetic_video(tmp_dir: Path, duration_s: int = 3) -> Path:
+    """Generate a portable fixture and fail at its actual point of failure.
+
+    The mock Worker test does not need burned-in text.  ``testsrc`` is part of
+    ffmpeg's core lavfi filters, unlike ``drawtext`` which depends on optional
+    freetype/libass builds.
+    """
     video_path = tmp_dir / "ipc_pytest_video.mp4"
     cmd = [
         "ffmpeg",
@@ -53,9 +59,7 @@ async def generate_synthetic_video(tmp_dir: Path) -> Path:
         "-f",
         "lavfi",
         "-i",
-        "color=c=red:s=320x240:d=3",
-        "-vf",
-        "drawtext=text='Subtitle Test':x=10:y=200:fontsize=24:fontcolor=white",
+        f"testsrc=size=320x240:rate=2:duration={duration_s}",
         "-c:v",
         "libx264",
         "-pix_fmt",
@@ -63,9 +67,12 @@ async def generate_synthetic_video(tmp_dir: Path) -> Path:
         str(video_path),
     ]
     proc = await asyncio.create_subprocess_exec(
-        *cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        *cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
     )
-    await proc.wait()
+    _stdout, stderr = await proc.communicate()
+    if proc.returncode != 0 or not video_path.is_file():
+        detail = stderr.decode("utf-8", errors="replace")[-2000:]
+        raise RuntimeError(f"ffmpeg synthetic fixture generation failed: {detail}")
     return video_path
 
 
@@ -128,6 +135,29 @@ def test_cpp_worker_handshake() -> None:
     asyncio.run(run())
 
 
+def test_cpp_worker_rejects_overlong_socket_path() -> None:
+    """AF_UNIX path truncation must fail explicitly before bind/unlink."""
+    worker_bin = check_worker_bin()
+
+    async def run() -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir_str:
+            socket_path = Path(tmp_dir_str) / ("x" * 200)
+            proc = await asyncio.create_subprocess_exec(
+                worker_bin,
+                "--socket",
+                str(socket_path),
+                "--engine",
+                "mock",
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE,
+            )
+            _stdout, stderr = await proc.communicate()
+            assert proc.returncode == 1
+            assert b"path is too long" in stderr
+
+    asyncio.run(run())
+
+
 def test_cpp_worker_path_mode() -> None:
     worker_bin = check_worker_bin()
 
@@ -135,7 +165,7 @@ def test_cpp_worker_path_mode() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             socket_path = tmp_dir / "worker.sock"
-            video_path = await generate_synthetic_video(tmp_dir)
+            video_path = await generate_synthetic_video(tmp_dir, duration_s=30)
 
             proc = await asyncio.create_subprocess_exec(
                 worker_bin,
@@ -220,6 +250,10 @@ def test_cpp_worker_cancel() -> None:
                         "video_path": str(video_path),
                     },
                 )
+
+                ready = await read_framed_msg(reader)
+                assert ready["type"] == "progress"
+                assert ready["stage"] == "ready"
 
                 await send_framed_msg(writer, {"type": "cancel_job", "video_id": "v_pytest_cancel"})
 
@@ -313,6 +347,83 @@ def test_cpp_worker_frame_mode() -> None:
                     await proc.wait()
                 except Exception:
                     pass
+
+    asyncio.run(run())
+
+
+def test_cpp_worker_client_bye_closes_connection() -> None:
+    """A client ``bye`` is a close request, not a second handshake."""
+    worker_bin = check_worker_bin()
+
+    async def run() -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir_str:
+            socket_path = Path(tmp_dir_str) / "worker.sock"
+            proc = await asyncio.create_subprocess_exec(
+                worker_bin, "--socket", str(socket_path), "--engine", "mock",
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            try:
+                reader, writer = await connect_unix_with_retry(socket_path)
+                await send_framed_msg(
+                    writer, {"type": "hello", "client": "pytest", "protocol_version": 1}
+                )
+                hello = await read_framed_msg(reader)
+                assert hello["type"] == "bye"
+                assert hello["engines"] == ["mock"]
+
+                await send_framed_msg(writer, {"type": "bye"})
+                assert await asyncio.wait_for(reader.read(), timeout=1.0) == b""
+                writer.close()
+                await writer.wait_closed()
+            finally:
+                proc.terminate()
+                await proc.wait()
+
+    asyncio.run(run())
+
+
+def test_cpp_worker_frame_mode_rejects_oversized_base64() -> None:
+    """Encoded JPEG data is bounded before base64 decoding/allocation."""
+    worker_bin = check_worker_bin()
+    oversized_b64 = "A" * (28 * 1024 * 1024)
+
+    async def run() -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir_str:
+            socket_path = Path(tmp_dir_str) / "worker.sock"
+            proc = await asyncio.create_subprocess_exec(
+                worker_bin, "--socket", str(socket_path), "--engine", "mock",
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            try:
+                reader, writer = await connect_unix_with_retry(socket_path)
+                await send_framed_msg(
+                    writer,
+                    {
+                        "type": "start_job",
+                        "video_id": "v_oversized_frame",
+                        "fps": 1.0,
+                        "engine": "mock",
+                        "confidence_threshold": 0.5,
+                    },
+                )
+                assert (await read_framed_msg(reader))["stage"] == "ready"
+                await send_framed_msg(
+                    writer,
+                    {
+                        "type": "frame",
+                        "video_id": "v_oversized_frame",
+                        "ts_ms": 0,
+                        "jpeg_bytes": oversized_b64,
+                    },
+                )
+                error = await read_framed_msg(reader)
+                assert error["type"] == "error"
+                assert "JPEG base64 过大" in error["message"]
+                writer.close()
+                await writer.wait_closed()
+            finally:
+                proc.terminate()
+                await proc.wait()
 
     asyncio.run(run())
 

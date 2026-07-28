@@ -13,6 +13,7 @@
 | 单消息上限 | 实现须设上限（建议与现实现对齐或文档化，例如数 MB）；超限 → 关闭连接 + error |
 | 无效 JSON | 返回 `error` 或关闭；不得半处理 job |
 | 断连 | 客户端关 socket = 取消语义可触发；worker 须回收 ffmpeg/线程 |
+| 客户端 `bye` | Worker 不回复第二个 `bye`，应取消/回收活动 job 并关闭连接（客户端随后读到 EOF） |
 
 ## 2. 协议版本与 capability（6.5 起强制）
 
@@ -35,6 +36,7 @@
 - 客户端只展示 / 选择 **capability 中的 engines**。
 - 请求不可用引擎 → **明确失败**（`done(ok=false)`），禁止静默换成另一引擎。
 - `start_job.engine` 与 worker 进程绑定引擎不一致 → 失败（沿用 ADR-0019）。
+- `engines` 仅列出**当前进程可实际接受**的 engine；若将来要表达「重启后可用」，必须使用新的字段，不能复用 `engines`。
 
 > 若 6.5 首版需兼容未升级的 Swift：未识别字段忽略；但 C++ worker 仍应发送 capability。
 
@@ -150,6 +152,7 @@ Worker 实现可拆为两个二进制或一个多引擎二进制，但 **capabil
 2. C++ worker 回放输入，比较输出消息 **类型序** 与关键字段。
 3. Swift 集成测试：仅改 launch path，mock 或真实 UDS。
 4. 用例：engine mismatch、cancel 中途、无效 JSON、断连回收。
+5. `hello → bye（握手响应）→ bye（客户端关闭）→ EOF`；超限 JPEG/base64、非 JPEG 与非法 `fps`/几何必须 fail-closed。
 
 06005 交付：夹具格式说明 + 最少 1 个「期望消息序」文本夹具（可先只针对 Python 断言，C++ 6.5 接上）。
 

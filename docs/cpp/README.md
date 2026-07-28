@@ -18,6 +18,8 @@
 | [phase6.4-vision.md](phase6.4-vision.md) | 6.4 Vision OCR（**done**） |
 | [phase6.5-worker.md](phase6.5-worker.md) | 6.5 C++ Worker（**done**） |
 | [phase6.6-cutover.md](phase6.6-cutover.md) | **6.6 Cutover**（**done**：默认 C++ / 门禁 / 回滚） |
+| [phase6.6-hardening.md](phase6.6-hardening.md) | **6.6 Worker Hardening**（feat-06606，标准开发门已完成） |
+| [phase6.6-sanitizer-isolation.md](phase6.6-sanitizer-isolation.md) | **6.6 Sanitizer 依赖隔离**（feat-06607，诊断隔离已完成；发布门仍待解决） |
 
 ### 架构与契约
 

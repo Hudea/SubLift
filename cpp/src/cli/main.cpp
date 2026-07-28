@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -68,12 +69,23 @@ void print_usage(const char* prog) {
   return std::string{buf};
 }
 
-[[nodiscard]] std::string format_srt(const std::vector<sublift::SubtitleEntry>& entries) {
-  if (entries.empty()) return "";
+[[nodiscard]] bool is_blank_text(std::string_view text) {
+  for (unsigned char c : text) {
+    if (!std::isspace(c)) return false;
+  }
+  return true;
+}
+
+/// Format SRT; skips blank-text entries (product export hygiene, matches Python SrtExporter).
+[[nodiscard]] std::pair<std::string, std::size_t> format_srt(
+    const std::vector<sublift::SubtitleEntry>& entries) {
+  if (entries.empty()) return {"", 0};
   std::string out;
-  for (std::size_t i = 0; i < entries.size(); ++i) {
-    const auto& e = entries[i];
-    out += std::to_string(i + 1);
+  std::size_t idx = 1;
+  for (const auto& e : entries) {
+    if (is_blank_text(e.text)) continue;
+
+    out += std::to_string(idx++);
     out += '\n';
     out += format_srt_timestamp(e.start_ms);
     out += " --> ";
@@ -82,7 +94,7 @@ void print_usage(const char* prog) {
     out += e.text;
     out += "\n\n";
   }
-  return out;
+  return {out, idx - 1};
 }
 
 [[nodiscard]] std::optional<fs::path> find_worker_bin(const std::optional<fs::path>& override) {
@@ -101,9 +113,12 @@ void print_usage(const char* prog) {
   // to common build locations relative to cwd.
   (void)self;
 #endif
+  // Prefer Release (cpp-rel) over Debug (cpp) for product performance.
   const std::vector<fs::path> candidates = {
+      fs::current_path() / "build" / "cpp-rel" / "bin" / "sublift_worker",
       fs::current_path() / "build" / "cpp" / "bin" / "sublift_worker",
       fs::current_path() / "bin" / "sublift_worker",
+      fs::path{"build/cpp-rel/bin/sublift_worker"},
       fs::path{"build/cpp/bin/sublift_worker"},
   };
   for (const auto& c : candidates) {
@@ -382,15 +397,16 @@ struct ExtractArgs {
     if (args.output.has_parent_path()) {
       fs::create_directories(args.output.parent_path());
     }
+    const auto [srt_body, written_count] = format_srt(entries);
     {
       std::ofstream ofs(args.output, std::ios::binary);
       if (!ofs) {
         std::fprintf(stderr, "Error: cannot write %s\n", args.output.c_str());
         throw std::runtime_error("write srt");
       }
-      ofs << format_srt(entries);
+      ofs << srt_body;
     }
-    std::fprintf(stdout, "完成：%zu 条字幕 → %s\n", entries.size(), args.output.c_str());
+    std::fprintf(stdout, "完成：%zu 条字幕 → %s\n", written_count, args.output.c_str());
     exit_code = 0;
   } catch (const std::exception& ex) {
     std::fprintf(stderr, "Error: %s\n", ex.what());

@@ -25,19 +25,24 @@ from sublift.models import SubtitleEntry
 class SrtExporter:
     """将字幕条目导出为 SRT 格式。"""
 
-    def format(self, entries: list[SubtitleEntry]) -> str:
+    def format(self, entries: list[SubtitleEntry], *, drop_empty: bool = True) -> str:
         """将字幕条目格式化为 SRT 字符串。
 
         Args:
             entries: 字幕条目列表。
+            drop_empty: 是否自动滤除空文本条目（默认 True）。
 
         Returns:
             SRT 格式字符串，条目间空行分隔，末尾保留换行；
-            空列表返回空字符串。
+            空列表或全部为空文本时返回空字符串。
 
         Raises:
             ValueError: 任一条目 start_ms/end_ms 为负或 end_ms < start_ms。
         """
+        if not entries:
+            return ""
+        if drop_empty:
+            entries = [e for e in entries if e.text and e.text.strip()]
         if not entries:
             return ""
         blocks: list[str] = []
@@ -48,17 +53,20 @@ class SrtExporter:
             blocks.append(f"{idx}\n{start_tc} --> {end_tc}\n{entry.text}")
         return "\n\n".join(blocks) + "\n"
 
-    def export(self, entries: list[SubtitleEntry], output: Path) -> None:
+    def export(
+        self, entries: list[SubtitleEntry], output: Path, *, drop_empty: bool = True
+    ) -> None:
         """导出字幕到 SRT 文件。
 
         Args:
             entries: 字幕条目列表。
             output: 输出文件路径（.srt）。
+            drop_empty: 是否自动滤除空文本条目（默认 True）。
 
         Raises:
             ValueError: 任一条目时间越界（见 format）。
         """
-        output.write_text(self.format(entries), encoding="utf-8")
+        output.write_text(self.format(entries, drop_empty=drop_empty), encoding="utf-8")
 
     @staticmethod
     def _validate(entry: SubtitleEntry) -> None:

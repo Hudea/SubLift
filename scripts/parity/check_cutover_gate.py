@@ -9,6 +9,7 @@ Usage:
     python scripts/parity/check_cutover_gate.py --check
     python scripts/parity/check_cutover_gate.py --check --skip-runtime
     python scripts/parity/check_cutover_gate.py --check --skip-gt
+    python scripts/parity/check_cutover_gate.py --check --parity-only
     python scripts/parity/check_cutover_gate.py --report-out docs/reports/phase6.6-cutover-gate.md
 """
 
@@ -29,8 +30,24 @@ from typing import Any, cast
 
 PARITY_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PARITY_DIR.parents[1]
-WORKER_BIN = REPO_ROOT / "build" / "cpp" / "bin" / "sublift_worker"
+# Repo root for `sublift.*`; parity dir for sibling `golden_registry`.
+for _p in (str(REPO_ROOT), str(PARITY_DIR)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+from golden_registry import PARITY_SCRIPTS  # type: ignore[import-not-found]  # noqa: E402
+
+from sublift.worker_bin import resolve_worker_bin  # noqa: E402
+
 DEFAULT_REPORT_PATH = REPO_ROOT / "docs" / "reports" / "phase6.6-cutover-gate.md"
+
+
+def worker_bin() -> Path:
+    """Resolved sublift_worker (Release preferred). Missing path for error messages."""
+    found = resolve_worker_bin(REPO_ROOT)
+    if found is not None:
+        return found
+    return REPO_ROOT / "build" / "cpp" / "bin" / "sublift_worker"
 
 # Fixed GT L3 asset (video not vendored; see ADR-0022 / quality-baseline.md)
 GT_VIDEO = REPO_ROOT / "debug" / "Zootopia_clip_1080p.mp4"
@@ -55,19 +72,6 @@ RESTART_MAX_S = 5.0
 WALL_RATIO_MAX = 1.30
 WALL_SLACK_S = 0.05
 RSS_RATIO_MAX = 1.50
-
-PARITY_DUMP_SCRIPTS = [
-    ("config", PARITY_DIR / "dump_config.py"),
-    ("signature", PARITY_DIR / "dump_signature.py"),
-    ("changepoint", PARITY_DIR / "dump_changepoint.py"),
-    ("timeline", PARITY_DIR / "dump_timeline.py"),
-    ("dedupe", PARITY_DIR / "dump_dedupe.py"),
-    ("line_select", PARITY_DIR / "dump_line_select.py"),
-    ("pipeline", PARITY_DIR / "dump_pipeline.py"),
-    ("extractor", PARITY_DIR / "dump_extractor.py"),
-    ("vision", PARITY_DIR / "dump_vision.py"),
-    ("ipc_session", PARITY_DIR / "dump_ipc_session.py"),
-]
 
 
 @dataclass
@@ -134,7 +138,7 @@ def run_correctness_checks() -> list[ParityCheckResult]:
     results: list[ParityCheckResult] = []
     python_exec = sys.executable
 
-    for name, script_path in PARITY_DUMP_SCRIPTS:
+    for name, script_path in PARITY_SCRIPTS:
         if not script_path.exists():
             results.append(
                 ParityCheckResult(
@@ -387,7 +391,7 @@ def run_runtime_checks(video_duration_s: float = 3.0) -> tuple[RuntimeMetrics, R
             video_path = await _generate_synthetic_video(tmp_dir, duration_s=video_duration_s)
 
             py_cmd = [sys.executable, "-m", "sublift.ipc.server", "--engine", "mock"]
-            cpp_cmd = [str(WORKER_BIN), "--engine", "mock"]
+            cpp_cmd = [str(worker_bin()), "--engine", "mock"]
 
             py_metrics = await _measure_worker_performance(py_cmd, video_path)
             cpp_metrics = await _measure_worker_performance(cpp_cmd, video_path)
@@ -478,13 +482,13 @@ def _score_entries_against_gt(
 
 async def _extract_entries_cpp_vision(video_path: Path) -> list[dict[str, Any]]:
     """Path-mode extract via C++ worker (vision) for GT L3 candidate scoring."""
-    if not WORKER_BIN.exists():
-        raise FileNotFoundError(f"sublift_worker missing: {WORKER_BIN}")
+    if not worker_bin().exists():
+        raise FileNotFoundError(f"sublift_worker missing: {worker_bin()}")
 
     with tempfile.TemporaryDirectory() as tmp_dir_str:
         socket_path = Path(tmp_dir_str) / "gt.sock"
         proc = subprocess.Popen(
-            [str(WORKER_BIN), "--engine", "vision", "--socket", str(socket_path)],
+            [str(worker_bin()), "--engine", "vision", "--socket", str(socket_path)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -571,11 +575,11 @@ def run_gt_l3_check(*, skip_gt: bool = False, require_gt: bool = False) -> GtL3R
             )
         return GtL3Result(status="waived", passed=True, message=msg)
 
-    if not WORKER_BIN.exists():
+    if not worker_bin().exists():
         return GtL3Result(
             status="failed",
             passed=False,
-            message=f"Cannot measure GT L3: sublift_worker missing at {WORKER_BIN}",
+            message=f"Cannot measure GT L3: sublift_worker missing at {worker_bin()}",
         )
 
     start = time.perf_counter()
@@ -632,12 +636,16 @@ def generate_markdown_report(report: CutoverGateReport) -> str:
         "| :--- | :--- | :--- | :--- | :--- |",
     ]
 
-    for r in report.parity_results:
-        st = "✅ PASS" if r.passed else "❌ FAIL"
-        clean_msg = r.message.replace("\n", " ").strip()
-        lines.append(
-            f"| {r.name} | `{r.script_path.name}` | {r.duration_s:.3f}s | {st} | {clean_msg} |"
-        )
+    if not report.parity_results:
+        lines.append("*（未执行正确性 Parity）*")
+    else:
+        for r in report.parity_results:
+            st = "✅ PASS" if r.passed else "❌ FAIL"
+            clean_msg = r.message.replace("\n", " ").strip()
+            lines.append(
+                f"| {r.name} | `{r.script_path.name}` | {r.duration_s:.3f}s | "
+                f"{st} | {clean_msg} |"
+            )
 
     lines.extend(
         [
@@ -791,6 +799,7 @@ def run_cutover_gate(
     skip_runtime: bool = False,
     skip_gt: bool = False,
     require_gt: bool = False,
+    parity_only: bool = False,
     report_out: Path | None = None,
     video_duration_s: float = 3.0,
 ) -> CutoverGateReport:
@@ -807,6 +816,22 @@ def run_cutover_gate(
         mark = "✓" if r.passed else "✗"
         print(f"  [{mark}] {r.name:12s} ({r.duration_s:.2f}s) - {r.message}")
 
+    if parity_only:
+        report = CutoverGateReport(
+            parity_results=parity_results,
+            python_metrics=None,
+            cpp_metrics=None,
+            gt_result=None,
+            correctness_passed=correctness_passed,
+            runtime_passed=True,
+            gt_passed=True,
+            all_passed=correctness_passed,
+            runtime_skipped=True,
+            gates_run=gates_run,
+            gates_missing=["runtime_wall_cancel_restart_rss", "gt_l3"],
+        )
+        return report
+
     py_metrics: RuntimeMetrics | None = None
     cpp_metrics: RuntimeMetrics | None = None
     runtime_passed = True
@@ -816,10 +841,10 @@ def run_cutover_gate(
         print("[2/3] 已显式 --skip-runtime，跳过运行时性能门禁。")
         runtime_skipped = True
         gates_missing.append("runtime_wall_cancel_restart_rss")
-    elif not WORKER_BIN.exists():
+    elif not worker_bin().exists():
         # GATE-05: missing worker under --check without --skip-runtime is a hard fail
         print(
-            f"[2/3] sublift_worker 未找到 ({WORKER_BIN})；"
+            f"[2/3] sublift_worker 未找到 ({worker_bin()})；"
             "运行时门禁 FAIL（使用 --skip-runtime 可显式跳过）。",
             file=sys.stderr,
         )
@@ -913,6 +938,11 @@ def main() -> None:
         help="跳过 GT L3 水位门（显式；报告标记为 incomplete）",
     )
     parser.add_argument(
+        "--parity-only",
+        action="store_true",
+        help="仅跑 10 项 golden 正确性门后退出（本地 fail-fast；不写完整报告）",
+    )
+    parser.add_argument(
         "--require-gt",
         action="store_true",
         help="强制要求固定 GT 视频存在并实测；缺失则 FAIL（发布门）",
@@ -929,6 +959,7 @@ def main() -> None:
         skip_runtime=args.skip_runtime,
         skip_gt=args.skip_gt,
         require_gt=args.require_gt,
+        parity_only=args.parity_only,
         report_out=args.report_out,
         video_duration_s=args.video_duration,
     )

@@ -1,5 +1,7 @@
 #include "protocol.hpp"
 
+#include <cmath>
+
 #include <sublift/vision.hpp>
 
 namespace sublift::ipc {
@@ -68,12 +70,16 @@ sublift::Box2i parse_box2i(const nlohmann::json& j) {
       throw ProtocolError("region_box elements must be integers");
     }
   }
-  return sublift::Box2i{
+  sublift::Box2i box{
       .x = j[0].get<std::int32_t>(),
       .y = j[1].get<std::int32_t>(),
       .width = j[2].get<std::int32_t>(),
       .height = j[3].get<std::int32_t>(),
   };
+  if (box.x < 0 || box.y < 0 || box.width <= 0 || box.height <= 0) {
+    throw ProtocolError("region_box must have non-negative origin and positive dimensions");
+  }
+  return box;
 }
 
 nlohmann::json serialize_box2i(const sublift::Box2i& box) {
@@ -115,6 +121,13 @@ sublift::SubtitleProfile parse_profile(const nlohmann::json& j) {
   p.height = require_int(j, "height");
   p.y_min = require_int(j, "y_min");
   p.y_max = require_int(j, "y_max");
+  const bool script_only = p.center_x == 0 && p.center_y == 0 && p.height == 0 &&
+      p.y_min == 0 && p.y_max == 0;
+  if (!script_only && (p.center_x < 0 || p.center_y < 0 || p.height <= 0 ||
+                       p.y_min < 0 || p.y_max < p.y_min || p.center_y < p.y_min ||
+                       p.center_y > p.y_max)) {
+    throw ProtocolError("SubtitleProfile geometry is invalid");
+  }
   return p;
 }
 
@@ -243,6 +256,9 @@ Message parse_message(std::string_view json_str) {
       StartJobMsg msg;
       msg.video_id = require_string(root, "video_id");
       msg.fps = require_double(root, "fps");
+      if (!std::isfinite(msg.fps) || msg.fps <= 0.0) {
+        throw ProtocolError("fps must be finite and > 0");
+      }
       msg.engine = require_string(root, "engine");
       if (msg.engine != "mock" && msg.engine != "vision" && msg.engine != "paddle") {
         throw ProtocolError("Invalid engine type: " + msg.engine);

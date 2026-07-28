@@ -51,6 +51,12 @@ void WorkerConnection::run() {
       if (resp.has_value()) {
         send_message(*resp);
       }
+      // `bye` is a client-requested connection close, not a second handshake.
+      // Do this at the connection boundary so the handler's normal destructor
+      // path still cancels and joins any active job before the fd is closed.
+      if (std::holds_alternative<ipc::ByeMsg>(msg)) {
+        break;
+      }
     } catch (const ipc::ProtocolError& pe) {
       send_message(ipc::ErrorMsg{.message = std::string("Protocol error: ") + pe.what()});
     } catch (const std::exception& e) {

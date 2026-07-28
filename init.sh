@@ -1,6 +1,12 @@
 #!/bin/bash
 # SubLift 项目环境初始化与验证脚本
-# 检出 uv / python / ffmpeg，运行 ruff / mypy / pytest 验证基线
+# 检出 uv / python / ffmpeg / cmake，运行 Python 基线 + C++ 构建测试 + cutover 门禁
+#
+# 环境变量（可选加速 / 收紧）：
+#   SUBLIFT_INIT_SKIP_GT=1       跳过 GT L3 live（有 debug/Zootopia 片时省 ~20s+）
+#   SUBLIFT_INIT_SKIP_RUNTIME=1  跳过 cutover runtime 微基准
+#   SUBLIFT_INIT_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS 开 VISION=ON）
+#   SUBLIFT_INIT_REQUIRE_GT=1    GT 视频缺失则 cutover 失败（发布门）
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -10,6 +16,9 @@ NC='\033[0m'
 
 pass=0
 fail=0
+
+# Shared extras for product path (Vision + Paddle optional deps).
+UV=(uv run --extra vision --extra paddle)
 
 check() {
     local name="$1"
@@ -38,11 +47,12 @@ check "uv"      uv      true
 check "python3" python3 true
 check "ffmpeg"  ffmpeg  true
 
-# Python 版本检查（>=3.12，通过 uv 管理的版本）
+# Python 版本检查（>=3.12，通过 uv 管理的版本）— 单次 uv run
 echo
 if command -v uv >/dev/null 2>&1; then
-    py_version=$(uv run --extra vision --extra paddle python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-    py_ok=$(uv run --extra vision --extra paddle python -c 'import sys; print(1 if sys.version_info >= (3, 12) else 0)')
+    py_line=$("${UV[@]}" python -c 'import sys; v=sys.version_info; print(f"{v.major}.{v.minor}"); print(1 if v >= (3, 12) else 0)')
+    py_version=$(printf '%s\n' "$py_line" | sed -n '1p')
+    py_ok=$(printf '%s\n' "$py_line" | sed -n '2p')
     if [ "$py_ok" = "1" ]; then
         printf "${GREEN}[OK]${NC}  python 版本 -> %s (>=3.12, via uv)\n" "$py_version"
         pass=$((pass + 1))
@@ -92,101 +102,27 @@ run_check() {
     fi
 }
 
-run_check "ruff check ."   uv run --extra vision --extra paddle ruff check .
-run_check "mypy src"       uv run --extra vision --extra paddle mypy src
+run_check "ruff check ."   "${UV[@]}" ruff check .
+run_check "mypy src tests" "${UV[@]}" mypy src tests
 # 默认基线排除集成测试：其中 Paddle 集成测试首次构造模型可能触发下载。
 # 需外部资源的验证由开发者显式运行：uv run pytest -m integration。
-run_check "pytest"         uv run --extra vision --extra paddle pytest -m "not integration"
+run_check "pytest"         "${UV[@]}" pytest -m "not integration"
 
 echo
 echo "=============================="
-echo " C++（可选，Phase 6）"
+echo " C++ / Phase 6 基线"
 echo "=============================="
 echo
-# Config parity: keep committed golden aligned with Python DEFAULT_CONFIG.
-if uv run --extra vision --extra paddle python scripts/parity/dump_config.py --check \
-    >/tmp/sublift_parity_config.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  config parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} config parity golden (--check)\n"
-    cat /tmp/sublift_parity_config.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
-
-# Signature parity (feat-06101): keep committed golden aligned with Python oracle.
-if uv run --extra vision --extra paddle python scripts/parity/dump_signature.py --check \
-    >/tmp/sublift_parity_signature.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  signature parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} signature parity golden (--check)\n"
-    cat /tmp/sublift_parity_signature.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
-
-# Changepoint parity (feat-06102).
-if uv run --extra vision --extra paddle python scripts/parity/dump_changepoint.py --check \
-    >/tmp/sublift_parity_changepoint.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  changepoint parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} changepoint parity golden (--check)\n"
-    cat /tmp/sublift_parity_changepoint.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
-
-for _parity_mod in timeline dedupe line_select; do
-    if uv run --extra vision --extra paddle python "scripts/parity/dump_${_parity_mod}.py" --check \
-        >"/tmp/sublift_parity_${_parity_mod}.log" 2>&1; then
-        printf "${GREEN}[OK]${NC}  ${_parity_mod} parity golden (--check)\n"
-        pass=$((pass + 1))
-    else
-        printf "${RED}[FAIL]${NC} ${_parity_mod} parity golden (--check)\n"
-        cat "/tmp/sublift_parity_${_parity_mod}.log" 2>/dev/null || true
-        fail=$((fail + 1))
-    fi
-done
-
-# Pipeline end-to-end parity (feat-06205).
-if uv run --extra vision --extra paddle python scripts/parity/dump_pipeline.py --check \
-    >/tmp/sublift_parity_pipeline.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  pipeline parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} pipeline parity golden (--check)\n"
-    cat /tmp/sublift_parity_pipeline.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
-
-# Extractor parity golden (feat-06305).
-if uv run --extra vision --extra paddle python scripts/parity/dump_extractor.py --check \
-    >/tmp/sublift_parity_extractor.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  extractor parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} extractor parity golden (--check)\n"
-    cat /tmp/sublift_parity_extractor.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
-
-# Vision parity golden (feat-06405).
-if uv run --extra vision --extra paddle python scripts/parity/dump_vision.py --check \
-    >/tmp/sublift_parity_vision.log 2>&1; then
-    printf "${GREEN}[OK]${NC}  vision parity golden (--check)\n"
-    pass=$((pass + 1))
-else
-    printf "${RED}[FAIL]${NC} vision parity golden (--check)\n"
-    cat /tmp/sublift_parity_vision.log 2>/dev/null || true
-    fail=$((fail + 1))
-fi
 
 if command -v cmake >/dev/null 2>&1; then
     # Prefer Ninja when present; otherwise use CMake default generator.
-    # Build argv as a non-empty array so bash 3.2 + set -u never expands an empty [@].
     # Phase 6.2+ Pipeline / signature parity requires OpenCV: hard-fail configure
     # if missing so init is not green with the entire deliverable compiled out.
     cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON)
+    # macOS product path uses Vision; opt out with SUBLIFT_INIT_SKIP_VISION=1
+    if [ "$(uname -s)" = "Darwin" ] && [ "${SUBLIFT_INIT_SKIP_VISION:-0}" != "1" ]; then
+        cmake_cmd+=(-DSUBLIFT_ENABLE_VISION=ON)
+    fi
     if command -v ninja >/dev/null 2>&1; then
         cmake_cmd+=(-G Ninja)
     fi
@@ -196,20 +132,9 @@ if command -v cmake >/dev/null 2>&1; then
         printf "${GREEN}[OK]${NC}  cmake/ctest (cpp/)\n"
         pass=$((pass + 1))
 
-        # IPC session parity golden (feat-06505).
-        if uv run --extra vision --extra paddle python scripts/parity/dump_ipc_session.py --check \
-            >/tmp/sublift_parity_ipc.log 2>&1; then
-            printf "${GREEN}[OK]${NC}  ipc session parity golden (--check)\n"
-            pass=$((pass + 1))
-        else
-            printf "${RED}[FAIL]${NC} ipc session parity golden (--check)\n"
-            cat /tmp/sublift_parity_ipc.log 2>/dev/null || true
-            fail=$((fail + 1))
-        fi
-
-        # Process-level C++ worker e2e (requires binary from cmake above; fail not skip).
-        if [ -x build/cpp/bin/sublift_worker ]; then
-            if uv run --extra vision --extra paddle pytest tests/ipc/test_cpp_worker.py \
+        # Process-level C++ worker e2e (requires binary; fail not skip).
+        if [ -x build/cpp/bin/sublift_worker ] || [ -x build/cpp-rel/bin/sublift_worker ]; then
+            if "${UV[@]}" pytest tests/ipc/test_cpp_worker.py \
                 >/tmp/sublift_cpp_worker_e2e.log 2>&1; then
                 printf "${GREEN}[OK]${NC}  pytest tests/ipc/test_cpp_worker.py (post-build)\n"
                 pass=$((pass + 1))
@@ -219,13 +144,23 @@ if command -v cmake >/dev/null 2>&1; then
                 fail=$((fail + 1))
             fi
 
-            # Cutover gate check (correctness + runtime benchmark)
-            if uv run --extra vision --extra paddle python scripts/parity/check_cutover_gate.py --check \
+            # Single cutover gate: 10 goldens (one process) + runtime + GT.
+            cutover_args=(python scripts/parity/check_cutover_gate.py --check)
+            if [ "${SUBLIFT_INIT_SKIP_RUNTIME:-0}" = "1" ]; then
+                cutover_args+=(--skip-runtime)
+            fi
+            if [ "${SUBLIFT_INIT_SKIP_GT:-0}" = "1" ]; then
+                cutover_args+=(--skip-gt)
+            fi
+            if [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" = "1" ]; then
+                cutover_args+=(--require-gt)
+            fi
+            if "${UV[@]}" "${cutover_args[@]}" \
                 >/tmp/sublift_cutover_gate.log 2>&1; then
-                printf "${GREEN}[OK]${NC}  cutover gate check (--check)\n"
+                printf "${GREEN}[OK]${NC}  cutover gate (parity + runtime/GT)\n"
                 pass=$((pass + 1))
             else
-                printf "${RED}[FAIL]${NC} cutover gate check (--check)\n"
+                printf "${RED}[FAIL]${NC} cutover gate check\n"
                 cat /tmp/sublift_cutover_gate.log 2>/dev/null || true
                 fail=$((fail + 1))
             fi
@@ -239,7 +174,8 @@ if command -v cmake >/dev/null 2>&1; then
         fail=$((fail + 1))
     fi
 else
-    printf "${YELLOW}[SKIP]${NC} cmake 未安装（可选；Phase 6 见 cpp/README.md）\n"
+    printf "${RED}[FAIL]${NC} cmake 未安装（默认 C++ Worker 路径需要该工具链）\n"
+    fail=$((fail + 1))
 fi
 
 echo

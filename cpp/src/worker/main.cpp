@@ -1,3 +1,5 @@
+#include <cstddef>
+#include <cstring>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -43,6 +45,12 @@ int main(int argc, char* argv[]) {
 
   sublift::worker::EngineFactory engine_factory(engine);
 
+  if (socket_path.size() >= sizeof(sockaddr_un::sun_path)) {
+    std::cerr << "Error: --socket path is too long for AF_UNIX (max "
+              << sizeof(sockaddr_un::sun_path) - 1 << " bytes).\n";
+    return 1;
+  }
+
   // Clean up stale socket file if it exists
   ::unlink(socket_path.c_str());
 
@@ -54,9 +62,10 @@ int main(int argc, char* argv[]) {
 
   struct sockaddr_un addr {};
   addr.sun_family = AF_UNIX;
-  std::strncpy(addr.sun_path, socket_path.c_str(), sizeof(addr.sun_path) - 1);
+  std::memcpy(addr.sun_path, socket_path.c_str(), socket_path.size() + 1);
 
-  if (::bind(server_fd, reinterpret_cast<struct sockaddr*>(&addr), sizeof(addr)) < 0) {
+  const auto addr_len = static_cast<socklen_t>(offsetof(sockaddr_un, sun_path) + socket_path.size() + 1);
+  if (::bind(server_fd, reinterpret_cast<struct sockaddr*>(&addr), addr_len) < 0) {
     std::cerr << "Error: Failed to bind socket to " << socket_path << ": " << ::strerror(errno) << "\n";
     ::close(server_fd);
     return 1;

@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
-import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -141,21 +139,9 @@ def _run_extract(
 
 
 def _find_sublift_worker_bin() -> Path | None:
-    env_path = os.environ.get("SUBLIFT_WORKER_PATH")
-    if env_path and os.access(env_path, os.X_OK):
-        return Path(env_path)
+    from sublift.worker_bin import resolve_worker_bin
 
-    cli_file = Path(__file__).resolve()
-    repo_root = cli_file.parents[2]
-    build_bin = repo_root / "build" / "cpp" / "bin" / "sublift_worker"
-    if build_bin.exists() and os.access(build_bin, os.X_OK):
-        return build_bin
-
-    system_which = shutil.which("sublift_worker")
-    if system_which and os.access(system_which, os.X_OK):
-        return Path(system_which)
-
-    return None
+    return resolve_worker_bin(Path(__file__).resolve().parents[2])
 
 
 def _write_framed_json(sock: socket.socket, data: dict[str, Any]) -> None:
@@ -311,7 +297,8 @@ def _run_extract_cpp(
             elapsed = time.perf_counter() - start
 
             SrtExporter().export(entries, output)
-            print(f"完成：{len(entries)} 条字幕 → {output}（耗时 {elapsed:.1f}s）")
+            written = sum(1 for e in entries if e.text and e.text.strip())
+            print(f"完成：{written} 条字幕 → {output}（耗时 {elapsed:.1f}s）")
 
         finally:
             if client is not None:
@@ -420,8 +407,8 @@ def _run_extract_python(
     elapsed = time.perf_counter() - start
 
     SrtExporter().export(entries, output)
-
-    print(f"完成：{len(entries)} 条字幕 → {output}（耗时 {elapsed:.1f}s）")
+    written = sum(1 for e in entries if e.text and e.text.strip())
+    print(f"完成：{written} 条字幕 → {output}（耗时 {elapsed:.1f}s）")
 
 
 def _build_ocr_engine(

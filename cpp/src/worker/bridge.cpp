@@ -1,10 +1,14 @@
 #include "bridge.hpp"
 
+#include "sublift/pipeline.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 #if defined(__APPLE__)
@@ -15,6 +19,10 @@
 namespace sublift::worker {
 
 namespace {
+
+constexpr std::size_t kMaxJpegBytes = 20 * 1024 * 1024;
+constexpr std::size_t kMaxImagePixels = 50'000'000;
+constexpr std::size_t kMaxBase64JpegChars = ((kMaxJpegBytes + 2) / 3) * 4;
 
 static const std::string kBase64Chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -31,6 +39,9 @@ static const std::array<int, 256> kBase64Table = [] {
 }();
 
 std::vector<std::uint8_t> decode_base64(std::string_view input) {
+  if (input.size() > kMaxBase64JpegChars) {
+    throw std::invalid_argument("JPEG base64 过大");
+  }
   std::vector<std::uint8_t> out;
   out.reserve((input.size() * 3) / 4);
 
@@ -49,6 +60,9 @@ std::vector<std::uint8_t> decode_base64(std::string_view input) {
       valb -= 8;
     }
   }
+  if (out.size() > kMaxJpegBytes) {
+    throw std::invalid_argument("JPEG 过大");
+  }
   return out;
 }
 
@@ -57,6 +71,13 @@ std::vector<std::uint8_t> decode_base64(std::string_view input) {
 sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) {
   if (bytes.empty()) {
     throw std::invalid_argument("JPEG 解码失败: 空数据");
+  }
+  if (bytes.size() > kMaxJpegBytes) {
+    throw std::invalid_argument("JPEG 解码失败: JPEG 过大");
+  }
+  if (bytes.size() < 4 || bytes[0] != 0xFF || bytes[1] != 0xD8 ||
+      bytes[bytes.size() - 2] != 0xFF || bytes.back() != 0xD9) {
+    throw std::invalid_argument("JPEG 解码失败: 仅支持 JPEG 数据");
   }
 
 #if defined(__APPLE__)
@@ -72,6 +93,30 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
     throw std::invalid_argument("JPEG 解码失败: ImageIO 无法解析图像数据");
   }
 
+  CFDictionaryRef properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nullptr);
+  if (!properties) {
+    CFRelease(source);
+    throw std::invalid_argument("JPEG 解码失败: ImageIO 无法读取尺寸");
+  }
+  CFNumberRef width_number = static_cast<CFNumberRef>(
+      CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth));
+  CFNumberRef height_number = static_cast<CFNumberRef>(
+      CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight));
+  long long metadata_width = 0;
+  long long metadata_height = 0;
+  const bool has_dimensions = width_number != nullptr && height_number != nullptr &&
+      CFNumberGetValue(width_number, kCFNumberLongLongType, &metadata_width) &&
+      CFNumberGetValue(height_number, kCFNumberLongLongType, &metadata_height);
+  CFRelease(properties);
+  if (!has_dimensions || metadata_width <= 0 || metadata_height <= 0 ||
+      metadata_width > std::numeric_limits<std::int32_t>::max() ||
+      metadata_height > std::numeric_limits<std::int32_t>::max() ||
+      static_cast<unsigned long long>(metadata_width) >
+          kMaxImagePixels / static_cast<unsigned long long>(metadata_height)) {
+    CFRelease(source);
+    throw std::invalid_argument("JPEG 解码失败: 图像尺寸超过限制");
+  }
+
   CGImageRef cg_image = CGImageSourceCreateImageAtIndex(source, 0, nullptr);
   CFRelease(source);
   if (!cg_image) {
@@ -80,7 +125,9 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
 
   const std::size_t w = CGImageGetWidth(cg_image);
   const std::size_t h = CGImageGetHeight(cg_image);
-  if (w == 0 || h == 0) {
+  if (w == 0 || h == 0 || w > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
+      h > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()) ||
+      w > kMaxImagePixels / h || w > std::numeric_limits<std::size_t>::max() / (h * 4)) {
     CGImageRelease(cg_image);
     throw std::invalid_argument("JPEG 解码失败: 图像尺寸无效");
   }

@@ -6,10 +6,10 @@
 - **平台 API 隔离**：平台特定 API（Apple Vision）只能出现在 `ocr/vision.py`，核心层只依赖 Protocol
 - **串联层不实现单一能力**：pipeline / export 组合能力模块，处理流程逻辑
 
-## 1.1 Phase 6 — Native C++ Core（进行中）
+## 1.1 Phase 6 — Native C++ Core（默认已切换，hardening 进行中）
 
-> **当前产品默认路径仍是本文下列 Python 架构。**  
-> Phase 6 将 Python Runtime 逐步替换为 C++ Core（SwiftUI + UDS 保留，Worker 优先替换）。
+> **当前产品默认路径：vision / mock 使用 C++ Worker；paddle 使用 Python Worker。**
+> SwiftUI + UDS 边界保留；Python Runtime 继续承担 paddle、冻结 Oracle 与 `SUBLIFT_RUNTIME=python` 回滚。产品 C++ Worker 需要 OpenCV 签名流水线；`SUBLIFT_ENABLE_OPENCV=OFF` 仅产出不宣告 engine/capability、明确拒绝作业的 sanitizer 诊断 Worker，不能作为 runtime 回退。相关计划见 `docs/cpp/phase6.6-hardening.md` 与 `docs/cpp/phase6.6-sanitizer-isolation.md`。
 
 | | 说明 |
 |---|---|

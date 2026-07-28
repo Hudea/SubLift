@@ -14,8 +14,11 @@
 #include "sublift/detector.hpp"
 #include "sublift/ffmpeg.hpp"
 #include "sublift/fixed_detector.hpp"
-#include "sublift/pipeline.hpp"
 #include "sublift/roi_passthrough_detector.hpp"
+
+namespace sublift {
+class Pipeline;
+}
 
 namespace sublift::worker {
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
 import pytest
@@ -12,6 +13,7 @@ from sublift.runtime import (
     WorkerChoice,
     resolve_runtime,
 )
+from sublift.worker_bin import resolve_worker_bin
 
 P_DEF = ResolutionSource.PRODUCT_DEFAULT
 FLAG = ResolutionSource.EXPLICIT_FLAG
@@ -128,3 +130,27 @@ def test_resolve_runtime_errors(
             env_override=env_map,
         )
     assert err_msg in str(exc_info.value)
+
+
+def test_resolve_worker_bin_prefers_release(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SUBLIFT_WORKER_PATH", raising=False)
+    rel = tmp_path / "build" / "cpp-rel" / "bin" / "sublift_worker"
+    dbg = tmp_path / "build" / "cpp" / "bin" / "sublift_worker"
+    rel.parent.mkdir(parents=True)
+    dbg.parent.mkdir(parents=True)
+    rel.write_text("x")
+    dbg.write_text("x")
+    rel.chmod(0o755)
+    dbg.chmod(0o755)
+    found = resolve_worker_bin(tmp_path)
+    assert found == rel
+
+
+def test_resolve_worker_bin_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    custom = tmp_path / "custom_worker"
+    custom.write_text("x")
+    custom.chmod(0o755)
+    monkeypatch.setenv("SUBLIFT_WORKER_PATH", str(custom))
+    assert resolve_worker_bin(tmp_path) == custom

@@ -433,6 +433,16 @@
           ]
         },
         {
+          "id": "phase6.release-hardening",
+          "name": "6.6 发布验证加固",
+          "description": "默认 C++ Worker 的协议/输入防护，以及针对 OpenCV/TBB sanitizer 退出问题的可复现隔离对照；产品路径仍要求 OpenCV。设计：docs/cpp/phase6.6-hardening.md、phase6.6-sanitizer-isolation.md。",
+          "status": "done",
+          "covers": [
+            "feat-06606",
+            "feat-06607"
+          ]
+        },
+        {
           "id": "phase6.post-cutover",
           "name": "6.7+ 去 Python 产品依赖 / 打包",
           "description": "在 paddle 有替代或产品放弃 paddle 默认后，去嵌入 Python；签名公证/随包 ffmpeg 等。开干前拆 feat-067xx 起。",
