@@ -12,11 +12,13 @@ set(_sublift_test_srcs
   extractor_probe_test.cpp
   extractor_full_test.cpp
   extractor_roi_test.cpp
+  vision_geometry_test.cpp
   parity/config_parity_test.cpp
   parity/timeline_parity_test.cpp
   parity/dedupe_parity_test.cpp
   parity/line_select_parity_test.cpp
   parity/extractor_parity_test.cpp
+  parity/vision_parity_test.cpp
 )
 if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_test_srcs
@@ -28,6 +30,12 @@ if(SUBLIFT_ENABLE_OPENCV)
     parity/signature_parity_test.cpp
     parity/changepoint_parity_test.cpp
     parity/pipeline_parity_test.cpp
+  )
+endif()
+
+if(SUBLIFT_ENABLE_VISION)
+  list(APPEND _sublift_test_srcs
+    vision_ocr_test.mm
   )
 endif()
 
@@ -48,10 +56,12 @@ set(_tl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/segments/timel
 set(_dd_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/entries/dedupe.v1.json")
 set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/line_select.v1.json")
 set(_ext_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/extractor/extractor.v1.json")
+set(_vis_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/vision/vision.v1.json")
 sublift_stringify_path(_tl_golden_esc "${_tl_golden}")
 sublift_stringify_path(_dd_golden_esc "${_dd_golden}")
 sublift_stringify_path(_ls_golden_esc "${_ls_golden}")
 sublift_stringify_path(_ext_golden_esc "${_ext_golden}")
+sublift_stringify_path(_vis_golden_esc "${_vis_golden}")
 
 target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
@@ -59,6 +69,7 @@ target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_PARITY_GOLDEN_DEDUPE=\"${_dd_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_LINE_SELECT=\"${_ls_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_EXTRACTOR=\"${_ext_golden_esc}\""
+  "SUBLIFT_PARITY_GOLDEN_VISION=\"${_vis_golden_esc}\""
 )
 
 if(SUBLIFT_ENABLE_OPENCV)
@@ -85,8 +96,17 @@ target_link_libraries(sublift_tests
   PRIVATE
     sublift_test_support
     sublift_ffmpeg
+    sublift_vision_macos
     Catch2::Catch2WithMain
 )
+
+if(SUBLIFT_ENABLE_VISION)
+  target_link_libraries(sublift_tests PRIVATE "-framework CoreText")
+  # Match sublift_vision_macos: ARC for ObjC++ test TUs (vision_ocr_test.mm).
+  target_compile_options(sublift_tests PRIVATE
+    $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
+  )
+endif()
 
 include(Catch)
 catch_discover_tests(sublift_tests)

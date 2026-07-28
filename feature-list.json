@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.3 done；下一子阶段 6.4 Vision（feat-064xx，设计待提交）。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.4 done；当前下一子阶段 6.5 Worker / Cutover。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -394,9 +394,22 @@
           ]
         },
         {
+          "id": "phase6.vision",
+          "name": "6.4 Vision OCR（ObjC++ adapter）",
+          "description": "sublift_vision_macos：VisionOcrEngine 实现 IOcrEngine；box 映射 L0；默认 zh-Hans+en-US；CMake SUBLIFT_ENABLE_VISION。文本 L4，产品路径仍 Python。设计：docs/cpp/phase6.4-vision.md。覆盖 feat-06401~06405。",
+          "status": "done",
+          "covers": [
+            "feat-06401",
+            "feat-06402",
+            "feat-06403",
+            "feat-06404",
+            "feat-06405"
+          ]
+        },
+        {
           "id": "phase6.runtime-cutover",
-          "name": "6.4+ Vision / Worker / Cutover",
-          "description": "Vision .mm、UDS worker、benchmark 门后 cutover；其后可去 Python 产品 runtime。开干前拆 feat-064xx 起。",
+          "name": "6.5+ Worker / Cutover",
+          "description": "UDS worker、benchmark 门后 cutover；其后可去 Python 产品 runtime。开干前拆 feat-065xx 起。",
           "status": "not-started",
           "covers": []
         }

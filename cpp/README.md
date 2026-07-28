@@ -79,7 +79,21 @@ Optional vision shell (macOS):
 ```bash
 cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON
 cmake --build build/cpp
+ctest --test-dir build/cpp -R vision --output-on-failure
 ```
+
+### Apple Vision OCR integration & CI policy (Phase 6.4)
+
+| Case | Behavior |
+|---|---|
+| `SUBLIFT_ENABLE_VISION=ON` (macOS) | Builds `sublift_vision_macos` with real Apple Vision (`Vision`, `CoreGraphics`, `Foundation`, `CoreText`). `is_vision_available()` returns `true`. `[vision][integration]` tests run in-memory CGImage text recognition |
+| `SUBLIFT_ENABLE_VISION=OFF` (Default) | Uses stub (`vision_stub.cpp`), `is_vision_available()` returns `false`, `VisionOcrEngine` constructor throws `std::runtime_error` matching Python `RuntimeError` |
+| Headless / CI Environment | Vision `VNRecognizeTextRequest` operates on in-memory `CGImageRef` pointers; does **not** require a GUI WindowServer session or screen recording permissions. Fully supported in headless CLI / CI runners |
+| Catch2 Filter Tag | Use Catch tag `[vision][integration]` or `ctest -R vision` to filter Vision integration tests |
+| Threading | `VisionOcrEngine::recognize` is **not thread-safe**; callers must serialize (no concurrent recognize) |
+| Pixel path | Product/parity path is **RGB24**. BGR24/Gray8 are best-effort conversions only |
+| L0 vs L4 | **L0** (init hard gate): box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`. **L4**: live Vision text/conf — optional report only; not an init hard gate. `dump_vision --live` is reserved (no-op beyond note) |
+| Dual-matrix | `./init.sh` builds **VISION=OFF** (core+ffmpeg+mock + L0 vision geometry/parity). For recognize smoke, run a second configure with `-DSUBLIFT_ENABLE_VISION=ON` and `ctest -R 'vision|parity.*vision'`. Optional: `SUBLIFT_CPP_VISION=ON` manual job — not default init |
 
 ## Related docs
 

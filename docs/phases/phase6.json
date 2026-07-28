@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.3 done（含 phase-review 加固）；下一子阶段 6.4 Vision（feat-064xx）。契约与子阶段设计见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.4 done（6.4 Vision ObjC++ adapter feat-06401~06405）；下一子阶段 6.5 Worker。契约与子阶段设计见 docs/cpp/。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -504,7 +504,132 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-28: 落地 Extractor Golden harness。dump_extractor.py 生成与 --check 校验 extractor.v1.json (包含 pure_validate_crop, pure_build_vf, pure_assess_display, pure_plan_frame_io 与 4 组合成视频 1.0fps/2.0fps/ROI/cancel 抽帧 sampled RGB 像素 L0)；sublift_test_support 拓展 load_extractor_golden；Catch2 extractor_parity_test 全量 Parity 校验全绿；init.sh 接入 extractor parity golden (--check) (17/17 绿)；code_reviewer 审查 PASS。产品路径未动。 同日 phase-review 加固：plan_frame_io_pure（display_transform fallback/error、mode=roi）；detector_type 断言；golden 扩 pure_plan/illegal_crop/ROI 像素；ctest 132/132；dump_extractor --check OK。"
+      "evidence": "2026-07-28: 落地 Extractor Golden harness。dump_extractor.py 生成与 --check 校验 extractor.v1.json (包含 pure_validate_crop, pure_build_vf, pure_assess_display, pure_plan_frame_io 与 4 组合成视频 1.0fps/2.0fps/ROI/cancel 抽帧 sampled RGB 像素 L0)；sublift_test_support 拓展 load_extractor_golden；Catch2 extractor_parity_test 全量 Parity 校验全绿；init.sh 接入 extractor parity golden (--check) (17/17 绿)；code_reviewer 审查 PASS。产品路径未动。 同日 phase-review 加固：plan_frame_io_pure；detector_type；golden 扩面；ctest 132/132；dump_extractor --check OK。"
+    },
+    {
+      "id": "feat-06401",
+      "name": "纯契约：Vision 归一化 box → 像素 + clamp + 排序",
+      "description": "无 Vision.framework 落地 vision_normalized_box_to_pixel / clamp 与 (y,x) 行序约定；表驱动 L0 单测对齐 Python _vision_box_to_pixel/_clamp_box。可放 vision target 纯 C++ 或 geometry 单元。产品路径不切换。",
+      "module": "cpp/include/sublift/vision.hpp; cpp/src/vision_macos/vision_geometry.cpp; cpp/tests/vision_geometry_test.cpp; docs/cpp/phase6.4-vision.md",
+      "dependencies": [
+        "feat-06305"
+      ],
+      "subtasks": [
+        {
+          "name": "box 映射 API",
+          "description": "左下归一化 → 左上像素；round 与 Python 一致。"
+        },
+        {
+          "name": "clamp + 排序约定",
+          "description": "越界 clamp；lines 按 (y,x) 排序文档与单测。"
+        },
+        {
+          "name": "单测",
+          "description": "表驱动；不链 Vision.framework。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 Vision 纯契约与几何转换。vision.hpp 声明 clamp_ocr_box / vision_normalized_box_to_pixel / sort_ocr_lines / is_vision_available；bankers_round (round half to even) 对齐 Python 3 round() 舍入契约；std::stable_sort (y,x) 稳定排序。Catch2 vision_geometry_test 27 项断言全绿；./init.sh 17/17 绿；两轮 code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06402",
+      "name": "CMake / availability 骨架",
+      "description": "SUBLIFT_ENABLE_VISION=ON 时链 Vision/CoreGraphics/Foundation；is_vision_available；头文件声明 VisionOcrEngine。OFF/非 Apple 不破 core+ffmpeg+mock。替换 stub 永久 false。",
+      "module": "cpp/src/vision_macos/CMakeLists.txt; cpp/CMakeLists.txt; cpp/include/sublift/vision.hpp",
+      "dependencies": [
+        "feat-06401"
+      ],
+      "subtasks": [
+        {
+          "name": "framework link",
+          "description": "最小 framework 集；APPLE 守卫。"
+        },
+        {
+          "name": "availability API",
+          "description": "is_vision_available；OFF→false。"
+        },
+        {
+          "name": "构建矩阵",
+          "description": "OFF 全绿；ON 可编译冒烟。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 CMake 与 Vision availability 骨架。vision.hpp 声明 VisionOcrEngine 接口与 Pimpl 移动语义；SUBLIFT_ENABLE_VISION=ON 链接 Vision/CoreGraphics/Foundation，is_vision_available 为 true；SUBLIFT_ENABLE_VISION=OFF 使用 stub，is_vision_available 为 false，构造抛 std::runtime_error 匹配 Python。Catch2 结合条件宏验证双构建矩阵；./init.sh 17/17 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06403",
+      "name": "VisionOcrEngine::recognize 主路径",
+      "description": "RGB24 ImageView→CGImage→VNRecognizeTextRequest→topCandidates(1)→OcrLine；from_lines；perform 失败空结果；autoreleasepool。不设置 Python 未设的 recognitionLevel。实现仅 .mm。",
+      "module": "cpp/src/vision_macos/vision_ocr.mm; cpp/include/sublift/vision.hpp",
+      "dependencies": [
+        "feat-06402"
+      ],
+      "subtasks": [
+        {
+          "name": "CGImage 桥接",
+          "description": "对齐 Python _pil_to_cgimage 字节布局。"
+        },
+        {
+          "name": "request + collect",
+          "description": "languages、topCandidates、box 失败整图占位、排序、from_lines。"
+        },
+        {
+          "name": "失败语义",
+          "description": "perform 失败→空 OcrResult；非线程安全文档。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 VisionOcrEngine::recognize 主路径。vision_ocr.mm 实现 RGB24/BGR24/Gray8/padded-stride 图像至 CGImage 转换、VNImageRequestHandler + VNRecognizeTextRequest 识别、topCandidates(1) 提取、bankers_round 坐标换算、sort_ocr_lines 排序；RAII + @autoreleasepool 内存防护；try-catch 外层无害捕获。Catch2 vision_ocr_test.mm 6 项集成测试全绿；./init.sh 17/17 绿与 ON 构建 138/138 绿；两轮 code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06404",
+      "name": "语言配置 + macOS 集成烟测",
+      "description": "默认 zh-Hans+en-US；可覆盖语言列表；不可用构造语义；macOS 中/英合成图与空白图集成测（可 skip）。标签 [vision][integration]。",
+      "module": "cpp/tests/vision_ocr_integration_test.cpp; cpp/README.md",
+      "dependencies": [
+        "feat-06403"
+      ],
+      "subtasks": [
+        {
+          "name": "默认语言常量",
+          "description": "与 Python DEFAULT_RECOGNITION_LANGUAGES 一致。"
+        },
+        {
+          "name": "集成烟测",
+          "description": "英文/中文/空白；VISION=OFF 跳过。"
+        },
+        {
+          "name": "不可用路径",
+          "description": "构造失败或明确错误信息。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地语言配置与 macOS 集成烟测。vision_ocr_test.mm 升级 CoreText 支持 PingFangSC-Regular 字体中文字幕绘制，补充 TC-03 中文字幕识别 (\"SubLift 硬字幕\")、TC-04 默认/自定义语言重写覆盖断言，标注 [vision][integration][ocr] 标签；cpp/README.md 补充 Apple Vision OCR 内存 CGImageRef 无界面运行策略与 ctest -R vision 运行说明。./init.sh 17/17 绿，SUBLIFT_ENABLE_VISION=ON 138/138 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06405",
+      "name": "Vision parity harness",
+      "description": "dump_vision.py：box 映射 L0 golden + envelope；C++ [parity][vision]；init L0 --check。Live 文本仅 L4 可选记录，不作为默认 init 硬门。产品路径不切换；无 cutover。",
+      "module": "scripts/parity/dump_vision.py; benchmark/parity/goldens/vision/; cpp/tests/parity/vision_parity_test.cpp; init.sh",
+      "dependencies": [
+        "feat-06404"
+      ],
+      "subtasks": [
+        {
+          "name": "Python dump L0",
+          "description": "几何表 + --check。"
+        },
+        {
+          "name": "C++ parity 测试",
+          "description": "load golden L0 比对。"
+        },
+        {
+          "name": "init / live 策略",
+          "description": "L0 进 init；--live 可选文档化。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: Vision parity harness L0 + review round-1 fixes. dump_vision.py builds/checks vision.v1.json (kind=vision, schema v1, oracle_commit/macos_version/vision_note, default langs, box/clamp/sort + empty_result L0); --live reserved no-op (vision_note only). C++ load_vision_golden + [parity][vision] (box/clamp/sort/empty); offline collect-path blanks (is_ocr_text_blank incl. U+3000) in vision_geometry_test. init.sh dump_vision --check L0. Dual-matrix: VISION=OFF ctest full green; VISION=ON 140/140 incl. VisionOcrEngine integration (EN soft L4 WARN). ARC -fobjc-arc on vision .mm; recognize no catch(...); RGB24 product path documented. Product path still Python."
     }
   ]
 }

@@ -15,6 +15,7 @@
 | [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md) | 6.1 Pure pipeline 算法 parity（**done**） |
 | [phase6.2-pipeline.md](phase6.2-pipeline.md) | 6.2 Pipeline 流式编排（**done**） |
 | [phase6.3-extractor.md](phase6.3-extractor.md) | 6.3 FFmpeg Extractor（**done**） |
+| [phase6.4-vision.md](phase6.4-vision.md) | **6.4 Vision OCR**（设计已登记；实现未开始） |
 
 ### 架构与契约
 
@@ -42,4 +43,4 @@
 3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock）；paddle 见引擎矩阵。
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision**；target 依赖图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
-6. **6.3 done**：FFmpeg Extractor parity（含 phase-review 加固）；产品路径仍 Python。下一子阶段 **6.4 Vision**。
+6. **6.4 当前**：Vision ObjC++ adapter（`IOcrEngine`）；产品路径仍 Python。下一实现刀 `feat-06401` box 纯契约。

@@ -240,9 +240,7 @@ struct ExtractorPlanFrameIoGolden {
   std::string name;
   std::optional<SourceBox> region_box;
   std::string mode;
-  /// When set, C++ calls plan_frame_io_pure with this source (no ffprobe).
   std::optional<SourceFrameInfo> source;
-  /// "fallback_full" | "error" (Python TransformPolicy)
   std::string on_unvalidated_transform{"fallback_full"};
   bool expected_ok{true};
   std::optional<std::string> expected_error_contains;
@@ -255,7 +253,7 @@ struct ExtractorPlanFrameIoGolden {
 struct ExtractorSampledPixelGolden {
   std::int32_t x{0};
   std::int32_t y{0};
-  std::array<int, 3> rgb{0, 0, 0};  // [R, G, B]
+  std::array<int, 3> rgb{0, 0, 0};
 };
 
 struct ExtractorFrameGolden {
@@ -290,5 +288,60 @@ struct ExtractorGolden {
 /// Load extractor golden envelope (schema v1). Throws std::runtime_error on error.
 [[nodiscard]] ExtractorGolden load_extractor_golden(
     const std::filesystem::path& path);
+
+// ---------------------------------------------------------------------------
+// Vision golden (feat-06405)
+// ---------------------------------------------------------------------------
+
+struct VisionBoxTestCase {
+  std::string name;
+  double nx{0.0};
+  double ny{0.0};
+  double nw{0.0};
+  double nh{0.0};
+  std::int32_t image_width{0};
+  std::int32_t image_height{0};
+  OcrCropBox expected_box;
+};
+
+struct VisionClampTestCase {
+  std::string name;
+  std::int32_t x{0};
+  std::int32_t y{0};
+  std::int32_t w{0};
+  std::int32_t h{0};
+  std::int32_t image_width{0};
+  std::int32_t image_height{0};
+  OcrCropBox expected_box;
+};
+
+struct VisionSortTestCase {
+  std::string name;
+  std::vector<OcrLine> input_lines;
+  std::vector<OcrLine> expected_lines;
+};
+
+/// Frozen empty OcrResult structure (perform-fail / no-obs / all-blank).
+struct VisionEmptyResultCase {
+  std::string name;
+  std::string expected_text;
+  double expected_confidence{0.0};
+  std::size_t expected_line_count{0};
+};
+
+struct VisionGolden {
+  OracleMeta oracle;
+  std::string macos_version;
+  bool vision_available{false};
+  std::string vision_note;
+  std::vector<std::string> default_languages;
+  std::vector<VisionBoxTestCase> box_cases;
+  std::vector<VisionClampTestCase> clamp_cases;
+  std::vector<VisionSortTestCase> sort_cases;
+  std::vector<VisionEmptyResultCase> empty_result_cases;
+};
+
+/// Load vision golden envelope (schema v1). Throws std::runtime_error on error.
+[[nodiscard]] VisionGolden load_vision_golden(const std::filesystem::path& path);
 
 }  // namespace sublift::test_support

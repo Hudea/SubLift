@@ -1,0 +1,256 @@
+{
+  "golden_schema_version": 1,
+  "kind": "vision",
+  "oracle": {
+    "oracle_commit": "2cf782738d8b0a47ad9d53b9066ba118164817ce",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "git_dirty": true,
+    "macos_version": "26.5.2",
+    "vision_available": true,
+    "vision_note": "Apple Vision PyObjC oracle"
+  },
+  "default_recognition_languages": [
+    "zh-Hans",
+    "en-US"
+  ],
+  "cases": [
+    {
+      "name": "standard_center_box",
+      "kind": "normalized_box_to_pixel",
+      "nx": 0.1,
+      "ny": 0.2,
+      "nw": 0.5,
+      "nh": 0.3,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 10,
+        "y": 50,
+        "width": 50,
+        "height": 30
+      }
+    },
+    {
+      "name": "bankers_round_half_even_1.5",
+      "kind": "normalized_box_to_pixel",
+      "nx": 0.015,
+      "ny": 0.0,
+      "nw": 0.1,
+      "nh": 0.1,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 2,
+        "y": 90,
+        "width": 10,
+        "height": 10
+      }
+    },
+    {
+      "name": "bankers_round_half_even_2.5",
+      "kind": "normalized_box_to_pixel",
+      "nx": 0.025,
+      "ny": 0.0,
+      "nw": 0.1,
+      "nh": 0.1,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 2,
+        "y": 90,
+        "width": 10,
+        "height": 10
+      }
+    },
+    {
+      "name": "clamp_overflow_right_bottom",
+      "kind": "normalized_box_to_pixel",
+      "nx": -0.1,
+      "ny": -0.1,
+      "nw": 1.5,
+      "nh": 1.5,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 0,
+        "y": 0,
+        "width": 100,
+        "height": 100
+      }
+    },
+    {
+      "name": "zero_image_dimensions",
+      "kind": "normalized_box_to_pixel",
+      "nx": 0.1,
+      "ny": 0.2,
+      "nw": 0.5,
+      "nh": 0.3,
+      "image_width": 0,
+      "image_height": 0,
+      "expected_box": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "zero_box_dimensions",
+      "kind": "normalized_box_to_pixel",
+      "nx": 0.5,
+      "ny": 0.5,
+      "nw": 0.0,
+      "nh": 0.0,
+      "image_width": 200,
+      "image_height": 100,
+      "expected_box": {
+        "x": 100,
+        "y": 50,
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "clamp_within_bounds",
+      "kind": "clamp_box",
+      "x": 10,
+      "y": 20,
+      "w": 30,
+      "h": 40,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 10,
+        "y": 20,
+        "width": 30,
+        "height": 40
+      }
+    },
+    {
+      "name": "clamp_negative_origin",
+      "kind": "clamp_box",
+      "x": -10,
+      "y": -5,
+      "w": 50,
+      "h": 50,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 0,
+        "y": 0,
+        "width": 50,
+        "height": 50
+      }
+    },
+    {
+      "name": "clamp_exceed_width_height",
+      "kind": "clamp_box",
+      "x": 80,
+      "y": 80,
+      "w": 50,
+      "h": 50,
+      "image_width": 100,
+      "image_height": 100,
+      "expected_box": {
+        "x": 80,
+        "y": 80,
+        "width": 20,
+        "height": 20
+      }
+    },
+    {
+      "name": "clamp_zero_img_bounds",
+      "kind": "clamp_box",
+      "x": 10,
+      "y": 10,
+      "w": 20,
+      "h": 20,
+      "image_width": 0,
+      "image_height": 0,
+      "expected_box": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      }
+    },
+    {
+      "name": "sort_multiline_y_then_x",
+      "kind": "line_sorting",
+      "input_lines": [
+        {
+          "text": "Line2",
+          "confidence": 0.9,
+          "box": {
+            "x": 10,
+            "y": 50,
+            "width": 100,
+            "height": 20
+          }
+        },
+        {
+          "text": "Line1_Right",
+          "confidence": 0.95,
+          "box": {
+            "x": 80,
+            "y": 10,
+            "width": 50,
+            "height": 20
+          }
+        },
+        {
+          "text": "Line1_Left",
+          "confidence": 0.88,
+          "box": {
+            "x": 20,
+            "y": 10,
+            "width": 50,
+            "height": 20
+          }
+        }
+      ],
+      "expected_lines": [
+        {
+          "text": "Line1_Left",
+          "confidence": 0.88,
+          "box": {
+            "x": 20,
+            "y": 10,
+            "width": 50,
+            "height": 20
+          }
+        },
+        {
+          "text": "Line1_Right",
+          "confidence": 0.95,
+          "box": {
+            "x": 80,
+            "y": 10,
+            "width": 50,
+            "height": 20
+          }
+        },
+        {
+          "text": "Line2",
+          "confidence": 0.9,
+          "box": {
+            "x": 10,
+            "y": 50,
+            "width": 100,
+            "height": 20
+          }
+        }
+      ]
+    },
+    {
+      "name": "empty_result_default_structure",
+      "kind": "empty_result",
+      "expected": {
+        "text": "",
+        "confidence": 0.0,
+        "lines": []
+      }
+    }
+  ]
+}

@@ -87,8 +87,9 @@ if(SUBLIFT_ENABLE_VISION)
     message(FATAL_ERROR "SUBLIFT_ENABLE_VISION requires macOS (AppleClang + OBJCXX)")
   endif()
   enable_language(OBJCXX)
-  add_subdirectory(src/vision_macos)
 endif()
+
+add_subdirectory(src/vision_macos)
 
 if(SUBLIFT_BUILD_TESTS)
   enable_testing()
