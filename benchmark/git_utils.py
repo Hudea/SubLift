@@ -86,4 +86,3 @@ def resolve_auto_increment_label(
     next_idx = max(existing_indices) + 1 if existing_indices else 1
     final_label = f"{base_label}_{next_idx}"
     return final_label, output_dir / final_label
-

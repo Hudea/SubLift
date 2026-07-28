@@ -94,9 +94,7 @@ class TestPipelineProfile:
     def test_derives_from_region_when_missing(self) -> None:
         region = BoundingBox(x=0, y=100, width=320, height=80)
         detector = FixedRegionDetector(region)
-        pipe = Pipeline(
-            detector=detector, ocr=MockOcrEngine(), config=Config()
-        )
+        pipe = Pipeline(detector=detector, ocr=MockOcrEngine(), config=Config())
         assert pipe.subtitle_profile is None
         img = Image.new("RGB", (320, 200), "white")
         pipe.feed(Frame(timestamp_ms=0, image=img))

@@ -411,7 +411,9 @@ def _validate_entry(e: Any, i: int) -> None:
             raise ProtocolError(f"entries[{i}].{field} 缺失或非整数: {e.get(field)!r}")
     if "text" not in e or not isinstance(e["text"], str):
         raise ProtocolError(f"entries[{i}].text 缺失或非字符串: {e.get('text')!r}")
-    if "confidence" not in e or not isinstance(e["confidence"], (int, float)) or isinstance(
-        e["confidence"], bool
+    if (
+        "confidence" not in e
+        or not isinstance(e["confidence"], (int, float))
+        or isinstance(e["confidence"], bool)
     ):
         raise ProtocolError(f"entries[{i}].confidence 缺失或非数值: {e.get('confidence')!r}")

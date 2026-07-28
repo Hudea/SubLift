@@ -190,8 +190,7 @@ def format_fn_report(
         for c in classifications:
             gt = c.gt_entry
             lines.append(
-                f"- #{gt.index} {_ms_to_tc(gt.start_ms)}→{_ms_to_tc(gt.end_ms)}"
-                f" `{gt.text}`"
+                f"- #{gt.index} {_ms_to_tc(gt.start_ms)}→{_ms_to_tc(gt.end_ms)} `{gt.text}`"
             )
             lines.append(f"  - 类型: `{c.fn_type}`")
             if c.related_detected is not None:
@@ -201,10 +200,7 @@ def format_fn_report(
                     f" 重叠 {c.overlap_ms}ms"
                 )
             if c.gt_neighbors_in_same_detected > 0:
-                lines.append(
-                    f"  - 同段真实条目数: {c.gt_neighbors_in_same_detected}"
-                    "（合并漏检）"
-                )
+                lines.append(f"  - 同段真实条目数: {c.gt_neighbors_in_same_detected}（合并漏检）")
     lines.append("")
 
     report = "\n".join(lines)

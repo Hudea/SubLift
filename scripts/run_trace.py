@@ -79,15 +79,11 @@ def _reconstruct_segments_from_trace(
             current_start = rec.timestamp_ms
         elif event == "OUT":
             if current_start is not None:
-                segments.append(
-                    DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms)
-                )
+                segments.append(DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms))
                 current_start = None
         elif event == "CHANGE":
             if current_start is not None:
-                segments.append(
-                    DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms)
-                )
+                segments.append(DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms))
             current_start = rec.timestamp_ms
 
     if current_start is not None:
@@ -101,9 +97,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="打轴决策 trace 与 FN 归因（feat-031a）。",
     )
-    parser.add_argument(
-        "--video", type=Path, required=True, help="输入视频路径"
-    )
+    parser.add_argument("--video", type=Path, required=True, help="输入视频路径")
     parser.add_argument(
         "--ground-truth",
         type=Path,
@@ -275,13 +269,10 @@ def main(argv: list[str] | None = None) -> int:
     if not detected:
         # fallback：用 pipeline 输出
         detected = [
-            DetectedSegment(start_ms=e.start_ms, end_ms=e.end_ms, text=e.text)
-            for e in entries
+            DetectedSegment(start_ms=e.start_ms, end_ms=e.end_ms, text=e.text) for e in entries
         ]
     ground_truth = load_srt(gt_path)
-    classifications = classify_fn(
-        detected, ground_truth, match_threshold=args.match_threshold
-    )
+    classifications = classify_fn(detected, ground_truth, match_threshold=args.match_threshold)
 
     fn_md_path = prefix_path.parent / f"{prefix_path.name}_fn_analysis.md"
     report = format_fn_report(classifications, output_path=fn_md_path)
@@ -319,9 +310,7 @@ def _run_comparison(args: argparse.Namespace, video_path: Path, gt_path: Path) -
         ssim_patrol_threshold=args.patrol_threshold,
     )
     print("运行 optimized（patrol 启用）...", file=sys.stderr)
-    opt_detected, _ = _run_pipeline_with_trace(
-        video_path, args.fps, region_box, patrol_config
-    )
+    opt_detected, _ = _run_pipeline_with_trace(video_path, args.fps, region_box, patrol_config)
     opt_seg = _compute_segment_metrics(opt_detected, ground_truth, args.match_threshold)
     opt_fn = classify_fn(opt_detected, ground_truth, match_threshold=args.match_threshold)
     opt_short = compute_short_subtitle_metrics(opt_detected, ground_truth)
@@ -331,9 +320,7 @@ def _run_comparison(args: argparse.Namespace, video_path: Path, gt_path: Path) -
         file=sys.stderr,
     )
 
-    report = _format_comparison(
-        base_seg, opt_seg, base_fn, opt_fn, base_short, opt_short
-    )
+    report = _format_comparison(base_seg, opt_seg, base_fn, opt_fn, base_short, opt_short)
     out_path = Path("debug/reports/feat031_comparison.md")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report, encoding="utf-8")
@@ -397,9 +384,7 @@ def _format_comparison(
         f"{opt_seg.timing_precision * 100:.1f}% | "
         f"{(opt_seg.timing_precision - base_seg.timing_precision) * 100:+.1f}pp |"
     )
-    lines.append(
-        f"| FN 总数 | {len(base_fn)} | {len(opt_fn)} | {len(opt_fn) - len(base_fn):+d} |"
-    )
+    lines.append(f"| FN 总数 | {len(base_fn)} | {len(opt_fn)} | {len(opt_fn) - len(base_fn):+d} |")
     lines.append(
         f"| 短字幕召回率 | {base_short.short_recall * 100:.1f}% | "
         f"{opt_short.short_recall * 100:.1f}% | "
@@ -445,10 +430,7 @@ def _format_comparison(
         )
         lines.append("- 不修改 config.py 默认值，patrol 默认保持关闭")
     else:
-        lines.append(
-            f"- 决策: **仅记录**（F1 提升 {f1_delta * 100:+.1f}pp < 3pp，"
-            "不落定参数）"
-        )
+        lines.append(f"- 决策: **仅记录**（F1 提升 {f1_delta * 100:+.1f}pp < 3pp，不落定参数）")
     lines.append("")
 
     return "\n".join(lines)

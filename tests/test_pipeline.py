@@ -49,9 +49,7 @@ def _subtitle_frame(
     return Frame(timestamp_ms=timestamp_ms, image=Image.fromarray(arr))
 
 
-def _subtitle_frame_text_b(
-    timestamp_ms: int, width: int = 320, height: int = 80
-) -> Frame:
+def _subtitle_frame_text_b(timestamp_ms: int, width: int = 320, height: int = 80) -> Frame:
     """造带字幕帧 B（暗矩形在不同位置，dHash 不同）。"""
     arr = np.full((height, width, 3), 200, dtype=np.uint8)
     arr[20:60, 40:120] = 30

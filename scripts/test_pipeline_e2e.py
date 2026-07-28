@@ -117,18 +117,13 @@ def main() -> None:
 
     entries = pipeline.run(video)
 
-    entries_window = [
-        e for e in entries if e.start_ms < end_ms and e.end_ms > start_ms
-    ]
+    entries_window = [e for e in entries if e.start_ms < end_ms and e.end_ms > start_ms]
 
     lines: list[str] = []
     lines.append("=" * 100)
+    lines.append(f"Pipeline 端到端测试：{video.name}  {ms_to_srt(start_ms)} → {ms_to_srt(end_ms)}")
     lines.append(
-        f"Pipeline 端到端测试：{video.name}  {ms_to_srt(start_ms)} → {ms_to_srt(end_ms)}"
-    )
-    lines.append(
-        f"采样率 {config.sample_fps}fps  检测到 {len(entries_window)} 段  "
-        f"实际 {len(srt_window)} 段"
+        f"采样率 {config.sample_fps}fps  检测到 {len(entries_window)} 段  实际 {len(srt_window)} 段"
     )
     lines.append("=" * 100)
 
@@ -137,8 +132,17 @@ def main() -> None:
         f"{'匹配 SRT':<26s} | {'匹配':>4s}"
     )
     sep = (
-        "-" * 3 + "-+-" + "-" * 26 + "-+-" + "-" * 6 + "-+-"
-        + "-" * 38 + "-+-" + "-" * 26 + "-+-" + "-" * 4
+        "-" * 3
+        + "-+-"
+        + "-" * 26
+        + "-+-"
+        + "-" * 6
+        + "-+-"
+        + "-" * 38
+        + "-+-"
+        + "-" * 26
+        + "-+-"
+        + "-" * 4
     )
     lines.append(header)
     lines.append(sep)
@@ -183,9 +187,7 @@ def main() -> None:
             f"{srt_range:<26s} | {match_str:>4s}"
         )
         if srt_text:
-            lines.append(
-                f"     | {'':26s} | {'':6s} | {'':38s} | {srt_text:<26s} |"
-            )
+            lines.append(f"     | {'':26s} | {'':6s} | {'':38s} | {srt_text:<26s} |")
 
     lines.append("")
     lines.append("=" * 100)

@@ -271,9 +271,7 @@ class ChangePointDetector:
         )
         return None
 
-    def _handle_disappearance(
-        self, signature: FrameSignature
-    ) -> StateEvent | None:
+    def _handle_disappearance(self, signature: FrameSignature) -> StateEvent | None:
         """处理字幕消失。"""
         from sublift.diagnostics.trace import TriggerReason, VetoReason
 
@@ -466,9 +464,7 @@ class ChangePointDetector:
             return False
         if self._anchor_crop is None or crop is None:
             return False
-        ssim_val = compute_ssim(
-            crop, self._anchor_crop, self.config.ssim_window_size
-        )
+        ssim_val = compute_ssim(crop, self._anchor_crop, self.config.ssim_window_size)
         return ssim_val > self.config.ssim_threshold
 
     def _is_new_content_stable(self, signature: FrameSignature) -> bool:

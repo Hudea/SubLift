@@ -114,8 +114,7 @@ def build_mock(setup: dict[str, Any]) -> MockOcrEngine:
     for r in setup["results"]:
         if r.get("lines"):
             lines = [
-                OcrLine(text=ln["text"], confidence=ln["confidence"],
-                        box=BoundingBox(**ln["box"]))
+                OcrLine(text=ln["text"], confidence=ln["confidence"], box=BoundingBox(**ln["box"]))
                 for ln in r["lines"]
             ]
             results.append(OcrResult.from_lines(lines))
@@ -354,8 +353,12 @@ def run_scenario(sc: dict[str, Any]) -> dict[str, Any]:
         if action == "finalize":
             out = pipe.finalize()
             final_entries = [
-                {"start_ms": e.start_ms, "end_ms": e.end_ms,
-                 "text": e.text, "confidence": e.confidence}
+                {
+                    "start_ms": e.start_ms,
+                    "end_ms": e.end_ms,
+                    "text": e.text,
+                    "confidence": e.confidence,
+                }
                 for e in out
             ]
             finalized = True
@@ -366,15 +369,18 @@ def run_scenario(sc: dict[str, Any]) -> dict[str, Any]:
             seg_events.append(ev)
             entry = pipe.ocr_segment(ev)
             raw_entries.append(
-                {"start_ms": entry.start_ms, "end_ms": entry.end_ms,
-                 "text": entry.text, "confidence": entry.confidence}
+                {
+                    "start_ms": entry.start_ms,
+                    "end_ms": entry.end_ms,
+                    "text": entry.text,
+                    "confidence": entry.confidence,
+                }
             )
 
     if not finalized:
         out = pipe.finalize()
         final_entries = [
-            {"start_ms": e.start_ms, "end_ms": e.end_ms,
-             "text": e.text, "confidence": e.confidence}
+            {"start_ms": e.start_ms, "end_ms": e.end_ms, "text": e.text, "confidence": e.confidence}
             for e in out
         ]
 
@@ -384,8 +390,7 @@ def run_scenario(sc: dict[str, Any]) -> dict[str, Any]:
             {
                 "start_ms": e.start_ms,
                 "end_ms": e.end_ms,
-                "anchor_ts": (e.anchor_frame.timestamp_ms
-                              if e.anchor_frame is not None else None),
+                "anchor_ts": (e.anchor_frame.timestamp_ms if e.anchor_frame is not None else None),
                 "fallback_ts": [f.timestamp_ms for f in e.fallback_frames],
             }
             for e in seg_events
@@ -492,10 +497,14 @@ def check_golden(path: Path, root: Path) -> int:
         for name in sorted(set(disk_by) | set(live_by)):
             if disk_by.get(name) != live_by.get(name):
                 print(f"  scenario {name}:", file=sys.stderr)
-                print(f"    disk: {json.dumps(disk_by.get(name, {}), ensure_ascii=False)}",
-                      file=sys.stderr)
-                print(f"    live: {json.dumps(live_by.get(name, {}), ensure_ascii=False)}",
-                      file=sys.stderr)
+                print(
+                    f"    disk: {json.dumps(disk_by.get(name, {}), ensure_ascii=False)}",
+                    file=sys.stderr,
+                )
+                print(
+                    f"    live: {json.dumps(live_by.get(name, {}), ensure_ascii=False)}",
+                    file=sys.stderr,
+                )
         return 1
     n = len(disk["scenarios"])
     commit = disk.get("oracle", {}).get("oracle_commit")
@@ -515,8 +524,7 @@ def main(argv: list[str] | None = None) -> int:
         return check_golden(path, root)
     if git_dirty(root) and not args.allow_dirty:
         print(
-            "refusing to write pipeline golden on a dirty worktree "
-            "(use --allow-dirty to override)",
+            "refusing to write pipeline golden on a dirty worktree (use --allow-dirty to override)",
             file=sys.stderr,
         )
         return 1
@@ -526,9 +534,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"oracle_commit={envelope['oracle']['oracle_commit']}")
     print(f"git_dirty={envelope['oracle']['git_dirty']}")
     for s in envelope["scenarios"]:
-        print(f"  {s['name']}: {len(s['expected_segment_events'])} events, "
-              f"{s['expected_ocr_calls']} ocr_calls, "
-              f"{len(s['expected_final_entries'])} final entries")
+        print(
+            f"  {s['name']}: {len(s['expected_segment_events'])} events, "
+            f"{s['expected_ocr_calls']} ocr_calls, "
+            f"{len(s['expected_final_entries'])} final entries"
+        )
     return 0
 
 

@@ -105,15 +105,11 @@ async def run_job(
                 )
             )
         elif mtype == "entries":
-            final_entries = [
-                dict(e) for e in (msg.get("entries") or []) if isinstance(e, dict)
-            ]
+            final_entries = [dict(e) for e in (msg.get("entries") or []) if isinstance(e, dict)]
             events.append(Event(now, "entries", {"n": len(final_entries)}))
         elif mtype == "done":
             done_msg = msg
-            events.append(
-                Event(now, "done", {"ok": msg.get("ok"), "error": msg.get("error")})
-            )
+            events.append(Event(now, "done", {"ok": msg.get("ok"), "error": msg.get("error")}))
 
     start = build_start_job(
         video_id,
@@ -158,11 +154,7 @@ async def run_job(
                 )
             )
             break
-        if (
-            cancel_after_video_ms is not None
-            and cancel_requested_at is None
-            and progress_values
-        ):
+        if cancel_after_video_ms is not None and cancel_requested_at is None and progress_values:
             est_video_ms = progress_values[-1] * duration_ms
             if est_video_ms >= cancel_after_video_ms:
                 cancel_requested_at = now
@@ -175,8 +167,7 @@ async def run_job(
                         {
                             "type": cancel_resp.get("type") if cancel_resp else None,
                             "error": (cancel_resp or {}).get("error"),
-                            "cancel_latency_s": ready_after_cancel_at
-                            - cancel_requested_at,
+                            "cancel_latency_s": ready_after_cancel_at - cancel_requested_at,
                             "est_video_ms": est_video_ms,
                         },
                     )
@@ -407,8 +398,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     gates["first_entry_le_10s"] = {
         "pass": (
-            full.get("first_entry_wall_s") is not None
-            and float(full["first_entry_wall_s"]) <= 10.0
+            full.get("first_entry_wall_s") is not None and float(full["first_entry_wall_s"]) <= 10.0
         ),
         "first_entry_wall_s": full.get("first_entry_wall_s"),
     }
@@ -425,8 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     gates["cancel_latency_le_1s"] = {
         "pass": (
-            cancel.get("cancel_latency_s") is not None
-            and float(cancel["cancel_latency_s"]) <= 1.0
+            cancel.get("cancel_latency_s") is not None and float(cancel["cancel_latency_s"]) <= 1.0
         ),
         "cancel_latency_s": cancel.get("cancel_latency_s"),
         "metric": "bridge.handle(cancel) return latency (path-mode product path)",
@@ -472,9 +461,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     out_json = args.out / "ux_report.json"
-    out_json.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {out_json}", flush=True)
     print("GATES", json.dumps(gates, ensure_ascii=False, indent=2), flush=True)
     print("ALL_PASS" if report["all_pass"] else "GATES_FAILED", flush=True)

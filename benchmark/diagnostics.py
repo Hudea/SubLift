@@ -448,9 +448,7 @@ def _match_one_to_one(
             continue
         assigned_det.add(det_id)
         assigned_gt.add(gt_id)
-        matches.append(
-            TemporalMatch(gt_id=gt_id, det_id=det_id, overlap_ms=ov, temporal_iou=iou)
-        )
+        matches.append(TemporalMatch(gt_id=gt_id, det_id=det_id, overlap_ms=ov, temporal_iou=iou))
     return sorted(matches, key=lambda item: item.gt_id)
 
 
@@ -616,15 +614,9 @@ def _compute_metrics(
     )
 
     start_errors = [
-        abs(case.start_error_ms)
-        for case in matched_gt
-        if case.start_error_ms is not None
+        abs(case.start_error_ms) for case in matched_gt if case.start_error_ms is not None
     ]
-    end_errors = [
-        abs(case.end_error_ms)
-        for case in matched_gt
-        if case.end_error_ms is not None
-    ]
+    end_errors = [abs(case.end_error_ms) for case in matched_gt if case.end_error_ms is not None]
     boundary_errors = [*start_errors, *end_errors]
 
     text_cases = [case for case in matched_gt if case.cer is not None]
@@ -645,9 +637,7 @@ def _compute_metrics(
     )
     cer_micro = edit_distance_sum / ref_len_sum if ref_len_sum else 0.0
     exact_match_rate = (
-        sum(1 for case in text_cases if case.exact_match) / len(text_cases)
-        if text_cases
-        else 0.0
+        sum(1 for case in text_cases if case.exact_match) / len(text_cases) if text_cases else 0.0
     )
     empty_text_rate = (
         sum(1 for case in matched_gt if case.classification == TEXT_EMPTY) / len(matched_gt)
@@ -751,9 +741,7 @@ def _build_summary(
         if precision_gate.get("pass") is None
         else "none"
     )
-    primary_remaining_gap = (
-        str(failure_clusters[0]["type"]) if failure_clusters else "none"
-    )
+    primary_remaining_gap = str(failure_clusters[0]["type"]) if failure_clusters else "none"
     status = "fail" if blocking_failures else "pass"
     conclusion = (
         "timing_f1 gate failed; inspect failure_clusters for the next optimization target"
@@ -981,9 +969,7 @@ def _format_performance_markdown(performance: dict[str, object]) -> list[str]:
         lines.append(
             f"- attributed_stage_ms: `{_fmt_perf_num(throughput.get('attributed_stage_ms'))}`"
         )
-        lines.append(
-            f"- unattributed_ms: `{_fmt_perf_num(throughput.get('unattributed_ms'))}`"
-        )
+        lines.append(f"- unattributed_ms: `{_fmt_perf_num(throughput.get('unattributed_ms'))}`")
         lines.append(
             f"- stage_coverage_pct: `{_fmt_perf_num(throughput.get('stage_coverage_pct'))}`"
         )
@@ -994,9 +980,7 @@ def _format_performance_markdown(performance: dict[str, object]) -> list[str]:
         lines.append("### Quality across measured runs")
         lines.append(f"- detections_consistent: `{quality.get('detections_consistent')}`")
         lines.append(f"- all_runs_pass: `{quality.get('all_runs_pass')}`")
-        lines.append(
-            f"- reference_detection_hash: `{quality.get('reference_detection_hash')}`"
-        )
+        lines.append(f"- reference_detection_hash: `{quality.get('reference_detection_hash')}`")
         runs = quality.get("runs")
         if isinstance(runs, list) and runs:
             lines.append("")
@@ -1006,9 +990,7 @@ def _format_performance_markdown(performance: dict[str, object]) -> list[str]:
                 if not isinstance(item, dict):
                     continue
                 raw_metrics = item.get("metrics")
-                metrics: dict[str, object] = (
-                    raw_metrics if isinstance(raw_metrics, dict) else {}
-                )
+                metrics: dict[str, object] = raw_metrics if isinstance(raw_metrics, dict) else {}
                 lines.append(
                     f"| {item.get('run_index')} | `{item.get('detection_hash')}` | "
                     f"{_fmt_perf_num(metrics.get('timing_f1'))} | "

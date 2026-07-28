@@ -124,9 +124,7 @@ class VisionOcrEngine:
         width, height = image.size
         with objc.autorelease_pool():
             cgimage = _pil_to_cgimage(image)
-            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-                cgimage, None
-            )
+            handler = Vision.VNImageRequestHandler.alloc().initWithCGImage_options_(cgimage, None)
             request = Vision.VNRecognizeTextRequest.alloc().init()
             request.setRecognitionLanguages_(self._recognition_languages)
             success, _error = handler.performRequests_error_([request], None)
@@ -194,10 +192,7 @@ class VisionOcrEngine:
             # 5) residual: autorelease pool exit + Python call overhead
             t_total = max(0.0, time.perf_counter() - t_total_start)
             components = (
-                t_input_prepare
-                + t_request_setup
-                + t_vision_perform
-                + t_observation_mapping
+                t_input_prepare + t_request_setup + t_vision_perform + t_observation_mapping
             )
             t_residual = max(0.0, t_total - components)
 

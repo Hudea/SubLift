@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "kind": "ipc_session",
+  "runtime": "cpp",
+  "engines": [
+    "mock"
+  ],
+  "capabilities": [
+    "path_mode",
+    "frame_mode",
+    "push_entry",
+    "cancel"
+  ],
+  "message_sequence": [
+    "bye",
+    "progress",
+    "progress",
+    "progress",
+    "push_entry",
+    "progress",
+    "entries",
+    "progress",
+    "done"
+  ]
+}

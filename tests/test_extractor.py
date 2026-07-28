@@ -35,9 +35,7 @@ class TestExtractorProtocol:
         with pytest.raises(FileNotFoundError):
             next(extractor.extract(Path("/nonexistent/video.mp4")))
 
-    def test_extract_invalid_file_includes_ffmpeg_stderr(
-        self, tmp_path: Path
-    ) -> None:
+    def test_extract_invalid_file_includes_ffmpeg_stderr(self, tmp_path: Path) -> None:
         """损坏/非视频输入失败时应附带 stderr 诊断，而非仅有退出码。"""
         bad = tmp_path / "not_a_video.mp4"
         bad.write_bytes(b"this is not a media file")
@@ -126,6 +124,7 @@ class TestFfmpegExtractorIntegration:
         video = tmp_path / "test.mp4"
         _generate_test_video(video, duration=3.0, fps=2.0)
         from sublift.extractor.ffmpeg_extractor import probe_duration_ms
+
         assert probe_duration_ms(video) == 3000
 
     def test_ffmpeg_extractor_cancel_midway(self, tmp_path: Path) -> None:

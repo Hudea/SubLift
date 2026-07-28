@@ -110,5 +110,6 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - **6.2 Pipeline 流式编排：** **done** — [phase6.2-pipeline.md](phase6.2-pipeline.md)（feat-06201–06205）
 - **6.3 FFmpeg Extractor：** **done** — [phase6.3-extractor.md](phase6.3-extractor.md)（feat-06301–06305）
 - **6.4 Vision OCR：** **done** — [phase6.4-vision.md](phase6.4-vision.md)（feat-06401–06405；L0 geometry/parity + optional VISION=ON smoke；产品路径仍 Python）
-- **下一子阶段：** **6.5** Worker / IPC assembly（cutover 归 6.6）
-- **产品路径：** 仍 Python
+- **进行中子阶段：** **6.5** C++ Worker — [phase6.5-worker.md](phase6.5-worker.md)（设计已登记；实现未开始）
+- **下一实现刀：** `feat-06501` UDS 分帧编解码
+- **产品路径：** 仍 Python（6.5 仅 opt-in 双轨；默认 cutover 归 6.6）

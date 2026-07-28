@@ -207,9 +207,7 @@ class BridgeHandler:
         video_path_raw = message.get("video_path")
         if isinstance(video_path_raw, str) and video_path_raw.strip():
             self._path_mode = True
-            self._path_task = asyncio.create_task(
-                self._run_path_mode(video_path_raw.strip(), push)
-            )
+            self._path_task = asyncio.create_task(self._run_path_mode(video_path_raw.strip(), push))
             return build_progress(self._video_id, STAGE_READY, 0.0, 0)
 
         self._path_mode = False
@@ -223,10 +221,7 @@ class BridgeHandler:
         # server 的启动参数在进程启动时已经决定实际工厂。客户端字段仍保留在
         # 协议中用于端到端可观测性，但不得覆盖或伪装该选择。
         if engine != self._engine_name:
-            error = (
-                "engine 不匹配: "
-                f"server 使用 {self._engine_name!r}，start_job 请求 {engine!r}"
-            )
+            error = f"engine 不匹配: server 使用 {self._engine_name!r}，start_job 请求 {engine!r}"
             logger.warning("%s (video_id=%s)", error, video_id)
             return build_done(video_id, ok=False, error=error)
 
@@ -251,9 +246,7 @@ class BridgeHandler:
 
         cp_config = ChangePointConfig()
         if "enable_ssim_patrol" in message and message["enable_ssim_patrol"] is not None:
-            cp_config = ChangePointConfig(
-                enable_ssim_patrol=bool(message["enable_ssim_patrol"])
-            )
+            cp_config = ChangePointConfig(enable_ssim_patrol=bool(message["enable_ssim_patrol"]))
 
         subtitle_profile = None
         if isinstance(raw_profile, dict):
@@ -338,11 +331,7 @@ class BridgeHandler:
             config.merge_gap_ms,
             config.subtitle_profile.to_dict() if config.subtitle_profile else None,
         )
-        if (
-            not is_path_mode
-            and isinstance(raw_region, list)
-            and len(raw_region) == 4
-        ):
+        if not is_path_mode and isinstance(raw_region, list) and len(raw_region) == 4:
             x = int(raw_region[0])
             y = int(raw_region[1])
             w = int(raw_region[2])
@@ -350,8 +339,7 @@ class BridgeHandler:
             feat033 = [0, 848, 1920, 87]
             match = [x, y, w, h] == feat033
             logger.info(
-                "start_job fixed_region box: [%d, %d, %d, %d] "
-                "matches_feat033_%s=%s",
+                "start_job fixed_region box: [%d, %d, %d, %d] matches_feat033_%s=%s",
                 x,
                 y,
                 w,
@@ -497,9 +485,7 @@ class BridgeHandler:
                         return
                     n += 1
                     if n == 1:
-                        logger.info(
-                            "path_mode first_frame: ts_ms=%d", frame.timestamp_ms
-                        )
+                        logger.info("path_mode first_frame: ts_ms=%d", frame.timestamp_ms)
                     # 首帧 / 每 N 帧推送进度，避免每帧写 UDS 与 Swift MainActor 积压
                     if n == 1 or n % _PROGRESS_EVERY_N_FRAMES == 0:
                         msg_q.put(("progress", n))
@@ -643,9 +629,7 @@ class BridgeHandler:
             return build_error(f"base64 解码失败: ts_ms={ts_ms}")
 
         if len(jpeg_bytes) > MAX_JPEG_BYTES:
-            return build_error(
-                f"JPEG 过大: {len(jpeg_bytes)} > {MAX_JPEG_BYTES}"
-            )
+            return build_error(f"JPEG 过大: {len(jpeg_bytes)} > {MAX_JPEG_BYTES}")
 
         try:
             from PIL import Image
@@ -667,29 +651,30 @@ class BridgeHandler:
 
             # 段闭合 → OCR（放线程池避免阻塞 event loop）
             entry = (
-                await asyncio.to_thread(pipeline.ocr_segment, event)
-                if event is not None
-                else None
+                await asyncio.to_thread(pipeline.ocr_segment, event) if event is not None else None
             )
         except Exception as e:
             return self._fail_frame_mode_job(video_id, e)
 
         if entry is not None:
-            await push(build_push_entry(video_id, {
-                "start_ms": entry.start_ms,
-                "end_ms": entry.end_ms,
-                "text": entry.text,
-                "confidence": entry.confidence,
-            }))
+            await push(
+                build_push_entry(
+                    video_id,
+                    {
+                        "start_ms": entry.start_ms,
+                        "end_ms": entry.end_ms,
+                        "text": entry.text,
+                        "confidence": entry.confidence,
+                    },
+                )
+            )
 
         # 进度
         pct = 0.0
         if self._est_total_frames > 0:
             pct = min(pipeline.processed_count / self._est_total_frames, 1.0)
 
-        return build_progress(
-            video_id, STAGE_PROCESSING, pct, 0
-        )
+        return build_progress(video_id, STAGE_PROCESSING, pct, 0)
 
     async def _handle_finalize(self, message: dict[str, Any]) -> dict[str, Any]:
         """Pipeline.finalize() → entries(is_final=True)（仅 frame mode）。"""

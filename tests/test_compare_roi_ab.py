@@ -47,11 +47,15 @@ def _agent(
     git_commit: str = _COMMIT,
     frame_count: int = _FRAME_COUNT,
 ) -> dict[str, Any]:
-    runs = quality_runs if quality_runs is not None else [
-        _quality_run(1),
-        _quality_run(2),
-        _quality_run(3),
-    ]
+    runs = (
+        quality_runs
+        if quality_runs is not None
+        else [
+            _quality_run(1),
+            _quality_run(2),
+            _quality_run(3),
+        ]
+    )
     thr = {
         "frame_count": frame_count,
         "output_mode": mode,

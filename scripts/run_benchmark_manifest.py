@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         config = load_run_config(args.manifest)
         if args.label != "manifest":
             import dataclasses
+
             config = dataclasses.replace(config, label=args.label)
 
         if config.label == "auto":
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
                 get_latest_commit_message,
                 resolve_auto_increment_label,
             )
+
             commit_msg = get_latest_commit_message()
             base_label = clean_commit_message(commit_msg)
             final_label, final_output_dir = resolve_auto_increment_label(
@@ -66,9 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             # 固定 label 也归入同名子目录，与 auto 行为保持一致。
             import dataclasses
 
-            config = dataclasses.replace(
-                config, output_dir=config.output_dir / config.label
-            )
+            config = dataclasses.replace(config, output_dir=config.output_dir / config.label)
 
         result = run_benchmark(config)
         paths = write_reports(result)
@@ -84,4 +84,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

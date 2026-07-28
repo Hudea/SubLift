@@ -57,8 +57,7 @@ def _resolve_bin(candidates: tuple[str, ...], label: str) -> str:
             if found:
                 return found
     raise RuntimeError(
-        f"未找到 {label}，请安装 ffmpeg 并确保在 PATH 中"
-        f"（已试: {', '.join(candidates)}）"
+        f"未找到 {label}，请安装 ffmpeg 并确保在 PATH 中（已试: {', '.join(candidates)}）"
     )
 
 
@@ -112,17 +111,13 @@ def validate_output_crop(
     requested = f"[{x}, {y}, {w}, {h}]"
     source = f"{source_width}x{source_height}"
     if x < 0 or y < 0:
-        raise ValueError(
-            f"output_crop 的 x/y 不能为负：source={source} requested={requested}"
-        )
+        raise ValueError(f"output_crop 的 x/y 不能为负：source={source} requested={requested}")
     if w <= 0 or h <= 0:
         raise ValueError(
             f"output_crop 的 width/height 必须为正：source={source} requested={requested}"
         )
     if x + w > source_width or y + h > source_height:
-        raise ValueError(
-            f"output_crop 越界：source={source} requested={requested}"
-        )
+        raise ValueError(f"output_crop 越界：source={source} requested={requested}")
 
 
 def probe_video(video_path: Path) -> VideoInfo:
@@ -259,9 +254,7 @@ class FfmpegExtractor:
                     "output_height": out_h,
                     "output_mode": output_mode,
                     "source_region_box": (
-                        None
-                        if crop is None
-                        else [crop.x, crop.y, crop.width, crop.height]
+                        None if crop is None else [crop.x, crop.y, crop.width, crop.height]
                     ),
                     "raw_bytes_per_frame": frame_size,
                 }
@@ -366,8 +359,7 @@ class FfmpegExtractor:
                     tail = _read_stderr_tail(stderr_path)
                     detail = f"：{tail}" if tail else ""
                     raise RuntimeError(
-                        f"ffmpeg 抽帧失败（退出码 {return_code}），"
-                        f"path={video_path}{detail}"
+                        f"ffmpeg 抽帧失败（退出码 {return_code}），path={video_path}{detail}"
                     )
         finally:
             if stderr_path is not None:
@@ -433,9 +425,7 @@ def _probe_source_frame(video_path: Path) -> SourceFrameInfo:
         if len(tail) > _STDERR_TAIL_CHARS:
             tail = tail[-_STDERR_TAIL_CHARS:]
         detail = f"：{tail}" if tail else ""
-        raise RuntimeError(
-            f"ffprobe 失败（退出码 {result.returncode}），path={video_path}{detail}"
-        )
+        raise RuntimeError(f"ffprobe 失败（退出码 {result.returncode}），path={video_path}{detail}")
 
     try:
         data = json.loads(result.stdout)

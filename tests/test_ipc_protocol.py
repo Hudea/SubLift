@@ -114,9 +114,7 @@ class TestStartJob:
         }
 
     def test_start_job_with_video_path(self) -> None:
-        msg = build_start_job(
-            VIDEO_ID, 5.0, "vision", 0.5, video_path="/tmp/clip.mp4"
-        )
+        msg = build_start_job(VIDEO_ID, 5.0, "vision", 0.5, video_path="/tmp/clip.mp4")
         assert msg["video_path"] == "/tmp/clip.mp4"
         validate(msg)
 
@@ -285,9 +283,7 @@ class TestEntries:
         msg = {
             "type": MSG_ENTRIES,
             "video_id": VIDEO_ID,
-            "entries": [
-                {"start_ms": 0, "end_ms": 1000, "text": 123, "confidence": 0.9}
-            ],
+            "entries": [{"start_ms": 0, "end_ms": 1000, "text": 123, "confidence": 0.9}],
         }
         with pytest.raises(ProtocolError, match="text"):
             validate(msg)

@@ -67,9 +67,7 @@ _COVERAGE_LEAF_STAGES = frozenset(
 # ``pipeline_overhead`` 为 ``Pipeline.run_frames`` 的排他阶段。它覆盖帧迭代、
 # 状态机编排和 recorder 调用等不属于已有叶子阶段的时间；其内部叶子必须在计算时
 # 扣除，避免与既有阶段双重计数。
-PIPELINE_OVERHEAD_CHILD_STAGES = _COVERAGE_LEAF_STAGES - frozenset(
-    {STAGE_PIPELINE_OVERHEAD}
-)
+PIPELINE_OVERHEAD_CHILD_STAGES = _COVERAGE_LEAF_STAGES - frozenset({STAGE_PIPELINE_OVERHEAD})
 
 EXTRACT_WAIT_LABEL = (
     "extract_wait includes codec decode + filters + RGB convert + stdout pipe output; "
@@ -281,9 +279,7 @@ class OcrBreakdown:
     observation_mapping: StageStats = field(
         default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
     )
-    residual: StageStats = field(
-        default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP)
-    )
+    residual: StageStats = field(default_factory=lambda: StageStats(sample_cap=_OCR_SAMPLE_CAP))
     # (width, height, mode) → count；有上限桶
     input_geometry_buckets: dict[tuple[int, int, str], int] = field(default_factory=dict)
     # 段级决策汇总
@@ -371,21 +367,15 @@ class OcrBreakdown:
 
     def _accounting_payload(self) -> dict[str, Any]:
         components_ms = (
-            ns_to_ms(self.input_prepare.total_ns) or 0.0
-        ) + (
-            ns_to_ms(self.request_setup.total_ns) or 0.0
-        ) + (
-            ns_to_ms(self.vision_perform.total_ns) or 0.0
-        ) + (
-            ns_to_ms(self.observation_mapping.total_ns) or 0.0
-        ) + (
-            ns_to_ms(self.residual.total_ns) or 0.0
+            (ns_to_ms(self.input_prepare.total_ns) or 0.0)
+            + (ns_to_ms(self.request_setup.total_ns) or 0.0)
+            + (ns_to_ms(self.vision_perform.total_ns) or 0.0)
+            + (ns_to_ms(self.observation_mapping.total_ns) or 0.0)
+            + (ns_to_ms(self.residual.total_ns) or 0.0)
         )
         parent_ms = self.call_total_ms
         delta_ms = max(0.0, abs(parent_ms - components_ms))
-        coverage_pct = (
-            min(100.0, components_ms / parent_ms * 100.0) if parent_ms > 0 else None
-        )
+        coverage_pct = min(100.0, components_ms / parent_ms * 100.0) if parent_ms > 0 else None
         return {
             "parent_total_ms": parent_ms,
             "components_total_ms": components_ms,
@@ -551,9 +541,7 @@ class PerformanceRecorder:
         从而不把 OCR、crop 等已有成本重复计入。
         """
         start = self._clock()
-        before = {
-            name: self._stages.get(name, StageStats()).total_ns for name in child_stages
-        }
+        before = {name: self._stages.get(name, StageStats()).total_ns for name in child_stages}
         try:
             yield
         finally:
@@ -706,18 +694,14 @@ class PerformanceRecorder:
         """
         # 仅合计叶子阶段；finalize 为容器不计入（内部 ocr/dedupe 已单独计）
         attributed_ns = sum(
-            stats.total_ns
-            for name, stats in self._stages.items()
-            if name in _COVERAGE_LEAF_STAGES
+            stats.total_ns for name, stats in self._stages.items() if name in _COVERAGE_LEAF_STAGES
         )
         attributed_ms = ns_to_ms(attributed_ns)
         if core_ms is None or attributed_ms is None:
             return attributed_ms, None, None
         unattributed = max(0.0, float(core_ms) - float(attributed_ms))
         coverage = (
-            min(100.0, float(attributed_ms) / float(core_ms) * 100.0)
-            if core_ms > 0
-            else None
+            min(100.0, float(attributed_ms) / float(core_ms) * 100.0) if core_ms > 0 else None
         )
         return attributed_ms, unattributed, coverage
 
@@ -904,11 +888,7 @@ def aggregate_run_payloads(
             return {"median": None, "min": None, "max": None}
         ordered = sorted(vals)
         mid = len(ordered) // 2
-        med = (
-            ordered[mid]
-            if len(ordered) % 2
-            else (ordered[mid - 1] + ordered[mid]) / 2.0
-        )
+        med = ordered[mid] if len(ordered) % 2 else (ordered[mid - 1] + ordered[mid]) / 2.0
         return {"median": med, "min": ordered[0], "max": ordered[-1]}
 
     return {

@@ -54,21 +54,19 @@ def _reconstruct_segments_from_trace(
             current_start = rec.timestamp_ms
         elif event == "OUT":
             if current_start is not None:
-                segments.append(
-                    DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms)
-                )
+                segments.append(DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms))
                 current_start = None
         elif event == "CHANGE":
             if current_start is not None:
-                segments.append(
-                    DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms)
-                )
+                segments.append(DetectedSegment(start_ms=current_start, end_ms=rec.timestamp_ms))
             current_start = rec.timestamp_ms
 
     if current_start is not None:
         segments.append(DetectedSegment(start_ms=current_start, end_ms=last_ts))
 
     return segments
+
+
 from sublift.extractor import FfmpegExtractor  # noqa: E402
 from sublift.models import BoundingBox  # noqa: E402
 from sublift.ocr import MockOcrEngine  # noqa: E402
@@ -92,9 +90,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="短字幕参数扫描（feat-031c）。",
     )
     parser.add_argument("--video", type=Path, required=True, help="输入视频路径")
-    parser.add_argument(
-        "--ground-truth", type=Path, required=True, help="ground truth SRT 路径"
-    )
+    parser.add_argument("--ground-truth", type=Path, required=True, help="ground truth SRT 路径")
     parser.add_argument("--fps", type=float, default=5.0, help="帧采样率（默认 5.0）")
     parser.add_argument(
         "--region-box",
@@ -164,9 +160,7 @@ def _run_once(
         for i, d in enumerate(detected)
     ]
     timing = analyze_entries(detected_srt, ground_truth).metrics.timing
-    short = compute_short_subtitle_metrics(
-        detected, ground_truth, threshold_ms=short_threshold_ms
-    )
+    short = compute_short_subtitle_metrics(detected, ground_truth, threshold_ms=short_threshold_ms)
 
     return ScanResult(
         label=label,
@@ -227,13 +221,18 @@ def main(argv: list[str] | None = None) -> int:
     for pt in (0.005, 0.01, 0.02, 0.03):
         cp = ChangePointConfig(presence_threshold=pt)
         r = _run_once(
-            video, ground_truth, fps, region_box, cp, 500, short_thr,
+            video,
+            ground_truth,
+            fps,
+            region_box,
+            cp,
+            500,
+            short_thr,
             f"presence={pt}",
         )
         results.append(r)
         print(
-            f"  {r.label}: F1={r.segment_f1:.3f}"
-            f" short={r.short_metrics.short_recall:.3f}",
+            f"  {r.label}: F1={r.segment_f1:.3f} short={r.short_metrics.short_recall:.3f}",
             file=sys.stderr,
         )
 
@@ -241,13 +240,18 @@ def main(argv: list[str] | None = None) -> int:
     for hf in (1, 2, 3):
         cp = ChangePointConfig(hysteresis_frames=hf)
         r = _run_once(
-            video, ground_truth, fps, region_box, cp, 500, short_thr,
+            video,
+            ground_truth,
+            fps,
+            region_box,
+            cp,
+            500,
+            short_thr,
             f"hysteresis={hf}",
         )
         results.append(r)
         print(
-            f"  {r.label}: F1={r.segment_f1:.3f}"
-            f" short={r.short_metrics.short_recall:.3f}",
+            f"  {r.label}: F1={r.segment_f1:.3f} short={r.short_metrics.short_recall:.3f}",
             file=sys.stderr,
         )
 
@@ -255,13 +259,18 @@ def main(argv: list[str] | None = None) -> int:
     for md in (200, 300, 500, 800):
         cp = ChangePointConfig()
         r = _run_once(
-            video, ground_truth, fps, region_box, cp, md, short_thr,
+            video,
+            ground_truth,
+            fps,
+            region_box,
+            cp,
+            md,
+            short_thr,
             f"min_duration={md}",
         )
         results.append(r)
         print(
-            f"  {r.label}: F1={r.segment_f1:.3f}"
-            f" short={r.short_metrics.short_recall:.3f}",
+            f"  {r.label}: F1={r.segment_f1:.3f} short={r.short_metrics.short_recall:.3f}",
             file=sys.stderr,
         )
 

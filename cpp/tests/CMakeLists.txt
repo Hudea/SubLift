@@ -13,6 +13,10 @@ set(_sublift_test_srcs
   extractor_full_test.cpp
   extractor_roi_test.cpp
   vision_geometry_test.cpp
+  worker_framing_test.cpp
+  worker_protocol_test.cpp
+  worker_path_mode_test.cpp
+  worker_cancel_test.cpp
   parity/config_parity_test.cpp
   parity/timeline_parity_test.cpp
   parity/dedupe_parity_test.cpp
@@ -95,6 +99,7 @@ endif()
 target_link_libraries(sublift_tests
   PRIVATE
     sublift_test_support
+    sublift_ipc
     sublift_ffmpeg
     sublift_vision_macos
     Catch2::Catch2WithMain

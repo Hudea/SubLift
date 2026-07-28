@@ -160,8 +160,7 @@ def run_benchmark(config: RunConfig) -> RunResult:
     # 每次 measured 均做质量快照；主报告仍用最后一次检测结果
     last_result, last_perf = measured[-1]
     quality_runs = [
-        _quality_snapshot(result, run_index=i + 1)
-        for i, (result, _perf) in enumerate(measured)
+        _quality_snapshot(result, run_index=i + 1) for i, (result, _perf) in enumerate(measured)
     ]
     hashes = [q["detection_hash"] for q in quality_runs]
     detections_consistent = len(set(hashes)) == 1
@@ -281,9 +280,7 @@ def _run_once_in_process(
             payload = queue.get(timeout=timeout_s)
         except Empty as exc:
             _terminate_process(proc)
-            raise RuntimeError(
-                f"性能测量子进程结果超时（>{timeout_s:.0f}s）"
-            ) from exc
+            raise RuntimeError(f"性能测量子进程结果超时（>{timeout_s:.0f}s）") from exc
     finally:
         if proc.is_alive():
             proc.join(timeout=_WORKER_JOIN_TIMEOUT_S)
@@ -544,21 +541,21 @@ def _validate_ocr_breakdown(
         return
 
     coverage = accounting.get("coverage_pct")
-    if (
-        coverage is not None
-        and not relaxed
-        and coverage < _OCR_ACCOUNTING_MIN_COVERAGE_PCT
-    ):
+    if coverage is not None and not relaxed and coverage < _OCR_ACCOUNTING_MIN_COVERAGE_PCT:
         raise RuntimeError(
-            f"OCR 内部对账覆盖度不足：{coverage:.1f}% < "
-            f"{_OCR_ACCOUNTING_MIN_COVERAGE_PCT:.0f}%"
+            f"OCR 内部对账覆盖度不足：{coverage:.1f}% < {_OCR_ACCOUNTING_MIN_COVERAGE_PCT:.0f}%"
         )
 
     # Vision 引擎应有非零内部阶段
     if bd.get("engine_detail") == "vision":
         non_zero_stages = 0
-        for stage_key in ("input_prepare", "request_setup", "vision_perform",
-                          "observation_mapping", "residual"):
+        for stage_key in (
+            "input_prepare",
+            "request_setup",
+            "vision_perform",
+            "observation_mapping",
+            "residual",
+        ):
             stage_data = bd.get(stage_key)
             if stage_data and stage_data.get("total_ms", 0) > 0:
                 non_zero_stages += 1
@@ -573,9 +570,7 @@ def _validate_ocr_breakdown(
     delta = float(accounting.get("delta_ms") or 0.0)
     max_acceptable_delta = max(0.1, parent * 0.01) + 0.01
     if delta > max_acceptable_delta and not relaxed:
-        raise RuntimeError(
-            f"OCR 对账 delta 过大：{delta:.3f}ms > {max_acceptable_delta:.3f}ms"
-        )
+        raise RuntimeError(f"OCR 对账 delta 过大：{delta:.3f}ms > {max_acceptable_delta:.3f}ms")
 
     # 内部 parent 与外层 stages.ocr wall 对账
     # 外层 span 包含 recognize 边界的少量 Python 开销，故比内部 parent 略宽
@@ -608,9 +603,7 @@ def _validate_frame_output_mode(config: RunConfig) -> None:
     """校验 frame_output_mode 与 region_box 组合（与 manifest 规则对齐）。"""
     mode = config.frame_output_mode
     if mode not in ("full", "roi"):
-        raise ValueError(
-            f"frame_output_mode 必须是 'full' 或 'roi'（收到 {mode!r}）"
-        )
+        raise ValueError(f"frame_output_mode 必须是 'full' 或 'roi'（收到 {mode!r}）")
     if mode == "roi" and config.region_box is None:
         raise ValueError("frame_output_mode=roi 需要 region_box")
 
@@ -625,9 +618,7 @@ def _build_extractor_and_detector(
         x, y, width, height = config.region_box
         region = BoundingBox(x=x, y=y, width=width, height=height)
     # benchmark 显式 full|roi；roi 下变换未验证硬失败
-    plan_mode: Literal["full", "roi"] = (
-        "roi" if config.frame_output_mode == "roi" else "full"
-    )
+    plan_mode: Literal["full", "roi"] = "roi" if config.frame_output_mode == "roi" else "full"
     plan = plan_frame_io(
         config.video_path,
         region,

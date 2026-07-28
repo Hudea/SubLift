@@ -78,9 +78,7 @@ def parse_srt_text(text: str) -> list[SrtEntry]:
             # 上一条 cue 即使文本为空也保留（feat-033 空轴 / 评测 timing）
             if saw_timecode:
                 index += 1
-                entries.append(
-                    SrtEntry(index, start_ms, end_ms, _join_text(current_text_lines))
-                )
+                entries.append(SrtEntry(index, start_ms, end_ms, _join_text(current_text_lines)))
                 current_text_lines = []
             saw_timecode = True
             start_ms = _srt_time_to_ms(m[1], m[2], m[3], m[4])

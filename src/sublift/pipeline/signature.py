@@ -79,9 +79,7 @@ def compute_dhash(image: np.ndarray, hash_size: int = 8) -> int:
     Returns:
         哈希值（整数）。
     """
-    resized = cv2.resize(
-        image, (hash_size + 1, hash_size), interpolation=cv2.INTER_AREA
-    )
+    resized = cv2.resize(image, (hash_size + 1, hash_size), interpolation=cv2.INTER_AREA)
     diff = resized[:, 1:] > resized[:, :-1]
 
     hash_value = 0

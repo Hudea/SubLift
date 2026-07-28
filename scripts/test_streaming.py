@@ -77,8 +77,7 @@ def main() -> None:
     final_result = pipeline_stream.finalize()
     t_stream = time.time() - t0
     print(
-        f"流式：{len(incremental_entries)} 条增量，"
-        f"{len(final_result)} 条最终，耗时 {t_stream:.2f}s"
+        f"流式：{len(incremental_entries)} 条增量，{len(final_result)} 条最终，耗时 {t_stream:.2f}s"
     )
 
     # 3. 对比

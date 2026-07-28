@@ -24,14 +24,7 @@ from sublift.pipeline.line_select import (
 
 
 def default_golden_path(root: Path) -> Path:
-    return (
-        root
-        / "benchmark"
-        / "parity"
-        / "goldens"
-        / "line_select"
-        / "line_select.v1.json"
-    )
+    return root / "benchmark" / "parity" / "goldens" / "line_select" / "line_select.v1.json"
 
 
 def profile(**kw: Any) -> SubtitleProfile:

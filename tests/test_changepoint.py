@@ -48,9 +48,7 @@ class TestAppearance:
 
     def test_appearance_emits_in_event(self) -> None:
         """连续 N 帧有字幕 → IN 事件。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         events = _feed(
             detector,
             [
@@ -66,9 +64,7 @@ class TestAppearance:
 
     def test_appearance_timestamp_uses_first_frame(self) -> None:
         """IN 事件时间戳 = 首次检测帧，非迟滞确认帧。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=3)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=3))
         events = _feed(
             detector,
             [
@@ -83,9 +79,7 @@ class TestAppearance:
 
     def test_flicker_no_in_event(self) -> None:
         """单帧闪烁（未达迟滞）不触发 IN。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         events = _feed(
             detector,
             [
@@ -103,9 +97,7 @@ class TestDisappearance:
 
     def test_disappearance_emits_out_event(self) -> None:
         """连续 N 帧无字幕 → OUT 事件。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         events = _feed(
             detector,
             [
@@ -122,9 +114,7 @@ class TestDisappearance:
 
     def test_disappearance_flicker_no_out(self) -> None:
         """单帧无字幕闪烁不触发 OUT。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         events = _feed(
             detector,
             [
@@ -191,9 +181,7 @@ class TestPersistence:
 
     def test_stable_no_event(self) -> None:
         """STABLE 状态下相同帧 → 无事件。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         events = _feed(
             detector,
             [
@@ -212,9 +200,7 @@ class TestReset:
     """reset() 行为。"""
 
     def test_reset_clears_state(self) -> None:
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         _feed(detector, [_sig(0, 0.05), _sig(200, 0.05)])
         assert detector.current_state == State.STABLE
 

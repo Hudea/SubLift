@@ -39,9 +39,7 @@ class TestTraceRecorder:
 
     def test_no_recorder_no_trace(self) -> None:
         """未注入 recorder 时，状态机正常工作且不报错。"""
-        detector = ChangePointDetector(
-            config=ChangePointConfig(hysteresis_frames=2)
-        )
+        detector = ChangePointDetector(config=ChangePointConfig(hysteresis_frames=2))
         _feed(detector, [_sig(0, 0.0), _sig(200, 0.05), _sig(400, 0.05)])
         assert detector.current_state.name == "STABLE"
 
@@ -83,9 +81,7 @@ class TestTraceRecorder:
         _feed(detector, [_sig(0, 0.0), _sig(200, 0.05), _sig(400, 0.05)])
         assert len(recorder.records) == 3
         assert all(r.event_type is None for r in recorder.records)
-        hysteresis_records = [
-            r for r in recorder.records if r.veto_reason == "hysteresis_not_met"
-        ]
+        hysteresis_records = [r for r in recorder.records if r.veto_reason == "hysteresis_not_met"]
         assert len(hysteresis_records) == 2
 
     def test_out_event_traced(self) -> None:
@@ -153,9 +149,7 @@ class TestTraceRecorder:
                 _sig(400, 0.05, dhash=0b01010101),
             ],
         )
-        veto_records = [
-            r for r in recorder.records if r.veto_reason == "distance_below_threshold"
-        ]
+        veto_records = [r for r in recorder.records if r.veto_reason == "distance_below_threshold"]
         assert len(veto_records) >= 1
 
     def test_unstable_content_traced(self) -> None:
@@ -177,9 +171,7 @@ class TestTraceRecorder:
                 _sig(600, 0.05, dhash=0b11110000),
             ],
         )
-        unstable_records = [
-            r for r in recorder.records if r.veto_reason == "unstable_content"
-        ]
+        unstable_records = [r for r in recorder.records if r.veto_reason == "unstable_content"]
         assert len(unstable_records) >= 1
 
     def test_empty_state_no_subtitle_traced(self) -> None:
@@ -260,9 +252,7 @@ class TestTraceRecorderJsonl:
         file_lines = len(jsonl_path.read_text(encoding="utf-8").strip().split("\n"))
         recorder.clear()
         assert recorder.records == []
-        assert (
-            len(jsonl_path.read_text(encoding="utf-8").strip().split("\n")) == file_lines
-        )
+        assert len(jsonl_path.read_text(encoding="utf-8").strip().split("\n")) == file_lines
 
 
 class TestTraceFields:
@@ -301,9 +291,7 @@ class TestTraceFields:
         """has_subtitle 字段正确反映前景占比判断。"""
         recorder = TraceRecorder()
         detector = ChangePointDetector(
-            config=ChangePointConfig(
-                hysteresis_frames=1, presence_threshold=0.02
-            ),
+            config=ChangePointConfig(hysteresis_frames=1, presence_threshold=0.02),
             trace_recorder=recorder,
         )
         _feed(detector, [_sig(0, 0.0), _sig(200, 0.05)])

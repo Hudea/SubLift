@@ -29,6 +29,7 @@ async def read_message(reader: asyncio.StreamReader) -> dict[str, Any] | None:
         (length,) = struct.unpack(">I", length_bytes)
         body = await reader.readexactly(length)
         import typing
+
         return typing.cast(dict[str, Any], json.loads(body.decode("utf-8")))
     except asyncio.IncompleteReadError:
         return None
@@ -45,7 +46,11 @@ async def get_rss_mb(pid: int) -> float:
     """获取进程的 RSS 物理内存占用 (MB)。"""
     try:
         process = await asyncio.create_subprocess_exec(
-            "ps", "-p", str(pid), "-o", "rss=",
+            "ps",
+            "-p",
+            str(pid),
+            "-o",
+            "rss=",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -60,7 +65,9 @@ async def get_child_pids(parent_pid: int) -> list[int]:
     """用 pgrep 获取当前父进程的所有子进程 PID。"""
     try:
         process = await asyncio.create_subprocess_exec(
-            "pgrep", "-P", str(parent_pid),
+            "pgrep",
+            "-P",
+            str(parent_pid),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

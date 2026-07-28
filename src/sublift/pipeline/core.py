@@ -138,9 +138,7 @@ class Pipeline:
         if self._perf is not None:
             self._perf.ensure_ocr_breakdown(engine_detail="vision")
             if hasattr(self._ocr, "_timing_callback"):
-                object.__setattr__(
-                    self._ocr, "_timing_callback", self._on_ocr_call_detail
-                )
+                object.__setattr__(self._ocr, "_timing_callback", self._on_ocr_call_detail)
                 self._ocr_has_internal_timing = True
             else:
                 self._perf.ensure_ocr_breakdown(engine_detail="opaque")
@@ -264,9 +262,7 @@ class Pipeline:
             crop_np = cv2.cvtColor(np.asarray(crop_image), cv2.COLOR_RGB2BGR)
 
         with self._perf_span("signature"):
-            signature = compute_signature(
-                crop_np, frame.timestamp_ms, self._config.signature
-            )
+            signature = compute_signature(crop_np, frame.timestamp_ms, self._config.signature)
         with self._perf_span("changepoint"):
             event = self._changepoint.process(signature, crop_np)
 
@@ -355,9 +351,7 @@ class Pipeline:
             text, confidence = self._ocr_segment_with_line_select(event, seg_stats)
         else:
             text, confidence = self._ocr_segment_legacy(event, seg_stats)
-        t_rep_sel_ns = (
-            (self._perf.now_ns() - t_rep_sel_start) if self._perf is not None else 0
-        )
+        t_rep_sel_ns = (self._perf.now_ns() - t_rep_sel_start) if self._perf is not None else 0
 
         entry = SubtitleEntry(
             start_ms=event.start_ms,
@@ -564,11 +558,7 @@ class Pipeline:
             seg_stats["early_stop"] = "legacy_path"
         text, confidence = self._ocr_frame_raw(event.anchor_frame, seg_stats)
         if self._needs_ocr_retry(text, confidence):
-            seen_ts = {
-                event.anchor_frame.timestamp_ms
-                if event.anchor_frame is not None
-                else -1
-            }
+            seen_ts = {event.anchor_frame.timestamp_ms if event.anchor_frame is not None else -1}
             for fb in event.fallback_frames:
                 if fb.timestamp_ms in seen_ts:
                     continue
@@ -636,17 +626,13 @@ class Pipeline:
             mixed_script = cjk_ratio(text) > 0.0 and latin_ratio(text) > 0.0
             if (
                 conf >= self._config.confidence_threshold
-                and script_score(text, profile.script)
-                >= self._config.line_select_min_script
+                and script_score(text, profile.script) >= self._config.line_select_min_script
                 and not (profile.script == SCRIPT_CJK and mixed_script)
             ):
                 early_stop = "single_high_confidence"
                 break
             # 相似变体已形成 ≥2 票共识即可提前结束，不要求全文精确相等。
-            if (
-                partial.support_votes >= 2
-                and partial.confidence >= self._config.low_conf_threshold
-            ):
+            if partial.support_votes >= 2 and partial.confidence >= self._config.low_conf_threshold:
                 early_stop = "two_frame_consensus"
                 break
 
@@ -920,10 +906,7 @@ class Pipeline:
         """
         img = frame.image
         full_local = (
-            box.x == 0
-            and box.y == 0
-            and box.width == img.width
-            and box.height == img.height
+            box.x == 0 and box.y == 0 and box.width == img.width and box.height == img.height
         )
         if full_local:
             if self._perf is not None:

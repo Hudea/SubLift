@@ -124,8 +124,17 @@ def main() -> None:
         f"{'匹配 SRT':<26s} | {'文本':>5s} | {'时间':>4s}"
     )
     sep = (
-        "-" * 3 + "-+-" + "-" * 26 + "-+-" + "-" * 38 + "-+-"
-        + "-" * 26 + "-+-" + "-" * 5 + "-+-" + "-" * 4
+        "-" * 3
+        + "-+-"
+        + "-" * 26
+        + "-+-"
+        + "-" * 38
+        + "-+-"
+        + "-" * 26
+        + "-+-"
+        + "-" * 5
+        + "-+-"
+        + "-" * 4
     )
     lines.append(header)
     lines.append(sep)
@@ -150,16 +159,13 @@ def main() -> None:
 
         if best is None or best_overlap == 0:
             lines.append(
-                f" {i:>2d}  | {det_range:<26s} | {det_text:<38s} | "
-                f"{'':26s} | {'':5s} | {'FP':>4s}"
+                f" {i:>2d}  | {det_range:<26s} | {det_text:<38s} | {'':26s} | {'':5s} | {'FP':>4s}"
             )
             continue
 
         entry_dur = entry.end_ms - entry.start_ms
         best_dur = best.end_ms - best.start_ms
-        time_matched = (
-            best_overlap >= entry_dur * 0.5 or best_overlap >= best_dur * 0.5
-        )
+        time_matched = best_overlap >= entry_dur * 0.5 or best_overlap >= best_dur * 0.5
         tscore = text_match_score(entry.text, best.text)
         time_err = abs(entry.start_ms - best.start_ms)
 
@@ -181,9 +187,7 @@ def main() -> None:
             f"{srt_range:<26s} | {tscore:.2f} | {match_str:>4s}"
         )
         if srt_text:
-            lines.append(
-                f"     | {'':26s} | {'':38s} | {srt_text:<26s} | {'':5s} |"
-            )
+            lines.append(f"     | {'':26s} | {'':38s} | {srt_text:<26s} | {'':5s} |")
 
     lines.append("")
     lines.append("=" * 110)
@@ -208,8 +212,7 @@ def main() -> None:
     for s in srt_window:
         if s.index not in matched_srt_indices:
             lines.append(
-                f"  #{s.index:>3d}  {ms_to_srt(s.start_ms)} → "
-                f"{ms_to_srt(s.end_ms)}  {s.text[:60]}"
+                f"  #{s.index:>3d}  {ms_to_srt(s.start_ms)} → {ms_to_srt(s.end_ms)}  {s.text[:60]}"
             )
 
     lines.append("")

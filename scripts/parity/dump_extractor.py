@@ -28,14 +28,7 @@ from sublift.models import BoundingBox, Frame
 
 
 def default_golden_path(root: Path) -> Path:
-    return (
-        root
-        / "benchmark"
-        / "parity"
-        / "goldens"
-        / "extractor"
-        / "extractor.v1.json"
-    )
+    return root / "benchmark" / "parity" / "goldens" / "extractor" / "extractor.v1.json"
 
 
 def sample_frame_pixels(frame: Frame) -> list[dict[str, Any]]:
@@ -178,16 +171,12 @@ def build_envelope(root: Path) -> dict[str, Any]:
     ffprobe_path = _ffprobe_bin()
 
     try:
-        ffmpeg_ver = subprocess.check_output(
-            [ffmpeg_path, "-version"], text=True
-        ).splitlines()[0]
+        ffmpeg_ver = subprocess.check_output([ffmpeg_path, "-version"], text=True).splitlines()[0]
     except Exception:
         ffmpeg_ver = "unknown"
 
     try:
-        ffprobe_ver = subprocess.check_output(
-            [ffprobe_path, "-version"], text=True
-        ).splitlines()[0]
+        ffprobe_ver = subprocess.check_output([ffprobe_path, "-version"], text=True).splitlines()[0]
     except Exception:
         ffprobe_ver = "unknown"
 
@@ -424,9 +413,7 @@ def build_envelope(root: Path) -> dict[str, Any]:
                 "crop": None,
                 "expected_ok": True,
                 "expected_frame_count": len(frames_1fps),
-                "expected_timestamps_ms": [
-                    f.timestamp_ms for f in frames_1fps
-                ],
+                "expected_timestamps_ms": [f.timestamp_ms for f in frames_1fps],
                 "expected_width": frames_1fps[0].image.width,
                 "expected_height": frames_1fps[0].image.height,
                 "frames": [
@@ -450,9 +437,7 @@ def build_envelope(root: Path) -> dict[str, Any]:
                 "crop": None,
                 "expected_ok": True,
                 "expected_frame_count": len(frames_2fps),
-                "expected_timestamps_ms": [
-                    f.timestamp_ms for f in frames_2fps
-                ],
+                "expected_timestamps_ms": [f.timestamp_ms for f in frames_2fps],
                 "expected_width": frames_2fps[0].image.width,
                 "expected_height": frames_2fps[0].image.height,
                 "frames": [],
@@ -579,21 +564,13 @@ def remove_volatile_oracle_keys(d: Any) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Dump/check extractor parity golden."
-    )
-    parser.add_argument(
-        "--check", action="store_true", help="Check committed golden file"
-    )
-    parser.add_argument(
-        "--output", type=Path, default=None, help="Output golden JSON file path"
-    )
+    parser = argparse.ArgumentParser(description="Dump/check extractor parity golden.")
+    parser.add_argument("--check", action="store_true", help="Check committed golden file")
+    parser.add_argument("--output", type=Path, default=None, help="Output golden JSON file path")
     args = parser.parse_args()
 
     root = repo_root()
-    golden_path = (
-        args.output if args.output is not None else default_golden_path(root)
-    )
+    golden_path = args.output if args.output is not None else default_golden_path(root)
 
     env = build_envelope(root)
 

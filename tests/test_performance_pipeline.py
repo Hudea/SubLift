@@ -177,6 +177,7 @@ def test_trace_segment_jsonl_forced(tmp_path: Path) -> None:
         assert isinstance(row["ocr_call_details"], list)
         # early_stop_reason 必须是允许值之一
         from sublift.diagnostics.performance import _ALLOWED_EARLY_STOP_REASONS
+
         assert row["early_stop_reason"] in _ALLOWED_EARLY_STOP_REASONS | {""}
 
 

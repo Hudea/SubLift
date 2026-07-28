@@ -56,9 +56,7 @@ def _str_to_model_type(name: str) -> ModelType:
     """将字符串模型规格转为 rapidocr ModelType 枚举。"""
     key = name.lower()
     if key not in _VALID_MODEL_TYPES:
-        raise ValueError(
-            f"未知 model_type: {name!r}，可选: {sorted(_VALID_MODEL_TYPES)}"
-        )
+        raise ValueError(f"未知 model_type: {name!r}，可选: {sorted(_VALID_MODEL_TYPES)}")
     return ModelType[key.upper()]
 
 
@@ -127,7 +125,7 @@ class PaddleOcrEngine:
         """
         # 传 PIL.Image：RapidOCR 的 LoadImage 对 PIL 来源做 RGB->BGR；
         # 传 RGB ndarray 会被按 BGR 消费，致彩色字幕 R/B 颠倒。
-        #（RapidOCR 运行时支持 PIL，但其 stub 的 __call__ 仅标注 str/ndarray/bytes/Path）
+        # （RapidOCR 运行时支持 PIL，但其 stub 的 __call__ 仅标注 str/ndarray/bytes/Path）
         result = self._engine(image)  # type: ignore[arg-type]
         img_w, img_h = image.size
 

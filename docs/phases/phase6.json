@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.4 done（6.4 Vision ObjC++ adapter feat-06401~06405）；下一子阶段 6.5 Worker。契约与子阶段设计见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.5 done（Worker feat-06501~06505）；下一子阶段 6.6 cutover。契约与子阶段设计见 docs/cpp/。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -630,6 +630,131 @@
       ],
       "status": "done",
       "evidence": "2026-07-28: Vision parity harness L0 + review round-1 fixes. dump_vision.py builds/checks vision.v1.json (kind=vision, schema v1, oracle_commit/macos_version/vision_note, default langs, box/clamp/sort + empty_result L0); --live reserved no-op (vision_note only). C++ load_vision_golden + [parity][vision] (box/clamp/sort/empty); offline collect-path blanks (is_ocr_text_blank incl. U+3000) in vision_geometry_test. init.sh dump_vision --check L0. Dual-matrix: VISION=OFF ctest full green; VISION=ON 140/140 incl. VisionOcrEngine integration (EN soft L4 WARN). ARC -fobjc-arc on vision .mm; recognize no catch(...); RGB24 product path documented. Product path still Python."
+    },
+    {
+      "id": "feat-06501",
+      "name": "UDS 分帧编解码（无业务）",
+      "description": "实现 4 字节大端长度前缀 + UTF-8 JSON body 的读写，与 Python server.py 字节兼容；长度上限/截断/坏帧行为文档化。纯单测，不 accept 连接、不跑 Pipeline。产品路径不切换。",
+      "module": "cpp/src/worker/framing.hpp; framing.cpp; cpp/tests/worker_framing_test.cpp; docs/cpp/phase6.5-worker.md",
+      "dependencies": [
+        "feat-06405"
+      ],
+      "subtasks": [
+        {
+          "name": "encode/decode API",
+          "description": "struct >I + body；圆跳单测。"
+        },
+        {
+          "name": "边界错误",
+          "description": "零长/超限/短读语义。"
+        },
+        {
+          "name": "位置",
+          "description": "worker 或 ipc 小库；不污染 sublift_core 公共 API。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 UDS 分帧编解码。framing.hpp/.cpp 实现 struct >I (4B 大端长度前缀) + UTF-8 payload 读写、64MB 上限 (kMaxMessageBytes = 64MB 对齐 server.py)、EINTR 重试 read_n/write_n 循环、write_n 0 字节 EIO 防护、ZeroLength/MessageTooLarge/Incomplete 边界错误校验。sublift_ipc 静态库编入 sublift_worker。Catch2 worker_framing_test.cpp 8 项测试全绿；./init.sh 18/18 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06502",
+      "name": "协议类型 + capability 握手",
+      "description": "业务消息构造/解析对齐 protocol.py；hello→bye 带 protocol_version、runtime=cpp、诚实 engines/capabilities。未知字段忽略。无 Pipeline。",
+      "module": "cpp/src/worker/protocol.hpp; protocol.cpp; cpp/tests/worker_protocol_test.cpp",
+      "dependencies": [
+        "feat-06501"
+      ],
+      "subtasks": [
+        {
+          "name": "消息 DTO",
+          "description": "start_job/frame/cancel/progress/entries/done/error 等。"
+        },
+        {
+          "name": "capability",
+          "description": "engines 仅 mock 与（可选）vision；无 paddle。"
+        },
+        {
+          "name": "单测",
+          "description": "JSON 样例表驱动。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地协议类型与 capability 握手。protocol.hpp/.cpp 实现 12 类 IPC 消息 DTO 与 JSON 安全解析/序列化；contains+!null 安全可选字段处理；nlohmann::json 强类型校验 (require_string/int/double/bool/parse_box2i/parse_profile/parse_entry)；is_valid_script 脚本校验；build_bye_message 实现 capability 诚实汇报（runtime=cpp, vision 可选, mock 必选, 绝无 paddle）。Catch2 worker_protocol_test.cpp 12 种消息 Round-Trip 与边界测试全绿；./init.sh 18/18 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06503",
+      "name": "连接循环 + path mode（Mock）",
+      "description": "UDS accept 循环；BridgeHandler path mode：plan_frame_io+extractor+Pipeline+Mock；progress/push/entries 时序；start_job.engine 不匹配 done(ok=false)。产品默认仍 Python。",
+      "module": "cpp/src/worker/connection.cpp; bridge.cpp; main.cpp; cpp/tests/worker_path_mode_test.cpp",
+      "dependencies": [
+        "feat-06502"
+      ],
+      "subtasks": [
+        {
+          "name": "serve loop",
+          "description": "listen/accept；一连接一 job。"
+        },
+        {
+          "name": "path 装配",
+          "description": "6.3 extractor + 6.2 Pipeline + Mock OCR。"
+        },
+        {
+          "name": "UDS 回环测",
+          "description": "合成短视频 mock 出 entries。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地连接循环与 path mode (Mock)。EngineFactory 实现能力与 validate_engine 引擎诚实校验；BridgeHandler 装配 plan_frame_io + FfmpegExtractor + Pipeline + MockOcrEngine，推导 progress (5 帧节流 + 0.99 封顶)、push_entry 与 entries，依赖 state_mutex_ 进行多线程并发与 cancel 安全保护；WorkerConnection 实现 UDS 阻塞读循环与 send_message 写锁互斥；sublift_worker 支持 --socket 与 --engine CLI 参数。Catch2 worker_path_mode_test.cpp 支持 socketpair 回环与合成短视频 end-to-end 校验。./init.sh 18/18 绿；code_reviewer 审查 PASS。产品路径未动。"
+    },
+    {
+      "id": "feat-06504",
+      "name": "Cancel / 断连 / frame mode 最小集",
+      "description": "cancel_job 与断连触发 ffmpeg kill + Pipeline::cancel；抑制迟到 push；frame mode 最小实现或显式未实现错误（不得静默当 path）。同连接可重启 job。",
+      "module": "cpp/src/worker/bridge.cpp; cpp/tests/worker_cancel_test.cpp",
+      "dependencies": [
+        "feat-06503"
+      ],
+      "subtasks": [
+        {
+          "name": "cancel 路径",
+          "description": "标志 + kill + cancel；可观测结束。"
+        },
+        {
+          "name": "断连 finally",
+          "description": "回收 socket/子进程。"
+        },
+        {
+          "name": "frame 最小或 stub",
+          "description": "JPEG feed+finalize 或明确失败；测试锁定。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 Cancel / 断连 / frame mode 最小集。BridgeHandler Base64 + ImageIO JPEG 解码 fail-closed；safe_push_cb 抑制 cancel 后迟到 push；path/frame 共享 job_detector_/job_ocr_engine_ 使 Pipeline 非拥有依赖不悬空。Catch2 worker_cancel_test: (1) cancel→DoneMsg(cancelled) 且无 PushEntry/Entries/success-done；(2) 断连 mid-path worker 线程退出 reclaim；(3) 同连接 cancel→第二 start_job 仅新 video_id；(4) 真 JPEG frame→finalize→entries；(5) 非图像 base64→ErrorMsg JPEG 解码失败。产品路径未动。Round1 fix 2026-07-28 补齐证据与实现缺口。"
+    },
+    {
+      "id": "feat-06505",
+      "name": "Vision 装配 + IPC 夹具 + worker CLI 文档",
+      "description": "VISION=ON 时 --engine vision 诚实 capability；path+mock 消息序 golden/fixture；CLI 参数子集；文档 opt-in 双轨启动。默认产品路径仍 Python；无 cutover。",
+      "module": "cpp/src/worker/engine_factory.cpp; scripts/parity/dump_ipc_session.py; benchmark/parity/goldens/ipc/; cpp/README.md; init.sh",
+      "dependencies": [
+        "feat-06504"
+      ],
+      "subtasks": [
+        {
+          "name": "Vision factory",
+          "description": "可选链接；失败不静默 mock。"
+        },
+        {
+          "name": "IPC fixture",
+          "description": "type 序列 L0；可选 Python 录制。"
+        },
+        {
+          "name": "文档 / 冒烟",
+          "description": "双轨启动；hello 冒烟可选进 init。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 Vision 装配 + IPC 夹具 / worker CLI。EngineFactory 支持 SUBLIFT_ENABLE_VISION=ON 调度 VisionOcrEngine（环境不可用时显式拒绝，绝不静默 fallback）；dump_ipc_session.py 录制并校验 path_mock_session.v1.json 序列；tests/ipc/test_cpp_worker.py 6 项进程 e2e；init.sh 在 cmake/ctest 成功后 fail-not-skip 运行 pytest tests/ipc/test_cpp_worker.py（二进制存在时）；ipc session parity golden 门禁；cpp/README.md 双轨 Opt-in。产品默认仍 Python。Round1 fix 2026-07-28 补齐 post-build e2e 门禁。"
     }
   ]
 }

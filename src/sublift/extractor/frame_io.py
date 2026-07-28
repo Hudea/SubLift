@@ -46,11 +46,7 @@ def build_output_vf(fps: float, crop: BoundingBox | None) -> str:
     """
     if crop is None:
         return f"fps={fps}"
-    return (
-        f"fps={fps},"
-        f"format=rgb24,"
-        f"crop={crop.width}:{crop.height}:{crop.x}:{crop.y}:exact=1"
-    )
+    return f"fps={fps},format=rgb24,crop={crop.width}:{crop.height}:{crop.x}:{crop.y}:exact=1"
 
 
 def plan_frame_io(

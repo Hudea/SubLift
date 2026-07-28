@@ -24,9 +24,7 @@ _CJK_RE = re.compile(
 _LATIN_RE = re.compile(r"[A-Za-z]")
 _WS_RE = re.compile(r"\s+")
 _CJK_EDGE_CLASS = r"\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff"
-_LEADING_ATTACHED_LATIN_RE = re.compile(
-    rf"^[A-Za-z0-9._/\-]+(?=[{_CJK_EDGE_CLASS}（【《「『“])"
-)
+_LEADING_ATTACHED_LATIN_RE = re.compile(rf"^[A-Za-z0-9._/\-]+(?=[{_CJK_EDGE_CLASS}（【《「『“])")
 _TRAILING_ATTACHED_LATIN_RE = re.compile(
     rf"(?<=[{_CJK_EDGE_CLASS}）】》」』”])"
     r"[A-Za-z][A-Za-z0-9 .:_/\-]*[、，。！？…]*$"
@@ -132,9 +130,7 @@ def score_line(line: OcrLine, profile: SubtitleProfile) -> LineScore:
         s_y = max(0.0, 1.0 - dist)
     else:
         # 带外：按带高度归一化惩罚
-        overflow = (
-            (band_lo - cy) / band_h if cy < band_lo else (cy - band_hi) / band_h
-        )
+        overflow = (band_lo - cy) / band_h if cy < band_lo else (cy - band_hi) / band_h
         s_y = max(0.0, 1.0 - overflow)
 
     # 字号：相对 profile.height
@@ -151,13 +147,7 @@ def score_line(line: OcrLine, profile: SubtitleProfile) -> LineScore:
 
     conf = max(0.0, min(1.0, line.confidence))
 
-    total = (
-        0.40 * s_script
-        + 0.30 * s_y
-        + 0.15 * s_h
-        + 0.10 * s_c
-        + 0.05 * conf
-    )
+    total = 0.40 * s_script + 0.30 * s_y + 0.15 * s_h + 0.10 * s_c + 0.05 * conf
     return LineScore(
         total=total,
         script=s_script,
@@ -306,19 +296,13 @@ def consensus_text(
     # 以每个样本为中心建立相似邻域，再按票数/总距离/首次出现稳定选簇。
     neighborhoods: list[list[tuple[int, str, str, float]]] = []
     for _index, _text, center_key, _confidence in cleaned:
-        neighborhood = [
-            sample for sample in cleaned if is_similar(sample[2], center_key)
-        ]
+        neighborhood = [sample for sample in cleaned if is_similar(sample[2], center_key)]
         neighborhoods.append(neighborhood)
 
     def _cluster_rank(
         cluster: list[tuple[int, str, str, float]],
     ) -> tuple[int, int, int]:
-        total_cost = sum(
-            edit_distance(left[2], right[2])
-            for left in cluster
-            for right in cluster
-        )
+        total_cost = sum(edit_distance(left[2], right[2]) for left in cluster for right in cluster)
         return (-len(cluster), total_cost, min(item[0] for item in cluster))
 
     best_cluster = min(neighborhoods, key=_cluster_rank)
@@ -369,24 +353,14 @@ def should_accept_text(
     if profile.script == SCRIPT_LATIN and s < 0.08 and cjk_ratio(text) > 0.5:
         return False
 
-    if confidence >= confidence_threshold and (
-        profile.script == SCRIPT_AUTO or s >= 0.08
-    ):
+    if confidence >= confidence_threshold and (profile.script == SCRIPT_AUTO or s >= 0.08):
         return True
 
-    if (
-        confidence >= low_conf_threshold
-        and support_votes >= min_stable_votes
-        and s >= 0.20
-    ):
+    if confidence >= low_conf_threshold and support_votes >= min_stable_votes and s >= 0.20:
         return True
 
     # 单帧中等置信 + 强目标语：介于 low_conf 与 threshold 之间
-    if (
-        confidence >= max(low_conf_threshold, 0.35)
-        and s >= 0.45
-        and support_votes >= 1
-    ):
+    if confidence >= max(low_conf_threshold, 0.35) and s >= 0.45 and support_votes >= 1:
         return True
 
     # 单帧但 conf 够高且 script 很好（强中文）

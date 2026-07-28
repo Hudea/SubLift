@@ -129,9 +129,7 @@ def main() -> None:
         s, ms_ = divmod(rem, 1000)
         return f"{h:02d}:{m:02d}:{s:02d},{ms_:03d}"
 
-    def find_best_match(
-        seg_start: int, seg_end: int
-    ) -> tuple[str, str, bool]:
+    def find_best_match(seg_start: int, seg_end: int) -> tuple[str, str, bool]:
         best = None
         best_overlap = 0
         for e in srt_window:
@@ -160,13 +158,8 @@ def main() -> None:
         if actual_text:
             lines.append(f"     | {'':28s} | {'':6s} | {actual_text:<28s} |")
 
-    total_detected = sum(
-        (s.end_ms or end_ms) - s.start_ms for s in segments
-    )
-    total_actual = sum(
-        min(e.end_ms, end_ms) - max(e.start_ms, start_ms)
-        for e in srt_window
-    )
+    total_detected = sum((s.end_ms or end_ms) - s.start_ms for s in segments)
+    total_actual = sum(min(e.end_ms, end_ms) - max(e.start_ms, start_ms) for e in srt_window)
     lines.append("")
     lines.append(f"检测到 {len(segments)} 个字幕段，总时长 {total_detected}ms")
     lines.append(f"实际有 {len(srt_window)} 个字幕段，总时长 {total_actual}ms")

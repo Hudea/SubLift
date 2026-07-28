@@ -45,9 +45,7 @@ class SrtExporter:
             self._validate(entry)
             start_tc = self._format_timestamp(entry.start_ms)
             end_tc = self._format_timestamp(entry.end_ms)
-            blocks.append(
-                f"{idx}\n{start_tc} --> {end_tc}\n{entry.text}"
-            )
+            blocks.append(f"{idx}\n{start_tc} --> {end_tc}\n{entry.text}")
         return "\n\n".join(blocks) + "\n"
 
     def export(self, entries: list[SubtitleEntry], output: Path) -> None:
@@ -73,13 +71,9 @@ class SrtExporter:
             ValueError: start_ms/end_ms 为负或 end_ms < start_ms。
         """
         if entry.start_ms < 0 or entry.end_ms < 0:
-            raise ValueError(
-                f"时间不能为负: start_ms={entry.start_ms}, end_ms={entry.end_ms}"
-            )
+            raise ValueError(f"时间不能为负: start_ms={entry.start_ms}, end_ms={entry.end_ms}")
         if entry.end_ms < entry.start_ms:
-            raise ValueError(
-                f"end_ms 不能小于 start_ms: {entry.end_ms} < {entry.start_ms}"
-            )
+            raise ValueError(f"end_ms 不能小于 start_ms: {entry.end_ms} < {entry.start_ms}")
 
     @staticmethod
     def _format_timestamp(ms: int) -> str:

@@ -74,9 +74,7 @@ def load_crops(fdir: Path) -> dict[str, np.ndarray]:
         w, h = int(c["width"]), int(c["height"])
         expected = w * h * 3
         if len(raw) != expected:
-            raise ValueError(
-                f"crop {c['name']}: size mismatch expected={expected} got={len(raw)}"
-            )
+            raise ValueError(f"crop {c['name']}: size mismatch expected={expected} got={len(raw)}")
         digest = "sha256:" + hashlib.sha256(raw).hexdigest()
         if digest != c["input_asset_sha256"]:
             raise ValueError(f"crop {c['name']}: sha256 mismatch")
@@ -91,9 +89,7 @@ def load_scenarios(fdir: Path) -> list[dict[str, Any]]:
     return [json.loads(p.read_text(encoding="utf-8")) for p in paths]
 
 
-def run_scenario(
-    sc: dict[str, Any], crops: dict[str, np.ndarray]
-) -> list[dict[str, Any]]:
+def run_scenario(sc: dict[str, Any], crops: dict[str, np.ndarray]) -> list[dict[str, Any]]:
     cfg = ChangePointConfig(**sc["change_point_config"])
     det = ChangePointDetector(config=cfg)
     events: list[dict[str, Any]] = []

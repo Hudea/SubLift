@@ -195,6 +195,33 @@ if command -v cmake >/dev/null 2>&1; then
         && ctest --test-dir build/cpp --output-on-failure >/tmp/sublift_cpp_ctest.log 2>&1; then
         printf "${GREEN}[OK]${NC}  cmake/ctest (cpp/)\n"
         pass=$((pass + 1))
+
+        # IPC session parity golden (feat-06505).
+        if uv run --extra vision --extra paddle python scripts/parity/dump_ipc_session.py --check \
+            >/tmp/sublift_parity_ipc.log 2>&1; then
+            printf "${GREEN}[OK]${NC}  ipc session parity golden (--check)\n"
+            pass=$((pass + 1))
+        else
+            printf "${RED}[FAIL]${NC} ipc session parity golden (--check)\n"
+            cat /tmp/sublift_parity_ipc.log 2>/dev/null || true
+            fail=$((fail + 1))
+        fi
+
+        # Process-level C++ worker e2e (requires binary from cmake above; fail not skip).
+        if [ -x build/cpp/bin/sublift_worker ]; then
+            if uv run --extra vision --extra paddle pytest tests/ipc/test_cpp_worker.py \
+                >/tmp/sublift_cpp_worker_e2e.log 2>&1; then
+                printf "${GREEN}[OK]${NC}  pytest tests/ipc/test_cpp_worker.py (post-build)\n"
+                pass=$((pass + 1))
+            else
+                printf "${RED}[FAIL]${NC} pytest tests/ipc/test_cpp_worker.py (post-build)\n"
+                cat /tmp/sublift_cpp_worker_e2e.log 2>/dev/null || true
+                fail=$((fail + 1))
+            fi
+        else
+            printf "${RED}[FAIL]${NC} sublift_worker binary missing after cmake/ctest\n"
+            fail=$((fail + 1))
+        fi
     else
         printf "${RED}[FAIL]${NC} cmake/ctest (cpp/)\n"
         tail -n 40 /tmp/sublift_cpp_cmake.log /tmp/sublift_cpp_build.log /tmp/sublift_cpp_ctest.log 2>/dev/null || true

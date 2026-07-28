@@ -17,11 +17,7 @@ from pathlib import Path
 import numpy as np
 
 FIXTURE_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "benchmark"
-    / "parity"
-    / "fixtures"
-    / "changepoint"
+    Path(__file__).resolve().parents[2] / "benchmark" / "parity" / "fixtures" / "changepoint"
 )
 CROPS_DIR = FIXTURE_DIR / "crops"
 

@@ -25,11 +25,7 @@ from sublift.config import SignatureConfig
 from sublift.pipeline.signature import compute_signature
 
 FIXTURE_DIR = (
-    Path(__file__).resolve().parents[2]
-    / "benchmark"
-    / "parity"
-    / "fixtures"
-    / "signature"
+    Path(__file__).resolve().parents[2] / "benchmark" / "parity" / "fixtures" / "signature"
 )
 
 DEFAULT_CONFIG = {"block_size_ratio": 0.08, "adaptive_c": 12, "hash_size": 8}
@@ -78,23 +74,17 @@ def main() -> int:
     summary: list[dict] = []
 
     # 1. empty: uniform background -> fg_ratio ~ 0, dhash 0 (baseline / EMPTY path)
-    summary.append(
-        write_fixture("empty", make_rgb(), "rgb24", timestamp_ms=0)
-    )
+    summary.append(write_fixture("empty", make_rgb(), "rgb24", timestamp_ms=0))
 
     # 2. subtitle: bright subtitle band block -> non-zero fg_ratio, non-zero dhash
     sub = make_rgb()
     stamp_block(sub, 48, 80, 44, 60, (240, 240, 240))
-    summary.append(
-        write_fixture("subtitle", sub, "rgb24", timestamp_ms=200)
-    )
+    summary.append(write_fixture("subtitle", sub, "rgb24", timestamp_ms=200))
 
     # 3. subtitle_b: different block shape/brightness vs subtitle -> distinct dhash
     sub_b = make_rgb()
     stamp_block(sub_b, 40, 88, 46, 58, (230, 230, 230))
-    summary.append(
-        write_fixture("subtitle_b", sub_b, "rgb24", timestamp_ms=400)
-    )
+    summary.append(write_fixture("subtitle_b", sub_b, "rgb24", timestamp_ms=400))
 
     # 4. bgr_quirk: yellow block (255,255,0). RGB2GRAY gray≈226 → non-zero
     #    fg/dhash under adaptive threshold; BGR2GRAY gray≈179 often yields
@@ -105,30 +95,19 @@ def main() -> int:
     gray_quirk = cv2.cvtColor(quirk, cv2.COLOR_RGB2GRAY)
     gray_bgr = cv2.cvtColor(quirk, cv2.COLOR_BGR2GRAY)
     if np.array_equal(gray_quirk, gray_bgr):
-        raise SystemExit(
-            "bgr_quirk fixture is not a trap: RGB2GRAY == BGR2GRAY (redesign color)"
-        )
+        raise SystemExit("bgr_quirk fixture is not a trap: RGB2GRAY == BGR2GRAY (redesign color)")
     sig_q = compute_signature(quirk, 600, SignatureConfig())
     # Channel swap + RGB2GRAY ≈ true BGR2GRAY on original channel order.
     bgr_as_rgb = quirk[:, :, ::-1].copy()
     sig_fixed = compute_signature(bgr_as_rgb, 600, SignatureConfig())
-    if (
-        sig_q.dhash == sig_fixed.dhash
-        and sig_q.foreground_ratio == sig_fixed.foreground_ratio
-    ):
-        raise SystemExit(
-            "bgr_quirk fixture is not a trap: signature identical under channel swap"
-        )
-    summary.append(
-        write_fixture("bgr_quirk", quirk, "bgr24_as_rgb_gray_quirk", timestamp_ms=600)
-    )
+    if sig_q.dhash == sig_fixed.dhash and sig_q.foreground_ratio == sig_fixed.foreground_ratio:
+        raise SystemExit("bgr_quirk fixture is not a trap: signature identical under channel swap")
+    summary.append(write_fixture("bgr_quirk", quirk, "bgr24_as_rgb_gray_quirk", timestamp_ms=600))
 
     # 5. gray8: 2D grayscale input -> exercises _to_gray 2D path (returns as-is)
     gray = np.full((H, W), BG, dtype=np.uint8)
     gray[44:60, 48:80] = 240
-    summary.append(
-        write_fixture("gray8", gray, "gray8", timestamp_ms=800)
-    )
+    summary.append(write_fixture("gray8", gray, "gray8", timestamp_ms=800))
 
     print(f"wrote {len(summary)} fixtures to {FIXTURE_DIR}")
     for s in summary:

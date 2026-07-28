@@ -191,12 +191,8 @@ class TestCleanup:
         assert cleanup_subtitle_text("后来加入ZPD警局") == "后来加入ZPD警局"
 
     def test_strip_only_latin_attached_to_cjk_edges(self) -> None:
-        assert cleanup_subtitle_text("（前市长杨咩咩入狱）PHISON") == (
-            "（前市长杨咩咩入狱）"
-        )
-        assert cleanup_subtitle_text("在动物方城市气候墙SON") == (
-            "在动物方城市气候墙"
-        )
+        assert cleanup_subtitle_text("（前市长杨咩咩入狱）PHISON") == ("（前市长杨咩咩入狱）")
+        assert cleanup_subtitle_text("在动物方城市气候墙SON") == ("在动物方城市气候墙")
         assert cleanup_subtitle_text("FOR一起揭穿阴谋SON") == "一起揭穿阴谋"
         assert cleanup_subtitle_text("哈茱蒂，本市第一位兔警员EFS CONSPI _N/、") == (
             "哈茱蒂，本市第一位兔警员"

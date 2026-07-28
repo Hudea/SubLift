@@ -268,9 +268,7 @@ class TestBusinessMessageStubs:
             reader = asyncio.StreamReader()
             writer = _MockStreamWriter()
             bridge = self._make_handler()
-            reader.feed_data(
-                _pack(build_start_job("V1", 5.0, "mock", 0.5))
-            )
+            reader.feed_data(_pack(build_start_job("V1", 5.0, "mock", 0.5)))
             reader.feed_eof()
             await handle_connection(reader, writer, handler=bridge.handle)
             return writer.chunks
@@ -290,9 +288,7 @@ class TestBusinessMessageStubs:
             writer = _MockStreamWriter()
             bridge = self._make_handler()
             # 先 start_job
-            reader.feed_data(
-                _pack(build_start_job("V1", 5.0, "mock", 0.5))
-            )
+            reader.feed_data(_pack(build_start_job("V1", 5.0, "mock", 0.5)))
             # 再 frame（用一个最小有效 JPEG）
             from PIL import Image
 
@@ -420,9 +416,7 @@ class TestServeOnce:
             return BridgeHandler(ocr_engine_factory=MockOcrEngine).handle
 
         async def scenario() -> list[dict[str, object] | None]:
-            server_task = asyncio.create_task(
-                serve_once(socket_path, handler_factory=make_handler)
-            )
+            server_task = asyncio.create_task(serve_once(socket_path, handler_factory=make_handler))
 
             for _ in range(50):
                 if Path(socket_path).exists():

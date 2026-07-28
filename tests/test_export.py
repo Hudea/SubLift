@@ -72,9 +72,7 @@ class TestSrtFormat:
             ]
         )
         assert result == (
-            "1\n00:00:01,000 --> 00:00:02,000\n你好\n"
-            "\n"
-            "2\n00:00:03,000 --> 00:00:04,000\n再见\n"
+            "1\n00:00:01,000 --> 00:00:02,000\n你好\n\n2\n00:00:03,000 --> 00:00:04,000\n再见\n"
         )
 
     def test_index_starts_at_1(self) -> None:
@@ -125,9 +123,7 @@ class TestSrtExport:
         """export 写入文件内容与 format 一致。"""
         output = tmp_path / "out.srt"
         SrtExporter().export([_entry(1000, 2000, "你好")], output)
-        assert output.read_text(encoding="utf-8") == (
-            "1\n00:00:01,000 --> 00:00:02,000\n你好\n"
-        )
+        assert output.read_text(encoding="utf-8") == ("1\n00:00:01,000 --> 00:00:02,000\n你好\n")
 
     def test_export_empty_list_writes_empty_file(self, tmp_path: Path) -> None:
         """空列表写入空文件。"""

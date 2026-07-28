@@ -33,9 +33,7 @@ class TestTimelineBuilder:
         """IN + CHANGE + OUT → 两段。"""
         builder = TimelineBuilder()
         builder.consume(_event(EventType.IN, 0))
-        builder.consume(
-            _event(EventType.CHANGE, 500, prev_end_ms=500)
-        )
+        builder.consume(_event(EventType.CHANGE, 500, prev_end_ms=500))
         builder.consume(_event(EventType.OUT, 1000))
         segments = builder.build()
         assert segments == [

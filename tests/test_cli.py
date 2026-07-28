@@ -83,9 +83,7 @@ class TestMainEntry:
         captured = capsys.readouterr()
         assert "usage:" in captured.out
 
-    def test_extract_video_not_found_exit_1(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_extract_video_not_found_exit_1(self, capsys: pytest.CaptureFixture[str]) -> None:
         """视频不存在时友好报错，exit 1。"""
         with pytest.raises(SystemExit) as exc_info:
             main(["extract", "/nonexistent/video.mp4", "--engine", "mock"])
@@ -160,13 +158,12 @@ class TestMainEntry:
         ]
 
         from sublift.extractor.ffmpeg_extractor import VideoInfo
+
         monkeypatch.setattr(
-            "sublift.extractor.ffmpeg_extractor.probe_video",
-            lambda v: VideoInfo(320, 240, 5000)
+            "sublift.extractor.ffmpeg_extractor.probe_video", lambda v: VideoInfo(320, 240, 5000)
         )
         monkeypatch.setattr(
-            "sublift.extractor.ffmpeg_extractor.FfmpegExtractor.extract",
-            lambda self, v: iter([])
+            "sublift.extractor.ffmpeg_extractor.FfmpegExtractor.extract", lambda self, v: iter([])
         )
         monkeypatch.setattr("sublift.cli.Pipeline.feed", lambda self, f: None)
         monkeypatch.setattr("sublift.cli.Pipeline.finalize", lambda self: fake_entries)
@@ -204,8 +201,7 @@ class TestMainEntry:
         # 1. 模拟 TTY
         monkeypatch.setattr("sys.stdout.isatty", lambda: True)
         monkeypatch.setattr(
-            "sublift.extractor.ffmpeg_extractor.probe_video",
-            lambda v: VideoInfo(320, 240, 400)
+            "sublift.extractor.ffmpeg_extractor.probe_video", lambda v: VideoInfo(320, 240, 400)
         )
         mock_frames = [
             Frame(0, Image.new("RGB", (10, 10))),
@@ -232,7 +228,7 @@ class TestMainEntry:
         monkeypatch.setattr("sublift.cli.Pipeline", MockPipeline)
         monkeypatch.setattr(
             "sublift.extractor.ffmpeg_extractor.FfmpegExtractor.extract",
-            lambda self, v: iter(mock_frames)
+            lambda self, v: iter(mock_frames),
         )
 
         main(["extract", str(video), "-o", str(output), "--engine", "mock"])

@@ -73,17 +73,13 @@ class TestDisplayTransform:
     def test_identity_display_matrix_rotation_zero(self) -> None:
         from sublift.extractor.ffmpeg_extractor import _is_identity_display_matrix
 
-        assert _is_identity_display_matrix(
-            {"side_data_type": "Display Matrix", "rotation": 0}
-        )
+        assert _is_identity_display_matrix({"side_data_type": "Display Matrix", "rotation": 0})
         assert _is_identity_display_matrix(
             {
                 "side_data_type": "Display Matrix",
                 "rotation": 0.0,
                 # 标准 16.16 + a33=2^30 恒等矩阵
-                "displaymatrix": (
-                    "65536 0 0 0 65536 0 0 0 1073741824"
-                ),
+                "displaymatrix": ("65536 0 0 0 65536 0 0 0 1073741824"),
             }
         )
 
@@ -102,9 +98,7 @@ class TestDisplayTransform:
     def test_non_identity_display_matrix_rejected(self) -> None:
         from sublift.extractor.ffmpeg_extractor import _is_identity_display_matrix
 
-        assert not _is_identity_display_matrix(
-            {"side_data_type": "Display Matrix", "rotation": 90}
-        )
+        assert not _is_identity_display_matrix({"side_data_type": "Display Matrix", "rotation": 90})
         # 误用 a33=65536 的伪恒等矩阵必须拒绝（轮1 Major 防护）
         assert not _is_identity_display_matrix(
             {
@@ -116,9 +110,7 @@ class TestDisplayTransform:
             {
                 "width": 320,
                 "height": 240,
-                "side_data_list": [
-                    {"side_data_type": "Display Matrix", "rotation": 90}
-                ],
+                "side_data_list": [{"side_data_type": "Display Matrix", "rotation": 90}],
             }
         )
         assert ok is False
@@ -199,8 +191,7 @@ class TestPipelineRoiPassthrough:
             performance_recorder=rec,
         )
         frames = [
-            Frame(timestamp_ms=i * 200, image=Image.new("RGB", (320, 80), "gray"))
-            for i in range(5)
+            Frame(timestamp_ms=i * 200, image=Image.new("RGB", (320, 80), "gray")) for i in range(5)
         ]
         pipeline.run_frames(iter(frames))
         payload = rec.to_payload()
@@ -259,9 +250,7 @@ class TestFrameIOPlan:
         _generate_solid_video(video, duration=1.0)
         with patch(
             "sublift.extractor.frame_io.probe_source_frame",
-            return_value=SourceFrameInfo(
-                width=320, height=240, display_transform_ok=True
-            ),
+            return_value=SourceFrameInfo(width=320, height=240, display_transform_ok=True),
         ):
             plan = plan_frame_io(
                 video,
@@ -273,9 +262,7 @@ class TestFrameIOPlan:
         assert plan.output_crop == BoundingBox(0, 180, 320, 60)
         assert isinstance(plan.detector, RoiPassthroughDetector)
 
-    def test_plan_auto_falls_back_on_unvalidated_transform(
-        self, tmp_path: Path
-    ) -> None:
+    def test_plan_auto_falls_back_on_unvalidated_transform(self, tmp_path: Path) -> None:
         video = tmp_path / "v.mp4"
         _generate_solid_video(video, duration=1.0)
         with patch(
@@ -348,9 +335,7 @@ class TestFrameIOPlan:
         region = BoundingBox(0, 180, 320, 60)
         with patch(
             "sublift.extractor.frame_io.probe_source_frame",
-            return_value=SourceFrameInfo(
-                width=320, height=240, display_transform_ok=True
-            ),
+            return_value=SourceFrameInfo(width=320, height=240, display_transform_ok=True),
         ):
             plan = plan_frame_io(video, region, mode="auto")
         assert plan.output_mode == "roi_rgb"
@@ -494,26 +479,19 @@ class TestFfmpegExtractorRoiIntegration:
         crop = BoundingBox(0, 180, 320, 60)
 
         full_frames = list(FfmpegExtractor(fps=1.0).extract(video))
-        roi_frames = list(
-            FfmpegExtractor(fps=1.0, output_crop=crop).extract(video)
-        )
+        roi_frames = list(FfmpegExtractor(fps=1.0, output_crop=crop).extract(video))
         assert len(full_frames) == len(roi_frames)
         for full, roi in zip(full_frames, roi_frames, strict=True):
             expected = full.image.crop((0, 180, 320, 240))
             assert roi.image.size == expected.size
-            assert list(roi.image.get_flattened_data()) == list(
-                expected.get_flattened_data()
-            )
+            assert list(roi.image.get_flattened_data()) == list(expected.get_flattened_data())
 
     def test_roi_frame_count_and_timestamps_match_full(self, tmp_path: Path) -> None:
         video = tmp_path / "roi.mp4"
         _generate_solid_video(video, duration=3.0)
         crop = BoundingBox(0, 180, 320, 60)
         full_ts = [f.timestamp_ms for f in FfmpegExtractor(fps=1.0).extract(video)]
-        roi_ts = [
-            f.timestamp_ms
-            for f in FfmpegExtractor(fps=1.0, output_crop=crop).extract(video)
-        ]
+        roi_ts = [f.timestamp_ms for f in FfmpegExtractor(fps=1.0, output_crop=crop).extract(video)]
         assert full_ts == roi_ts
         assert full_ts == [0, 1000, 2000]
 
@@ -558,9 +536,7 @@ class TestFfmpegExtractorRoiIntegration:
 
 
 class TestBridgeRoiRouting:
-    def test_path_mode_with_region_uses_roi_extractor_and_passthrough(
-        self, tmp_path: Path
-    ) -> None:
+    def test_path_mode_with_region_uses_roi_extractor_and_passthrough(self, tmp_path: Path) -> None:
         import asyncio
 
         from sublift.ipc.bridge import BridgeHandler
@@ -596,18 +572,14 @@ class TestBridgeRoiRouting:
                 region_box=[0, 180, 320, 60],
                 video_path=str(video),
             )
-            with patch(
-                "sublift.ipc.bridge.FfmpegExtractor", side_effect=capture_extractor
-            ):
+            with patch("sublift.ipc.bridge.FfmpegExtractor", side_effect=capture_extractor):
                 await bridge.handle(msg, collect)
                 if bridge._path_task is not None:
                     await bridge._path_task
 
         with patch(
             "sublift.extractor.frame_io.probe_source_frame",
-            return_value=SourceFrameInfo(
-                width=320, height=240, display_transform_ok=True
-            ),
+            return_value=SourceFrameInfo(width=320, height=240, display_transform_ok=True),
         ):
             asyncio.run(run())
 
@@ -619,9 +591,7 @@ class TestBridgeRoiRouting:
         assert captured.get("kwargs", {}).get("source_info") is not None
         types = [m.get("type") for m in pushed]
         assert "entries" in types or "done" in types
-        assert not any(
-            m.get("type") == "done" and m.get("ok") is False for m in pushed
-        )
+        assert not any(m.get("type") == "done" and m.get("ok") is False for m in pushed)
 
     def test_path_mode_invalid_region_errors(self, tmp_path: Path) -> None:
         import asyncio
@@ -654,9 +624,7 @@ class TestBridgeRoiRouting:
 
         with patch(
             "sublift.extractor.frame_io.probe_source_frame",
-            return_value=SourceFrameInfo(
-                width=320, height=240, display_transform_ok=True
-            ),
+            return_value=SourceFrameInfo(width=320, height=240, display_transform_ok=True),
         ):
             asyncio.run(run())
 
@@ -667,9 +635,7 @@ class TestBridgeRoiRouting:
         assert "source=320x240" in err
         assert "requested=" in err or "[0, 200, 320, 100]" in err
 
-    def test_path_mode_unvalidated_transform_falls_back_full(
-        self, tmp_path: Path
-    ) -> None:
+    def test_path_mode_unvalidated_transform_falls_back_full(self, tmp_path: Path) -> None:
         import asyncio
 
         from sublift.ipc.bridge import BridgeHandler
@@ -718,13 +684,9 @@ class TestBridgeRoiRouting:
             asyncio.run(run())
 
         assert captured.get("kwargs", {}).get("output_crop") is None
-        assert not any(
-            m.get("type") == "done" and m.get("ok") is False for m in pushed
-        )
+        assert not any(m.get("type") == "done" and m.get("ok") is False for m in pushed)
 
-    def test_path_mode_without_region_full_bottom_crop(
-        self, tmp_path: Path
-    ) -> None:
+    def test_path_mode_without_region_full_bottom_crop(self, tmp_path: Path) -> None:
         """path mode 无 region → 全帧 + BottomCrop，不启用 ROI。"""
         import asyncio
 
@@ -759,9 +721,7 @@ class TestBridgeRoiRouting:
                 duration_ms=1000,
                 video_path=str(video),
             )
-            with patch(
-                "sublift.ipc.bridge.FfmpegExtractor", side_effect=capture_extractor
-            ):
+            with patch("sublift.ipc.bridge.FfmpegExtractor", side_effect=capture_extractor):
                 await bridge.handle(msg, collect)
                 if bridge._path_task is not None:
                     await bridge._path_task
@@ -770,9 +730,7 @@ class TestBridgeRoiRouting:
 
         assert captured.get("kwargs", {}).get("output_crop") is None
         assert BottomCropDetector in detectors_seen
-        assert not any(
-            m.get("type") == "done" and m.get("ok") is False for m in pushed
-        )
+        assert not any(m.get("type") == "done" and m.get("ok") is False for m in pushed)
 
 
 class TestBenchmarkFrameOutputMode:

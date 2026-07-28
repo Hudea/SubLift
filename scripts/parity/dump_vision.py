@@ -36,9 +36,7 @@ from sublift.ocr.vision import (  # noqa: E402
 )
 
 GOLDEN_VERSION = 1
-DEFAULT_GOLDEN_PATH = (
-    REPO_ROOT / "benchmark" / "parity" / "goldens" / "vision" / "vision.v1.json"
-)
+DEFAULT_GOLDEN_PATH = REPO_ROOT / "benchmark" / "parity" / "goldens" / "vision" / "vision.v1.json"
 
 # Envelope keys that must be present in frozen golden (values not L0-compared).
 REQUIRED_ROOT_KEYS = (
@@ -58,24 +56,18 @@ REQUIRED_ORACLE_KEYS = (
 def get_git_info() -> tuple[str, str, bool]:
     """Get current git commit, branch, and dirty status."""
     try:
-        commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], text=True
-        ).strip()
+        commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
         branch = subprocess.check_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
         ).strip()
-        status = subprocess.check_output(
-            ["git", "status", "--porcelain"], text=True
-        ).strip()
+        status = subprocess.check_output(["git", "status", "--porcelain"], text=True).strip()
         dirty = bool(status)
         return commit, branch, dirty
     except Exception:
         return "unknown", "unknown", False
 
 
-def build_vision_golden_envelope(
-    allow_dirty: bool = False, live: bool = False
-) -> dict[str, Any]:
+def build_vision_golden_envelope(allow_dirty: bool = False, live: bool = False) -> dict[str, Any]:
     """Build the canonical Vision parity golden envelope."""
     commit, branch, dirty = get_git_info()
     if dirty and not allow_dirty:
@@ -98,9 +90,7 @@ def build_vision_golden_envelope(
         "oracle_branch": branch,
         "python_version": sys.version.split()[0],
         "git_dirty": dirty,
-        "macos_version": (
-            platform.mac_ver()[0] if sys.platform == "darwin" else "non-macos"
-        ),
+        "macos_version": (platform.mac_ver()[0] if sys.platform == "darwin" else "non-macos"),
         "vision_available": is_vision_available(),
         "vision_note": vision_note,
     }
@@ -119,22 +109,24 @@ def build_vision_golden_envelope(
 
     for name, nx, ny, nw, nh, img_w, img_h in box_cases:
         res = _vision_box_to_pixel((nx, ny, nw, nh), img_w, img_h)
-        cases.append({
-            "name": name,
-            "kind": "normalized_box_to_pixel",
-            "nx": nx,
-            "ny": ny,
-            "nw": nw,
-            "nh": nh,
-            "image_width": img_w,
-            "image_height": img_h,
-            "expected_box": {
-                "x": res.x,
-                "y": res.y,
-                "width": res.width,
-                "height": res.height,
-            },
-        })
+        cases.append(
+            {
+                "name": name,
+                "kind": "normalized_box_to_pixel",
+                "nx": nx,
+                "ny": ny,
+                "nw": nw,
+                "nh": nh,
+                "image_width": img_w,
+                "image_height": img_h,
+                "expected_box": {
+                    "x": res.x,
+                    "y": res.y,
+                    "width": res.width,
+                    "height": res.height,
+                },
+            }
+        )
 
     # 2. clamp_box test cases
     clamp_cases = [
@@ -146,22 +138,24 @@ def build_vision_golden_envelope(
 
     for name, x, y, w, h, img_w, img_h in clamp_cases:
         res = _clamp_box(x, y, w, h, img_w, img_h)
-        cases.append({
-            "name": name,
-            "kind": "clamp_box",
-            "x": x,
-            "y": y,
-            "w": w,
-            "h": h,
-            "image_width": img_w,
-            "image_height": img_h,
-            "expected_box": {
-                "x": res.x,
-                "y": res.y,
-                "width": res.width,
-                "height": res.height,
-            },
-        })
+        cases.append(
+            {
+                "name": name,
+                "kind": "clamp_box",
+                "x": x,
+                "y": y,
+                "w": w,
+                "h": h,
+                "image_width": img_w,
+                "image_height": img_h,
+                "expected_box": {
+                    "x": res.x,
+                    "y": res.y,
+                    "width": res.width,
+                    "height": res.height,
+                },
+            }
+        )
 
     # 3. line_sorting test cases
     raw_lines = [
@@ -184,47 +178,51 @@ def build_vision_golden_envelope(
     lines_copy = list(raw_lines)
     lines_copy.sort(key=lambda line: (line.box.y, line.box.x))
 
-    cases.append({
-        "name": "sort_multiline_y_then_x",
-        "kind": "line_sorting",
-        "input_lines": [
-            {
-                "text": line.text,
-                "confidence": line.confidence,
-                "box": {
-                    "x": line.box.x,
-                    "y": line.box.y,
-                    "width": line.box.width,
-                    "height": line.box.height,
-                },
-            }
-            for line in raw_lines
-        ],
-        "expected_lines": [
-            {
-                "text": line.text,
-                "confidence": line.confidence,
-                "box": {
-                    "x": line.box.x,
-                    "y": line.box.y,
-                    "width": line.box.width,
-                    "height": line.box.height,
-                },
-            }
-            for line in lines_copy
-        ],
-    })
+    cases.append(
+        {
+            "name": "sort_multiline_y_then_x",
+            "kind": "line_sorting",
+            "input_lines": [
+                {
+                    "text": line.text,
+                    "confidence": line.confidence,
+                    "box": {
+                        "x": line.box.x,
+                        "y": line.box.y,
+                        "width": line.box.width,
+                        "height": line.box.height,
+                    },
+                }
+                for line in raw_lines
+            ],
+            "expected_lines": [
+                {
+                    "text": line.text,
+                    "confidence": line.confidence,
+                    "box": {
+                        "x": line.box.x,
+                        "y": line.box.y,
+                        "width": line.box.width,
+                        "height": line.box.height,
+                    },
+                }
+                for line in lines_copy
+            ],
+        }
+    )
 
     # 4. empty OcrResult structure (L0) — perform-fail / no-obs / all-blank
-    cases.append({
-        "name": "empty_result_default_structure",
-        "kind": "empty_result",
-        "expected": {
-            "text": "",
-            "confidence": 0.0,
-            "lines": [],
-        },
-    })
+    cases.append(
+        {
+            "name": "empty_result_default_structure",
+            "kind": "empty_result",
+            "expected": {
+                "text": "",
+                "confidence": 0.0,
+                "lines": [],
+            },
+        }
+    )
 
     return {
         "golden_schema_version": GOLDEN_VERSION,
@@ -292,9 +290,7 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    golden_data = build_vision_golden_envelope(
-        allow_dirty=args.allow_dirty, live=args.live
-    )
+    golden_data = build_vision_golden_envelope(allow_dirty=args.allow_dirty, live=args.live)
     golden_json = json.dumps(golden_data, indent=2, ensure_ascii=False) + "\n"
 
     if args.check:
@@ -308,9 +304,7 @@ def main() -> int:
             with open(args.output, encoding="utf-8") as f:
                 existing_data = json.load(f)
         except json.JSONDecodeError as exc:
-            print(
-                f"[FAIL] Invalid JSON in {args.output}: {exc}", file=sys.stderr
-            )
+            print(f"[FAIL] Invalid JSON in {args.output}: {exc}", file=sys.stderr)
             return 1
 
         mismatch = False

@@ -72,9 +72,7 @@ def run_scenario(sc: dict[str, Any]) -> list[dict[str, Any]]:
         )
     if sc["finalize_ms"] is not None:
         b.finalize_open_segment(int(sc["finalize_ms"]))
-    return [
-        {"start_ms": s.start_ms, "end_ms": s.end_ms} for s in b.build()
-    ]
+    return [{"start_ms": s.start_ms, "end_ms": s.end_ms} for s in b.build()]
 
 
 def build_envelope(root: Path) -> dict[str, Any]:

@@ -95,6 +95,26 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | L0 vs L4 | **L0** (init hard gate): box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`. **L4**: live Vision text/conf — optional report only; not an init hard gate. `dump_vision --live` is reserved (no-op beyond note) |
 | Dual-matrix | `./init.sh` builds **VISION=OFF** (core+ffmpeg+mock + L0 vision geometry/parity). For recognize smoke, run a second configure with `-DSUBLIFT_ENABLE_VISION=ON` and `ctest -R 'vision|parity.*vision'`. Optional: `SUBLIFT_CPP_VISION=ON` manual job — not default init |
 
+## sublift_worker CLI & Dual-Track Opt-in Guide (Phase 6.5)
+
+`sublift_worker` is the standalone native C++ IPC worker binary delivering Unix Domain Socket framing (`>I` big-endian 4B header), JSON protocol DTOs, path mode, and frame mode processing.
+
+### Usage
+
+```bash
+# Launch mock engine worker
+./build/cpp/bin/sublift_worker --socket /tmp/sublift_worker.sock --engine mock
+
+# Launch Apple Vision engine worker (when built with -DSUBLIFT_ENABLE_VISION=ON)
+./build/cpp/bin/sublift_worker --socket /tmp/sublift_worker.sock --engine vision
+```
+
+### Dual-Track Opt-in Policy
+
+- **Default Product Runtime**: Python Worker remains the default runtime for SubLift products.
+- **Opt-in Debugging**: SubLift Swift GUI / Python host can opt-in to spawn `sublift_worker` by passing `--socket <path> --engine <mock|vision>`.
+- **Paddle OCR**: PaddleOCR is **not** supported in C++ worker and must remain on Python worker (`engine: "paddle"` requests return explicit `done(ok=false)` error).
+
 ## Related docs
 
 - [architecture.md](../docs/cpp/architecture.md) §2 target graph & §2.1 toolchain

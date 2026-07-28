@@ -29,9 +29,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command")
 
-    extract_parser = subparsers.add_parser(
-        "extract", help="从视频提取硬字幕并导出为字幕文件"
-    )
+    extract_parser = subparsers.add_parser("extract", help="从视频提取硬字幕并导出为字幕文件")
     extract_parser.add_argument("video", help="输入视频文件路径")
     extract_parser.add_argument(
         "-o", "--output", default="output.srt", help="输出字幕文件路径（默认 output.srt）"
@@ -108,9 +106,7 @@ def _run_extract(
 
     ocr = _build_ocr_engine(engine)
     extractor = FfmpegExtractor(fps=fps)
-    detector = BottomCropDetector(
-        bottom_ratio=DEFAULT_CONFIG.region_bottom_ratio
-    )
+    detector = BottomCropDetector(bottom_ratio=DEFAULT_CONFIG.region_bottom_ratio)
     config = Config(
         sample_fps=fps,
         confidence_threshold=confidence,
@@ -120,10 +116,7 @@ def _run_extract(
     pipeline = Pipeline(detector=detector, ocr=ocr, config=config, extractor=extractor)
 
     print(f"提取字幕：{video}")
-    print(
-        f"采样率：{fps}fps  引擎：{engine}  "
-        f"置信度阈值：{confidence}  文字系统：{script}"
-    )
+    print(f"采样率：{fps}fps  引擎：{engine}  置信度阈值：{confidence}  文字系统：{script}")
 
     start = time.perf_counter()
     est_total_frames = int(duration_ms / 1000 * fps) if duration_ms > 0 else 0
@@ -205,8 +198,7 @@ def _build_ocr_engine(
     if engine == "paddle":
         if not is_paddle_available():
             print(
-                "错误：PaddleOCR 不可用。请安装可选依赖：\n"
-                "  uv sync --extra paddle",
+                "错误：PaddleOCR 不可用。请安装可选依赖：\n  uv sync --extra paddle",
                 file=sys.stderr,
             )
             sys.exit(1)

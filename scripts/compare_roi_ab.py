@@ -81,8 +81,8 @@ def evaluate(full: dict[str, Any], roi: dict[str, Any]) -> dict[str, Any]:
     roi_perf = roi.get("performance") or {}
     full_thr = full_perf.get("throughput") or {}
     roi_thr = roi_perf.get("throughput") or {}
-    full_q = (full_perf.get("quality") or {})
-    roi_q = (roi_perf.get("quality") or {})
+    full_q = full_perf.get("quality") or {}
+    roi_q = roi_perf.get("quality") or {}
 
     checks: list[dict[str, Any]] = []
 
@@ -182,8 +182,7 @@ def evaluate(full: dict[str, Any], roi: dict[str, Any]) -> dict[str, Any]:
         metrics = run.get("metrics") if isinstance(run.get("metrics"), dict) else {}
         run_checks = {
             "timing_f1": _num(metrics, "timing_f1", 0.0) >= _QUALITY_TIMING_F1,
-            "timing_precision": _num(metrics, "timing_precision", 0.0)
-            >= _QUALITY_TIMING_PRECISION,
+            "timing_precision": _num(metrics, "timing_precision", 0.0) >= _QUALITY_TIMING_PRECISION,
             "usable": _num(metrics, "usable_subtitle_recall", 0.0) >= _QUALITY_USABLE,
             "cer_macro": _num(metrics, "cer_macro", 1.0) <= _QUALITY_CER_MACRO,
             "noise": int(_num(metrics, "text_noise", 99)) <= _QUALITY_NOISE_MAX,
@@ -274,8 +273,7 @@ def evaluate(full: dict[str, Any], roi: dict[str, Any]) -> dict[str, Any]:
             roi_coverages.append(float(cov))
     add(
         "stage_coverage",
-        bool(roi_coverages)
-        and all(c >= _STAGE_COVERAGE_MIN for c in roi_coverages),
+        bool(roi_coverages) and all(c >= _STAGE_COVERAGE_MIN for c in roi_coverages),
         {"roi_coverages": roi_coverages, "min": _STAGE_COVERAGE_MIN},
     )
 

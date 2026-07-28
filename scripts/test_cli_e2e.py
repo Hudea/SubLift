@@ -81,11 +81,13 @@ def levenshtein(s1: str, s2: str) -> int:
     for i, c1 in enumerate(s1):
         curr = [i + 1]
         for j, c2 in enumerate(s2):
-            curr.append(min(
-                prev[j + 1] + 1,
-                curr[j] + 1,
-                prev[j] + (c1 != c2),
-            ))
+            curr.append(
+                min(
+                    prev[j + 1] + 1,
+                    curr[j] + 1,
+                    prev[j] + (c1 != c2),
+                )
+            )
         prev = curr
     return prev[-1]
 
@@ -113,8 +115,17 @@ def main() -> None:
     srt_window = [e for e in srt_all if e.start_ms < video_duration_ms]
 
     cmd = [
-        "uv", "run", "sublift", "extract", str(video),
-        "-o", str(out_srt), "--fps", "5", "--engine", "vision",
+        "uv",
+        "run",
+        "sublift",
+        "extract",
+        str(video),
+        "-o",
+        str(out_srt),
+        "--fps",
+        "5",
+        "--engine",
+        "vision",
     ]
 
     print(f"运行 CLI: {' '.join(cmd)}")
@@ -144,21 +155,21 @@ def main() -> None:
                 best = s
 
         if best is None or best_overlap == 0:
-            matches.append({
-                "detected": entry,
-                "real": None,
-                "overlap": 0,
-                "time_match": False,
-                "edit_dist": None,
-                "cer": None,
-            })
+            matches.append(
+                {
+                    "detected": entry,
+                    "real": None,
+                    "overlap": 0,
+                    "time_match": False,
+                    "edit_dist": None,
+                    "cer": None,
+                }
+            )
             continue
 
         entry_dur = entry.end_ms - entry.start_ms
         best_dur = best.end_ms - best.start_ms
-        time_match = (
-            best_overlap >= entry_dur * 0.5 or best_overlap >= best_dur * 0.5
-        )
+        time_match = best_overlap >= entry_dur * 0.5 or best_overlap >= best_dur * 0.5
 
         if time_match:
             matched_srt_indices.add(best.index)
@@ -166,14 +177,16 @@ def main() -> None:
         edit_dist = levenshtein(entry.text, best.text) if entry.text and best.text else None
         cer_val = edit_dist / len(best.text) if edit_dist is not None and best.text else None
 
-        matches.append({
-            "detected": entry,
-            "real": best,
-            "overlap": best_overlap,
-            "time_match": time_match,
-            "edit_dist": edit_dist,
-            "cer": cer_val,
-        })
+        matches.append(
+            {
+                "detected": entry,
+                "real": best,
+                "overlap": best_overlap,
+                "time_match": time_match,
+                "edit_dist": edit_dist,
+                "cer": cer_val,
+            }
+        )
 
     # --- 指标 1：打轴精度 ---
     time_matched_count = sum(1 for m in matches if m["time_match"])
@@ -197,7 +210,7 @@ def main() -> None:
     lines.append(f"  视频:       {video.name}（1920x1080, 254s）")
     lines.append("  采样率:     5fps")
     lines.append("  OCR 引擎:   vision")
-    lines.append(f"  处理耗时:   {elapsed:.1f}s（{254/elapsed:.1f}x 实时）")
+    lines.append(f"  处理耗时:   {elapsed:.1f}s（{254 / elapsed:.1f}x 实时）")
     lines.append("")
 
     lines.append("指标 1：打轴精度")
@@ -210,7 +223,7 @@ def main() -> None:
 
     lines.append("指标 2：OCR 质量")
     lines.append(f"  字符准确率 (1-CER):  {char_accuracy:.1f}%")
-    lines.append(f"  平均 CER:            {avg_cer*100:.1f}%")
+    lines.append(f"  平均 CER:            {avg_cer * 100:.1f}%")
     lines.append(f"  空文本条目:          {empty_count}/{len(exported)}")
     lines.append("  判定标准: Levenshtein 编辑距离 / 参考文本长度")
     lines.append("")
@@ -242,9 +255,9 @@ def main() -> None:
             real_time = ""
             real_text = ""
         tm = "✓" if m["time_match"] else "✗"
-        cer_str = f"{m['cer']*100:.0f}%" if m["cer"] is not None else "-"
+        cer_str = f"{m['cer'] * 100:.0f}%" if m["cer"] is not None else "-"
         comp_lines.append(
-            f"{i+1:>3} | {det_time:<26} | {det_text:<40} | "
+            f"{i + 1:>3} | {det_time:<26} | {det_text:<40} | "
             f"{real_time:<26} | {real_text:<40} | {tm:>4} | {cer_str:>5}"
         )
 

@@ -23,7 +23,6 @@ def test_clean_commit_message() -> None:
     assert clean_commit_message("!!!") == "run"
 
 
-
 def test_get_latest_commit_message_runs_successfully() -> None:
     # This should run in the git repository and return the last commit message or empty string
     msg = get_latest_commit_message()

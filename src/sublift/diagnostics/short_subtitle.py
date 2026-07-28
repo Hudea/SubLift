@@ -56,9 +56,7 @@ def compute_short_subtitle_metrics(
     Returns:
         ``ShortSubtitleMetrics``。
     """
-    short_gt = [
-        gt for gt in ground_truth if (gt.end_ms - gt.start_ms) < threshold_ms
-    ]
+    short_gt = [gt for gt in ground_truth if (gt.end_ms - gt.start_ms) < threshold_ms]
     if not short_gt:
         return ShortSubtitleMetrics(
             short_gt_count=0,
@@ -67,9 +65,7 @@ def compute_short_subtitle_metrics(
             threshold_ms=threshold_ms,
         )
 
-    classifications = classify_fn(
-        detected, short_gt, match_threshold=match_threshold
-    )
+    classifications = classify_fn(detected, short_gt, match_threshold=match_threshold)
     fn_indices = {c.gt_entry.index for c in classifications}
     short_matched = sum(1 for gt in short_gt if gt.index not in fn_indices)
 
