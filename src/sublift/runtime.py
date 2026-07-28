@@ -1,0 +1,102 @@
+"""
+src/sublift/runtime.py
+----------------------
+SubLift Runtime Policy and Worker Selection Resolver.
+Implements the engine x runtime resolution matrix for SubLift CLI and host launchers.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass
+from enum import StrEnum, unique
+from typing import Literal, cast
+
+
+class RuntimePolicyError(ValueError):
+    """Raised when runtime or engine input is invalid."""
+
+    pass
+
+
+@unique
+class ResolutionSource(StrEnum):
+    EXPLICIT_FLAG = "explicit_flag"
+    ENV_VAR = "env_var"
+    PRODUCT_DEFAULT = "product_default"
+    PADDLE_OVERRIDE = "paddle_override"
+
+
+@dataclass(frozen=True)
+class WorkerChoice:
+    runtime: Literal["python", "cpp"]
+    engine: Literal["vision", "mock", "paddle"]
+    resolved_via: ResolutionSource
+
+
+SUPPORTED_ENGINES = {"vision", "mock", "paddle"}
+SUPPORTED_RUNTIMES = {"python", "cpp"}
+
+
+DEFAULT_RUNTIME: Literal["python", "cpp"] = "cpp"
+
+
+def resolve_runtime(
+    requested_runtime: str | None = None,
+    requested_engine: str = "vision",
+    env_override: Mapping[str, str] | None = None,
+    default_runtime: str = DEFAULT_RUNTIME,
+) -> WorkerChoice:
+    """
+    Resolves the final WorkerChoice (runtime, engine, resolved_via).
+
+    Priority hierarchy:
+    1. Explicit flag (requested_runtime)
+    2. Environment variable SUBLIFT_RUNTIME
+    3. Product default (default_runtime)
+
+    Cross-matrix rules:
+    - engine == 'paddle' ALWAYS routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested).
+    - engine in ('vision', 'mock') routes to resolved runtime.
+    - Unsupported engines or invalid runtimes raise RuntimePolicyError.
+    """
+    engine_norm = (requested_engine or "").strip().lower()
+    if engine_norm not in SUPPORTED_ENGINES:
+        raise RuntimePolicyError(
+            f"Unsupported engine '{requested_engine}'. Supported: {sorted(SUPPORTED_ENGINES)}"
+        )
+
+    source = ResolutionSource.PRODUCT_DEFAULT
+    raw_runtime: str | None = None
+
+    if requested_runtime is not None and requested_runtime.strip():
+        raw_runtime = requested_runtime.strip().lower()
+        source = ResolutionSource.EXPLICIT_FLAG
+    else:
+        env_map = env_override if env_override is not None else os.environ
+        env_val = env_map.get("SUBLIFT_RUNTIME")
+        if env_val is not None and env_val.strip():
+            raw_runtime = env_val.strip().lower()
+            source = ResolutionSource.ENV_VAR
+        else:
+            raw_runtime = (default_runtime or "").strip().lower()
+
+    if raw_runtime not in SUPPORTED_RUNTIMES:
+        raise RuntimePolicyError(
+            f"Invalid runtime '{raw_runtime}'. Supported: {sorted(SUPPORTED_RUNTIMES)}"
+        )
+
+    resolved_engine = cast(Literal["vision", "mock", "paddle"], engine_norm)
+
+    if resolved_engine == "paddle":
+        if raw_runtime == "cpp":
+            return WorkerChoice(
+                runtime="python",
+                engine="paddle",
+                resolved_via=ResolutionSource.PADDLE_OVERRIDE,
+            )
+        return WorkerChoice(runtime="python", engine="paddle", resolved_via=source)
+
+    resolved_runtime = cast(Literal["python", "cpp"], raw_runtime)
+    return WorkerChoice(runtime=resolved_runtime, engine=resolved_engine, resolved_via=source)

@@ -254,11 +254,20 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
       cfg.change_point.enable_ssim_patrol = *msg.enable_ssim_patrol;
     }
     if (msg.subtitle_profile.has_value()) {
-      cfg.subtitle_profile = *msg.subtitle_profile;
+      // CLI may send script-only profile (all geometry zero). Apply script to
+      // Config.subtitle_script and only keep geometry when non-zero so Pipeline
+      // can rebuild a full band profile from the crop.
+      const auto& p = *msg.subtitle_profile;
+      cfg.subtitle_script = p.script;
+      const bool has_geometry =
+          p.center_x != 0 || p.center_y != 0 || p.height != 0 || p.y_min != 0 || p.y_max != 0;
+      if (has_geometry) {
+        cfg.subtitle_profile = p;
+      }
     } else if (msg.region_box.has_value() && msg.region_box->width > 0 &&
                msg.region_box->height > 0) {
-      cfg.subtitle_profile =
-          sublift::SubtitleProfile::from_crop(msg.region_box->width, msg.region_box->height);
+      cfg.subtitle_profile = sublift::SubtitleProfile::from_crop(
+          msg.region_box->width, msg.region_box->height, cfg.subtitle_script);
     }
 
     std::unique_ptr<sublift::IDetector> detector;
@@ -445,11 +454,17 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       cfg.change_point.enable_ssim_patrol = *msg.enable_ssim_patrol;
     }
     if (msg.subtitle_profile.has_value()) {
-      cfg.subtitle_profile = *msg.subtitle_profile;
+      const auto& p = *msg.subtitle_profile;
+      cfg.subtitle_script = p.script;
+      const bool has_geometry =
+          p.center_x != 0 || p.center_y != 0 || p.height != 0 || p.y_min != 0 || p.y_max != 0;
+      if (has_geometry) {
+        cfg.subtitle_profile = p;
+      }
     } else if (msg.region_box.has_value() && msg.region_box->width > 0 &&
                msg.region_box->height > 0) {
-      cfg.subtitle_profile =
-          sublift::SubtitleProfile::from_crop(msg.region_box->width, msg.region_box->height);
+      cfg.subtitle_profile = sublift::SubtitleProfile::from_crop(
+          msg.region_box->width, msg.region_box->height, cfg.subtitle_script);
     }
 
     std::optional<sublift::SourceBox> region_box_src;

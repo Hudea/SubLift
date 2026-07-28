@@ -218,6 +218,17 @@ if command -v cmake >/dev/null 2>&1; then
                 cat /tmp/sublift_cpp_worker_e2e.log 2>/dev/null || true
                 fail=$((fail + 1))
             fi
+
+            # Cutover gate check (correctness + runtime benchmark)
+            if uv run --extra vision --extra paddle python scripts/parity/check_cutover_gate.py --check \
+                >/tmp/sublift_cutover_gate.log 2>&1; then
+                printf "${GREEN}[OK]${NC}  cutover gate check (--check)\n"
+                pass=$((pass + 1))
+            else
+                printf "${RED}[FAIL]${NC} cutover gate check (--check)\n"
+                cat /tmp/sublift_cutover_gate.log 2>/dev/null || true
+                fail=$((fail + 1))
+            fi
         else
             printf "${RED}[FAIL]${NC} sublift_worker binary missing after cmake/ctest\n"
             fail=$((fail + 1))

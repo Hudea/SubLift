@@ -16,7 +16,8 @@
 | [phase6.2-pipeline.md](phase6.2-pipeline.md) | 6.2 Pipeline 流式编排（**done**） |
 | [phase6.3-extractor.md](phase6.3-extractor.md) | 6.3 FFmpeg Extractor（**done**） |
 | [phase6.4-vision.md](phase6.4-vision.md) | 6.4 Vision OCR（**done**） |
-| [phase6.5-worker.md](phase6.5-worker.md) | **6.5 C++ Worker**（设计已登记；实现未开始） |
+| [phase6.5-worker.md](phase6.5-worker.md) | 6.5 C++ Worker（**done**） |
+| [phase6.6-cutover.md](phase6.6-cutover.md) | **6.6 Cutover**（**done**：默认 C++ / 门禁 / 回滚） |
 
 ### 架构与契约
 
@@ -44,4 +45,4 @@
 3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock）；paddle 见引擎矩阵。
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision**；target 依赖图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
-6. **6.5 当前**：C++ UDS worker（协议兼容、path mode、capability）；产品默认仍 Python。下一实现刀 `feat-06501` 分帧编解码。
+6. **6.6 已完成**：vision/mock 产品默认 C++ worker；paddle 仍 Python；`SUBLIFT_RUNTIME=python` 回滚；门禁报告 `docs/reports/phase6.6-cutover-gate.md`；GT L3 缺资产见 ADR-0022。

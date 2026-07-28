@@ -24,18 +24,27 @@
 
 ## 文档
 
-- [架构（当前 Python 产品路径）](docs/ARCHITECTURE.md)
+- [架构](docs/ARCHITECTURE.md)
 - [需求规格](docs/REQUIREMENTS.md)
-- **[Phase 6 C++ 迁移计划与契约](docs/cpp/README.md)**（进行中：Oracle/parity、Worker IPC、引擎矩阵与 cutover）
+- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.6 **done**：默认 C++ worker for vision/mock）
+- [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
 
 ## 安装
 
 ```bash
 git clone <repo>
 cd SubLift
-./init.sh                  # 安装依赖并运行标准验证
+./init.sh                  # 安装依赖并运行标准验证（含 cutover 门）
 uv sync --extra vision     # 仅需单独补装 Vision 依赖时使用
 uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
+```
+
+### 原生 C++ 构建（vision/mock 产品路径，**不强制 uv**）
+
+```bash
+cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUBLIFT_ENABLE_VISION=ON
+cmake --build build/cpp
+# 产物：build/cpp/bin/sublift（与 sublift_cli）+ sublift_worker
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
@@ -49,12 +58,38 @@ uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; Paddle
 
 ## 使用
 
+### 原生 CLI（推荐 vision/mock；无需 uv）
+
 ```bash
-uv run sublift extract <video> -o output.srt
-uv run sublift extract clip.mkv --fps 5 -o out.srt
-uv run sublift extract clip.mkv --script cjk -o out.srt    # 已知中文字幕轨
-uv run sublift extract clip.mkv --engine mock -o out.srt   # 无 Vision 时跑流程
-uv run sublift extract clip.mkv --engine paddle -o out.srt  # PaddleOCR（无需 Vision）
+./build/cpp/bin/sublift extract <video> -o output.srt
+./build/cpp/bin/sublift extract clip.mkv --fps 5 --script cjk -o out.srt
+./build/cpp/bin/sublift extract clip.mkv --engine mock -o out.srt
+```
+
+### Python CLI（oracle / paddle / 回滚）
+
+```bash
+uv run sublift extract <video> -o output.srt                 # 默认 runtime=cpp → spawn C++ worker
+uv run sublift extract clip.mkv --runtime python -o out.srt  # 强制 Python worker
+uv run sublift extract clip.mkv --engine paddle -o out.srt   # Paddle 始终走 Python
+SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回滚
+```
+
+### Runtime 矩阵
+
+| engine | 产品默认 runtime | 说明 |
+|---|---|---|
+| **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
+| **mock** | **cpp** | CI / 流程验证 |
+| **paddle** | **python**（强制） | 直至原生 adapter；禁止静默落到 vision/mock |
+
+解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → **产品默认 cpp**（paddle 例外）。
+
+### 一键回滚
+
+```bash
+export SUBLIFT_RUNTIME=python
+# CLI 与 GUI 均恢复 Python worker；Python 树保留，不删
 ```
 
 ### CLI 参数
@@ -66,6 +101,7 @@ uv run sublift extract clip.mkv --engine paddle -o out.srt  # PaddleOCR（无需
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
 | `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 首次运行需下载模型 |
+| `--runtime` | 自动 | `python` \| `cpp`；覆盖 env 与默认（paddle 仍强制 Python） |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）

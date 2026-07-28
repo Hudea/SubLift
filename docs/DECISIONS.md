@@ -5,6 +5,26 @@
 
 ---
 
+## ADR-0022 Cutover GT L3 固定素材缺失时的门禁豁免（2026-07-28）
+
+- **状态**：已确认（6.6 cutover residual）。
+- **背景**：engine-matrix §3.1/§3.4 与 phase6.6-cutover §4 要求固定素材 GT L3
+  （F1/precision/CER/usable/noise/empty ≥ 冻结水位）或书面 waiver 后方可默认翻转。
+  固定 clip `debug/Zootopia_clip_1080p.mp4` **不入库**（体积/版权），CI/多数开发机无该资产；
+  水位本体已冻结于 `benchmark/reports/quality-baseline.md`（feat-034）。
+- **决策**：
+  1. `scripts/parity/check_cutover_gate.py` **接线** GT L3：资产存在时用 C++ worker（vision）
+     path-mode 抽帧 + 现有 `benchmark.diagnostics` 打分，硬门对齐冻结水位；跌破 → 门禁 FAIL。
+  2. 资产缺失时默认 **WAIVED**（`gt_l3_waived`），报告必须显式标注豁免与
+     「非完整发布契约」；**禁止**把豁免写成「全量发布契约 PASS」。
+  3. 发布/合并若要求 live L3：使用 `--require-gt`（无资产即 FAIL）。
+  4. 显式 `--skip-gt` 仅作开发捷径，同样记入报告 missing gates。
+  5. 残差风险保留在 `progress.md`：有固定 clip 的机器应跑 live L3 再宣称质量门完整。
+- **理由**：不阻塞无专有素材环境的 parity/runtime 门，同时避免假阳性「全契约通过」。
+- **影响**：`check_cutover_gate.py`、`docs/reports/phase6.6-cutover-gate.md`、cutover 结论措辞。
+
+---
+
 ## ADR-0021 Phase 6 P1 契约：Oracle、Target、IPC、引擎矩阵（2026-07-26）
 
 - **状态**：已确认（设计冻结）；实现分属 feat-06002–06005 / 6.5–6.6。

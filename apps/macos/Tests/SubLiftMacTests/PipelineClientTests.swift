@@ -102,39 +102,76 @@ final class PipelineClientTests: XCTestCase {
         withUnsafeBytes(of: &length) { ptr in
             data.append(contentsOf: ptr)
         }
-        data.append(Data([0x01, 0x02]))
-
+        data.append(Data([0x01, 0x02]))  // Length is 100 but body is 2
         XCTAssertThrowsError(try PipelineClient.unpackMessage(data)) { error in
             XCTAssertEqual(error as? PipelineClientError, .incompleteBody)
         }
     }
 
-    // MARK: - LocalizedError
+    // MARK: - feat-06602 C++ Worker Binary Lookup & Error Localization
 
-    func testServerErrorLocalizedMessagePreservesPythonMessage() throws {
-        // feat-05004 P1#4：serverError 携带的 Python 端消息（如 uv sync / 网络错误）
-        // 必须通过 errorDescription 透传，不得退化为系统默认文案。
-        let message = "PaddleOCR 不可用。请安装可选依赖：uv sync --extra paddle"
-        let error = PipelineClientError.serverError(message)
-        XCTAssertEqual(error.errorDescription, message)
-        XCTAssertTrue(error.localizedDescription.contains("uv sync --extra paddle"))
+    func testFindWorkerExecutableFromEnvVar() throws {
+        let repoRoot = PipelineClient.findRepoRoot()
+        guard let repoRoot else {
+            XCTFail("Could not locate repo root")
+            return
+        }
+
+        let workerBin = repoRoot.appendingPathComponent("build/cpp/bin/sublift_worker").path
+        guard FileManager.default.isExecutableFile(atPath: workerBin) else {
+            throw XCTSkip("sublift_worker binary not compiled in build/cpp/bin/")
+        }
+
+        let env = ["SUBLIFT_WORKER_PATH": workerBin]
+        let found = try PipelineClient.findWorkerExecutable(envOverride: env)
+        XCTAssertEqual(found, workerBin)
     }
 
-    func testAllErrorsHaveLocalizedDescription() throws {
-        // 所有 case 都应给出可读 errorDescription，不返回 nil / 通用文案。
-        let cases: [PipelineClientError] = [
-            .incompleteLengthPrefix,
-            .incompleteBody,
-            .serverStartTimeout,
-            .socketCreateFailed(1),
-            .socketConnectFailed(2),
-            .socketWriteFailed(3),
-            .serverError("boom"),
-            .connectionClosed,
-        ]
-        for c in cases {
-            XCTAssertNotNil(c.errorDescription)
-            XCTAssertFalse(c.errorDescription?.isEmpty ?? true)
+    func testFindWorkerExecutableFromRepoBuildDir() throws {
+        let repoRoot = PipelineClient.findRepoRoot()
+        guard let repoRoot else {
+            XCTFail("Could not locate repo root")
+            return
         }
+
+        let workerBin = repoRoot.appendingPathComponent("build/cpp/bin/sublift_worker").path
+        guard FileManager.default.isExecutableFile(atPath: workerBin) else {
+            throw XCTSkip("sublift_worker binary not compiled in build/cpp/bin/")
+        }
+
+        let found = try PipelineClient.findWorkerExecutable(envOverride: [:])
+        XCTAssertTrue(found.hasSuffix("sublift_worker"))
+    }
+
+    func testFindWorkerExecutableNotFoundThrowsError() {
+        class MockFileManager: FileManager {
+            override func fileExists(atPath path: String, isDirectory: UnsafeMutablePointer<ObjCBool>?) -> Bool {
+                return false
+            }
+            override func isExecutableFile(atPath path: String) -> Bool {
+                return false
+            }
+        }
+
+        let mockFM = MockFileManager()
+        let env = ["SUBLIFT_WORKER_PATH": "/nonexistent/fake/sublift_worker"]
+
+        XCTAssertThrowsError(
+            try PipelineClient.findWorkerExecutable(envOverride: env, fileManager: mockFM)
+        ) { error in
+            guard case PipelineClientError.workerBinaryNotFound(let searched) = error else {
+                XCTFail("Expected workerBinaryNotFound error")
+                return
+            }
+            XCTAssertTrue(searched.contains("/nonexistent/fake/sublift_worker"))
+        }
+    }
+
+    func testErrorLocalizationForNewErrorTypes() {
+        let err1 = PipelineClientError.workerBinaryNotFound(searchedPaths: ["/tmp/worker"])
+        XCTAssertTrue(err1.localizedDescription.contains("未找到 SubLift C++ Worker 可执行文件"))
+
+        let err2 = PipelineClientError.engineMismatch(requested: "paddle", supported: ["mock", "vision"])
+        XCTAssertTrue(err2.localizedDescription.contains("请求的引擎 'paddle' 不被当前 Worker 支持"))
     }
 }

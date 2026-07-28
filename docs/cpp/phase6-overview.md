@@ -109,7 +109,9 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - **6.1 Pure pipeline：** **done** — [phase6.1-pure-pipeline.md](phase6.1-pure-pipeline.md)
 - **6.2 Pipeline 流式编排：** **done** — [phase6.2-pipeline.md](phase6.2-pipeline.md)（feat-06201–06205）
 - **6.3 FFmpeg Extractor：** **done** — [phase6.3-extractor.md](phase6.3-extractor.md)（feat-06301–06305）
-- **6.4 Vision OCR：** **done** — [phase6.4-vision.md](phase6.4-vision.md)（feat-06401–06405；L0 geometry/parity + optional VISION=ON smoke；产品路径仍 Python）
-- **进行中子阶段：** **6.5** C++ Worker — [phase6.5-worker.md](phase6.5-worker.md)（设计已登记；实现未开始）
-- **下一实现刀：** `feat-06501` UDS 分帧编解码
-- **产品路径：** 仍 Python（6.5 仅 opt-in 双轨；默认 cutover 归 6.6）
+- **6.4 Vision OCR：** **done** — [phase6.4-vision.md](phase6.4-vision.md)（feat-06401–06405）
+- **6.5 C++ Worker：** **done** — [phase6.5-worker.md](phase6.5-worker.md)（feat-06501–06505；opt-in 双轨）
+- **6.6 Cutover：** **done** — [phase6.6-cutover.md](phase6.6-cutover.md)（feat-06601–06605）
+- **产品默认：** vision/mock → C++ `sublift_worker`；paddle → Python worker；`SUBLIFT_RUNTIME=python` 一键回滚
+- **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 oracle / paddle / 回滚
+- **残差风险：** 固定 GT clip 不入库 → live GT L3 按 [ADR-0022](../DECISIONS.md) 豁免直至本机有 `debug/Zootopia_clip_1080p.mp4`；merged residual / paddle 仍 Python

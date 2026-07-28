@@ -14,6 +14,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any, cast
 
 import pytest
 
@@ -29,18 +30,19 @@ MINIMAL_JPEG_B64 = (
 assert base64.b64decode(MINIMAL_JPEG_B64)[:2] == b"\xff\xd8"
 
 
-async def send_framed_msg(writer: asyncio.StreamWriter, data: dict) -> None:
+async def send_framed_msg(writer: asyncio.StreamWriter, data: dict[str, Any]) -> None:
     raw_json = json.dumps(data).encode("utf-8")
     length_prefix = len(raw_json).to_bytes(4, byteorder="big")
     writer.write(length_prefix + raw_json)
     await writer.drain()
 
 
-async def read_framed_msg(reader: asyncio.StreamReader) -> dict:
+async def read_framed_msg(reader: asyncio.StreamReader) -> dict[str, Any]:
     prefix = await reader.readexactly(4)
     length = int.from_bytes(prefix, byteorder="big")
     payload = await reader.readexactly(length)
-    return json.loads(payload.decode("utf-8"))
+    res = json.loads(payload.decode("utf-8"))
+    return cast(dict[str, Any], res)
 
 
 async def generate_synthetic_video(tmp_dir: Path) -> Path:
@@ -51,9 +53,11 @@ async def generate_synthetic_video(tmp_dir: Path) -> Path:
         "-f",
         "lavfi",
         "-i",
-        "testsrc=size=320x240:rate=1",
-        "-t",
-        "2",
+        "color=c=red:s=320x240:d=3",
+        "-vf",
+        "drawtext=text='Subtitle Test':x=10:y=200:fontsize=24:fontcolor=white",
+        "-c:v",
+        "libx264",
         "-pix_fmt",
         "yuv420p",
         str(video_path),
@@ -78,16 +82,16 @@ async def connect_unix_with_retry(
             await asyncio.sleep(0.1)
 
 
-def check_worker_bin():
+def check_worker_bin() -> str:
     if not WORKER_BIN.exists():
         pytest.skip("sublift_worker binary not compiled in build/cpp/bin/")
     return str(WORKER_BIN)
 
 
-def test_cpp_worker_handshake():
+def test_cpp_worker_handshake() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             socket_path = Path(tmp_dir_str) / "worker.sock"
             proc = await asyncio.create_subprocess_exec(
@@ -124,10 +128,10 @@ def test_cpp_worker_handshake():
     asyncio.run(run())
 
 
-def test_cpp_worker_path_mode():
+def test_cpp_worker_path_mode() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             socket_path = tmp_dir / "worker.sock"
@@ -184,10 +188,10 @@ def test_cpp_worker_path_mode():
     asyncio.run(run())
 
 
-def test_cpp_worker_cancel():
+def test_cpp_worker_cancel() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             tmp_dir = Path(tmp_dir_str)
             socket_path = tmp_dir / "worker.sock"
@@ -239,10 +243,10 @@ def test_cpp_worker_cancel():
     asyncio.run(run())
 
 
-def test_cpp_worker_frame_mode():
+def test_cpp_worker_frame_mode() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             socket_path = Path(tmp_dir_str) / "worker.sock"
             proc = await asyncio.create_subprocess_exec(
@@ -313,10 +317,10 @@ def test_cpp_worker_frame_mode():
     asyncio.run(run())
 
 
-def test_cpp_worker_engine_mismatch():
+def test_cpp_worker_engine_mismatch() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             socket_path = Path(tmp_dir_str) / "worker.sock"
             proc = await asyncio.create_subprocess_exec(
@@ -360,10 +364,10 @@ def test_cpp_worker_engine_mismatch():
     asyncio.run(run())
 
 
-def test_cpp_worker_paddle_rejected():
+def test_cpp_worker_paddle_rejected() -> None:
     worker_bin = check_worker_bin()
 
-    async def run():
+    async def run() -> None:
         with tempfile.TemporaryDirectory() as tmp_dir_str:
             socket_path = Path(tmp_dir_str) / "worker.sock"
             proc = await asyncio.create_subprocess_exec(

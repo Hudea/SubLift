@@ -1,6 +1,6 @@
 # SubLift C++ tree (`cpp/`)
 
-Native core / worker / CLI for **Phase 6**. Product default path remains **Python** until cutover.  
+Native core / worker / CLI for **Phase 6**. Product default path is **C++ Native Core (`sublift_worker`)** after Phase 6.6 Cutover.  
 Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 
 ## Requirements
@@ -109,11 +109,21 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 ./build/cpp/bin/sublift_worker --socket /tmp/sublift_worker.sock --engine vision
 ```
 
-### Dual-Track Opt-in Policy
+### Dual-Track Opt-in & Cutover Policy
 
-- **Default Product Runtime**: Python Worker remains the default runtime for SubLift products.
-- **Opt-in Debugging**: SubLift Swift GUI / Python host can opt-in to spawn `sublift_worker` by passing `--socket <path> --engine <mock|vision>`.
-- **Paddle OCR**: PaddleOCR is **not** supported in C++ worker and must remain on Python worker (`engine: "paddle"` requests return explicit `done(ok=false)` error).
+- **Default Product Runtime**: C++ Native Core (`sublift_worker`) is the **default runtime** for SubLift products (Phase 6.6 Cutover Default).
+- **Rollback Path**: Host CLI / Swift GUI can fallback to Python worker by setting environment variable `SUBLIFT_RUNTIME=python` or passing `--runtime python`.
+- **Paddle OCR**: PaddleOCR is **not** supported in C++ worker and remains on Python worker (`engine: "paddle"` requests automatically route to Python worker via `paddle_override`).
+
+## Runtime Resolution Policy & Toggles (Phase 6.6)
+
+SubLift provides unified runtime resolution (`src/sublift/runtime.py` and `RuntimePolicy.swift`):
+
+- **Default**: C++ Native Core (`sublift_worker`) for `vision` and `mock` engines.
+- **Priority**: Explicit `--runtime python|cpp` Flag > Environment Variable `SUBLIFT_RUNTIME=python|cpp` > Product Default (`cpp`).
+- **Engine Matrix Cross-Rules**:
+  - `engine="paddle"` ALWAYS routes to Python Worker (`resolved_via="paddle_override"` if C++ requested).
+  - `engine="vision"` or `"mock"` routes according to resolved runtime (`cpp` by default).
 
 ## Related docs
 

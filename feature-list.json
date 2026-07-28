@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.5 done；当前下一子阶段 6.6 cutover（feat-066xx）。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 已全部完成 (done)。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -420,9 +420,22 @@
           ]
         },
         {
-          "id": "phase6.runtime-cutover",
-          "name": "6.6+ Cutover / 去 Python 产品 runtime",
-          "description": "默认 vision/mock→C++ worker、benchmark 门与回滚；其后可去 Python 产品 runtime。开干前拆 feat-066xx 起。",
+          "id": "phase6.cutover",
+          "name": "6.6 Cutover（默认 C++ + 门禁 + 回滚）",
+          "description": "vision/mock 默认 C++ worker；paddle 仍 Python；SUBLIFT_RUNTIME 回滚；GT L3/cancel 门；GUI/CLI 双轨启动。设计：docs/cpp/phase6.6-cutover.md。覆盖 feat-06601~06605。",
+          "status": "done",
+          "covers": [
+            "feat-06601",
+            "feat-06602",
+            "feat-06603",
+            "feat-06604",
+            "feat-06605"
+          ]
+        },
+        {
+          "id": "phase6.post-cutover",
+          "name": "6.7+ 去 Python 产品依赖 / 打包",
+          "description": "在 paddle 有替代或产品放弃 paddle 默认后，去嵌入 Python；签名公证/随包 ffmpeg 等。开干前拆 feat-067xx 起。",
           "status": "not-started",
           "covers": []
         }

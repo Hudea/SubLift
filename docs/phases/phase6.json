@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.5 done（Worker feat-06501~06505）；下一子阶段 6.6 cutover。契约与子阶段设计见 docs/cpp/。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 done：vision/mock 产品默认 C++ worker；paddle 仍 Python；SUBLIFT_RUNTIME=python 回滚；cutover 门（parity + runtime cancel/restart/RSS + GT L3 接线/ADR-0022 豁免）见 docs/reports/phase6.6-cutover-gate.md。设计 docs/cpp/phase6.6-cutover.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -755,6 +755,132 @@
       ],
       "status": "done",
       "evidence": "2026-07-28: 落地 Vision 装配 + IPC 夹具 / worker CLI。EngineFactory 支持 SUBLIFT_ENABLE_VISION=ON 调度 VisionOcrEngine（环境不可用时显式拒绝，绝不静默 fallback）；dump_ipc_session.py 录制并校验 path_mock_session.v1.json 序列；tests/ipc/test_cpp_worker.py 6 项进程 e2e；init.sh 在 cmake/ctest 成功后 fail-not-skip 运行 pytest tests/ipc/test_cpp_worker.py（二进制存在时）；ipc session parity golden 门禁；cpp/README.md 双轨 Opt-in。产品默认仍 Python。Round1 fix 2026-07-28 补齐 post-build e2e 门禁。"
+    },
+    {
+      "id": "feat-06601",
+      "name": "Runtime 解析策略 + 开关面",
+      "description": "统一 runtime 优先级：显式 flag > SUBLIFT_RUNTIME > 产品默认；与 engine 交叉规则（paddle 不静默改 vision）。表驱动单测；文档开发者开关。本刀不改 GUI 默认 spawn。",
+      "module": "docs/cpp/phase6.6-cutover.md; apps/macos RuntimePolicy 或等价; src/sublift/runtime 解析; tests",
+      "dependencies": [
+        "feat-06505"
+      ],
+      "subtasks": [
+        {
+          "name": "优先级表",
+          "description": "flag / env / default 钉死并文档化。"
+        },
+        {
+          "name": "engine×runtime",
+          "description": "cpp+paddle → 双 worker 或明确失败（钉一种）。"
+        },
+        {
+          "name": "单测",
+          "description": "表驱动组合 → expected launcher。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 Runtime 解析策略 + 开关面。实现 Python src/sublift/runtime.py (resolve_runtime + WorkerChoice + ResolutionSource) 与 Swift apps/macos/Sources/SubLiftMac/Core/RuntimePolicy.swift (RuntimePolicy.resolve + WorkerChoice) 双端 1:1 解析器。锁定优先级 (flag > env SUBLIFT_RUNTIME > product default) 与 paddle 强路由法则 (paddle + cpp -> runtime=python, resolved_via=paddle_override)。pytest tests/test_runtime.py (16/16 绿) 与 swift test RuntimePolicyTests (9/9 绿) 达成 1:1 表驱动覆盖。./init.sh 20/20 绿；code_reviewer 审查 PASS。"
+    },
+    {
+      "id": "feat-06602",
+      "name": "macOS GUI 双 Worker 启动",
+      "description": "PipelineClient/上层：vision|mock 可 spawn sublift_worker；paddle 仍 Python。capability 校验；错误可观测。建议默认仍 python 直至 06605 翻转。",
+      "module": "apps/macos/Sources/SubLiftMac/Core/PipelineClient.swift; 相关测试",
+      "dependencies": [
+        "feat-06601"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ Process 启动",
+          "description": "--socket/--engine；二进制路径解析顺序。"
+        },
+        {
+          "name": "Paddle 分支",
+          "description": "保持现 Python IPC server。"
+        },
+        {
+          "name": "测试",
+          "description": "mock Process / 可选集成。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 macOS GUI 双 Worker 启动。PipelineClient 集成 RuntimePolicy.resolve 路由策略与 C++ sublift_worker 启动能力；实现 findWorkerExecutable (环境变量 SUBLIFT_WORKER_PATH > build/cpp/bin/sublift_worker > App Bundle > PATH) 查找算法；重构 start 入口增加 stop() 幂等重置与异常路径 do-catch stop 保护、connectUDS 配置 SO_NOSIGPIPE 防护 GUI 崩溃、stop 补充 waitUntilExit() 防护僵尸进程，并完成 bye 响应 capabilities 校验；新增 PipelineClientTests 与 PipelineClientIntegrationTests (139/139 绿) 覆盖路径解析与跨进程提帧；./init.sh 20/20 绿；code_reviewer 审查 PASS。"
+    },
+    {
+      "id": "feat-06603",
+      "name": "CLI cutover 路径",
+      "description": "vision/mock 默认不强制 uv（原生 sublift 或等价）；--runtime 与 env 对齐 06601；paddle 仍 Python。Python CLI 保留 oracle/benchmark。",
+      "module": "src/sublift/cli.py 和/或 cpp CLI; tests/test_cli.py",
+      "dependencies": [
+        "feat-06601"
+      ],
+      "subtasks": [
+        {
+          "name": "默认路由",
+          "description": "vision/mock → C++ 路径（实现可选 spawn worker 或直调 core）。"
+        },
+        {
+          "name": "强制 runtime",
+          "description": "--runtime python|cpp。"
+        },
+        {
+          "name": "单测",
+          "description": "解析与分支覆盖。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 落地 CLI cutover 路径。sublift extract 扩展 --runtime {python,cpp} 参数支持，集成 resolve_runtime 解析；实现 _find_sublift_worker_bin (SUBLIFT_WORKER_PATH > build/cpp/bin/sublift_worker > PATH) 与 _run_extract_cpp (UDS IPC hello->bye 握手、start_job path mode 提帧、progress/entries/error 消息流处理与 proc.kill 孤儿进程防护)；新增 TestCliCutoverRouting 覆盖 --runtime 参数解析、环境变量 SUBLIFT_RUNTIME 路由、Paddle 强覆盖提示、缺失二进制退出与 C++ Worker Mock 调度；./init.sh 20/20 绿；code_reviewer 审查 PASS。"
+    },
+    {
+      "id": "feat-06604",
+      "name": "Cutover 门：正确性 + 运行时",
+      "description": "Mock L2/ROI + GT L3 同机对照报告；cancel≤1s/restart≤5s 测量入报告；脚本复用现有 benchmark，不重写指标。GT 跌破水位阻止默认切换。",
+      "module": "scripts/cutover/ 或 scripts/parity/; docs/reports/; benchmark 接入",
+      "dependencies": [
+        "feat-06602",
+        "feat-06603"
+      ],
+      "subtasks": [
+        {
+          "name": "正确性门",
+          "description": "Mock L2 + GT L3 报告模板与自动化。"
+        },
+        {
+          "name": "运行时门",
+          "description": "cancel/restart/wall 记录。"
+        },
+        {
+          "name": "失败策略",
+          "description": "硬门 vs 告警钉死；waiver 流程。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28 + phase-review 加固：scripts/parity/check_cutover_gate.py。正确性：10 项 parity golden --check。运行时：Wall（硬门 ×1.30+0.05s）、Cancel≤1s、Restart≤5s（同连接测量硬失败）、Peak RSS 比值；缺 WORKER_BIN 时 runtime_passed=False 整体 FAIL（非 soft-PASS）；--skip-runtime 为唯一逃逸。GT L3：有固定 clip 时实测；缺失时 ADR-0022 WAIVED（gt_l3_waived），--require-gt 发布硬门 fail-closed。报告 docs/reports/phase6.6-cutover-gate.md 含 gates_run/gates_missing 与 scoped conclusion（不得声称 live L3 已满）。pytest tests/test_cutover_gate.py + test_cli 覆盖；init 接入 gate。"
+    },
+    {
+      "id": "feat-06605",
+      "name": "默认翻转 + 回滚演练 + release note",
+      "description": "产品默认 runtime=cpp（vision/mock）；SUBLIFT_RUNTIME=python 回滚测通；CHANGELOG/README；phase 跟踪 done。不删 Python；无 libav/原生 paddle。",
+      "module": "GUI/CLI 默认; docs; feature-list; phase6.json; progress.md",
+      "dependencies": [
+        "feat-06604"
+      ],
+      "subtasks": [
+        {
+          "name": "默认 cpp",
+          "description": "GUI+CLI 一致翻转。"
+        },
+        {
+          "name": "回滚演练",
+          "description": "env/设置恢复 Python 路径。"
+        },
+        {
+          "name": "发布说明",
+          "description": "矩阵、质量摘要、已知限制。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-28: 默认翻转完成。Python runtime.py 与 Swift RuntimePolicy.swift / PipelineClient.swift 的 default_runtime 正式切为 cpp；CLI 与 macOS GUI 默认基于 C++ Native Core (sublift_worker) 运行；paddle 引擎保持 100% 强路由 Python (paddle_override)；显式 SUBLIFT_RUNTIME=python 可 100% 干净回滚；pytest (488/488 绿), Swift XCTest (139/139 绿), ./init.sh (21/21 绿)；Phase 6 全量 28 个 features 彻底完成。"
     }
   ]
 }
