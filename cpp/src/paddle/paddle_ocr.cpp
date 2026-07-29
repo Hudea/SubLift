@@ -306,9 +306,8 @@ struct PaddleOcrEngine::Impl {
       }
       return boxes;
     }
-  }
 
-  paddle_detail::CtcResult run_rec(const uint8_t* rgb, int32_t w, int32_t h, int32_t stride,
+    paddle_detail::CtcResult run_rec(const uint8_t* rgb, int32_t w, int32_t h, int32_t stride,
                                    const DetBox& box) {
     const int32_t bw = std::max(1, box.x1 - box.x0);
     const int32_t bh = std::max(1, box.y1 - box.y0);
