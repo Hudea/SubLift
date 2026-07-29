@@ -79,7 +79,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::string engine_tag = (engine == "paddle") ? "paddle [experimental]" : engine;
+  std::string engine_tag = engine;
   std::cout << "sublift_worker listening on " << socket_path << " (engine: " << engine_tag << ")\n";
 
   while (true) {

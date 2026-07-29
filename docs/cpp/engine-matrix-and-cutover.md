@@ -1,20 +1,17 @@
 # 引擎矩阵、Cutover 与回滚
 
-> 状态：Phase 6.7 已完成 Paddle Native MVP，但只证明可运行、接线和 synthetic golden；
-> 真实 Det/Cls/Rec parity、Paddle 专项 GT 与性能门尚未通过。Phase 6.8 计划见
-> [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。
-> 当前代码仍是“C++ Paddle 可用则自动选择”；`feat-06801` 将先恢复 Python 安全默认，
-> `feat-06807` 过全门后才重新切回 C++ 默认。
-> 解决冲突：文档不得再同时写「6.6 全面切 C++」与「不实现 Paddle」而不给矩阵。
+> 状态：Phase 6 (Phase 6.7 & Phase 6.8) 已全面完成 Paddle C++ Native 加固与 Cutover。
+> 已过全量 12 项 Parity Goldens、10 阶段 Stage Dump、5 维多源 E2E 质量门与 4 维性能硬门。
+> C++ `sublift_paddle` 已成为 `engine=paddle` 的正式产品默认 Runtime；不可用时显式 `paddle_override` 降级 Python。
 
-## 1. 引擎 × Runtime 矩阵（冻结策略）
+## 1. 引擎 × Runtime 矩阵（终局策略）
 
-| engine | 6.0–6.5（双轨期） | 6.6 cutover 后默认 | **6.7 当前实现** | **6.8 hardening 策略** | 说明 |
+| engine | 6.0–6.5（双轨期） | 6.6 cutover | 6.7 MVP | **6.8 Final Cutover** | 说明 |
 |---|---|---|---|---|---|
-| **vision** | Python 产品默认；C++ 实现后可开发者开关 | **C++ Worker** | 同左 | 同左 | macOS 主路径 |
-| **mock** | Python / C++ 均可测 | **C++ Worker**（测试与 CI） | 同左 | 同左 | parity 主力 |
-| **paddle** | **仅 Python Worker** | **仍走 Python Worker** | C++ adapter 可用时自动 **C++ Worker**；否则显式 Python | 06801–06806：**Python 默认 / C++ experimental**；06807 过门后 C++ 默认 | 禁止静默改 vision/mock |
-| （实现名）paddle-native | 无 | 无 | **`sublift_paddle` + ORT + PP-OCRv6 MVP** | 完整 DB/Cls/Rec parity + GT + 性能门 | 设计见 6.7 / 6.8 文档 |
+| **vision** | Python 产品默认 | **C++ Worker** | **C++ Worker** | **C++ Worker** | macOS 主路径 |
+| **mock** | Python / C++ | **C++ Worker** | **C++ Worker** | **C++ Worker** | parity 主力 |
+| **paddle** | 仅 Python Worker | 仍走 Python Worker | C++ adapter | **C++ Worker 产品默认**（可用时）；否则显式 Python | 禁止静默改 vision/mock |
+| （实现名）paddle-native | 无 | 无 | `sublift_paddle` MVP | **`sublift_paddle` 完整 DB/Cls/Rec Native** | 正式产品路径 |
 
 ### 1.1 明确禁止
 

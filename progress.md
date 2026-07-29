@@ -2,25 +2,24 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-30（6.8 Paddle Native hardening **feat-06806 完成**）
-- **当前 Phase：** phase6-native-cpp-core
-- **子阶段：** **6.8 Paddle Native hardening**（feat-06801 ~ feat-06806 完成，最后一刀 feat-06807 Cutover）
-- **产品默认 Runtime：** C++ `sublift_worker`（vision/mock）；paddle 在未显式 opt-in 时安全默认走 Python (`product_default`)
+- **最后更新：** 2026-07-30（**Phase 6 整体及 6.8 Paddle Native Hardening 全部圆满完成**）
+- **当前 Phase：** phase6-native-cpp-core（已完成）
+- **子阶段：** **6.8 Paddle Native hardening**（feat-06801 ~ feat-06807 全部完成并已完成 Product Cutover）
+- **产品默认 Runtime：** C++ `sublift_worker`（vision / mock / paddle 全引擎支持，产品默认）
 - **回滚：** `SUBLIFT_RUNTIME=python` / `SUBLIFT_CPP_PADDLE=0`
 - **分支：** `refactor/paddle-native-hardening`
 
 ## 进行中
 
-- **feat-06807**（Paddle C++ 产品 Cutover）
-- 设计源头：`docs/cpp/phase6.8-paddle-hardening.md`
+- 无（Phase 6 所有 Feature 已全部交付并通过验证门）
 
 ## 近期完成（最近 5 个）
 
+- [x] **feat-06807**：Paddle C++ Product Cutover（完成默认路由翻转为 C++ Native、移除 experimental 标记与集成全量 Cutover 门禁）
 - [x] **feat-06806**：Paddle Native 性能加固与评估（Wall-time 0.76x / Peak RSS 0.61x 硬门评估与 check_paddle_perf.py）
 - [x] **feat-06805**：多源 Paddle E2E 质量门（Timing F1/CER/Usable/Box IoU 5 维硬门评估与 check_paddle_gate.py）
 - [x] **feat-06804**：Paddle Quad Crop、Cls 与 Rec Parity（warpPerspective 透视变换剪裁、高窄框 90° 校正、Rec 3x48xW 右侧 0 Padding 与 text_score=0.5 过滤）
 - [x] **feat-06803**：Paddle Det 预处理与完整 DB/unclip parity（包含 0.3 threshold 二值化、2x2 dilation、findContours、Polygon Unclip 与空图 0 Rec 调用的性能短路）
-- [x] **feat-06802**：Paddle 分阶段观测与冻结 Oracle Fixture（依赖/模型 SHA256 冻结，10 阶段节点 JSON schema，12 Parity goldens）
 
 ## 阻塞项 / 风险
 

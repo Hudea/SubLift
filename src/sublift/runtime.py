@@ -129,13 +129,10 @@ def resolve_runtime(
     resolved_engine = cast(Literal["vision", "mock", "paddle"], engine_norm)
 
     if resolved_engine == "paddle":
-        is_explicit_cpp = (
-            source in (ResolutionSource.EXPLICIT_FLAG, ResolutionSource.ENV_VAR)
-            and raw_runtime == "cpp"
-        )
-        if is_explicit_cpp and cpp_paddle_available:
-            return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
-        if is_explicit_cpp and not cpp_paddle_available:
+        wants_cpp = raw_runtime == "cpp"
+        if wants_cpp:
+            if cpp_paddle_available:
+                return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
             return WorkerChoice(
                 runtime="python",
                 engine="paddle",

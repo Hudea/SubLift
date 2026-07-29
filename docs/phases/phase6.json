@@ -1259,8 +1259,8 @@
           "description": "默认 cpp→强制 Python→cpp restart 无串扰；更新矩阵/README/架构/需求/跟踪与 cutover 报告；Python Paddle 至少保留一个小版本周期。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle C++ Product Cutover。完成 src/sublift/runtime.py 与 Swift RuntimePolicy.swift 中的产品默认路由翻转（engine=paddle && cpp_paddle_available=True 默认走 C++）；移除 CLI 与 C++ Worker 中的 [experimental] 标记；更新 check_cutover_gate.py 集成 Paddle E2E Quality Gate 与 Perf Check；更新 docs/cpp/engine-matrix-and-cutover.md 与 feature-list.json，将 Phase 6 整体状态标记为 done；./init.sh 全绿通过；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     }
   ]
 }
