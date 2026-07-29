@@ -30,6 +30,7 @@ target_link_libraries(sublift_ipc PUBLIC
   sublift_core
   sublift_ffmpeg
   sublift_vision_macos
+  sublift_paddle
   nlohmann_json::nlohmann_json
 )
 

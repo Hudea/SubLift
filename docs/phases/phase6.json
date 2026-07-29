@@ -1059,8 +1059,8 @@
           "description": "日志标明 runtime/engine；不改 vision 默认。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-29: 落地 Worker / CLI / Runtime 接线与可用性感知路由。C++ EngineFactory 接入 paddle (supported_engines 诚实声明，validate_engine 校验不可用时抛拒绝错误，create_engine 构造 PaddleOcrEngine)；src/sublift/runtime.py 与 Swift RuntimePolicy.swift 实现可用性感知路由（C++ paddle 可用时走 cpp，不可用时降级为 python paddle_override，严禁改写为 vision/mock）；tests/test_runtime.py 与 swift test 139 测试及 C++ sublift_tests 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06706",

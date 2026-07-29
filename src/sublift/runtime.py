@@ -47,6 +47,7 @@ def resolve_runtime(
     requested_engine: str = "vision",
     env_override: Mapping[str, str] | None = None,
     default_runtime: str = DEFAULT_RUNTIME,
+    cpp_paddle_available: bool = False,
 ) -> WorkerChoice:
     """
     Resolves the final WorkerChoice (runtime, engine, resolved_via).
@@ -57,7 +58,8 @@ def resolve_runtime(
     3. Product default (default_runtime)
 
     Cross-matrix rules:
-    - engine == 'paddle' ALWAYS routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested).
+    - engine == 'paddle' routes to runtime='cpp' if cpp_paddle_available=True and runtime='cpp' requested/default.
+    - engine == 'paddle' routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested) when C++ paddle is unavailable.
     - engine in ('vision', 'mock') routes to resolved runtime.
     - Unsupported engines or invalid runtimes raise RuntimePolicyError.
     """
@@ -90,6 +92,8 @@ def resolve_runtime(
     resolved_engine = cast(Literal["vision", "mock", "paddle"], engine_norm)
 
     if resolved_engine == "paddle":
+        if cpp_paddle_available and raw_runtime == "cpp":
+            return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
         if raw_runtime == "cpp":
             return WorkerChoice(
                 runtime="python",
@@ -100,3 +104,4 @@ def resolve_runtime(
 
     resolved_runtime = cast(Literal["python", "cpp"], raw_runtime)
     return WorkerChoice(runtime=resolved_runtime, engine=resolved_engine, resolved_via=source)
+

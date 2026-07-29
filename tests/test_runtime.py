@@ -49,6 +49,16 @@ def test_resolve_runtime_paddle_force_python() -> None:
     assert choice.resolved_via == PADDLE_OVR
 
 
+def test_resolve_runtime_paddle_cpp_available() -> None:
+    choice = resolve_runtime(
+        requested_runtime="cpp", requested_engine="paddle", cpp_paddle_available=True
+    )
+    assert choice.runtime == "cpp"
+    assert choice.engine == "paddle"
+    assert choice.resolved_via == FLAG
+
+
+
 def test_resolve_runtime_env_override() -> None:
     env = {"SUBLIFT_RUNTIME": "cpp"}
     choice = resolve_runtime(env_override=env)

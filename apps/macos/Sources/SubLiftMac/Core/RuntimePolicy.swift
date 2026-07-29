@@ -51,7 +51,8 @@ public enum RuntimePolicy {
         requestedRuntime: String? = nil,
         requestedEngine: String = "vision",
         envOverride: [String: String]? = nil,
-        defaultRuntime: SubLiftRuntime = .cpp
+        defaultRuntime: SubLiftRuntime = .cpp,
+        isCppPaddleAvailable: Bool = false
     ) throws -> WorkerChoice {
         let engineNorm = requestedEngine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard let engine = SubLiftEngine(rawValue: engineNorm) else {
@@ -77,6 +78,9 @@ public enum RuntimePolicy {
         }
 
         if engine == .paddle {
+            if isCppPaddleAvailable && candidateRuntime == .cpp {
+                return WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: source)
+            }
             if candidateRuntime == .cpp {
                 return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
             }
