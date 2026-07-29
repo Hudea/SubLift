@@ -324,12 +324,13 @@ class TestCliCutoverRouting:
             called["python"] = True
 
         monkeypatch.setattr("sublift.cli._run_extract_python", mock_python)
+        monkeypatch.setattr("sublift.cli.probe_cpp_paddle_available", lambda: False)
 
         main(["extract", str(video), "-o", str(output), "--engine", "paddle", "--runtime", "cpp"])
 
         assert called["python"] is True
         captured = capsys.readouterr()
-        assert "paddle 引擎暂仅支持 Python runtime" in captured.err
+        assert "C++ Paddle 不可用" in captured.err
 
     def test_cli_cpp_missing_binary_exits_1(
         self,
