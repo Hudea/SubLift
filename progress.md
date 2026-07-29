@@ -9,6 +9,7 @@
 - **回滚：** `SUBLIFT_RUNTIME=python` / `SUBLIFT_CPP_PADDLE=0`
 - **下一项：** `feat-06801` 先把 Paddle 自动默认恢复为 Python；显式 C++ 标为 experimental
 - **6.8 设计：** `docs/cpp/phase6.8-paddle-hardening.md`
+- **分支：** `refactor/paddle-native-hardening`
 
 ## 进行中
 
