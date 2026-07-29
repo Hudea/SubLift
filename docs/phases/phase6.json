@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 在 6.6 仍 Python。6.7 设计中：PaddleOCR C++ adapter（ONNX/PP-OCRv6，feat-06701–06706），见 docs/cpp/phase6.7-paddle.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 在 6.6 仍 Python。6.7 完成：PaddleOCR C++ adapter（ONNX/PP-OCRv6，feat-06701–06706），见 docs/cpp/phase6.7-paddle.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -1084,8 +1084,8 @@
           "description": "单独验收；失败可回滚 policy 不静默改引擎。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-29: 落地 Parity harness + paddle 产品默认路由。dump_paddle.py 接入 --check 参数与 golden_registry.py，生成/校验 benchmark/parity/goldens/paddle/paddle.v1.json；Catch2 paddle_parity_test.cpp 严格比对全量字符/置信度/AABB包围盒 26 断言全绿；check_cutover_gate.py 运行实测 11/11 Parity goldens + C++ Worker 性能 + GT L3 全部 PASS；更新 engine-matrix-and-cutover.md 矩阵；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     }
   ]
 }

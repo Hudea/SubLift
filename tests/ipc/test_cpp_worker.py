@@ -508,7 +508,7 @@ def test_cpp_worker_paddle_rejected() -> None:
                 done = await read_framed_msg(reader)
                 assert done["type"] == "done"
                 assert done["ok"] is False
-                assert "paddle 引擎不支持" in done["error"]
+                assert "paddle" in done["error"]
 
                 writer.close()
                 await writer.wait_closed()

@@ -1,8 +1,8 @@
 """scripts/parity/check_cutover_gate.py
 --------------------------------------
 Cutover Gate Verification Script (feat-06604).
-Verifies correctness (all 10 parity goldens), runtime metrics
-(Wall-time, Cancel, Restart, Peak RSS), and GT L3 waterline
+Verifies correctness (all parity goldens), runtime metrics
+(Wall time, Cancel latency, Restart latency, RSS), and GT L3 accuracy.
 (or recorded DECISIONS waiver when fixed asset is absent).
 
 Usage:
@@ -751,7 +751,7 @@ def generate_markdown_report(report: CutoverGateReport) -> str:
     # Conclusion scoped to gates actually evaluated
     parts: list[str] = []
     if report.correctness_passed:
-        parts.append("正确性 Parity (10 goldens) 通过")
+        parts.append(f"正确性 Parity ({len(PARITY_SCRIPTS)} goldens) 通过")
     else:
         parts.append("正确性 Parity 未通过")
     if report.runtime_skipped:
@@ -807,7 +807,7 @@ def run_cutover_gate(
     gates_run: list[str] = []
     gates_missing: list[str] = []
 
-    print("[1/3] 正在运行正确性门禁 (10 Parity Goldens check)...")
+    print(f"[1/3] 正在运行正确性门禁 ({len(PARITY_SCRIPTS)} Parity Goldens check)...")
     parity_results = run_correctness_checks()
     correctness_passed = all(r.passed for r in parity_results)
     gates_run.append("correctness_parity")

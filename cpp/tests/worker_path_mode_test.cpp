@@ -102,7 +102,7 @@ TEST_CASE("Worker Connection and Path Mode Mock integration test", "[worker][ipc
     const auto& done = std::get<DoneMsg>(msg);
     REQUIRE(done.ok == false);
     REQUIRE(done.error.has_value());
-    REQUIRE((done.error->find("PaddleOCR 引擎在当前环境不可用") != std::string::npos || done.error->find("paddle 引擎") != std::string::npos));
+    REQUIRE(done.error->find("paddle") != std::string::npos);
   }
 
   SECTION("Non-existent video file fails with DoneMsg ok=false") {

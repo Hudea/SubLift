@@ -25,7 +25,7 @@ from scripts.parity.golden_registry import PARITY_SCRIPTS
 
 def test_correctness_checks_execution() -> None:
     results = run_correctness_checks()
-    assert len(results) == 10
+    assert len(results) == len(PARITY_SCRIPTS)
     names = [r.name for r in results]
     assert "config" in names
     assert "signature" in names
@@ -36,6 +36,7 @@ def test_correctness_checks_execution() -> None:
     assert "pipeline" in names
     assert "extractor" in names
     assert "vision" in names
+    assert "paddle" in names
     assert "ipc_session" in names
     assert all(r.passed for r in results)
 
@@ -136,7 +137,7 @@ def test_run_cutover_gate_skip_runtime(tmp_path: Path) -> None:
 
 
 def test_golden_registry_matches_correctness_suite() -> None:
-    assert len(PARITY_SCRIPTS) == 10
+    assert len(PARITY_SCRIPTS) == 11
     results = run_correctness_checks()
     assert [r.name for r in results] == [n for n, _ in PARITY_SCRIPTS]
 
@@ -144,7 +145,7 @@ def test_golden_registry_matches_correctness_suite() -> None:
 def test_run_cutover_gate_parity_only() -> None:
     report = run_cutover_gate(check=True, parity_only=True)
     assert report.correctness_passed is True
-    assert len(report.parity_results) == 10
+    assert len(report.parity_results) == len(PARITY_SCRIPTS)
     assert report.runtime_skipped is True
     assert report.gt_result is None
     assert report.all_passed is True

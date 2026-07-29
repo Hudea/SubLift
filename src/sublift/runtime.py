@@ -58,8 +58,10 @@ def resolve_runtime(
     3. Product default (default_runtime)
 
     Cross-matrix rules:
-    - engine == 'paddle' routes to runtime='cpp' if cpp_paddle_available=True and runtime='cpp' requested/default.
-    - engine == 'paddle' routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested) when C++ paddle is unavailable.
+    - engine == 'paddle' routes to runtime='cpp' if cpp_paddle_available=True and
+      runtime='cpp' requested/default.
+    - engine == 'paddle' routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested)
+      when C++ paddle is unavailable.
     - engine in ('vision', 'mock') routes to resolved runtime.
     - Unsupported engines or invalid runtimes raise RuntimePolicyError.
     """

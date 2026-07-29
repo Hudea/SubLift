@@ -338,7 +338,7 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 已全部完成 (done)；6.7 Paddle C++ adapter 设计中。",
+      "description": "将 Python Runtime 逐步替换为 C++ Core：保留 Extractor/Detector/OcrEngine/Pipeline/Exporter 边界与 SwiftUI；UDS+JSON 协议暂时保留，Python Worker → C++ Worker。Python 为 Oracle、C++ 为 Candidate，先行为 parity 再 cutover。不上 libav、不顺手改算法、第一阶段不做 Swift↔C++ 直连。设计与子阶段文档在 docs/cpp/；细粒度任务见 docs/phases/phase6.json；编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.7 已全部完成 (done)。",
       "detail_file": "docs/phases/phase6.json",
       "features": [
         {
@@ -446,7 +446,7 @@
           "id": "phase6.paddle-native",
           "name": "6.7 PaddleOCR C++ adapter",
           "description": "ONNX Runtime + PP-OCRv6 实现 IOcrEngine（sublift_paddle）；与 Python rapidocr Oracle parity；Worker/Runtime 在 C++ paddle 可用时走 C++，否则显式 Python；禁止静默改 vision/mock。设计：docs/cpp/phase6.7-paddle.md。覆盖 feat-06701~06706。",
-          "status": "not-started",
+          "status": "done",
           "covers": [
             "feat-06701",
             "feat-06702",

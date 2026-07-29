@@ -1,6 +1,6 @@
 # 引擎矩阵、Cutover 与回滚
 
-> 状态：`feat-06005` 设计冻结；6.6 实现 cutover 时按本文验收。  
+> 状态：Phase 6.7 彻底完成；全引擎（vision / mock / paddle）均完成 Native C++ 支持与 Parity 门禁验证。  
 > 解决冲突：文档不得再同时写「6.6 全面切 C++」与「不实现 Paddle」而不给矩阵。
 
 ## 1. 引擎 × Runtime 矩阵（冻结策略）
