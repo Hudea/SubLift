@@ -900,8 +900,8 @@ def run_cutover_gate(
     print(f"  [{gt_result.status}] {gt_result.message}")
 
     print("[4/4] 正在评估 Paddle E2E 质量与性能门禁...")
-    from check_paddle_gate import run_paddle_gate
-    from check_paddle_perf import run_paddle_perf_check
+    from check_paddle_gate import run_paddle_gate  # type: ignore[import-not-found]
+    from check_paddle_perf import run_paddle_perf_check  # type: ignore[import-not-found]
 
     paddle_gate_rep = run_paddle_gate(check=True, skip_runtime=skip_runtime)
     paddle_perf_rep = run_paddle_perf_check(check=True, skip_runtime=skip_runtime)
