@@ -16,6 +16,7 @@ set(_sublift_test_srcs
   paddle_geometry_test.cpp
   paddle_stub_test.cpp
   paddle_ctc_test.cpp
+  paddle_db_test.cpp
   paddle_models_test.cpp
   worker_framing_test.cpp
 

@@ -1159,8 +1159,8 @@
           "description": "固定 probability map box count exact、坐标≤1px、score≤1e-4；真实 fixture precision/recall=1.0@IoU0.95；empty 为 0 box/0 Rec call。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle Det 预处理与完整 DB/unclip parity。实现 cpp/src/paddle/ppocr_db_postprocess.hpp/.cpp (包含 0.3 threshold 二值化、2x2 dilation 膨胀、findContours 轮廓提取、fast score 过滤与 Polygon Unclip 几何扩张)，在 paddle_ocr.cpp 中彻底废除旧的连通域 AABB 简易实现并实现空检测 0 次 Rec 调用的性能短路；Catch2 paddle_db_test.cpp 运行全绿；sublift_tests 166 项全过；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06804",

@@ -9,6 +9,7 @@
 
 #include "paddle_models.hpp"
 #include "ppocr_ctc.hpp"
+#include "ppocr_db_postprocess.hpp"
 #include "sublift/image.hpp"
 
 namespace sublift {
@@ -292,7 +293,18 @@ struct PaddleOcrEngine::Impl {
       oh = static_cast<int32_t>(dims[1]);
       ow = static_cast<int32_t>(dims[2]);
     }
-    return boxes_from_prob_map(out, oh, ow, w, h);
+    paddle::DBPostProcessOptions opts;
+    auto db_res = paddle::db_postprocess(out, oh, ow, h, w, opts);
+
+      std::vector<DetBox> boxes;
+      boxes.reserve(db_res.aabbs.size());
+      for (size_t i = 0; i < db_res.aabbs.size(); ++i) {
+        const auto& a = db_res.aabbs[i];
+        float score = (i < db_res.quads.size()) ? db_res.quads[i].score : 1.0f;
+        boxes.push_back(DetBox{a.x, a.y, a.x + a.width, a.y + a.height, score});
+      }
+      return boxes;
+    }
   }
 
   paddle_detail::CtcResult run_rec(const uint8_t* rgb, int32_t w, int32_t h, int32_t stride,
@@ -375,8 +387,8 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
 
     auto boxes = impl_->run_det(rgb, w, h, stride);
     if (boxes.empty()) {
-      // Fallback: whole-image rec (aligns with "no boxes but may have text" recovery)
-      boxes.push_back(DetBox{0, 0, w, h, 1.0f});
+      // Empty Det short-circuit: immediately return empty result
+      return OcrResult::from_lines({});
     }
 
     std::vector<OcrLine> lines;

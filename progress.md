@@ -2,25 +2,25 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-30（6.8 Paddle Native hardening **feat-06802 完成**）
+- **最后更新：** 2026-07-30（6.8 Paddle Native hardening **feat-06803 完成**）
 - **当前 Phase：** phase6-native-cpp-core
-- **子阶段：** **6.8 Paddle Native hardening**（feat-06801、feat-06802 完成，下一刀 feat-06803）
+- **子阶段：** **6.8 Paddle Native hardening**（feat-06801 ~ feat-06803 完成，下一刀 feat-06804）
 - **产品默认 Runtime：** C++ `sublift_worker`（vision/mock）；paddle 在未显式 opt-in 时安全默认走 Python (`product_default`)
 - **回滚：** `SUBLIFT_RUNTIME=python` / `SUBLIFT_CPP_PADDLE=0`
 - **分支：** `refactor/paddle-native-hardening`
 
 ## 进行中
 
-- **feat-06803**（Paddle Det 预处理与完整 DB/unclip parity）
+- **feat-06804**（Quad Crop、Cls 与 Rec Parity）
 - 设计源头：`docs/cpp/phase6.8-paddle-hardening.md`
 
 ## 近期完成（最近 5 个）
 
+- [x] **feat-06803**：Paddle Det 预处理与完整 DB/unclip parity（包含 0.3 threshold 二值化、2x2 dilation、findContours、Polygon Unclip 与空图 0 Rec 调用的性能短路）
 - [x] **feat-06802**：Paddle 分阶段观测与冻结 Oracle Fixture（依赖/模型 SHA256 冻结，10 阶段节点 JSON schema，12 Parity goldens）
 - [x] **feat-06801**：Paddle 安全路由与 Experimental 标识（未显式指定默认 Python，显式 opt-in 进 C++ experimental，严禁改写引擎）
 - [x] **Phase 6.8 计划冻结**：safe route → stage parity → Det → Cls/Rec → E2E GT → performance → cutover
 - [x] **审核修复**：ORT recognize + 路由 probe + PP-OCRv6 路径
-- [x] **feat-06701–06706** paddle adapter（Det 简化连通域，文本 L4）
 
 ## 阻塞项 / 风险
 

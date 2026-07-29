@@ -9,7 +9,7 @@ target_include_directories(sublift_paddle_geometry
 
 target_link_libraries(sublift_paddle_geometry PUBLIC sublift_core)
 
-add_library(sublift_paddle STATIC paddle_ocr.cpp paddle_models.cpp)
+add_library(sublift_paddle STATIC paddle_ocr.cpp paddle_models.cpp ppocr_db_postprocess.cpp)
 add_library(sublift::paddle ALIAS sublift_paddle)
 
 target_include_directories(sublift_paddle
@@ -24,6 +24,12 @@ target_link_libraries(sublift_paddle
     sublift_core
     sublift_paddle_geometry
 )
+
+if(SUBLIFT_ENABLE_OPENCV AND OpenCV_FOUND)
+  target_compile_definitions(sublift_paddle PRIVATE SUBLIFT_HAS_OPENCV=1)
+  target_link_libraries(sublift_paddle PRIVATE ${OpenCV_LIBS})
+  target_include_directories(sublift_paddle PRIVATE ${OpenCV_INCLUDE_DIRS})
+endif()
 
 if(SUBLIFT_ENABLE_PADDLE AND ONNXRuntime_FOUND)
   target_compile_definitions(sublift_paddle PUBLIC SUBLIFT_HAS_PADDLE=1)
