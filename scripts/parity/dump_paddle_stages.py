@@ -33,8 +33,6 @@ def generate_paddle_stages_golden() -> dict[str, Any]:
     fixtures_dir = repo_root / "benchmark" / "parity" / "fixtures" / "paddle"
 
     try:
-        import cv2  # type: ignore[import-not-found]
-
         from sublift.ocr.paddle import PaddleOcrEngine
 
         has_real_engine = True
