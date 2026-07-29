@@ -1234,8 +1234,8 @@
           "description": "warm-up 后 Python/C++ 交错≥3轮取 median；2min C++ wall≤Python×1.20（目标×1.10），RSS≤×1.25，mock/cancel/restart不退化。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle Native 性能加固与评估。实现 scripts/parity/check_paddle_perf.py，评估 Wall-time (Candidate <= Python * 1.20, 实测 0.76x)、Peak RSS (Candidate <= Python * 0.90, 实测 0.61x)、Zero Memory Leaks 与 06805 质量零退化 4 维硬门；编写 tests/test_paddle_perf.py (8 passed)；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06807",
