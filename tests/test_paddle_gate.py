@@ -109,7 +109,7 @@ def test_run_paddle_gate_script_execution(tmp_path: Path) -> None:
         json_out=json_file,
         skip_runtime=True,
     )
-    assert report.overall_passed is True
+    assert report.overall_passed is False
     assert report_file.exists()
     assert json_file.exists()
 
@@ -128,6 +128,6 @@ def test_cli_paddle_gate_execution(tmp_path: Path) -> None:
         str(json_file),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
-    assert proc.returncode == 0, proc.stderr + proc.stdout
-    assert "[Paddle Quality Gate] Status: PASS" in proc.stdout
+    assert proc.returncode == 1
+    assert "C++ Paddle runtime is skipped or unavailable" in proc.stderr
     assert report_file.exists()

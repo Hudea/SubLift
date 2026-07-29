@@ -116,6 +116,6 @@ def test_cli_paddle_perf_execution(tmp_path: Path) -> None:
         str(json_file),
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
-    assert proc.returncode == 0, proc.stderr + proc.stdout
-    assert "[Paddle Perf Check] Status: PASS" in proc.stdout
+    assert proc.returncode == 1
+    assert "C++ Paddle runtime is skipped or unavailable" in proc.stderr
     assert report_file.exists()

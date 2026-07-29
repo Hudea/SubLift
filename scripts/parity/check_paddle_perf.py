@@ -189,6 +189,28 @@ def run_paddle_perf_check(
     skip_runtime: bool = False,
 ) -> PaddlePerfReport:
     """Run Paddle native performance benchmark check."""
+    from sublift.runtime import probe_cpp_paddle_available
+
+    if skip_runtime or not probe_cpp_paddle_available():
+        failing_gate = PerfGateResult(
+            name="cpp_paddle_perf_availability",
+            passed=False,
+            oracle_val=1.0,
+            candidate_val=0.0,
+            ratio=0.0,
+            limit=1.2,
+            message="Candidate C++ Paddle worker or model is unavailable / skipped",
+        )
+        report = PaddlePerfReport(
+            overall_passed=False,
+            metrics_oracle=PaddlePerfMetrics(),
+            metrics_candidate=PaddlePerfMetrics(),
+            gate_results=[failing_gate],
+        )
+        if check:
+            print("[FAIL] C++ Paddle runtime is skipped or unavailable for perf test", file=sys.stderr)
+        return report
+
     # Baseline benchmark metrics (C++ vs Python)
     oracle = PaddlePerfMetrics(
         wall_time_sec=12.50,

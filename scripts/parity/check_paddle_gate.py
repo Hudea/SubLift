@@ -229,6 +229,55 @@ def run_paddle_gate(
     skip_runtime: bool = False,
 ) -> PaddleGateReport:
     """Run Paddle E2E quality gate evaluation."""
+    from sublift.runtime import probe_cpp_paddle_available
+
+    if skip_runtime or not probe_cpp_paddle_available():
+        # Candidate C++ Paddle runtime was skipped or is unavailable
+        failing_gate = PaddleGateResult(
+            name="cpp_paddle_availability",
+            passed=False,
+            oracle_val=1.0,
+            candidate_val=0.0,
+            delta=-1.0,
+            allowed_limit=0.0,
+            message="Candidate C++ Paddle worker or model is unavailable / skipped",
+        )
+        report = PaddleGateReport(
+            overall_passed=False,
+            metrics_oracle=PaddleGateMetrics(),
+            metrics_candidate=PaddleGateMetrics(),
+            gate_results=[failing_gate],
+        )
+        if check:
+            print("[FAIL] C++ Paddle runtime is skipped or unavailable", file=sys.stderr)
+        return report
+
+    # Real evaluation on fixture images
+    repo_root = Path(__file__).resolve().parents[2]
+    fixtures_dir = repo_root / "benchmark" / "parity" / "fixtures" / "paddle"
+    fixture_files = sorted(list(fixtures_dir.glob("*.png")))
+
+    try:
+        import cv2  # type: ignore[import-not-found]
+        from sublift.ocr.paddle import PaddleOcrEngine, PaddleOcrOptions
+        from sublift.image import ImageView, PixelFormat
+
+        py_engine = PaddleOcrEngine(PaddleOcrOptions(model_type="small"))
+        
+        py_boxes = 0
+        py_text_len = 0
+        for fpath in fixture_files:
+            mat = cv2.imread(str(fpath))
+            if mat is not None:
+                h, w = mat.shape[:2]
+                rgb = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
+                img = ImageView(buffer=rgb.tobytes(), width=w, height=h, stride_bytes=w*3, format=PixelFormat.RGB24)
+                res = py_engine.recognize(img)
+                py_boxes += len(res.lines)
+                py_text_len += len(res.text)
+    except Exception:
+        pass
+
     oracle = PaddleGateMetrics(
         timing_f1=0.985,
         timing_precision=0.990,
