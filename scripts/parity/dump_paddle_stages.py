@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sublift.models import ImageView, OcrResult, PixelFormat
+from sublift.models import OcrResult
 from sublift.ocr.paddle import _VALID_MODEL_TYPES
 
 
@@ -51,24 +51,14 @@ def generate_paddle_stages_golden() -> dict[str, Any]:
         except Exception:
             engine = None
 
+    from PIL import Image
+
     for fpath in fixture_files:
         case_id = fpath.stem
         if has_real_engine and engine is not None:
-            mat = cv2.imread(str(fpath))
-            if mat is not None:
-                h, w = mat.shape[:2]
-                rgb = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
-                img_view = ImageView(
-                    buffer=rgb.tobytes(),
-                    width=w,
-                    height=h,
-                    stride_bytes=w * 3,
-                    format=PixelFormat.RGB24,
-                )
-                res = engine.recognize(img_view)
-            else:
-                res = OcrResult.from_lines([])
-                w, h = 800, 200
+            pil_img = Image.open(fpath)
+            w, h = pil_img.size
+            res = engine.recognize(pil_img)
         else:
             res = OcrResult.from_lines([])
             w, h = 800, 200
