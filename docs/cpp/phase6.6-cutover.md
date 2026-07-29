@@ -50,10 +50,10 @@ SUBLIFT_RUNTIME=python   →  一键回滚整段默认（或按 CLI/GUI 覆盖�
 
 | 项 | 归属 |
 |---|---|
-| 删除 `src/sublift` 产品代码 | **6.8+** 且全引擎 native 或产品放弃 |
+| 删除 `src/sublift` 产品代码 | **6.9+** 且 6.8 Paddle hardening 已过门，或产品放弃 Paddle |
 | 原生 Paddle / ONNX adapter | **6.7** — [phase6.7-paddle.md](phase6.7-paddle.md) |
 | 全面重写 SwiftUI | 仅改 launch / runtime 选择 |
-| 随包 ffmpeg / 公证 / universal2 收尾 | **6.8+** |
+| 随包 ffmpeg / 公证 / universal2 收尾 | **6.9+** |
 | 改打轴/OCR 阈值「刷」GT | 禁止；以 Oracle 行为为准 |
 | Linux 上假装有 Vision | capability 诚实 |
 

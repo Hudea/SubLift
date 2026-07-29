@@ -4,7 +4,10 @@
 
 为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Python CLI 与 macOS SwiftUI 开发者版本；PaddleOCR 已作为可选 CLI/GUI 引擎接入，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
 
-**Phase 6（进行中）：** 将产品 Runtime 从 Python 迁移到 C++ Core，行为与现网 Python 冻结 Oracle 对齐；迁移计划与契约见 [`docs/cpp/`](cpp/README.md)。在 cutover 完成前，上表「已交付」路径仍以 Python 为准；cutover 后门禁与引擎矩阵见 `docs/cpp/engine-matrix-and-cutover.md`。
+**Phase 6（进行中）：** 将产品 Runtime 从 Python 迁移到 C++ Core，行为与冻结 Python Oracle
+对齐；迁移计划与契约见 [`docs/cpp/`](cpp/README.md)。vision/mock 已完成 C++ cutover；
+Paddle 6.7 只交付 Native MVP，6.8 将先恢复 Python 安全默认，再完成 stage parity、多源质量门、
+性能门和重新 cutover。引擎矩阵见 `docs/cpp/engine-matrix-and-cutover.md`。
 
 ## 2. 用户与使用场景
 
@@ -34,7 +37,10 @@
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。
 - **F12 配置文件** ❌：尚不支持 `sublift.toml` / `--config`。
 - **F13 引擎对照模式** ❌：尚未提供产品化的多引擎并行对照。
-- **F14 PaddleOCR 第二引擎** ✅：已通过 rapidocr PP-OCRv6 + onnxruntime 接入，`--engine paddle` CLI/GUI 可选；首次模型下载后离线推理，模型缓存位于 `~/.cache/sublift/rapidocr-models`。
+- **F14 PaddleOCR 第二引擎** ⚠️：Python rapidocr PP-OCRv6 稳定路径已接入；C++ ONNX adapter
+  已达到 Native MVP，但简化 Det/Rec 路径、Paddle 专项 GT 与性能门待 Phase 6.8 收口。
+  `--engine paddle` CLI/GUI 可选，首次模型下载后离线推理，模型缓存位于
+  `~/.cache/sublift/rapidocr-models`。
 
 ### 3.2 Benchmark 与可观察性
 
@@ -59,7 +65,7 @@
 
 | 维度 | 要求 | 当前状态 |
 |---|---|---|
-| **性能** | 1080p、5fps 处理速度 ≥ 1× 实时 | ✅ 固定 GT 实测 21.0× 实时 |
+| **性能** | 1080p、5fps 处理速度 ≥ 1× 实时 | ⚠️ Vision 固定 GT 实测 21.0×；Paddle C++ 2min 样片约为 Python wall 的 2.74×，待 6.8 性能门 |
 | **离线 / 隐私** | 视频与文本不上传；已缓存模型时不依赖网络 | ✅ Vision 全程本机处理；PaddleOCR 仅首次下载模型需要联网，之后本机推理 |
 | **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；4K 自动内存审计、Vision 生命周期修复和 ≥10 分钟真实 GUI 验收均已通过。Phase 4.1 有界重叠实验也验证队列边界，但未通过吞吐保留门，产品保持串行。 |
 | **可分发** | 面向终端用户的独立安装包 | ❌ Phase 2 已明确跳过 `.app` 打包与公证 |
@@ -95,6 +101,7 @@
 | path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 已确认 Vision 请求执行主导，下一步先补多源 GT 后研究有效 OCR 调用。 |
 | Apple Vision 在非 macOS/CI 不可用 | 集成覆盖受限 | Mock 闭环测试；平台 API 限定在适配层 |
 | PaddleOCR 首次模型下载失败 | 首次 `--engine paddle` 无法启动 | CLI 给出不含 traceback 的失败原因与预下载命令；模型缓存后离线复用 |
+| C++ Paddle Native MVP 质量/性能不足 | 自动 C++ 路由可能比 Python 慢且漏/误识别 | 6.8 先恢复 Python 安全默认；分阶段对齐 Det/Cls/Rec，建立多源 GT，达到 C++ wall≤Python×1.20 后才重新 cutover |
 
 ## 8. 阶段验收状态
 

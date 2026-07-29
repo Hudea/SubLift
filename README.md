@@ -26,7 +26,7 @@
 
 - [架构](docs/ARCHITECTURE.md)
 - [需求规格](docs/REQUIREMENTS.md)
-- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.6 **done**：默认 C++ worker for vision/mock）
+- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.7 Native MVP done；6.8 Paddle hardening 待开始）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
 
 ## 安装
@@ -71,9 +71,14 @@ uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; Paddle
 ```bash
 uv run sublift extract <video> -o output.srt                 # 默认 runtime=cpp → spawn C++ worker
 uv run sublift extract clip.mkv --runtime python -o out.srt  # 强制 Python worker
-uv run sublift extract clip.mkv --engine paddle -o out.srt   # Paddle 始终走 Python
+uv run sublift extract clip.mkv --engine paddle --runtime python -o out.srt  # 当前推荐的 Paddle 稳定路径
+uv run sublift extract clip.mkv --engine paddle --runtime cpp -o out.srt     # C++ Paddle Native MVP（experimental）
 SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回滚
 ```
+
+> 6.7 当前自动路由在 C++ Paddle 可用时会选择 C++，但 2026-07-29 审计确认其真实
+> Det/Cls/Rec parity 与性能尚未达到产品门。6.8 的第一项会把自动默认恢复为 Python；
+> 在此之前使用 Paddle 时建议显式 `--runtime python`。
 
 ### Runtime 矩阵
 
@@ -81,9 +86,9 @@ SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回�
 |---|---|---|
 | **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
 | **mock** | **cpp** | CI / 流程验证 |
-| **paddle** | **cpp**（模型+`ENABLE_PADDLE` worker 可用时）；否则 **python** | 禁止静默落到 vision/mock；见 `docs/cpp/phase6.7-paddle.md` |
+| **paddle** | 当前实现：C++ 可用时自动 **cpp**，否则 **python** | C++ 为 6.7 Native MVP；hardening 期间的安全路由与重新 cutover 见 `docs/cpp/phase6.8-paddle-hardening.md` |
 
-解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → **产品默认 cpp**（paddle 例外）。
+解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → 当前产品自动策略。
 
 ### 一键回滚
 
@@ -101,7 +106,7 @@ export SUBLIFT_RUNTIME=python
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
 | `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 首次运行需下载模型 |
-| `--runtime` | 自动 | `python` \| `cpp`；覆盖 env 与默认（paddle 仍强制 Python） |
+| `--runtime` | 自动 | `python` \| `cpp`；覆盖 env 与自动策略；Paddle 在 6.8 完成前推荐显式 `python` |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）

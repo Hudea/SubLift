@@ -1,16 +1,20 @@
 # 引擎矩阵、Cutover 与回滚
 
-> 状态：Phase 6.7 彻底完成；全引擎（vision / mock / paddle）均完成 Native C++ 支持与 Parity 门禁验证。  
+> 状态：Phase 6.7 已完成 Paddle Native MVP，但只证明可运行、接线和 synthetic golden；
+> 真实 Det/Cls/Rec parity、Paddle 专项 GT 与性能门尚未通过。Phase 6.8 计划见
+> [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。
+> 当前代码仍是“C++ Paddle 可用则自动选择”；`feat-06801` 将先恢复 Python 安全默认，
+> `feat-06807` 过全门后才重新切回 C++ 默认。
 > 解决冲突：文档不得再同时写「6.6 全面切 C++」与「不实现 Paddle」而不给矩阵。
 
 ## 1. 引擎 × Runtime 矩阵（冻结策略）
 
-| engine | 6.0–6.5（双轨期） | 6.6 cutover 后默认 | **6.7+ paddle native** | 说明 |
-|---|---|---|---|---|
-| **vision** | Python 产品默认；C++ 实现后可开发者开关 | **C++ Worker** | 同左 | macOS 主路径 |
-| **mock** | Python / C++ 均可测 | **C++ Worker**（测试与 CI） | 同左 | parity 主力 |
-| **paddle** | **仅 Python Worker** | **仍走 Python Worker** | **C++ Worker（ONNX adapter 可用时）**；否则显式 Python | 设计见 [phase6.7-paddle.md](phase6.7-paddle.md) |
-| （实现名）paddle-native | 无 | 无 | **`sublift_paddle` + ORT + PP-OCRv6** | 6.7 feat-067xx；不阻塞 6.6 |
+| engine | 6.0–6.5（双轨期） | 6.6 cutover 后默认 | **6.7 当前实现** | **6.8 hardening 策略** | 说明 |
+|---|---|---|---|---|---|
+| **vision** | Python 产品默认；C++ 实现后可开发者开关 | **C++ Worker** | 同左 | 同左 | macOS 主路径 |
+| **mock** | Python / C++ 均可测 | **C++ Worker**（测试与 CI） | 同左 | 同左 | parity 主力 |
+| **paddle** | **仅 Python Worker** | **仍走 Python Worker** | C++ adapter 可用时自动 **C++ Worker**；否则显式 Python | 06801–06806：**Python 默认 / C++ experimental**；06807 过门后 C++ 默认 | 禁止静默改 vision/mock |
+| （实现名）paddle-native | 无 | 无 | **`sublift_paddle` + ORT + PP-OCRv6 MVP** | 完整 DB/Cls/Rec parity + GT + 性能门 | 设计见 6.7 / 6.8 文档 |
 
 ### 1.1 明确禁止
 
@@ -42,6 +46,18 @@ engine == paddle && C++ paddle unavailable → Python worker（显式 override�
 
 - **禁止** 不可用时静默改为 vision/mock。
 - `SUBLIFT_RUNTIME=python` 仍可强制全引擎走 Python（oracle / 回滚）。
+
+**6.8 hardening 期间（`feat-06801` 实施后）：**
+
+```text
+engine in {vision, mock} → C++ worker（不变）
+engine == paddle，未显式指定 runtime → Python worker（安全默认）
+engine == paddle，显式 runtime=cpp 且 available → C++ worker（experimental）
+engine == paddle，显式 runtime=cpp 但 unavailable → 明确错误或显式 Python override
+```
+
+只有 `feat-06803`–`feat-06806` 的 stage、质量、性能和稳定性门全部通过，
+`feat-06807` 才允许恢复 6.7 的自动 C++ 默认。
 
 **非 macOS：** 默认引擎候选为 paddle（6.7 native 或 Python）；无 Vision。Linux 至少可 `ENABLE_PADDLE=ON` 构建（见 6.7 设计）。
 
@@ -122,10 +138,10 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | `.app` 内 worker | `Contents/MacOS/sublift-worker` 或 `Contents/Helpers/` |
 | OpenCV | 动态链接系统或 brew；或静态进 worker（体积/许可评估） |
 | rpath | `@executable_path/../Frameworks` 预留 |
-| 签名 / 公证 | 随 feat-025 / **6.8+**；符号 hidden 减少泄漏 |
+| 签名 / 公证 | 随 feat-025 / **6.9+**；符号 hidden 减少泄漏 |
 | universal2 / 最低 macOS | 与 GUI 一致（当前 macOS 13+） |
 | ffmpeg | 默认系统；随包另 feat |
-| Paddle 模型 / ORT | 6.7 开发用系统 ORT + 用户缓存模型；随包模型 **6.8+** |
+| Paddle 模型 / ORT | 6.7/6.8 开发用系统 ORT + 用户缓存模型；随包模型 **6.9+** |
 
 ## 6. 与子阶段关系
 
@@ -134,5 +150,6 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | 6.0 `feat-06005` | 冻结本文 + worker-ipc + 矩阵 |
 | 6.4–6.5 | 实现 vision/mock C++；capability 上报 |
 | 6.6 | vision/mock 默认 C++；paddle 显式 Python；双轨与回滚 |
-| **6.7** | **paddle C++ adapter（ONNX）**；可用则 paddle→C++；见 [phase6.7-paddle.md](phase6.7-paddle.md) |
-| 6.8+ | 去 Python 产品依赖 / 分发打包（**仅当**各引擎 native 足够或产品放弃 Python） |
+| **6.7** | **paddle C++ Native MVP（ONNX）**；当前代码可用则 paddle→C++；见 [phase6.7-paddle.md](phase6.7-paddle.md) |
+| **6.8** | 安全路由 → stage parity → 多源质量门 → 性能 → 重新 cutover；见 [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) |
+| 6.9+ | 去 Python 产品依赖 / 分发打包（**仅当**6.8 全门通过或产品放弃 Paddle） |

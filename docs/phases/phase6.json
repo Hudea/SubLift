@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 在 6.6 仍 Python。6.7 完成：PaddleOCR C++ adapter（ONNX/PP-OCRv6，feat-06701–06706），见 docs/cpp/phase6.7-paddle.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker。6.7 已交付 PaddleOCR C++ Native MVP（ONNX/PP-OCRv6，feat-06701–06706），但不代表真实推理质量/性能达到产品默认门；6.8 负责 Paddle Native 质量、性能与重新 cutover（feat-06801–06807），见 docs/cpp/phase6.8-paddle-hardening.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -1086,6 +1086,181 @@
       ],
       "status": "done",
       "evidence": "2026-07-29: 落地 Parity harness + paddle 产品默认路由。dump_paddle.py 接入 --check 参数与 golden_registry.py，生成/校验 benchmark/parity/goldens/paddle/paddle.v1.json；Catch2 paddle_parity_test.cpp 严格比对全量字符/置信度/AABB包围盒 26 断言全绿；check_cutover_gate.py 运行实测 11/11 Parity goldens + C++ Worker 性能 + GT L3 全部 PASS；更新 engine-matrix-and-cutover.md 矩阵；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+    },
+    {
+      "id": "feat-06801",
+      "name": "Paddle 安全路由与 Experimental 标识",
+      "description": "在 Native hardening 完成前把 engine=paddle 的自动默认恢复为 Python；仅显式 runtime/developer override 允许 C++ Paddle，并在 CLI/GUI/日志诚实显示 experimental 与最终 runtime。不得静默改成 vision/mock。",
+      "module": "src/sublift/runtime.py; apps/macos/; README.md; docs/ARCHITECTURE.md; docs/cpp/engine-matrix-and-cutover.md; tests/",
+      "dependencies": [
+        "feat-06706"
+      ],
+      "subtasks": [
+        {
+          "name": "Python / Swift 路由矩阵",
+          "description": "覆盖默认、显式 flag、env、C++ Paddle 不可用四类情况；默认 paddle→Python，显式 cpp 才进 Candidate。"
+        },
+        {
+          "name": "产品可观测性",
+          "description": "CLI/GUI/日志显示最终 runtime 与 paddle-native experimental，不隐瞒 capability 或 fallback。"
+        },
+        {
+          "name": "契约与回归",
+          "description": "同步 README/ARCHITECTURE/引擎矩阵，并运行 ruff/mypy/pytest/Swift/C++ 相关门。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06802",
+      "name": "Paddle 分阶段观测与冻结 Oracle Fixture",
+      "description": "建立 Python RapidOCR Oracle 与 C++ Candidate 共用的 Det/Cls/Rec 分阶段 dump schema、manifest 和离线小型 fixture；冻结依赖版本、模型/字典 SHA256、关键参数与阶段计数，使差异可归因。",
+      "module": "scripts/parity/; benchmark/parity/; cpp/src/paddle/; src/sublift/ocr/paddle.py; docs/cpp/phase6.8-paddle-hardening.md",
+      "dependencies": [
+        "feat-06801"
+      ],
+      "subtasks": [
+        {
+          "name": "Stage dump schema",
+          "description": "记录输入、Det tensor/probability/boxes、crop、Cls、Rec tensor/logits/tokens 与最终 lines；含 schema/runtime/model/config fingerprint。"
+        },
+        {
+          "name": "Oracle 冻结",
+          "description": "钉扎 rapidocr/onnxruntime/OpenCV、PP-OCRv6 tier、模型/字典 hash 与所有关键参数。"
+        },
+        {
+          "name": "离线 fixtures",
+          "description": "覆盖 empty、单/双行、CJK/Latin/混排、低对比、倾斜/旋转与相邻框；同一 manifest 驱动 Python/C++。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06803",
+      "name": "Paddle Det 预处理与完整 DB/unclip parity",
+      "description": "替换简化阈值+连通域 AABB：对齐 RapidOCR 的线性 resize、BGR/NCHW/归一化、dilation、contour、minAreaRect、polygon score、Clipper unclip、过滤与坐标回映；内部保留 quad；Det 无框直接返回空结果且不调用 Rec。",
+      "module": "cpp/src/paddle/; cpp/include/sublift/; cpp/tests/; benchmark/parity/; third_party notices",
+      "dependencies": [
+        "feat-06802"
+      ],
+      "subtasks": [
+        {
+          "name": "Det tensor parity",
+          "description": "输入 shape exact、max_abs≤1e-5；同 provider probability map shape exact、max_abs≤1e-5。"
+        },
+        {
+          "name": "完整 DB 后处理",
+          "description": "2x2 dilation、findContours、minAreaRect、mask score、unclip_ratio=1.6、clip/filter/sort 与 quad 保留。"
+        },
+        {
+          "name": "Det fixture 门",
+          "description": "固定 probability map box count exact、坐标≤1px、score≤1e-4；真实 fixture precision/recall=1.0@IoU0.95；empty 为 0 box/0 Rec call。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06804",
+      "name": "Paddle Quad crop、Cls 与 Rec parity",
+      "description": "在 Det 框冻结后对齐 perspective crop、高窄旋转、Cls、Rec 动态宽度/右侧零 padding、batch 语义、metadata 字典、CTC 解码、text_score 过滤与最终排序。",
+      "module": "cpp/src/paddle/; cpp/include/sublift/; cpp/tests/; benchmark/parity/",
+      "dependencies": [
+        "feat-06803"
+      ],
+      "subtasks": [
+        {
+          "name": "Perspective crop / Cls",
+          "description": "四点透视裁剪与 180° 分类旋转；crop 尺寸≤1px、像素 mean abs≤1/P99≤3；Cls label exact、score≤1e-4。"
+        },
+        {
+          "name": "Rec preprocess / batch",
+          "description": "3x48x320 基准、动态 max width、右侧零 padding、width sort/batch；有效区 max_abs≤1e-5，batch=1/N 输出 exact。"
+        },
+        {
+          "name": "Decode 与 final lines",
+          "description": "固定 crop text exact、confidence≤1e-4；最终文本 exact、AABB≤1px、顺序 exact；缺 Cls 模型时诚实失败。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06805",
+      "name": "多源 Paddle E2E 质量门",
+      "description": "建立明确区分 engine=paddle/runtime=python|cpp 的 Q0 fixture、Q1 固定短片和 Q2 多源 GT 门；使用同一 benchmark diagnostics 评价 timing、CER、usable、noise/empty 与 box，并生成 JSON+Markdown 报告。",
+      "module": "scripts/parity/check_paddle_gate.py; benchmark/; docs/reports/; docs/cpp/phase6.8-paddle-hardening.md",
+      "dependencies": [
+        "feat-06804"
+      ],
+      "subtasks": [
+        {
+          "name": "多源数据分层",
+          "description": "Q1 至少覆盖 CJK/Latin/混排；Q2 ≥3 来源、总时长≥10min、版本化 GT；不得只用单一字幕样式。"
+        },
+        {
+          "name": "相对 Oracle 硬门",
+          "description": "F1/precision 下降≤1pp、CER 增加≤1pp、usable 下降≤2pp、box recall≥0.98@IoU0.5、mean IoU≥0.90。"
+        },
+        {
+          "name": "绝对 GT 与报告",
+          "description": "冻结 Python Paddle 水位；Candidate 同时过相对/绝对门；报告记录 engine/runtime/model/config/commit，默认写 /tmp。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06806",
+      "name": "Paddle Native 性能加固",
+      "description": "质量门冻结后，依次优化 ORT 线程、Rec batch、空 Det 短路、OpenCV SIMD 热点、Session/元数据/缓冲复用与容器分配；每个优化点独立 A/B 并重跑 06805 质量门。",
+      "module": "cpp/src/paddle/; cpp/tests/; scripts/parity/; benchmark/",
+      "dependencies": [
+        "feat-06805"
+      ],
+      "subtasks": [
+        {
+          "name": "ORT 与 Rec batch sweep",
+          "description": "同机 Release 下测试 ORT 1/2/4/default 与 batch 1/2/4/6；保持 batch parity。"
+        },
+        {
+          "name": "热点与分配优化",
+          "description": "OpenCV resize/color/normalize、session/name/MemoryInfo 生命周期、scratch buffer 与 vector 复用。"
+        },
+        {
+          "name": "Canonical 性能门",
+          "description": "warm-up 后 Python/C++ 交错≥3轮取 median；2min C++ wall≤Python×1.20（目标×1.10），RSS≤×1.25，mock/cancel/restart不退化。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06807",
+      "name": "Paddle C++ 产品 Cutover",
+      "description": "仅在 stage parity、多源质量、性能、稳定性与回滚门全部通过后，才把 C++ Paddle 从 experimental 恢复为产品默认；不可用时显式 Python Paddle override，禁止静默改引擎。",
+      "module": "src/sublift/runtime.py; apps/macos/; cpp/; scripts/parity/; README.md; docs/ARCHITECTURE.md; docs/REQUIREMENTS.md; docs/reports/",
+      "dependencies": [
+        "feat-06806"
+      ],
+      "subtasks": [
+        {
+          "name": "默认路由切换",
+          "description": "engine=paddle 且 C++ available→C++；unavailable→显式 Python；日志/GUI 显示 runtime/model/stable 状态。"
+        },
+        {
+          "name": "发布与长流门",
+          "description": "标准 init、Paddle Release ctest、Python/Swift 门、≥10min 长流、cancel/restart、06803–06806 全门通过。"
+        },
+        {
+          "name": "回滚演练与收尾",
+          "description": "默认 cpp→强制 Python→cpp restart 无串扰；更新矩阵/README/架构/需求/跟踪与 cutover 报告；Python Paddle 至少保留一个小版本周期。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
     }
   ]
 }

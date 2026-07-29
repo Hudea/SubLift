@@ -4,7 +4,8 @@
 > 任务跟踪：`docs/phases/phase6.json`  
 > 总览：[phase6-overview.md](phase6-overview.md)  
 > 契约：[architecture.md](architecture.md) · [parity-contract.md](parity-contract.md) · [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) · [worker-ipc-contract.md](worker-ipc-contract.md)  
-> **门槛：** 6.6 cutover 已完成（feat-06601–06605）；vision/mock 产品默认 C++；paddle **当前** 仍仅 Python  
+> **状态：** feat-06701–06706 已完成，交付的是 **Native MVP**；2026-07-29 质量审计确认它尚未达到产品级 RapidOCR parity / 性能门
+> **后续：** [Phase 6.8 Paddle Native hardening](phase6.8-paddle-hardening.md)
 > **Oracle：** `src/sublift/ocr/paddle.py`（`PaddleOcrEngine` + rapidocr PP-OCRv6 + onnxruntime）
 
 ## 1. 目标
@@ -29,14 +30,18 @@ ImageView (RGB24 优先，与 extractor / Vision 一致)
 | Runtime 策略 | 有 C++ paddle 时允许 `runtime=cpp`；否则保留 `paddle_override → Python` |
 | Parity | box/颜色 L0；合成图/固定夹具 L2–L3；live 文本 L4；**不**要求与 Vision 同字 |
 
-**本子阶段结束时（目标 / 验收状态）：**
+**本子阶段结束时（已实现的 MVP 验收边界）：**
 
 - macOS / Linux（有 ONNX）可构建并运行 **C++ paddle**（`SUBLIFT_ENABLE_PADDLE=ON` + ORT + PP-OCRv6 模型）；
 - 产品默认：`paddle` → **优先 C++ worker**（`probe_cpp_paddle_available` / `is_paddle_available` 为真时），否则 **显式** 回退 Python（不静默改引擎）；
 - Det 后处理为 **简化连通域 AABB**（非完整 DB unclip）；文本 parity 为 **L4**，不要求与 rapidocr 逐字 identical；
 - Python `PaddleOcrEngine` **保留**为 Oracle / 回滚 / 无 ONNX 环境。
 
-**本子阶段不结束：** 删除 Python 树、`.app` 内嵌模型与公证、去 `uv` 的完整无 Python 分发（见 §2 不做 / 6.8+）。
+这里的“完成”不表示真实 Det/Cls/Rec、字幕质量或性能已与 RapidOCR 对齐。简化连通域、
+AABB crop、无框整图 fallback、逐框 Rec 与缺少 Paddle 专项 GT 门均由 6.8 收口。
+
+**本子阶段不结束：** Paddle 产品级质量/性能（6.8）；删除 Python 树、`.app` 内嵌模型与
+公证、去 `uv` 的完整无 Python 分发（6.9+）。
 
 ## 2. 做 / 不做
 
@@ -63,8 +68,8 @@ ImageView (RGB24 优先，与 extractor / Vision 一致)
 | 改 signature / changepoint / line_select / conf 阈值「刷」GT | 禁止；parity 以 Oracle 为准 |
 | 嵌入完整 PaddlePaddle 训练框架 | 过重；Oracle 已是 ONNX 推理 |
 | 用 subprocess 调 Python rapidocr 冒充 native | 不解决产品依赖 |
-| 删除 `src/sublift` / 去掉 Python oracle | **6.8+** 且全引擎有 native 或产品放弃 |
-| macOS 公证、随包 ffmpeg、universal2 收尾 | **6.8+ / 分发** |
+| 删除 `src/sublift` / 去掉 Python oracle | **6.9+** 且 6.8 已过门 |
+| macOS 公证、随包 ffmpeg、universal2 收尾 | **6.9+ / 分发** |
 | Vision 路径改动 | 非本子阶段 |
 | 并行 `recognize` / 多线程 ORT session 共享无锁 | 禁止；与串行 Pipeline 契约一致 |
 | 要求 paddle 文本与 Vision **逐字**一致 | 禁止；两引擎 L4 独立 |
@@ -301,17 +306,17 @@ feat-06605 (cutover done) + feat-06201 (IOcrEngine)
 | 与 6.6 paddle_override 行为冲突 | 06705/06706 明确迁移表与单测矩阵 |
 | 性能预期 | 目标为 **去 Python 依赖**，不承诺必快于 rapidocr |
 
-## 10. 与 6.6 / 6.8 的边界
+## 10. 与 6.6 / 6.8 / 6.9 的边界
 
-| 主题 | 6.6（已完成） | **6.7（本文）** | 6.8+（后置） |
+| 主题 | 6.6（已完成） | **6.7（本文）** | 6.8 / 6.9+ |
 |---|---|---|---|
 | vision/mock 默认 C++ | ✅ | 保持 | 保持 |
-| paddle 实现 | 仅 Python | **C++ adapter** | 打磨/量化 |
-| paddle 默认 runtime | 强制 Python | **可用则 C++** | 可去 Python |
-| 删除 Python 产品依赖 | 否 | 否 | 评估 |
-| `.app` 模型随包 / 公证 | 否 | 设计预留 | 实施 |
+| paddle 实现 | 仅 Python | **C++ Native MVP** | 6.8 完整 parity / 性能 |
+| paddle 默认 runtime | 强制 Python | **可用则 C++（当前实现）** | 6.8 先安全回退，过门后重新 cutover |
+| 删除 Python 产品依赖 | 否 | 否 | 6.9+ 评估 |
+| `.app` 模型随包 / 公证 | 否 | 设计预留 | 6.9+ 实施 |
 
-## 11. 文档与跟踪更新清单（设计落地时）
+## 11. 文档与跟踪记录
 
 | 文件 | 动作 |
 |---|---|
@@ -319,19 +324,20 @@ feat-06605 (cutover done) + feat-06201 (IOcrEngine)
 | `phase6-overview.md` / `docs/cpp/README.md` / `NAMING.md` | 登记 6.7 |
 | `engine-matrix-and-cutover.md` | 矩阵改为「6.7+ paddle native」 |
 | `architecture.md` | target 图实线 `sublift_paddle` |
-| `docs/phases/phase6.json` | feat-06701–06706 `not-started` |
+| `docs/phases/phase6.json` | feat-06701–06706 `done`，记录 Native MVP evidence |
 | `feature-list.json` | `phase6.paddle-native` 功能块 |
 | `docs/DECISIONS.md` | ADR：选型 ONNX + 路由策略 |
-| `progress.md` | 当前子阶段指向 6.7 |
+| `progress.md` | 当前子阶段已指向 6.8 hardening |
 
-## 12. 建议执行顺序（实现阶段）
+## 12. 实际执行顺序（已完成）
 
-1. **06701** 纯函数 + 单测（零外部依赖）  
-2. **06702** CMake 发现 ORT（本机装通）  
-3. **06703–06704** 最小 recognize + small 模型  
-4. **06705** 接通 worker，CLI 冒烟  
+1. **06701** 纯函数 + 单测（零外部依赖）
+2. **06702** CMake 发现 ORT（本机装通）
+3. **06703–06704** 最小 recognize + small 模型
+4. **06705** 接通 worker，CLI 冒烟
 5. **06706** parity 与默认路由翻转（单独 PR，带门禁）
 
 ---
 
-*设计状态：草案已写入跟踪（2026-07-29）。实现前若 ORT 安装源或 rapidocr 模型布局有变，先修订 §3 再动代码。*
+*实现状态：Native MVP 已完成（2026-07-29）；产品级质量与性能边界见
+[Phase 6.8](phase6.8-paddle-hardening.md)。*

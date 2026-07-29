@@ -5,17 +5,48 @@
 
 ---
 
+## ADR-0024 Phase 6.8 Paddle Native 质量 / 性能加固先于去 Python 分发（2026-07-29）
+
+- **状态**：已确认（路线与验收门冻结；实现从 feat-06801 开始）。
+- **背景**：6.7 已证明 C++ Paddle adapter 能加载 PP-OCRv6、接入 Worker 并输出真实 SRT，
+  但其完成门主要是 synthetic 行排序/AABB golden 与 L4 文本烟测。审计发现 Candidate 使用
+  简化连通域 AABB、最近邻预处理、AABB crop、逐框 Rec、缺完整 Cls/DB unclip，并在 Det
+  无框时整图 Rec；现有 GT cutover 又固定为 Vision。相同 2 分钟样片 C++ wall 147.8s、
+  Python 54.0s（约 2.74×），尚不具备 Paddle 产品默认条件。
+- **决策**：
+  1. 在原“6.8+ 去 Python/打包”前插入 **Phase 6.8 Paddle Native Quality & Performance
+     Hardening**；去 Python、随包 ORT/模型/ffmpeg、universal2、公证顺延到 **6.9+**。
+  2. `feat-06801` 先恢复安全路由：Paddle 自动默认 Python，只有显式 override 使用
+     C++ experimental；禁止静默改为 Vision/Mock。
+  3. 质量实现顺序固定为：分阶段 Oracle → 完整 Det DB/unclip → Quad crop/Cls/Rec →
+     多源 Paddle E2E GT；不得用 Vision GT 或纯几何 golden 代替。
+  4. **先冻结质量、后优化性能**。性能优化按 ORT 线程、Rec batch、空 Det 短路、
+     OpenCV/SIMD 与缓冲复用推进，每一步重跑质量门。
+  5. 产品重新 cutover 的 canonical 硬门为 C++ wall median ≤ Python ×1.20
+     （目标 ×1.10），并同时满足 Paddle 专项质量、RSS、cancel/restart 与长流门。
+  6. 若门未通过，Paddle 默认继续 Python；路线图不得倒逼降低阈值或强行去 Python。
+- **理由**：当前差距主要来自 adapter 算法/执行策略，而不是 IPC 或 C++ 语言本身；先获得
+  可归因的 stage parity，才能判断正确性与性能优化是否有效，并给默认切换提供可审计证据。
+- **影响**：新增 `docs/cpp/phase6.8-paddle-hardening.md` 与 feat-06801–06807；
+  `docs/cpp/NAMING.md`、引擎矩阵、Phase 跟踪和项目总览同步；分发范围改为 feat-069xx 起。
+
+---
+
 ## ADR-0023 Phase 6.7 PaddleOCR C++ adapter 选型与路由（2026-07-29）
 
-- **状态**：已确认（设计冻结；实现属 feat-06701–06706）。
+- **状态**：已确认（feat-06701–06706 已实现）；“可用时产品默认 C++”已被 ADR-0024
+  的 6.8 安全路由 / 重新 cutover 决策取代。
 - **背景**：6.6 cutover 后 vision/mock 默认 C++，paddle 仍强制 Python（rapidocr + onnxruntime + PP-OCRv6）。
   产品跨平台路径与「去 Python 产品依赖」均被 paddle 卡住；需 native adapter，且不得静默落到 vision/mock。
 - **决策**：
   1. **推理栈**：C++ 使用 **ONNX Runtime + PP-OCRv6**（与 Python rapidocr 同系），**不**引入完整 PaddlePaddle Inference 训练/全栈，**不**用嵌入 CPython 调 rapidocr。
   2. **Target**：新增可选 `sublift_paddle`（`SUBLIFT_ENABLE_PADDLE` 默认 OFF）；`sublift_core` 零 ORT/ObjC 依赖。
   3. **行为 Oracle**：`src/sublift/ocr/paddle.py`；颜色（RGB 入、内部 BGR）、四角点 AABB/clamp/排序、空结果 vs 故障上抛语义必须对齐。
-  4. **路由**：C++ paddle **可用**时 `engine=paddle` 允许/默认 C++ worker；**不可用**时显式 `paddle_override → Python`；**禁止**静默 vision/mock。
-  5. **范围**：6.7 完成 adapter + worker 接线 + parity/默认路由；**不**删除 Python 树、不在本子阶段做公证/随包模型（6.8+）。
+  4. **6.7 路由**：C++ paddle **可用**时 `engine=paddle` 允许/默认 C++ worker；
+     **不可用**时显式 `paddle_override → Python`；**禁止**静默 vision/mock。审计后的
+     6.8 路由与重新 cutover 以 ADR-0024 为准。
+  5. **范围**：6.7 完成 adapter + worker 接线 + MVP parity/默认路由；**不**删除 Python 树、
+     不在本子阶段做公证/随包模型（现顺延到 6.9+）。
 - **理由**：与现有 Python extra 一致、体积可控、跨平台；延续 Phase 6「adapter 分 target + parity 再 cutover」模式（类比 6.4 Vision）。
 - **影响**：`docs/cpp/phase6.7-paddle.md`、引擎矩阵、architecture target 图、`resolve_runtime` / GUI 策略、CMake 选项。
 

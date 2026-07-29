@@ -18,6 +18,7 @@ from typing import Any, cast
 
 import pytest
 
+
 # Prefer Release (cpp-rel) then Debug (cpp), same as product resolve_worker_bin.
 def _resolve_worker_bin() -> Path:
     root = Path(__file__).resolve().parents[2]

@@ -6,17 +6,25 @@
 - **平台 API 隔离**：平台特定 API（Apple Vision）只能出现在 `ocr/vision.py`，核心层只依赖 Protocol
 - **串联层不实现单一能力**：pipeline / export 组合能力模块，处理流程逻辑
 
-## 1.1 Phase 6 — Native C++ Core（默认已切换，hardening 进行中）
+## 1.1 Phase 6 — Native C++ Core（6.8 Paddle hardening 待开始）
 
-> **当前产品默认路径：vision / mock 使用 C++ Worker；paddle 使用 Python Worker。**
-> SwiftUI + UDS 边界保留；Python Runtime 继续承担 paddle、冻结 Oracle 与 `SUBLIFT_RUNTIME=python` 回滚。产品 C++ Worker 需要 OpenCV 签名流水线；`SUBLIFT_ENABLE_OPENCV=OFF` 仅产出不宣告 engine/capability、明确拒绝作业的 sanitizer 诊断 Worker，不能作为 runtime 回退。相关计划见 `docs/cpp/phase6.6-hardening.md` 与 `docs/cpp/phase6.6-sanitizer-isolation.md`。
+> **当前实现路径：vision / mock 使用 C++ Worker；paddle 在 C++ adapter/模型可用时也会自动使用
+> C++ Worker，否则显式 Python。** 6.7 Paddle 只达到 Native MVP；真实推理质量和性能尚未达到
+> 产品默认门。`feat-06801` 将先把 Paddle 自动默认恢复为 Python，`feat-06807` 过全门后才重新
+> cutover。SwiftUI + UDS 边界保留；Python Runtime 继续承担冻结 Oracle、Paddle 稳定路径与
+> `SUBLIFT_RUNTIME=python` 回滚。
+>
+> 产品 C++ Worker 需要 OpenCV 签名流水线；`SUBLIFT_ENABLE_OPENCV=OFF` 仅产出不宣告
+> engine/capability、明确拒绝作业的 sanitizer 诊断 Worker，不能作为 runtime 回退。相关计划见
+> `docs/cpp/phase6.6-hardening.md`、`docs/cpp/phase6.6-sanitizer-isolation.md` 与
+> `docs/cpp/phase6.8-paddle-hardening.md`。
 
 | | 说明 |
 |---|---|
 | 计划与契约 | **[`docs/cpp/`](cpp/README.md)**（总览、architecture、parity、worker-ipc、引擎矩阵/cutover） |
 | 任务跟踪 | [`docs/phases/phase6.json`](phases/phase6.json) |
 | 行为 Oracle | **冻结** `oracle_commit` + golden（见 `docs/cpp/parity-contract.md`），不是未钉扎的 main 尖端 |
-| 引擎 cutover | vision/mock → C++ Worker；paddle → 仍 Python（见 `docs/cpp/engine-matrix-and-cutover.md`） |
+| 引擎 cutover | vision/mock → C++；Paddle 6.7 Native MVP 当前可自动 C++，6.8 先安全回退再按专项门重新 cutover（见 `docs/cpp/engine-matrix-and-cutover.md`） |
 | 实现树 | `cpp/`（自 feat-06002 起） |
 
 Python 侧 `docs/design/*` 在 cutover 前仍是算法语义叙述源；与 C++ 冲突时以冻结 golden 为准。
@@ -324,3 +332,4 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 - **ADR-0016**：未通过真实 A/B 吞吐保留门的 path-mode overlap 不进入 main；保留数据作为负向证据
 - **ADR-0017**：OCR 内部明细是 `ocr` coverage leaf 的子树，不参与 core coverage 相加；归因完成后先补多源 GT，再实验代表帧排序与有效调用数
 - **ADR-0018**：PaddleOCR 采用 rapidocr PP-OCRv6 + onnxruntime，模型缓存放在用户缓存目录；作为可选第二 OCR 引擎接入
+- **ADR-0024**：在去 Python/打包前插入 Phase 6.8，先完成 Paddle Native stage parity、多源质量门、性能与安全 cutover

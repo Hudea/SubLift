@@ -20,7 +20,8 @@
 | [phase6.6-cutover.md](phase6.6-cutover.md) | **6.6 Cutover**（**done**：默认 C++ / 门禁 / 回滚） |
 | [phase6.6-hardening.md](phase6.6-hardening.md) | **6.6 Worker Hardening**（feat-06606，标准开发门已完成） |
 | [phase6.6-sanitizer-isolation.md](phase6.6-sanitizer-isolation.md) | **6.6 Sanitizer 依赖隔离**（feat-06607，诊断隔离已完成；发布门仍待解决） |
-| [phase6.7-paddle.md](phase6.7-paddle.md) | **6.7 PaddleOCR C++ adapter**（ONNX / PP-OCRv6；**设计中**） |
+| [phase6.7-paddle.md](phase6.7-paddle.md) | **6.7 PaddleOCR C++ Native MVP**（ONNX / PP-OCRv6；**done**） |
+| [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) | **6.8 Paddle Native 质量与性能加固**（feat-06801–06807；**not-started**） |
 
 ### 架构与契约
 
@@ -49,4 +50,5 @@
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision/ORT**；OCR adapter 分 target；图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
 6. **6.6 已完成**：vision/mock 产品默认 C++ worker；paddle 仍 Python；`SUBLIFT_RUNTIME=python` 回滚；门禁报告 `docs/reports/phase6.6-cutover-gate.md`；GT L3 缺资产见 ADR-0022。
-7. **6.7 设计中**：Paddle C++ adapter（ONNX Runtime + PP-OCRv6）；见 [phase6.7-paddle.md](phase6.7-paddle.md)。
+7. **6.7 Native MVP 已完成**：Paddle C++ adapter 能运行并接入产品，但简化 Det 与 synthetic golden 不代表真实 RapidOCR parity。
+8. **6.8 待开始**：先安全回退默认路由，再完成 Det/Cls/Rec 质量、E2E GT、性能和重新 cutover；见 [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。

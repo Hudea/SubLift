@@ -55,8 +55,9 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 | **6.4 Vision** | `feat-064xx` | ObjC++ Vision adapter | 仍 Python |
 | **6.5 Worker** | `feat-065xx` | 按 [worker-ipc-contract.md](worker-ipc-contract.md) 实现 | 可双轨 |
 | **6.6 Cutover** | `feat-066xx` | 按 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 默认化 | vision/mock→C++；paddle→Python |
-| **6.7 Paddle native** | `feat-067xx` | [phase6.7-paddle.md](phase6.7-paddle.md)：ONNX PP-OCRv6 `IOcrEngine` | paddle→C++（可用时）；否则 Python |
-| **6.8+** | `feat-068xx`… | 去 Python 产品依赖 / 打包分发等 | 后置 |
+| **6.7 Paddle Native MVP** | `feat-067xx` | [phase6.7-paddle.md](phase6.7-paddle.md)：ONNX PP-OCRv6 `IOcrEngine` 可运行、接线与基础 golden | 当前实现可用时自动 C++；真实质量/性能未过产品门 |
+| **6.8 Paddle hardening** | `feat-068xx` | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)：安全路由、完整 Det/Cls/Rec parity、多源质量门、性能与重新 cutover | 先 Python 默认 / C++ experimental；过门后才 C++ 默认 |
+| **6.9+** | `feat-069xx`… | 去 Python 产品依赖 / 打包分发等 | 后置 |
 
 **进入 6.1 的硬门槛：** `feat-06001`–`feat-06005` 全部 `done`。
 
@@ -85,8 +86,11 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 
 - Phase 5.0（PaddleOCR via rapidocr）**已完成**（Python Oracle）。
 - C++ **6.0–6.6 不实现**原生 Paddle；cutover 后 **paddle 显式走 Python worker**，vision/mock 走 C++。
-- **6.7** 落地 C++ adapter（ONNX Runtime + PP-OCRv6），与 Python Oracle 行为 parity；可用时 paddle 可走 C++ worker。  
-  设计：[phase6.7-paddle.md](phase6.7-paddle.md)。完整矩阵：见 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md)。
+- **6.7** 已落地 C++ adapter（ONNX Runtime + PP-OCRv6），证明 Native MVP 可运行；其
+  synthetic golden 与 L4 文本检查不等于 RapidOCR 真实推理质量 parity。
+- **6.8** 负责完整 Det/Cls/Rec parity、多源 Paddle GT、性能门与产品重新 cutover。
+  设计：[phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。完整矩阵：见
+  [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md)。
 
 ## 7. 非目标（全 Phase 6 默认）
 
@@ -114,8 +118,9 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - **6.4 Vision OCR：** **done** — [phase6.4-vision.md](phase6.4-vision.md)（feat-06401–06405）
 - **6.5 C++ Worker：** **done** — [phase6.5-worker.md](phase6.5-worker.md)（feat-06501–06505；opt-in 双轨）
 - **6.6 Cutover：** **done** — [phase6.6-cutover.md](phase6.6-cutover.md)（feat-06601–06605）
-- **6.7 Paddle C++ adapter：** **设计中 / not-started** — [phase6.7-paddle.md](phase6.7-paddle.md)（feat-06701–06706）
-- **产品默认（6.6）：** vision/mock → C++ `sublift_worker`；paddle → Python worker；`SUBLIFT_RUNTIME=python` 一键回滚
-- **6.7 目标默认：** paddle 在 C++ adapter 可用时 → C++ worker；否则仍 Python（不静默改引擎）
+- **6.7 Paddle C++ Native MVP：** **done** — [phase6.7-paddle.md](phase6.7-paddle.md)（feat-06701–06706）
+- **6.8 Paddle Native hardening：** **not-started** — [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)（feat-06801–06807）
+- **当前实现（6.7）：** vision/mock → C++；paddle 在 C++ adapter 可用时也自动 → C++，否则 Python；`SUBLIFT_RUNTIME=python` 可回滚
+- **6.8 第一项安全变更：** 在 hardening 期间把 paddle 自动默认恢复为 Python，仅显式 override 进入 C++ experimental
 - **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 oracle / 回滚 / paddle 无 native 时
-- **残差风险：** 固定 GT clip 不入库 → live GT L3 按 [ADR-0022](../DECISIONS.md) 豁免；merged residual；paddle 在 6.7 完成前仍 Python
+- **残差风险：** 固定 GT clip 不入库 → live GT L3 按 [ADR-0022](../DECISIONS.md) 豁免；merged residual；当前 Paddle C++ 默认路由尚未执行 06801 安全回退；Native Det/Cls/Rec 质量与性能待 6.8 收口
