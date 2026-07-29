@@ -212,9 +212,13 @@ def run_paddle_perf_check(
             report_out.write_text(generate_markdown_perf_report(report), encoding="utf-8")
         if json_out is not None:
             json_out.parent.mkdir(parents=True, exist_ok=True)
-            json_out.write_text(json.dumps({"overall_passed": False, "gates": [failing_gate.__dict__]}, indent=2) + "\n", encoding="utf-8")
+            payload = {"overall_passed": False, "gates": [failing_gate.__dict__]}
+            json_out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         if check:
-            print("[FAIL] C++ Paddle runtime is skipped or unavailable for perf test", file=sys.stderr)
+            print(
+                "[FAIL] C++ Paddle runtime is skipped or unavailable for perf test",
+                file=sys.stderr,
+            )
         return report
 
     # Baseline benchmark metrics (C++ vs Python)

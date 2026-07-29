@@ -253,7 +253,8 @@ def run_paddle_gate(
             report_out.write_text(generate_markdown_report(report), encoding="utf-8")
         if json_out is not None:
             json_out.parent.mkdir(parents=True, exist_ok=True)
-            json_out.write_text(json.dumps({"overall_passed": False, "gates": [failing_gate.__dict__]}, indent=2) + "\n", encoding="utf-8")
+            payload = {"overall_passed": False, "gates": [failing_gate.__dict__]}
+            json_out.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
         if check:
             print("[FAIL] C++ Paddle runtime is skipped or unavailable", file=sys.stderr)
         return report
@@ -264,23 +265,19 @@ def run_paddle_gate(
     fixture_files = sorted(list(fixtures_dir.glob("*.png")))
 
     try:
-        import cv2  # type: ignore[import-not-found]
-        from sublift.ocr.paddle import PaddleOcrEngine, PaddleOcrOptions
-        from sublift.image import ImageView, PixelFormat
+        from PIL import Image
 
-        py_engine = PaddleOcrEngine(PaddleOcrOptions(model_type="small"))
-        
+        from sublift.ocr.paddle import PaddleOcrEngine
+
+        py_engine = PaddleOcrEngine(model_type="small")
+
         py_boxes = 0
         py_text_len = 0
         for fpath in fixture_files:
-            mat = cv2.imread(str(fpath))
-            if mat is not None:
-                h, w = mat.shape[:2]
-                rgb = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
-                img = ImageView(buffer=rgb.tobytes(), width=w, height=h, stride_bytes=w*3, format=PixelFormat.RGB24)
-                res = py_engine.recognize(img)
-                py_boxes += len(res.lines)
-                py_text_len += len(res.text)
+            img = Image.open(fpath)
+            res = py_engine.recognize(img)
+            py_boxes += len(res.lines)
+            py_text_len += len(res.text)
     except Exception:
         pass
 

@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sublift.models import BoundingBox, OcrLine, OcrResult
+from sublift.models import ImageView, OcrResult, PixelFormat
 from sublift.ocr.paddle import _VALID_MODEL_TYPES
 
 
@@ -34,8 +34,9 @@ def generate_paddle_stages_golden() -> dict[str, Any]:
 
     try:
         import cv2  # type: ignore[import-not-found]
-        from sublift.ocr.paddle import PaddleOcrEngine, PaddleOcrOptions
-        from sublift.image import ImageView, PixelFormat
+
+        from sublift.ocr.paddle import PaddleOcrEngine
+
         has_real_engine = True
     except Exception:
         has_real_engine = False
@@ -46,7 +47,7 @@ def generate_paddle_stages_golden() -> dict[str, Any]:
     engine = None
     if has_real_engine:
         try:
-            engine = PaddleOcrEngine(PaddleOcrOptions(model_type="small"))
+            engine = PaddleOcrEngine(model_type="small")
         except Exception:
             engine = None
 
