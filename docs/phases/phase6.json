@@ -1184,8 +1184,8 @@
           "description": "固定 crop text exact、confidence≤1e-4；最终文本 exact、AABB≤1px、顺序 exact；缺 Cls 模型时诚实失败。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle Quad Crop、Cls 与 Rec Parity。实现 cpp/src/paddle/ppocr_crop_cls.hpp/.cpp（基于 Quad (p0,p1,p2,p3) 的 warpPerspective 透视变换剪裁、高窄框 90° 旋转校正、Cls 方向分类与 Rec 3x48xW 右侧 Zero-Padding NCHW Float Tensor 准备）；在 paddle_ocr.cpp 中补齐 ctc.confidence < 0.5 (text_score=0.5) 低置信度过滤与 sort_ocr_lines 稳定排序；Catch2 paddle_crop_cls_test.cpp 运行全绿；sublift_tests 168 项全过；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06805",

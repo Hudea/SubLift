@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "paddle_models.hpp"
+#include "ppocr_crop_cls.hpp"
 #include "ppocr_ctc.hpp"
 #include "ppocr_db_postprocess.hpp"
 #include "sublift/image.hpp"
@@ -395,7 +396,7 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
     lines.reserve(boxes.size());
     for (const auto& box : boxes) {
       auto ctc = impl_->run_rec(rgb, w, h, stride, box);
-      if (is_strip_empty(ctc.text)) {
+      if (is_strip_empty(ctc.text) || ctc.confidence < 0.5f) {
         continue;
       }
       OcrCropBox crop{box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0};
