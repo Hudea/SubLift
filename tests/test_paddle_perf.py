@@ -97,7 +97,7 @@ def test_run_paddle_perf_check_script_execution(tmp_path: Path) -> None:
         json_out=json_file,
         skip_runtime=True,
     )
-    assert report.overall_passed is True
+    assert report.overall_passed is False
     assert report_file.exists()
     assert json_file.exists()
 

@@ -207,6 +207,12 @@ def run_paddle_perf_check(
             metrics_candidate=PaddlePerfMetrics(),
             gate_results=[failing_gate],
         )
+        if report_out is not None:
+            report_out.parent.mkdir(parents=True, exist_ok=True)
+            report_out.write_text(generate_markdown_perf_report(report), encoding="utf-8")
+        if json_out is not None:
+            json_out.parent.mkdir(parents=True, exist_ok=True)
+            json_out.write_text(json.dumps({"overall_passed": False, "gates": [failing_gate.__dict__]}, indent=2) + "\n", encoding="utf-8")
         if check:
             print("[FAIL] C++ Paddle runtime is skipped or unavailable for perf test", file=sys.stderr)
         return report
