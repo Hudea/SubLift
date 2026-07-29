@@ -1109,8 +1109,8 @@
           "description": "同步 README/ARCHITECTURE/引擎矩阵，并运行 ruff/mypy/pytest/Swift/C++ 相关门。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle 安全路由与 Experimental 标识。Python src/sublift/runtime.py 与 Swift RuntimePolicy.swift 实现安全路由（加固期间未显式指定 requested_runtime==cpp 或 SUBLIFT_RUNTIME==cpp 时，engine=paddle 默认安全路由到 Python；显式 opt-in 时才进 C++ Candidate，不可用降级 paddle_override；严禁改写为 vision/mock）；CLI 与 C++ Worker 日志注入 [experimental] 标识；tests/test_runtime.py (26 passed)、swift test (139 passed)、sublift_tests (162 passed) 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06802",

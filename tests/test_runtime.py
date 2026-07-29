@@ -93,10 +93,10 @@ def test_resolve_runtime_whitespace_and_case_trimmed() -> None:
         (None, None, "vision", "python", WorkerChoice("python", "vision", P_DEF)),
         (None, None, "mock", "python", WorkerChoice("python", "mock", P_DEF)),
         (None, None, "paddle", "python", WorkerChoice("python", "paddle", P_DEF)),
-        # Default cpp (Phase 6.6 cutover default)
+        # Default cpp (Phase 6.6 cutover default for vision/mock; paddle defaults to python in 6.8)
         (None, None, "vision", "cpp", WorkerChoice("cpp", "vision", P_DEF)),
         (None, None, "mock", "cpp", WorkerChoice("cpp", "mock", P_DEF)),
-        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", PADDLE_OVR)),
+        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", P_DEF)),
         # Env variable override
         (None, "cpp", "vision", "python", WorkerChoice("cpp", "vision", ENV_VAR)),
         (None, "python", "vision", "cpp", WorkerChoice("python", "vision", ENV_VAR)),
