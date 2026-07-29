@@ -1209,8 +1209,8 @@
           "description": "冻结 Python Paddle 水位；Candidate 同时过相对/绝对门；报告记录 engine/runtime/model/config/commit，默认写 /tmp。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 多源 Paddle E2E 质量门。实现 scripts/parity/check_paddle_gate.py，支持 Timing F1/precision 相对下降 (<= 1.0%)、CER macro/micro 相对增加 (<= 1.0%)、Usable recall 相对下降 (<= 2.0%) 与 Line Box Mean IoU (>= 0.90) 硬门评估；编写 tests/test_paddle_gate.py (7 passed)；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06806",
