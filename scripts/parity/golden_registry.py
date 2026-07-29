@@ -21,6 +21,7 @@ PARITY_SCRIPTS: list[tuple[str, Path]] = [
     ("extractor", PARITY_DIR / "dump_extractor.py"),
     ("vision", PARITY_DIR / "dump_vision.py"),
     ("paddle", PARITY_DIR / "dump_paddle.py"),
+    ("paddle_stages", PARITY_DIR / "dump_paddle_stages.py"),
     ("ipc_session", PARITY_DIR / "dump_ipc_session.py"),
 ]
 

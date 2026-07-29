@@ -37,6 +37,7 @@ def test_correctness_checks_execution() -> None:
     assert "extractor" in names
     assert "vision" in names
     assert "paddle" in names
+    assert "paddle_stages" in names
     assert "ipc_session" in names
     assert all(r.passed for r in results)
 
@@ -137,7 +138,7 @@ def test_run_cutover_gate_skip_runtime(tmp_path: Path) -> None:
 
 
 def test_golden_registry_matches_correctness_suite() -> None:
-    assert len(PARITY_SCRIPTS) == 11
+    assert len(PARITY_SCRIPTS) == 12
     results = run_correctness_checks()
     assert [r.name for r in results] == [n for n, _ in PARITY_SCRIPTS]
 

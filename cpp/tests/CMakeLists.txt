@@ -29,6 +29,7 @@ set(_sublift_test_srcs
   parity/extractor_parity_test.cpp
   parity/vision_parity_test.cpp
   parity/paddle_parity_test.cpp
+  parity/paddle_stages_parity_test.cpp
 )
 if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_test_srcs
@@ -68,12 +69,14 @@ set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/li
 set(_ext_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/extractor/extractor.v1.json")
 set(_vis_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/vision/vision.v1.json")
 set(_pad_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/paddle/paddle.v1.json")
+set(_pad_stages_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/paddle/paddle_stages.v1.json")
 sublift_stringify_path(_tl_golden_esc "${_tl_golden}")
 sublift_stringify_path(_dd_golden_esc "${_dd_golden}")
 sublift_stringify_path(_ls_golden_esc "${_ls_golden}")
 sublift_stringify_path(_ext_golden_esc "${_ext_golden}")
 sublift_stringify_path(_vis_golden_esc "${_vis_golden}")
 sublift_stringify_path(_pad_golden_esc "${_pad_golden}")
+sublift_stringify_path(_pad_stages_golden_esc "${_pad_stages_golden}")
 
 target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
@@ -83,6 +86,7 @@ target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_PARITY_GOLDEN_EXTRACTOR=\"${_ext_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_VISION=\"${_vis_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_PADDLE=\"${_pad_golden_esc}\""
+  "SUBLIFT_PARITY_GOLDEN_PADDLE_STAGES=\"${_pad_stages_golden_esc}\""
 )
 
 if(SUBLIFT_ENABLE_OPENCV)

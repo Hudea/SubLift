@@ -1134,8 +1134,8 @@
           "description": "覆盖 empty、单/双行、CJK/Latin/混排、低对比、倾斜/旋转与相邻框；同一 manifest 驱动 Python/C++。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle 分阶段观测与冻结 Oracle Fixture。创建 freeze_paddle_manifest.json (锁死 rapidocr==3.9.2, onnxruntime==1.28.0 及全套超参数)、gen_paddle_fixtures.py (生成 6 组免网络下载合成 PNG 图)、dump_paddle_stages.py (生成/校验 10 阶段节点 paddle_stages.v1.json)；在 cpp/include/sublift/paddle.hpp 扩充 dump_stages/dump_out_dir；在 golden_registry.py 中注册 paddle_stages 将 Parity 集成扩展为 12 项；Catch2 paddle_stages_parity_test.cpp 运行全绿；ruff / mypy / pytest / ctest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06803",

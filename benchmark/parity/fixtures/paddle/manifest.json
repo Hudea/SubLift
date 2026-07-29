@@ -1,0 +1,40 @@
+{
+  "fixtures": [
+    {
+      "name": "empty.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 0
+    },
+    {
+      "name": "cjk_single_line.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 1
+    },
+    {
+      "name": "latin_single_line.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 1
+    },
+    {
+      "name": "mixed_cjk_latin.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 1
+    },
+    {
+      "name": "stroke_outlined.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 1
+    },
+    {
+      "name": "tilted_adjacent.png",
+      "width": 800,
+      "height": 200,
+      "text_count": 2
+    }
+  ]
+}

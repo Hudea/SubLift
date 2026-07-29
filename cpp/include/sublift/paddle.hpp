@@ -15,6 +15,8 @@ namespace sublift {
 struct PaddleOcrOptions {
   std::string model_type{"small"};  // tiny / small / medium
   std::string model_root_dir{};     // 默认空，自动指向 ~/.cache/sublift/rapidocr-models
+  bool dump_stages{false};          // 调试：输出 10 阶段 Dump 摘要
+  std::string dump_out_dir{};       // 调试 Dump 目录
 };
 
 class PaddleOcrEngine final : public IOcrEngine {

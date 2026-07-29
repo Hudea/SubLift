@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "dependencies": {
+    "rapidocr": "3.9.2",
+    "onnxruntime": "1.28.0",
+    "python": "3.12"
+  },
+  "model_info": {
+    "det_model_name": "ch_PP-OCRv4_det_infer.onnx",
+    "rec_model_name": "ch_PP-OCRv4_rec_infer.onnx",
+    "dictionary_name": "ppocrv6_dict.txt"
+  },
+  "hyperparameters": {
+    "det_limit_side_len": 960,
+    "det_limit_type": "max",
+    "det_thresh": 0.3,
+    "det_box_thresh": 0.6,
+    "det_unclip_ratio": 1.6,
+    "det_score_mode": "fast",
+    "rec_img_shape": [3, 48, 320],
+    "rec_batch_num": 6,
+    "text_score": 0.5
+  }
+}
