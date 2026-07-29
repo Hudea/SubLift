@@ -81,6 +81,8 @@ add_subdirectory(src/ffmpeg)
 add_subdirectory(src/test_support)
 add_subdirectory(src/worker)
 add_subdirectory(src/cli)
+add_subdirectory(src/paddle)
+
 
 if(SUBLIFT_ENABLE_VISION)
   if(NOT APPLE)

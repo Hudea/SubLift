@@ -53,7 +53,8 @@ Phase 1–4 旧编号 `feat-001` ~ `feat-043` **保持不动**，两套规则并
 | **6.4** | Vision Objective-C++ adapter | `feat-064xx` |
 | **6.5** | C++ worker（UDS + JSON 协议兼容） | `feat-065xx` |
 | **6.6** | Cutover（默认路径切换 + benchmark 门） | `feat-066xx` |
-| **6.7+** | 去 Python 产品 runtime / 打包等（后置） | `feat-067xx`… |
+| **6.7** | PaddleOCR C++ adapter（ONNX / PP-OCRv6） | `feat-067xx` |
+| **6.8+** | 去 Python 产品 runtime / 打包分发等（后置） | `feat-068xx`… |
 
 > 子阶段划分以 `docs/cpp/phase6-overview.md` 为准；上表为路线图，可在不改 `PP`/`S` 语义的前提下微调范围。
 

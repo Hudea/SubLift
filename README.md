@@ -81,7 +81,7 @@ SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回�
 |---|---|---|
 | **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
 | **mock** | **cpp** | CI / 流程验证 |
-| **paddle** | **python**（强制） | 直至原生 adapter；禁止静默落到 vision/mock |
+| **paddle** | **python**（6.6 强制；**6.7** 规划 C++ ONNX adapter） | 未 native 前禁止静默落到 vision/mock；设计见 `docs/cpp/phase6.7-paddle.md` |
 
 解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → **产品默认 cpp**（paddle 例外）。
 

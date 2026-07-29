@@ -114,9 +114,9 @@ public final class PipelineClient: @unchecked Sendable {
     }
 
     /// 查找 C++ sublift_worker 可执行文件路径。
-    /// 查找顺序：
+    /// 查找顺序（与 Python `resolve_worker_bin` / 原生 CLI 对齐）：
     /// 1. 环境变量 SUBLIFT_WORKER_PATH
-    /// 2. 仓库开发 build 目录 (<repoRoot>/build/cpp/bin/sublift_worker, <repoRoot>/build/cpp/sublift_worker)
+    /// 2. 仓库开发 build：`build/cpp-rel/bin`（Release）优先，再 `build/cpp/bin`（Debug）
     /// 3. App Bundle 资源目录 (Helpers/sublift_worker, Contents/MacOS/sublift_worker)
     /// 4. 系统 PATH 常用可执行路径 (/opt/homebrew/bin, /usr/local/bin, /usr/bin)
     public static func findWorkerExecutable(
@@ -134,18 +134,20 @@ public final class PipelineClient: @unchecked Sendable {
             }
         }
 
-        // 2. 仓库开发 build 目录
+        // 2. 仓库开发 build 目录（Release 优先，避免产品路径误用 Debug）
         if let repoRoot = findRepoRoot() {
-            let p1 = repoRoot.appendingPathComponent("build/cpp/bin/sublift_worker").path
-            searchedPaths.append(p1)
-            if isRegularExecutable(p1, fileManager: fileManager) {
-                return p1
-            }
-
-            let p2 = repoRoot.appendingPathComponent("build/cpp/sublift_worker").path
-            searchedPaths.append(p2)
-            if isRegularExecutable(p2, fileManager: fileManager) {
-                return p2
+            let candidates = [
+                "build/cpp-rel/bin/sublift_worker",
+                "build/cpp/bin/sublift_worker",
+                "build/cpp-rel/sublift_worker",
+                "build/cpp/sublift_worker",
+            ]
+            for rel in candidates {
+                let path = repoRoot.appendingPathComponent(rel).path
+                searchedPaths.append(path)
+                if isRegularExecutable(path, fileManager: fileManager) {
+                    return path
+                }
             }
         }
 

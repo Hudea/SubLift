@@ -134,13 +134,22 @@ final class PipelineClientTests: XCTestCase {
             return
         }
 
-        let workerBin = repoRoot.appendingPathComponent("build/cpp/bin/sublift_worker").path
-        guard FileManager.default.isExecutableFile(atPath: workerBin) else {
-            throw XCTSkip("sublift_worker binary not compiled in build/cpp/bin/")
+        let releaseBin = repoRoot.appendingPathComponent("build/cpp-rel/bin/sublift_worker").path
+        let debugBin = repoRoot.appendingPathComponent("build/cpp/bin/sublift_worker").path
+        let hasRelease = FileManager.default.isExecutableFile(atPath: releaseBin)
+        let hasDebug = FileManager.default.isExecutableFile(atPath: debugBin)
+        guard hasRelease || hasDebug else {
+            throw XCTSkip("sublift_worker binary not compiled in build/cpp-rel or build/cpp")
         }
 
         let found = try PipelineClient.findWorkerExecutable(envOverride: [:])
         XCTAssertTrue(found.hasSuffix("sublift_worker"))
+        // Prefer Release (cpp-rel) over Debug (cpp), matching Python resolve_worker_bin.
+        if hasRelease {
+            XCTAssertEqual(found, releaseBin)
+        } else {
+            XCTAssertEqual(found, debugBin)
+        }
     }
 
     func testFindWorkerExecutableNotFoundThrowsError() {

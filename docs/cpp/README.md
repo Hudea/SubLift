@@ -20,6 +20,7 @@
 | [phase6.6-cutover.md](phase6.6-cutover.md) | **6.6 Cutover**（**done**：默认 C++ / 门禁 / 回滚） |
 | [phase6.6-hardening.md](phase6.6-hardening.md) | **6.6 Worker Hardening**（feat-06606，标准开发门已完成） |
 | [phase6.6-sanitizer-isolation.md](phase6.6-sanitizer-isolation.md) | **6.6 Sanitizer 依赖隔离**（feat-06607，诊断隔离已完成；发布门仍待解决） |
+| [phase6.7-paddle.md](phase6.7-paddle.md) | **6.7 PaddleOCR C++ adapter**（ONNX / PP-OCRv6；**设计中**） |
 
 ### 架构与契约
 
@@ -44,7 +45,8 @@
 
 1. **冻结 Oracle**（commit + 环境 + golden schema），不是「漂移中的 main」。
 2. **Python dump → C++ Candidate 比较**；先中间量与决策，再 SRT/GT。
-3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock）；paddle 见引擎矩阵。
-4. **`sublift_core` 不依赖 ObjC/Swift/Vision**；target 依赖图见 architecture。
+3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock；6.7+ paddle native）；见引擎矩阵。
+4. **`sublift_core` 不依赖 ObjC/Swift/Vision/ORT**；OCR adapter 分 target；图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
 6. **6.6 已完成**：vision/mock 产品默认 C++ worker；paddle 仍 Python；`SUBLIFT_RUNTIME=python` 回滚；门禁报告 `docs/reports/phase6.6-cutover-gate.md`；GT L3 缺资产见 ADR-0022。
+7. **6.7 设计中**：Paddle C++ adapter（ONNX Runtime + PP-OCRv6）；见 [phase6.7-paddle.md](phase6.7-paddle.md)。

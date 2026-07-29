@@ -5,6 +5,22 @@
 
 ---
 
+## ADR-0023 Phase 6.7 PaddleOCR C++ adapter 选型与路由（2026-07-29）
+
+- **状态**：已确认（设计冻结；实现属 feat-06701–06706）。
+- **背景**：6.6 cutover 后 vision/mock 默认 C++，paddle 仍强制 Python（rapidocr + onnxruntime + PP-OCRv6）。
+  产品跨平台路径与「去 Python 产品依赖」均被 paddle 卡住；需 native adapter，且不得静默落到 vision/mock。
+- **决策**：
+  1. **推理栈**：C++ 使用 **ONNX Runtime + PP-OCRv6**（与 Python rapidocr 同系），**不**引入完整 PaddlePaddle Inference 训练/全栈，**不**用嵌入 CPython 调 rapidocr。
+  2. **Target**：新增可选 `sublift_paddle`（`SUBLIFT_ENABLE_PADDLE` 默认 OFF）；`sublift_core` 零 ORT/ObjC 依赖。
+  3. **行为 Oracle**：`src/sublift/ocr/paddle.py`；颜色（RGB 入、内部 BGR）、四角点 AABB/clamp/排序、空结果 vs 故障上抛语义必须对齐。
+  4. **路由**：C++ paddle **可用**时 `engine=paddle` 允许/默认 C++ worker；**不可用**时显式 `paddle_override → Python`；**禁止**静默 vision/mock。
+  5. **范围**：6.7 完成 adapter + worker 接线 + parity/默认路由；**不**删除 Python 树、不在本子阶段做公证/随包模型（6.8+）。
+- **理由**：与现有 Python extra 一致、体积可控、跨平台；延续 Phase 6「adapter 分 target + parity 再 cutover」模式（类比 6.4 Vision）。
+- **影响**：`docs/cpp/phase6.7-paddle.md`、引擎矩阵、architecture target 图、`resolve_runtime` / GUI 策略、CMake 选项。
+
+---
+
 ## ADR-0022 Cutover GT L3 固定素材缺失时的门禁豁免（2026-07-28）
 
 - **状态**：已确认（6.6 cutover residual）。

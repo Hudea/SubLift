@@ -306,7 +306,7 @@ struct ContentView: View {
         case .idle:
             Text("就绪").foregroundStyle(.secondary)
         case .startingServer:
-            Text("启动 Python 服务...").foregroundStyle(.orange)
+            Text("正在启动服务...").foregroundStyle(.orange)
         case .processing(let progress, let frameCount, let totalFrames):
             HStack(spacing: 6) {
                 Text("提取与识别中 \(frameCount)/\(totalFrames) (\(Int(progress * 100))%)")

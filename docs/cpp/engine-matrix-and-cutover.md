@@ -5,12 +5,12 @@
 
 ## 1. 引擎 × Runtime 矩阵（冻结策略）
 
-| engine | 6.0–6.5（双轨期） | 6.6 cutover 后默认 | 说明 |
-|---|---|---|---|
-| **vision** | Python 产品默认；C++ 实现后可开发者开关 | **C++ Worker** | macOS 主路径 |
-| **mock** | Python / C++ 均可测 | **C++ Worker**（测试与 CI） | parity 主力 |
-| **paddle** | **仅 Python Worker** | **仍走 Python Worker**（直至原生 adapter） | **不阻塞** vision/mock 的 C++ 默认化 |
-| （未来）paddle-native | 无 | 可选 C++/ONNX | 另 feat，不在 6.0–6.6 必达 |
+| engine | 6.0–6.5（双轨期） | 6.6 cutover 后默认 | **6.7+ paddle native** | 说明 |
+|---|---|---|---|---|
+| **vision** | Python 产品默认；C++ 实现后可开发者开关 | **C++ Worker** | 同左 | macOS 主路径 |
+| **mock** | Python / C++ 均可测 | **C++ Worker**（测试与 CI） | 同左 | parity 主力 |
+| **paddle** | **仅 Python Worker** | **仍走 Python Worker** | **C++ Worker（ONNX adapter 可用时）**；否则显式 Python | 设计见 [phase6.7-paddle.md](phase6.7-paddle.md) |
+| （实现名）paddle-native | 无 | 无 | **`sublift_paddle` + ORT + PP-OCRv6** | 6.7 feat-067xx；不阻塞 6.6 |
 
 ### 1.1 明确禁止
 
@@ -30,9 +30,20 @@ engine == paddle         → 启动 Python ipc server（现路径）
 ```
 
 - CLI：`sublift` 原生解析参数后同样分支；或 `sublift extract --runtime python|cpp` 强制。
-- 开发者双轨：环境变量 / 配置 `SUBLIFT_RUNTIME=python|cpp`（cpp 时 paddle 请求直接失败并提示）。
+- 开发者双轨：环境变量 / 配置 `SUBLIFT_RUNTIME=python|cpp`（**6.6**：cpp 时 paddle 强制 Python worker，不改引擎）。
 
-**非 macOS（未来）：** 默认引擎候选为 paddle（Python 或日后 native）；无 Vision。本文只登记，不实现。
+**6.7 推荐产品行为（paddle native 可用后）：**
+
+```text
+engine in {vision, mock} → C++ worker（同 6.6）
+engine == paddle && C++ paddle available → C++ worker（sublift_paddle）
+engine == paddle && C++ paddle unavailable → Python worker（显式 override，提示安装/构建）
+```
+
+- **禁止** 不可用时静默改为 vision/mock。
+- `SUBLIFT_RUNTIME=python` 仍可强制全引擎走 Python（oracle / 回滚）。
+
+**非 macOS：** 默认引擎候选为 paddle（6.7 native 或 Python）；无 Vision。Linux 至少可 `ENABLE_PADDLE=ON` 构建（见 6.7 设计）。
 
 ## 2. CLI 形态
 
@@ -111,9 +122,10 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | `.app` 内 worker | `Contents/MacOS/sublift-worker` 或 `Contents/Helpers/` |
 | OpenCV | 动态链接系统或 brew；或静态进 worker（体积/许可评估） |
 | rpath | `@executable_path/../Frameworks` 预留 |
-| 签名 / 公证 | 随 feat-025 / 6.7；符号 hidden 减少泄漏 |
+| 签名 / 公证 | 随 feat-025 / **6.8+**；符号 hidden 减少泄漏 |
 | universal2 / 最低 macOS | 与 GUI 一致（当前 macOS 13+） |
 | ffmpeg | 默认系统；随包另 feat |
+| Paddle 模型 / ORT | 6.7 开发用系统 ORT + 用户缓存模型；随包模型 **6.8+** |
 
 ## 6. 与子阶段关系
 
@@ -122,4 +134,5 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | 6.0 `feat-06005` | 冻结本文 + worker-ipc + 矩阵 |
 | 6.4–6.5 | 实现 vision/mock C++；capability 上报 |
 | 6.6 | vision/mock 默认 C++；paddle 显式 Python；双轨与回滚 |
-| 6.7+ | 去 Python 产品依赖（**仅当 paddle 有替代或产品放弃 paddle 默认**） |
+| **6.7** | **paddle C++ adapter（ONNX）**；可用则 paddle→C++；见 [phase6.7-paddle.md](phase6.7-paddle.md) |
+| 6.8+ | 去 Python 产品依赖 / 分发打包（**仅当**各引擎 native 足够或产品放弃 Python） |

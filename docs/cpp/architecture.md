@@ -9,7 +9,7 @@
 |---|---|---|
 | GUI | SwiftUI → UDS → **Python** worker | SwiftUI → UDS → **C++** worker |
 | CLI | `uv run sublift` → Python Pipeline | **`sublift` 原生可执行**（同 core）；Python CLI 可作 oracle |
-| OCR | Vision/Paddle/Mock（Python） | Vision/Mock（C++）；Paddle 策略见 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) |
+| OCR | Vision/Paddle/Mock（Python） | Vision/Mock（C++，6.6）；Paddle C++ adapter（6.7 ONNX）见 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) / [phase6.7-paddle.md](phase6.7-paddle.md) |
 | 抽帧 | Python FfmpegExtractor subprocess | C++ `sublift_ffmpeg` subprocess（同语义） |
 | 行为 oracle | — | **冻结 commit + 环境 + golden**，非「漂移中的 main」 |
 
@@ -31,18 +31,22 @@
        │                      │            ┌────────┴───────────┐
        │                      │            │ sublift_vision_macos│
        │                      │            │ .mm  only           │
+       │                      │            └────────┬───────────┘
+       │                      │                     │
+       │                      │            ┌────────┴───────────┐
+       │                      │            │ sublift_paddle     │
+       │                      │            │ ONNX Runtime       │
+       │                      │            │ (6.7, option OFF)  │
        └──────────────────────┼────────────┴────────────────────┘
-                              │
-                     (optional later)
-                     sublift_paddle / onnx
 ```
 
 | Target | 允许依赖 | 禁止 |
 |---|---|---|
-| **`sublift_core`** | C++20 STL、（可选）OpenCV **仅作图像缓冲实现细节若在 core 暴露则通过 `ImageBuffer` 抽象** | ObjC、Swift、Vision、UDS、系统 ffmpeg 进程封装可放 core 接口但实现宜在 `sublift_ffmpeg` |
-| **`sublift_ffmpeg`** | `sublift_core`、POSIX spawn/pipe | Vision、IPC |
-| **`sublift_vision_macos`** | `sublift_core`、Apple Vision/Quartz | 被 Linux 构建默认链接 |
-| **`sublift_worker`** | core + ffmpeg +（macOS）vision；JSON；UDS | Swift |
+| **`sublift_core`** | C++20 STL、（可选）OpenCV **仅作图像缓冲实现细节若在 core 暴露则通过 `ImageBuffer` 抽象** | ObjC、Swift、Vision、ORT、UDS、系统 ffmpeg 进程封装可放 core 接口但实现宜在 `sublift_ffmpeg` |
+| **`sublift_ffmpeg`** | `sublift_core`、POSIX spawn/pipe | Vision、ORT、IPC |
+| **`sublift_vision_macos`** | `sublift_core`、Apple Vision/Quartz | 被 Linux 构建默认链接；ORT |
+| **`sublift_paddle`** | `sublift_core`、**ONNX Runtime**（系统包） | ObjC、Vision、UDS；**不得**反向依赖 worker |
+| **`sublift_worker`** | core + ffmpeg +（macOS）vision +（可选）paddle；JSON；UDS | Swift |
 | **`sublift_cli`** | core + ffmpeg + ocr adapters | GUI |
 | **`sublift_test_support`** | core；读写 golden | 产品路径 |
 
@@ -59,7 +63,8 @@
 | OpenCV | **软可选** `find_package(OpenCV QUIET)`；`SUBLIFT_ENABLE_OPENCV` 默认 ON，**找不到则自动关闭** signature（models/image 仍可编）；硬失败用 `SUBLIFT_REQUIRE_OPENCV=ON`。core 图像类型见 §3，不在 API 表面强制 `cv::Mat` | 6.1+ 本机开发推荐 `brew install opencv@4`；CI/无 OpenCV 环境不硬挂 configure |
 | 链接 | 默认 **静态** `sublift_*` 进 worker/cli；系统 OpenCV 可 dynamic | 避免产品静默混用两套 OpenCV ABI |
 | Symbol visibility | 默认 hidden；仅 C API（若有）显式 export | 为日后 `.app` 做准备 |
-| 依赖获取 | FetchContent 仅用于 Catch2 + nlohmann；OpenCV/ffmpeg **系统安装** | 不 vendor 整棵 OpenCV |
+| 依赖获取 | FetchContent 仅用于 Catch2 + nlohmann；OpenCV/ffmpeg/ORT **系统安装** | 不 vendor 整棵 OpenCV/ORT |
+| Paddle OCR（6.7） | `SUBLIFT_ENABLE_PADDLE` 默认 **OFF**；ON 时 `find` ONNX Runtime + `sublift_paddle` | 见 [phase6.7-paddle.md](phase6.7-paddle.md) |
 | Sanitizer | Debug 可选 `SUBLIFT_SANITIZE=ON` → ASan+UBSan | cutover 门使用 |
 
 ## 3. 图像与几何契约（`feat-06003` 前冻结，禁止占位后换类型）

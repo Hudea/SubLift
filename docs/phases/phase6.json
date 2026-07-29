@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 仍 Python；SUBLIFT_RUNTIME=python 回滚；完整 Python/C++/Swift/init 标准门已恢复。06607 已恢复无 OpenCV sanitizer 对照，并将退出崩溃收窄到 OpenCV/TBB 依赖链。cutover 门（parity + runtime cancel/restart/RSS + GT L3 接线/ADR-0022 豁免）见 docs/reports/phase6.6-cutover-gate.md。发布仍需有固定 GT 资产的 --require-gt，以及解决 macOS Homebrew OpenCV/TBB 下 ASan 退出崩溃，详见 docs/reports/phase6-cpp-migration-quality-audit-2026-07-28.md。设计 docs/cpp/phase6.6-cutover.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker；paddle 在 6.6 仍 Python。6.7 设计中：PaddleOCR C++ adapter（ONNX/PP-OCRv6，feat-06701–06706），见 docs/cpp/phase6.7-paddle.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -935,6 +935,157 @@
       ],
       "status": "done",
       "evidence": "2026-07-29：修复了 SUBLIFT_ENABLE_OPENCV=OFF 与 Worker 的错误依赖边界：CMake 根据 OpenCV 能力选择 bridge.cpp（产品）或 bridge_no_opencv.cpp（诊断），并以 SUBLIFT_HAS_OPENCV 将 EngineFactory 的 engine/capability 声明与实现对齐。无 OpenCV Worker 保留 hello/协议诊断，但 engines=[]、capabilities=[]，任何 start_job 明确拒绝，不能被误作可用 runtime。验证：标准 OpenCV build + CTest 152/152；ASan + OpenCV OFF 的 Worker otool 无 OpenCV/TBB，--version exit 0，真实 UDS hello/start_job 对照 PASS；相同 ASan + OpenCV 4.14 构建 --version（detect_leaks=0）仍 exit 134，栈在 Homebrew TBB 2023.1.0 InitOnce 析构。ruff clean、mypy 70 files、pytest 508 selected/23 deselected、Worker E2E 9/9、Swift 30 XCTest + 139 Swift Testing、./init.sh exit 0。结论：消除了无 OpenCV 配置失效，并确认 sanitizer 退出崩溃依赖 OpenCV/TBB 链；发布 gate 未通过。"
+    },
+    {
+      "id": "feat-06701",
+      "name": "Paddle 纯契约：颜色 / 四角点 AABB / clamp / 排序",
+      "description": "无 ORT 的表驱动 L0：四角点→AABB、clamp、空文本丢弃、整图 fallback box、排序 (y,x)、RGB↔BGR 转换契约与 src/sublift/ocr/paddle.py 对齐。设计 docs/cpp/phase6.7-paddle.md §7 feat-06701。",
+      "module": "cpp/include/sublift/paddle_*.hpp; cpp/src/paddle/; cpp/tests/; docs/cpp/phase6.7-paddle.md",
+      "dependencies": [
+        "feat-06605",
+        "feat-06201"
+      ],
+      "subtasks": [
+        {
+          "name": "quad_to_aabb + clamp",
+          "description": "与 Python floor/ceil/clamp 数值对齐的纯函数与单测。"
+        },
+        {
+          "name": "RGB/BGR 契约",
+          "description": "文档 + 单测锁定产品 RGB24 入、网络 BGR 的转换点。"
+        },
+        {
+          "name": "行排序与 from_lines",
+          "description": "空 strip 丢弃、fallback box、sort (y,x) 表驱动。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-29: 落地 Paddle 纯契约与几何/颜色转换。paddle_geometry.hpp / paddle_geometry.cpp 实现 quad_to_aabb (floor/ceil 对齐 Python np.floor/ceil)、clamp_box、sort_ocr_lines (std::stable_sort (y,x))、is_strip_empty 与 rgb24_to_bgr24 跨距通道转换。Catch2 paddle_geometry_test 35 项断言全绿；全局 158 个 C++ 测试全绿 (1405 assertions)；两轮 subagent 计划与 code_reviewer 审查 PASS。无 ORT 硬依赖。"
+    },
+    {
+      "id": "feat-06702",
+      "name": "CMake + ONNX Runtime 发现 + sublift_paddle 壳",
+      "description": "SUBLIFT_ENABLE_PADDLE 默认 OFF；ON 时发现 ORT、创建 sublift_paddle target 与 is_paddle_available stub；OFF 时 core/worker/vision/init 基线不回归。",
+      "module": "cpp/CMakeLists.txt; cpp/src/paddle/; cpp/README.md; docs/cpp/architecture.md",
+      "dependencies": [
+        "feat-06701"
+      ],
+      "subtasks": [
+        {
+          "name": "CMake option + find ORT",
+          "description": "ENABLE_PADDLE/REQUIRE_PADDLE；文档安装方式。"
+        },
+        {
+          "name": "target 壳",
+          "description": "sublift_paddle 可链接；availability stub。"
+        },
+        {
+          "name": "OFF 矩阵",
+          "description": "默认构建无 ORT 符号；worker 拒绝 paddle 语义可保留。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06703",
+      "name": "PaddleOcrEngine::recognize 主路径",
+      "description": "ONNX PP-OCRv6 Det/(Cls)/Rec 流水线实现 IOcrEngine::recognize；空结果与故障上抛语义对齐 Python；合成图/空白图烟测。",
+      "module": "cpp/src/paddle/; cpp/include/sublift/paddle*.hpp; cpp/tests/",
+      "dependencies": [
+        "feat-06702"
+      ],
+      "subtasks": [
+        {
+          "name": "会话与预处理",
+          "description": "ORT session；RGB→BGR；letterbox/归一化对齐 Oracle 默认。"
+        },
+        {
+          "name": "Det/Rec 解码",
+          "description": "输出 lines；接 06701 几何。"
+        },
+        {
+          "name": "故障语义",
+          "description": "无文本空结果；推理失败不伪装空字幕。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06704",
+      "name": "模型规格 + 缓存路径 + availability",
+      "description": "tiny/small/medium；默认 ~/.cache/sublift/rapidocr-models；env/构造覆盖；is_paddle_available 与错误提示；CI 夹具或 skip 策略。",
+      "module": "cpp/src/paddle/; cpp/README.md; docs/cpp/phase6.7-paddle.md",
+      "dependencies": [
+        "feat-06703"
+      ],
+      "subtasks": [
+        {
+          "name": "model_type 枚举",
+          "description": "与 Python _VALID_MODEL_TYPES 一致，默认 small。"
+        },
+        {
+          "name": "缓存与下载策略",
+          "description": "开发可下载；CI 不依赖 flaky 外网。"
+        },
+        {
+          "name": "availability API",
+          "description": "构造失败/缺失模型可探测。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06705",
+      "name": "Worker / CLI / Runtime 接线",
+      "description": "EngineFactory 支持 paddle；capability 诚实；resolve_runtime/Swift RuntimePolicy 可用性感知；GUI/CLI 选 paddle 时 C++ 可用走 C++，否则显式 Python；禁止静默 vision/mock。",
+      "module": "cpp/src/worker/engine_factory.cpp; src/sublift/runtime.py; apps/macos/.../RuntimePolicy.swift; tests/",
+      "dependencies": [
+        "feat-06704"
+      ],
+      "subtasks": [
+        {
+          "name": "C++ factory + reject 文案",
+          "description": "bind paddle；未启用时明确错误。"
+        },
+        {
+          "name": "Python/Swift policy",
+          "description": "可用性矩阵单测；paddle_override 仅当 C++ 不可用。"
+        },
+        {
+          "name": "CLI/GUI 冒烟",
+          "description": "日志标明 runtime/engine；不改 vision 默认。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06706",
+      "name": "Parity harness + paddle 产品默认路由",
+      "description": "dump_paddle/golden；L0 几何 + L4 文本记录；可选合成/短 clip 门；文档化 paddle 默认 cpp（可用时）与 SUBLIFT_RUNTIME=python 回滚；归档报告。",
+      "module": "scripts/parity/; benchmark/; docs/reports/; docs/cpp/engine-matrix-and-cutover.md",
+      "dependencies": [
+        "feat-06705"
+      ],
+      "subtasks": [
+        {
+          "name": "dump + golden",
+          "description": "Python Oracle vs C++ Candidate 对照入口。"
+        },
+        {
+          "name": "门禁/报告",
+          "description": "可选接入 cutover 脚本 paddle 分支。"
+        },
+        {
+          "name": "默认路由翻转",
+          "description": "单独验收；失败可回滚 policy 不静默改引擎。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
     }
   ]
 }

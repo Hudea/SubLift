@@ -13,7 +13,9 @@ set(_sublift_test_srcs
   extractor_full_test.cpp
   extractor_roi_test.cpp
   vision_geometry_test.cpp
+  paddle_geometry_test.cpp
   worker_framing_test.cpp
+
   worker_protocol_test.cpp
   worker_path_mode_test.cpp
   worker_cancel_test.cpp
@@ -102,6 +104,7 @@ target_link_libraries(sublift_tests
     sublift_ipc
     sublift_ffmpeg
     sublift_vision_macos
+    sublift_paddle_geometry
     Catch2::Catch2WithMain
 )
 
