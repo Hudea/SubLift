@@ -16,12 +16,13 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 ```text
 sublift_cli ──► sublift_ffmpeg ──► sublift_core ──► nlohmann_json
 sublift_worker ─┬► sublift_ffmpeg ──► sublift_core
-                └► sublift_vision_macos (OPTION OFF, macOS only)
+                ├► sublift_vision_macos (OPTION OFF, macOS only)
+                └► sublift_paddle (OPTION OFF, ONNX Runtime)
 sublift_test_support ──► sublift_core
 sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 ```
 
-| Target | Type | Role (6.0) |
+| Target | Type | Role (6.0+) |
 |---|---|---|
 | `sublift_core` | STATIC | models/config/pipeline home (stubs: version) |
 | `sublift_ffmpeg` | STATIC | subprocess extractor (stub) |
@@ -29,14 +30,17 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | `sublift_worker` | EXE | UDS worker shell |
 | `sublift_cli` | EXE | native CLI shell |
 | `sublift_vision_macos` | STATIC | Vision adapter; **off by default** |
+| `sublift_paddle` | STATIC | PaddleOCR adapter (ONNX Runtime); **off by default** |
 
-`sublift_core` must not depend on ObjC, Swift, or Apple Vision.
+`sublift_core` must not depend on ObjC, Swift, Apple Vision, or ONNX Runtime.
 
 ## Options
 
 | Option | Default | Meaning |
 |---|---|---|
 | `SUBLIFT_ENABLE_VISION` | OFF | Build `sublift_vision_macos` |
+| `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (ONNX Runtime) |
+| `SUBLIFT_REQUIRE_PADDLE` | OFF | Fail configure if ONNX Runtime missing |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |
 | `SUBLIFT_BUILD_TESTS` | ON | Catch2 + CTest |
 | `SUBLIFT_ENABLE_OPENCV` | ON | Prefer signature pipeline when OpenCV is found |

@@ -984,8 +984,8 @@
           "description": "默认构建无 ORT 符号；worker 拒绝 paddle 语义可保留。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-29: 落地 CMake + ONNX Runtime 发现与 sublift_paddle 壳。新增 FindONNXRuntime.cmake、SUBLIFT_ENABLE_PADDLE (默认 OFF) / SUBLIFT_REQUIRE_PADDLE 选项；sublift/paddle.hpp 声明 is_paddle_available() 与 PaddleOcrEngine Pimpl 接口；OFF 构建下 is_paddle_available() 返回 false，构造函数抛出匹配 Python 的 runtime_error 降级异常。Catch2 paddle_stub_test 验证 OFF 抛出异常与包含字符串；159 个 C++ 测试全绿 (1408 assertions)；ruff/mypy/pytest 零回归；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06703",

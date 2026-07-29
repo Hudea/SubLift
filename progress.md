@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-07-29（6.7 Paddle C++ adapter **feat-06701 完成**）
+- **最后更新：** 2026-07-29（6.7 Paddle C++ adapter **feat-06702 完成**）
 - **当前 Phase：** phase6-native-cpp-core
-- **子阶段：** **6.7 PaddleOCR C++ adapter**（feat-06701 纯契约完成，下一刀 feat-06702）
+- **子阶段：** **6.7 PaddleOCR C++ adapter**（feat-06702 CMake+ORT 发现与 target 壳完成，下一刀 feat-06703）
 - **6.0–6.6：** 开发完成；产品默认 vision/mock → C++；paddle 仍 Python（至 6.7 完成）
 - **产品默认 Runtime：** C++ `sublift_worker`（vision/mock）；paddle → Python（`paddle_override`）
 - **回滚：** `SUBLIFT_RUNTIME=python`
@@ -12,16 +12,16 @@
 
 ## 进行中
 
-- **feat-06702**（CMake + ONNX Runtime 发现 + sublift_paddle 壳）
+- **feat-06703**（PaddleOcrEngine::recognize 主路径与 PP-OCRv6 推理）
 - 设计源头：`docs/cpp/phase6.7-paddle.md`
 
 ## 近期完成（最近 5 个）
 
+- [x] **feat-06702**：CMake + ONNX Runtime 发现 + sublift_paddle 壳（is_paddle_available, stub 抛出 runtime_error, Catch2 跑通）
 - [x] **feat-06701**：Paddle 纯契约（quad_to_aabb, clamp, sort, rgb24_to_bgr24, Catch2 35 断言全绿）
 - [x] **6.7 设计**：Paddle C++ adapter（ONNX/PP-OCRv6）、feat-06701–06706、ADR-0023、跟踪文件更新
 - [x] **GUI worker 查找**：优先 `build/cpp-rel` Release（对齐 CLI）
 - [x] **冗余清理 / cutover 门 / 6.6 hardening**：见 phase6.json evidence
-- [x] **feat-06607** Sanitizer 依赖隔离（发布门未豁免）
 
 ## 阻塞项 / 风险
 

@@ -28,6 +28,15 @@ option(SUBLIFT_ENABLE_OPENCV
   "Build signature pipeline when OpenCV is available (feat-06101)" ON)
 option(SUBLIFT_REQUIRE_OPENCV
   "Fail configure if OpenCV is missing (implies enabling signature)" OFF)
+option(SUBLIFT_ENABLE_PADDLE
+  "Build sublift_paddle (ONNX Runtime PaddleOCR adapter)" OFF)
+option(SUBLIFT_REQUIRE_PADDLE
+  "Fail configure if ONNX Runtime is missing (implies enabling paddle)" OFF)
+
+if(SUBLIFT_REQUIRE_PADDLE)
+  set(SUBLIFT_ENABLE_PADDLE ON)
+endif()
+
 
 # OpenCV: private impl detail of the signature pipeline (feat-06101). Linked
 # PRIVATE into sublift_core only — no cv::Mat on the public API
@@ -75,6 +84,21 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
+
+if(SUBLIFT_ENABLE_PADDLE)
+  if(SUBLIFT_REQUIRE_PADDLE)
+    find_package(ONNXRuntime REQUIRED)
+  else()
+    find_package(ONNXRuntime QUIET)
+  endif()
+  if(ONNXRuntime_FOUND)
+    message(STATUS "ONNX Runtime ${ONNXRuntime_VERSION} enabled (sublift_paddle)")
+  else()
+    set(SUBLIFT_ENABLE_PADDLE OFF)
+    message(WARNING "ONNX Runtime not found; sublift_paddle built in stub mode.")
+  endif()
+endif()
+
 
 add_subdirectory(src/core)
 add_subdirectory(src/ffmpeg)
