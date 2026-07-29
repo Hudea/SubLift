@@ -61,20 +61,23 @@ def probe_cpp_paddle_available(
 
     from sublift.worker_bin import resolve_worker_bin
 
-    if resolve_worker_bin(repo_root) is None:
+    worker_bin = resolve_worker_bin(repo_root)
+    if worker_bin is None or not worker_bin.is_file():
         return False
 
-    model_dir = (env.get("SUBLIFT_PADDLE_MODEL_DIR") or "").strip()
-    if model_dir:
-        root = Path(model_dir).expanduser()
-    else:
-        root = Path.home() / ".cache" / "sublift" / "rapidocr-models"
+    import subprocess
 
-    det = root / "PP-OCRv6_det_small.onnx"
-    rec = root / "PP-OCRv6_rec_small.onnx"
-    keys = root / "ppocrv6_dict.txt"
-    keys_alt = root / "ppocrv6_tiny_dict.txt"
-    return det.is_file() and rec.is_file() and (keys.is_file() or keys_alt.is_file())
+    try:
+        res = subprocess.run(
+            [str(worker_bin), "--probe-engine", "paddle"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            env=dict(env),
+        )
+        return res.returncode == 0
+    except Exception:
+        return False
 
 
 def resolve_runtime(
@@ -129,10 +132,13 @@ def resolve_runtime(
     resolved_engine = cast(Literal["vision", "mock", "paddle"], engine_norm)
 
     if resolved_engine == "paddle":
-        wants_cpp = raw_runtime == "cpp"
-        if wants_cpp:
-            if cpp_paddle_available:
-                return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
+        is_explicit_cpp = (
+            source in (ResolutionSource.EXPLICIT_FLAG, ResolutionSource.ENV_VAR)
+            and raw_runtime == "cpp"
+        )
+        if is_explicit_cpp and cpp_paddle_available:
+            return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
+        if is_explicit_cpp and not cpp_paddle_available:
             return WorkerChoice(
                 runtime="python",
                 engine="paddle",

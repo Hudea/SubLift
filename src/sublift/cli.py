@@ -125,6 +125,11 @@ def _run_extract(
             "可设置 SUBLIFT_PADDLE_MODEL_DIR 或启用 SUBLIFT_ENABLE_PADDLE 构建。",
             file=sys.stderr,
         )
+    elif choice.engine == "paddle" and choice.runtime == "cpp":
+        print(
+            "[提示] 已开启 C++ Paddle Native OCR [experimental] (Phase 6.8 加固中)。",
+            file=sys.stderr,
+        )
 
 
     if choice.runtime == "cpp":

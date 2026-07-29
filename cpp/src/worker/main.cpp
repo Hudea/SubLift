@@ -29,6 +29,16 @@ int main(int argc, char* argv[]) {
       socket_path = argv[++i];
     } else if ((arg == "-e" || arg == "--engine") && i + 1 < argc) {
       engine = argv[++i];
+    } else if (arg == "--probe-engine" && i + 1 < argc) {
+      std::string target_engine = argv[++i];
+      sublift::worker::EngineFactory factory(target_engine);
+      auto err = factory.validate_engine(target_engine);
+      if (err.has_value()) {
+        std::cerr << "Engine " << target_engine << " unavailable: " << *err << "\n";
+        return 1;
+      }
+      std::cout << "Engine " << target_engine << " available\n";
+      return 0;
     } else if (arg == "-v" || arg == "--version") {
       std::cout << "sublift_worker 1.0 (Phase 6.5 C++ Core IPC)\n";
       return 0;
@@ -79,7 +89,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::string engine_tag = engine;
+  std::string engine_tag = (engine == "paddle") ? "paddle [experimental]" : engine;
   std::cout << "sublift_worker listening on " << socket_path << " (engine: " << engine_tag << ")\n";
 
   while (true) {

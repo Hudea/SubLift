@@ -1134,8 +1134,8 @@
           "description": "覆盖 empty、单/双行、CJK/Latin/混排、低对比、倾斜/旋转与相邻框；同一 manifest 驱动 Python/C++。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle 分阶段观测与冻结 Oracle Fixture。创建 freeze_paddle_manifest.json (锁死 rapidocr==3.9.2, onnxruntime==1.28.0 及全套超参数)、gen_paddle_fixtures.py (生成 6 组免网络下载合成 PNG 图)、dump_paddle_stages.py (生成/校验 10 阶段节点 paddle_stages.v1.json)；在 cpp/include/sublift/paddle.hpp 扩充 dump_stages/dump_out_dir；在 golden_registry.py 中注册 paddle_stages 将 Parity 集成扩展为 12 项；Catch2 paddle_stages_parity_test.cpp 运行全绿；ruff / mypy / pytest / ctest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+      "status": "in-progress",
+      "evidence": "2026-07-30: 已建立 freeze_paddle_manifest.json 结构与辅助基座，正在对接真实 Python RapidOCR 抓取与真实 C++ Stage Dump 导出。"
     },
     {
       "id": "feat-06803",
@@ -1159,8 +1159,8 @@
           "description": "固定 probability map box count exact、坐标≤1px、score≤1e-4；真实 fixture precision/recall=1.0@IoU0.95；empty 为 0 box/0 Rec call。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle Det 预处理与完整 DB/unclip parity。实现 cpp/src/paddle/ppocr_db_postprocess.hpp/.cpp (包含 0.3 threshold 二值化、2x2 dilation 膨胀、findContours 轮廓提取、fast score 过滤与 Polygon Unclip 几何扩张)，在 paddle_ocr.cpp 中彻底废除旧的连通域 AABB 简易实现并实现空检测 0 次 Rec 调用的性能短路；Catch2 paddle_db_test.cpp 运行全绿；sublift_tests 166 项全过；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+      "status": "not-started",
+      "evidence": ""
     },
     {
       "id": "feat-06804",
@@ -1184,8 +1184,8 @@
           "description": "固定 crop text exact、confidence≤1e-4；最终文本 exact、AABB≤1px、顺序 exact；缺 Cls 模型时诚实失败。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle Quad Crop、Cls 与 Rec Parity。实现 cpp/src/paddle/ppocr_crop_cls.hpp/.cpp（基于 Quad (p0,p1,p2,p3) 的 warpPerspective 透视变换剪裁、高窄框 90° 旋转校正、Cls 方向分类与 Rec 3x48xW 右侧 Zero-Padding NCHW Float Tensor 准备）；在 paddle_ocr.cpp 中补齐 ctc.confidence < 0.5 (text_score=0.5) 低置信度过滤与 sort_ocr_lines 稳定排序；Catch2 paddle_crop_cls_test.cpp 运行全绿；sublift_tests 168 项全过；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+      "status": "not-started",
+      "evidence": ""
     },
     {
       "id": "feat-06805",
@@ -1209,8 +1209,8 @@
           "description": "冻结 Python Paddle 水位；Candidate 同时过相对/绝对门；报告记录 engine/runtime/model/config/commit，默认写 /tmp。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 多源 Paddle E2E 质量门。实现 scripts/parity/check_paddle_gate.py，支持 Timing F1/precision 相对下降 (<= 1.0%)、CER macro/micro 相对增加 (<= 1.0%)、Usable recall 相对下降 (<= 2.0%) 与 Line Box Mean IoU (>= 0.90) 硬门评估；编写 tests/test_paddle_gate.py (7 passed)；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+      "status": "not-started",
+      "evidence": ""
     },
     {
       "id": "feat-06806",
@@ -1234,8 +1234,8 @@
           "description": "warm-up 后 Python/C++ 交错≥3轮取 median；2min C++ wall≤Python×1.20（目标×1.10），RSS≤×1.25，mock/cancel/restart不退化。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle Native 性能加固与评估。实现 scripts/parity/check_paddle_perf.py，评估 Wall-time (Candidate <= Python * 1.20, 实测 0.76x)、Peak RSS (Candidate <= Python * 0.90, 实测 0.61x)、Zero Memory Leaks 与 06805 质量零退化 4 维硬门；编写 tests/test_paddle_perf.py (8 passed)；ruff / mypy / pytest 全绿；两轮 subagent 计划与 code_reviewer 审查 PASS。"
+      "status": "not-started",
+      "evidence": ""
     },
     {
       "id": "feat-06807",
@@ -1259,8 +1259,7 @@
           "description": "默认 cpp→强制 Python→cpp restart 无串扰；更新矩阵/README/架构/需求/跟踪与 cutover 报告；Python Paddle 至少保留一个小版本周期。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle C++ Product Cutover。完成 src/sublift/runtime.py 与 Swift RuntimePolicy.swift 中的产品默认路由翻转（engine=paddle && cpp_paddle_available=True 默认走 C++）；移除 CLI 与 C++ Worker 中的 [experimental] 标记；更新 check_cutover_gate.py 集成 Paddle E2E Quality Gate 与 Perf Check；更新 docs/cpp/engine-matrix-and-cutover.md 与 feature-list.json，将 Phase 6 整体状态标记为 done；./init.sh 全绿通过；两轮 subagent 计划与 code_reviewer 审查 PASS。"
-    }
+      "status": "not-started",
+      "evidence": ""
   ]
 }

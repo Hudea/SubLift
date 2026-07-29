@@ -460,7 +460,7 @@
         "id": "phase6.paddle-hardening",
         "name": "6.8 Paddle Native 质量与性能加固",
         "description": "先恢复 Paddle 安全默认路由，再建立 Det/Cls/Rec 分阶段 Oracle、完整 DB/unclip 与 Quad/Cls/Rec parity、多源 Paddle GT 质量门；质量冻结后优化 ORT 线程、Rec batch 和图像热点，达到 C++ wall≤Python×1.20 后重新产品 cutover。设计：docs/cpp/phase6.8-paddle-hardening.md。覆盖 feat-06801~06807。",
-        "status": "done",
+        "status": "in-progress",
         "covers": [
           "feat-06801",
           "feat-06802",

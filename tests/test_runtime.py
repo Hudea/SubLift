@@ -93,18 +93,18 @@ def test_resolve_runtime_whitespace_and_case_trimmed() -> None:
         (None, None, "vision", "python", WorkerChoice("python", "vision", P_DEF)),
         (None, None, "mock", "python", WorkerChoice("python", "mock", P_DEF)),
         (None, None, "paddle", "python", WorkerChoice("python", "paddle", P_DEF)),
-        # Default cpp (Phase 6.8 cutover default for paddle when cpp_paddle_available=True)
+        # Default cpp (Phase 6.6 cutover default for vision/mock; paddle defaults to python in 6.8)
         (None, None, "vision", "cpp", WorkerChoice("cpp", "vision", P_DEF)),
         (None, None, "mock", "cpp", WorkerChoice("cpp", "mock", P_DEF)),
-        (None, None, "paddle", "cpp", WorkerChoice("cpp", "paddle", P_DEF)),
+        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", P_DEF)),
         # Env variable override
         (None, "cpp", "vision", "python", WorkerChoice("cpp", "vision", ENV_VAR)),
         (None, "python", "vision", "cpp", WorkerChoice("python", "vision", ENV_VAR)),
-        (None, "cpp", "paddle", "python", WorkerChoice("cpp", "paddle", ENV_VAR)),
+        (None, "cpp", "paddle", "python", WorkerChoice("python", "paddle", PADDLE_OVR)),
         # Explicit flag overrides everything
         ("python", "cpp", "vision", "cpp", WorkerChoice("python", "vision", FLAG)),
         ("cpp", "python", "mock", "python", WorkerChoice("cpp", "mock", FLAG)),
-        ("cpp", "python", "paddle", "cpp", WorkerChoice("cpp", "paddle", FLAG)),
+        ("cpp", "python", "paddle", "cpp", WorkerChoice("python", "paddle", PADDLE_OVR)),
     ],
 )
 def test_resolve_runtime_matrix(
@@ -120,7 +120,6 @@ def test_resolve_runtime_matrix(
         requested_engine=requested_engine,
         env_override=env_map,
         default_runtime=default_runtime,
-        cpp_paddle_available=True,
     )
     assert choice == expected_choice
 

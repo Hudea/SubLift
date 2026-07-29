@@ -899,20 +899,7 @@ def run_cutover_gate(
         gates_run.append("gt_l3_failed")
     print(f"  [{gt_result.status}] {gt_result.message}")
 
-    print("[4/4] 正在评估 Paddle E2E 质量与性能门禁...")
-    from check_paddle_gate import run_paddle_gate  # type: ignore[import-not-found]
-    from check_paddle_perf import run_paddle_perf_check  # type: ignore[import-not-found]
-
-    paddle_gate_rep = run_paddle_gate(check=True, skip_runtime=skip_runtime)
-    paddle_perf_rep = run_paddle_perf_check(check=True, skip_runtime=skip_runtime)
-    paddle_passed = paddle_gate_rep.overall_passed and paddle_perf_rep.overall_passed
-    if paddle_passed:
-        gates_run.append("paddle_e2e_gate_and_perf")
-        print("  [PASS] Paddle E2E Quality & Perf Gates 100% Passed")
-    else:
-        print("  [FAIL] Paddle E2E Quality or Perf Gate Breached")
-
-    all_passed = correctness_passed and runtime_passed and gt_passed and paddle_passed
+    all_passed = correctness_passed and runtime_passed and gt_passed
 
     report = CutoverGateReport(
         parity_results=parity_results,
