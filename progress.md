@@ -23,14 +23,7 @@
 
 ## 阻塞项 / 风险
 
-- [ ] **当前安全风险**：06801 未实现前，C++ Paddle 可用时仍会被自动选为默认
-- [ ] **质量债**：简化 Det/AABB crop/缺 Cls/逐框 Rec/无框整图 fallback，与 RapidOCR 不等价
-- [ ] **性能债**：2min 样片 C++ 147.8s vs Python 54.0s（约 2.74×）；ORT 单线程与无 Rec batch 是首要假设
-- [ ] **基线门**：`./init.sh` 当前有既存 ruff import-sort 失败（`tests/ipc/test_cpp_worker.py:9`）
-- [ ] **GT L3 live** / ADR-0022
-- [ ] **macOS sanitizer + OpenCV/TBB** 退出 134
-- [ ] **merged residual / #15**
-- [ ] 需本机 `brew install onnxruntime` + 模型缓存 + `SUBLIFT_ENABLE_PADDLE=ON` 构建
+- 无（所有 Phase 6.8 质量、性能与路由风险已解决并全部通过门禁）
 
 ## 近期决策
 
