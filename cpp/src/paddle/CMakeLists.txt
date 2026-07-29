@@ -15,6 +15,7 @@ add_library(sublift::paddle ALIAS sublift_paddle)
 target_include_directories(sublift_paddle
   PUBLIC
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 

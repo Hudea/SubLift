@@ -1009,8 +1009,8 @@
           "description": "无文本空结果；推理失败不伪装空字幕。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-29: 落地 PaddleOcrEngine::recognize 主路径与 PP-OCRv6 推理与 CTC 解码器。ppocr_ctc.hpp 实现 ctc_greedy_decode (blank 索引 0，连续去重折叠，置信度均值)；paddle_ocr.cpp 整合分布式预处理/ONNX Session Run/异常向上传播（捕获 Ort::Exception 转 runtime_error，空图/无文本返回空 OcrResult）；Catch2 paddle_ctc_test 46 断言全绿；全局 C++ 160 个测试全绿 (1411 assertions)；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06704",
