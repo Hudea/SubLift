@@ -1034,8 +1034,8 @@
           "description": "构造失败/缺失模型可探测。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-29: 落地模型规格校验、路径扩展与可用性错误指引。paddle_models.hpp / paddle_models.cpp 实现 parse_model_type (tiny/small/medium 校验，非法抛 std::invalid_argument)、expand_user_path (扩展 ~ 前缀)、resolve_model_dir (构造参数 > 环境变量 > 默认缓存) 及 validate_model_paths；paddle_ocr.cpp 在模型缺失时抛出带解决步骤的 runtime_error；Catch2 paddle_models_test 57 断言全绿；全局 C++ 161 测试全绿 (1427 assertions)；两轮 subagent 计划与 code_reviewer 审查 PASS。"
     },
     {
       "id": "feat-06705",

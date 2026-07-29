@@ -9,7 +9,7 @@ target_include_directories(sublift_paddle_geometry
 
 target_link_libraries(sublift_paddle_geometry PUBLIC sublift_core)
 
-add_library(sublift_paddle STATIC paddle_ocr.cpp)
+add_library(sublift_paddle STATIC paddle_ocr.cpp paddle_models.cpp)
 add_library(sublift::paddle ALIAS sublift_paddle)
 
 target_include_directories(sublift_paddle
