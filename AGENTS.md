@@ -83,26 +83,60 @@ SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自
 
 ## 验证命令
 
-完整验证（等价于 `./init.sh` 的验证段）：
+日常启动门（`./init.sh` 默认）：
 
 ```bash
-uv sync
+uv sync --extra vision --extra paddle
 uv run ruff check .
 uv run mypy src tests
-uv run pytest
+# C++: cmake + build + ctest（build/cpp Debug；macOS 默认 VISION=ON）
+uv run pytest -m "not integration" --no-cov   # 单次；须在 C++ 构建之后以便 IPC e2e 不 skip
+uv run python scripts/parity/check_cutover_gate.py --check --skip-runtime --skip-gt \
+  --report-out /tmp/sublift_cutover_gate.md
 ```
 
 必需检查：
 
 - `uv run ruff check .` — lint，必须 0 error
 - `uv run mypy src tests` — 类型检查（strict），必须 no issues
-- `uv run pytest` — 单元测试，必须全绿
+- `uv run pytest -m "not integration"` — 单元/IPC 测试全绿（init 默认加 `--no-cov`）
+- C++ `ctest` + cutover **parity goldens**（init 默认）
 
-集成测试（需外部资源，CI 跳过）：
+发布 / 完整 cutover 门（**不在**默认 init 内，需显式）：
+
+```bash
+SUBLIFT_INIT_RUNTIME=1 SUBLIFT_INIT_REQUIRE_GT=1 ./init.sh
+# 或
+uv run python scripts/parity/check_cutover_gate.py --check --require-gt
+```
+
+集成测试（需外部资源）：
 
 ```bash
 uv run pytest -m integration
 ```
+
+## `init.sh` 范围与防膨胀
+
+`init.sh` 是**日常可重复启动门**，不是完整发布 CI 的无限堆积处。目标：干净仓库上数分钟内可绿，且不写入应入库的报告垃圾。
+
+| 允许进入默认 init | 禁止默认塞入（须 env / 独立脚本 / 发布 job） |
+|---|---|
+| 工具链存在性、`uv sync` 产品 extras | 无文档的「顺手再跑一遍」重复门 |
+| ruff / mypy | 默认 coverage 报告（用 pytest 配置显式开） |
+| **一次** pytest（`not integration`，构建 C++ 后） | 同一测试集拆成多次 pytest 调用 |
+| C++ configure/build/**全量 ctest**（Debug 树） | 无理由的第二套 build 目录全量编测 |
+| cutover **正确性 parity**（golden 列表） | 默认 runtime 微基准、默认 live GT L3 |
+| 报告写 `/tmp` 或 `debug/` | 每次 init 改写 `docs/reports/*` 污染 git |
+
+**新增步骤前必须自问（写入 PR / 会话说明）：**
+
+1. 是否已被 ruff/mypy/pytest/ctest/parity 之一覆盖？是则 **禁止**再加平行门。  
+2. 是否每次会话启动都需要？否 → 环境变量默认关，或独立 `scripts/` / CI job。  
+3. 是否会把产物写进版本库？默认否；需要归档时显式路径。  
+4. 是否改变「下一次会话能立刻 `./init.sh`」的假设？若变慢一个数量级，必须同步改本文与 README。
+
+**反模式：** 为单个 feat 在 init 末尾永久追加「再跑某某慢脚本」；应用 `SUBLIFT_INIT_*=1` 或 phase 专用验证命令代替。
 
 ## 升级处理
 

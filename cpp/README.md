@@ -39,7 +39,8 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | Option | Default | Meaning |
 |---|---|---|
 | `SUBLIFT_ENABLE_VISION` | OFF | Build `sublift_vision_macos` |
-| `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (ONNX Runtime) |
+| `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (needs system ONNX Runtime; macOS: `brew install onnxruntime`) |
+| `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/rapidocr-models` | PP-OCRv6 ONNX + `ppocrv6_dict.txt` (same cache as Python rapidocr) |
 | `SUBLIFT_REQUIRE_PADDLE` | OFF | Fail configure if ONNX Runtime missing |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |
 | `SUBLIFT_BUILD_TESTS` | ON | Catch2 + CTest |

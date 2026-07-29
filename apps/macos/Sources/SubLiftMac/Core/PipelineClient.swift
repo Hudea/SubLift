@@ -113,6 +113,38 @@ public final class PipelineClient: @unchecked Sendable {
         return fileManager.isExecutableFile(atPath: path)
     }
 
+    /// Align with Python `probe_cpp_paddle_available`: worker present + PP-OCRv6 small models.
+    public static func probeCppPaddleAvailable(
+        env: [String: String]? = nil,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        let envMap = env ?? ProcessInfo.processInfo.environment
+        let flag = (envMap["SUBLIFT_CPP_PADDLE"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        if ["0", "false", "no", "off"].contains(flag) {
+            return false
+        }
+        guard (try? findWorkerExecutable(envOverride: envMap, fileManager: fileManager)) != nil else {
+            return false
+        }
+        let modelDir: String
+        if let custom = envMap["SUBLIFT_PADDLE_MODEL_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
+            modelDir = (custom as NSString).expandingTildeInPath
+        } else {
+            modelDir = (NSHomeDirectory() as NSString)
+                .appendingPathComponent(".cache/sublift/rapidocr-models")
+        }
+        let det = (modelDir as NSString).appendingPathComponent("PP-OCRv6_det_small.onnx")
+        let rec = (modelDir as NSString).appendingPathComponent("PP-OCRv6_rec_small.onnx")
+        let keys = (modelDir as NSString).appendingPathComponent("ppocrv6_dict.txt")
+        let keysAlt = (modelDir as NSString).appendingPathComponent("ppocrv6_tiny_dict.txt")
+        return fileManager.isReadableFile(atPath: det)
+            && fileManager.isReadableFile(atPath: rec)
+            && (fileManager.isReadableFile(atPath: keys) || fileManager.isReadableFile(atPath: keysAlt))
+    }
+
     /// 查找 C++ sublift_worker 可执行文件路径。
     /// 查找顺序（与 Python `resolve_worker_bin` / 原生 CLI 对齐）：
     /// 1. 环境变量 SUBLIFT_WORKER_PATH
@@ -211,10 +243,12 @@ public final class PipelineClient: @unchecked Sendable {
         // 先确保清理掉之前的进程和资源
         stop()
 
+        let envForPolicy = envOverride ?? ProcessInfo.processInfo.environment
         let choice = try RuntimePolicy.resolve(
             requestedRuntime: requestedRuntime,
             requestedEngine: engine,
-            envOverride: envOverride
+            envOverride: envForPolicy,
+            isCppPaddleAvailable: Self.probeCppPaddleAvailable(env: envForPolicy)
         )
 
         let socketPath = makeSocketPath()

@@ -18,7 +18,18 @@ from typing import Any, cast
 
 import pytest
 
-WORKER_BIN = Path(__file__).resolve().parents[2] / "build" / "cpp" / "bin" / "sublift_worker"
+# Prefer Release (cpp-rel) then Debug (cpp), same as product resolve_worker_bin.
+def _resolve_worker_bin() -> Path:
+    root = Path(__file__).resolve().parents[2]
+    for rel in (
+        Path("build") / "cpp-rel" / "bin" / "sublift_worker",
+        Path("build") / "cpp" / "bin" / "sublift_worker",
+    ):
+        candidate = root / rel
+        if candidate.is_file():
+            return candidate
+    return root / "build" / "cpp" / "bin" / "sublift_worker"
+
 
 # 8x6 red JPEG (ffmpeg lavfi). Non-image base64 must fail closed in C++ worker.
 MINIMAL_JPEG_B64 = (
@@ -90,9 +101,10 @@ async def connect_unix_with_retry(
 
 
 def check_worker_bin() -> str:
-    if not WORKER_BIN.exists():
-        pytest.skip("sublift_worker binary not compiled in build/cpp/bin/")
-    return str(WORKER_BIN)
+    worker = _resolve_worker_bin()
+    if not worker.exists():
+        pytest.skip("sublift_worker binary not compiled (build/cpp-rel or build/cpp)")
+    return str(worker)
 
 
 def test_cpp_worker_handshake() -> None:

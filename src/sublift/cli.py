@@ -26,7 +26,12 @@ from sublift.ocr import (
     is_vision_available,
 )
 from sublift.pipeline import Pipeline
-from sublift.runtime import ResolutionSource, WorkerChoice, resolve_runtime
+from sublift.runtime import (
+    ResolutionSource,
+    WorkerChoice,
+    probe_cpp_paddle_available,
+    resolve_runtime,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -107,14 +112,17 @@ def _run_extract(
         print(f"错误：视频文件不存在: {video}", file=sys.stderr)
         sys.exit(1)
 
+    cpp_paddle = probe_cpp_paddle_available()
     choice = resolve_runtime(
         requested_runtime=runtime,
         requested_engine=engine,
+        cpp_paddle_available=cpp_paddle,
     )
 
     if choice.resolved_via == ResolutionSource.PADDLE_OVERRIDE:
         print(
-            "[提示] paddle 引擎暂仅支持 Python runtime，自动切回 Python 提帧流程。",
+            "[提示] C++ Paddle 不可用（未构建/无模型），已切回 Python runtime；"
+            "可设置 SUBLIFT_PADDLE_MODEL_DIR 或启用 SUBLIFT_ENABLE_PADDLE 构建。",
             file=sys.stderr,
         )
 

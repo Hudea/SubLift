@@ -1,12 +1,22 @@
 #!/bin/bash
-# SubLift 项目环境初始化与验证脚本
-# 检出 uv / python / ffmpeg / cmake，运行 Python 基线 + C++ 构建测试 + cutover 门禁
+# SubLift 标准启动与验证路径（日常开发门，非完整发布门）。
 #
-# 环境变量（可选加速 / 收紧）：
-#   SUBLIFT_INIT_SKIP_GT=1       跳过 GT L3 live（有 debug/Zootopia 片时省 ~20s+）
-#   SUBLIFT_INIT_SKIP_RUNTIME=1  跳过 cutover runtime 微基准
-#   SUBLIFT_INIT_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS 开 VISION=ON）
+# 默认覆盖：
+#   工具检查 → uv sync（vision+paddle extras）→ ruff / mypy →
+#   C++ cmake+build+ctest → 单次 pytest（含 worker e2e，需先有二进制）→
+#   cutover 正确性 parity（golden 列表）
+#
+# 默认 *不* 跑：cutover runtime 微基准、GT L3 live、二次 pytest、coverage。
+# 完整发布门请显式打开（见下方环境变量）或单独调用 check_cutover_gate.py。
+#
+# 环境变量：
+#   SUBLIFT_INIT_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS VISION=ON）
+#   SUBLIFT_INIT_RUNTIME=1       额外跑 cutover runtime wall/cancel/restart/RSS
+#   SUBLIFT_INIT_GT=1            额外跑 GT L3（有片则测；缺片则按脚本策略 WAIVE/FAIL）
 #   SUBLIFT_INIT_REQUIRE_GT=1    GT 视频缺失则 cutover 失败（发布门）
+#   SUBLIFT_INIT_SKIP_CUTOVER=1  跳过整个 cutover（仅应急；不推荐）
+#
+# 防膨胀：见 AGENTS.md「init.sh 范围与防膨胀」——新增步骤须对照清单，禁止无序加门。
 set -euo pipefail
 
 RED='\033[0;31m'
@@ -17,8 +27,8 @@ NC='\033[0m'
 pass=0
 fail=0
 
-# Shared extras for product path (Vision + Paddle optional deps).
-UV=(uv run --extra vision --extra paddle)
+# After uv sync --extra …, plain `uv run` uses the project env (extras already installed).
+UV=(uv run)
 
 check() {
     local name="$1"
@@ -37,20 +47,38 @@ check() {
     fi
 }
 
+run_check() {
+    local label="$1"
+    shift
+    if "$@" >/tmp/sublift_init.log 2>&1; then
+        printf "${GREEN}[OK]${NC}  %s\n" "$label"
+        pass=$((pass + 1))
+    else
+        local code=$?
+        if [ "$code" = "5" ] && [ "$label" = "pytest" ]; then
+            printf "${YELLOW}[SKIP]${NC} %s（无测试用例）\n" "$label"
+            pass=$((pass + 1))
+        else
+            printf "${RED}[FAIL]${NC} %s\n" "$label"
+            cat /tmp/sublift_init.log
+            fail=$((fail + 1))
+        fi
+    fi
+}
+
 echo "=============================="
 echo " SubLift 环境检查"
 echo "=============================="
 echo
 
-# --- 必需工具 ---
 check "uv"      uv      true
 check "python3" python3 true
 check "ffmpeg"  ffmpeg  true
 
-# Python 版本检查（>=3.12，通过 uv 管理的版本）— 单次 uv run
 echo
 if command -v uv >/dev/null 2>&1; then
-    py_line=$("${UV[@]}" python -c 'import sys; v=sys.version_info; print(f"{v.major}.{v.minor}"); print(1 if v >= (3, 12) else 0)')
+    # One-shot version probe without forcing unused extras on the CLI line.
+    py_line=$(uv run python -c 'import sys; v=sys.version_info; print(f"{v.major}.{v.minor}"); print(1 if v >= (3, 12) else 0)')
     py_version=$(printf '%s\n' "$py_line" | sed -n '1p')
     py_ok=$(printf '%s\n' "$py_line" | sed -n '2p')
     if [ "$py_ok" = "1" ]; then
@@ -67,7 +95,7 @@ echo "=============================="
 echo " 依赖同步"
 echo "=============================="
 echo
-# Phase 2 GUI 默认使用 Apple Vision；Phase 5 加 PaddleOCR；带上 optional extras，避免普通 uv sync 修剪可选依赖。
+# Product optional engines: keep both extras so sync does not prune them.
 if uv sync --extra vision --extra paddle 2>&1; then
     printf "${GREEN}[OK]${NC}  uv sync --extra vision --extra paddle 成功\n"
     pass=$((pass + 1))
@@ -78,35 +106,12 @@ fi
 
 echo
 echo "=============================="
-echo " 验证（ruff / mypy / pytest）"
+echo " Python 静态检查"
 echo "=============================="
 echo
 
-run_check() {
-    local label="$1"
-    shift
-    if "$@" >/tmp/sublift_init.log 2>&1; then
-        printf "${GREEN}[OK]${NC}  %s\n" "$label"
-        pass=$((pass + 1))
-    else
-        local code=$?
-        # pytest 退出码 5 = 无测试收集，不视为失败
-        if [ "$code" = "5" ] && [ "$label" = "pytest" ]; then
-            printf "${YELLOW}[SKIP]${NC} %s（无测试用例）\n" "$label"
-            pass=$((pass + 1))
-        else
-            printf "${RED}[FAIL]${NC} %s\n" "$label"
-            cat /tmp/sublift_init.log
-            fail=$((fail + 1))
-        fi
-    fi
-}
-
 run_check "ruff check ."   "${UV[@]}" ruff check .
 run_check "mypy src tests" "${UV[@]}" mypy src tests
-# 默认基线排除集成测试：其中 Paddle 集成测试首次构造模型可能触发下载。
-# 需外部资源的验证由开发者显式运行：uv run pytest -m integration。
-run_check "pytest"         "${UV[@]}" pytest -m "not integration"
 
 echo
 echo "=============================="
@@ -115,11 +120,7 @@ echo "=============================="
 echo
 
 if command -v cmake >/dev/null 2>&1; then
-    # Prefer Ninja when present; otherwise use CMake default generator.
-    # Phase 6.2+ Pipeline / signature parity requires OpenCV: hard-fail configure
-    # if missing so init is not green with the entire deliverable compiled out.
     cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON)
-    # macOS product path uses Vision; opt out with SUBLIFT_INIT_SKIP_VISION=1
     if [ "$(uname -s)" = "Darwin" ] && [ "${SUBLIFT_INIT_SKIP_VISION:-0}" != "1" ]; then
         cmake_cmd+=(-DSUBLIFT_ENABLE_VISION=ON)
     fi
@@ -129,47 +130,10 @@ if command -v cmake >/dev/null 2>&1; then
     if "${cmake_cmd[@]}" >/tmp/sublift_cpp_cmake.log 2>&1 \
         && cmake --build build/cpp >/tmp/sublift_cpp_build.log 2>&1 \
         && ctest --test-dir build/cpp --output-on-failure >/tmp/sublift_cpp_ctest.log 2>&1; then
-        printf "${GREEN}[OK]${NC}  cmake/ctest (cpp/)\n"
+        printf "${GREEN}[OK]${NC}  cmake/ctest (build/cpp Debug)\n"
         pass=$((pass + 1))
-
-        # Process-level C++ worker e2e (requires binary; fail not skip).
-        if [ -x build/cpp/bin/sublift_worker ] || [ -x build/cpp-rel/bin/sublift_worker ]; then
-            if "${UV[@]}" pytest tests/ipc/test_cpp_worker.py \
-                >/tmp/sublift_cpp_worker_e2e.log 2>&1; then
-                printf "${GREEN}[OK]${NC}  pytest tests/ipc/test_cpp_worker.py (post-build)\n"
-                pass=$((pass + 1))
-            else
-                printf "${RED}[FAIL]${NC} pytest tests/ipc/test_cpp_worker.py (post-build)\n"
-                cat /tmp/sublift_cpp_worker_e2e.log 2>/dev/null || true
-                fail=$((fail + 1))
-            fi
-
-            # Single cutover gate: 10 goldens (one process) + runtime + GT.
-            cutover_args=(python scripts/parity/check_cutover_gate.py --check)
-            if [ "${SUBLIFT_INIT_SKIP_RUNTIME:-0}" = "1" ]; then
-                cutover_args+=(--skip-runtime)
-            fi
-            if [ "${SUBLIFT_INIT_SKIP_GT:-0}" = "1" ]; then
-                cutover_args+=(--skip-gt)
-            fi
-            if [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" = "1" ]; then
-                cutover_args+=(--require-gt)
-            fi
-            if "${UV[@]}" "${cutover_args[@]}" \
-                >/tmp/sublift_cutover_gate.log 2>&1; then
-                printf "${GREEN}[OK]${NC}  cutover gate (parity + runtime/GT)\n"
-                pass=$((pass + 1))
-            else
-                printf "${RED}[FAIL]${NC} cutover gate check\n"
-                cat /tmp/sublift_cutover_gate.log 2>/dev/null || true
-                fail=$((fail + 1))
-            fi
-        else
-            printf "${RED}[FAIL]${NC} sublift_worker binary missing after cmake/ctest\n"
-            fail=$((fail + 1))
-        fi
     else
-        printf "${RED}[FAIL]${NC} cmake/ctest (cpp/)\n"
+        printf "${RED}[FAIL]${NC} cmake/ctest (build/cpp Debug)\n"
         tail -n 40 /tmp/sublift_cpp_cmake.log /tmp/sublift_cpp_build.log /tmp/sublift_cpp_ctest.log 2>/dev/null || true
         fail=$((fail + 1))
     fi
@@ -180,9 +144,70 @@ fi
 
 echo
 echo "=============================="
+echo " Python 测试（单次，含 post-build IPC）"
+echo "=============================="
+echo
+# After C++ build so tests/ipc/test_cpp_worker.py can run (not skip for missing binary).
+# --no-cov: init 是启动门，不是 coverage 门（完整 cov 由开发者显式 pytest 配置）。
+# 不再二次单独跑 test_cpp_worker.py。
+run_check "pytest" "${UV[@]}" pytest -m "not integration" --no-cov
+
+echo
+echo "=============================="
+echo " Cutover 正确性门（parity）"
+echo "=============================="
+echo
+
+if [ "${SUBLIFT_INIT_SKIP_CUTOVER:-0}" = "1" ]; then
+    printf "${YELLOW}[SKIP]${NC} cutover（SUBLIFT_INIT_SKIP_CUTOVER=1）\n"
+elif [ ! -x build/cpp/bin/sublift_worker ] && [ ! -x build/cpp-rel/bin/sublift_worker ]; then
+    printf "${RED}[FAIL]${NC} sublift_worker 缺失，无法跑 cutover parity\n"
+    fail=$((fail + 1))
+else
+    # 日常 init：parity goldens 必跑；runtime/GT 默认关（发布用 env 打开）。
+    cutover_args=(python scripts/parity/check_cutover_gate.py --check)
+    cutover_args+=(--report-out /tmp/sublift_cutover_gate.md)
+
+    if [ "${SUBLIFT_INIT_RUNTIME:-0}" = "1" ]; then
+        : # keep runtime
+    else
+        cutover_args+=(--skip-runtime)
+    fi
+
+    if [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" = "1" ]; then
+        cutover_args+=(--require-gt)
+    elif [ "${SUBLIFT_INIT_GT:-0}" = "1" ]; then
+        : # measure if asset present, else script WAIVE
+    else
+        cutover_args+=(--skip-gt)
+    fi
+
+    if "${UV[@]}" "${cutover_args[@]}" >/tmp/sublift_cutover_gate.log 2>&1; then
+        printf "${GREEN}[OK]${NC}  cutover gate"
+        if [ "${SUBLIFT_INIT_RUNTIME:-0}" != "1" ] || { [ "${SUBLIFT_INIT_GT:-0}" != "1" ] && [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" != "1" ]; }; then
+            printf " (parity"
+            [ "${SUBLIFT_INIT_RUNTIME:-0}" = "1" ] || printf "; runtime skipped"
+            if [ "${SUBLIFT_INIT_GT:-0}" != "1" ] && [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" != "1" ]; then
+                printf "; GT skipped"
+            fi
+            printf ")"
+        fi
+        printf "\n"
+        pass=$((pass + 1))
+    else
+        printf "${RED}[FAIL]${NC} cutover gate\n"
+        cat /tmp/sublift_cutover_gate.log 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+fi
+
+echo
+echo "=============================="
 echo " 汇总"
 echo "=============================="
 printf "通过: ${GREEN}%d${NC}  失败: ${RED}%d${NC}\n" "$pass" "$fail"
+echo "提示: 发布门请 SUBLIFT_INIT_RUNTIME=1 SUBLIFT_INIT_REQUIRE_GT=1 ./init.sh"
+echo "      或 uv run python scripts/parity/check_cutover_gate.py --check --require-gt"
 
 if [ "$fail" -gt 0 ]; then
     printf "${RED}环境验证未通过，请修复上述失败项。${NC}\n"

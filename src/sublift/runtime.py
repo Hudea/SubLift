@@ -11,6 +11,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum, unique
+from pathlib import Path
 from typing import Literal, cast
 
 
@@ -40,6 +41,40 @@ SUPPORTED_RUNTIMES = {"python", "cpp"}
 
 
 DEFAULT_RUNTIME: Literal["python", "cpp"] = "cpp"
+
+
+def probe_cpp_paddle_available(
+    *,
+    env_override: Mapping[str, str] | None = None,
+    repo_root: Path | None = None,
+) -> bool:
+    """Heuristic: C++ paddle is product-usable when worker exists and PP-OCRv6 models exist.
+
+    Does not start the worker. Matches C++ ``is_paddle_available()`` model-path check
+    for the default ``small`` layout under ``SUBLIFT_PADDLE_MODEL_DIR`` / cache.
+    Set ``SUBLIFT_CPP_PADDLE=0`` to force unavailable; ``=1`` still requires models.
+    """
+    env = env_override if env_override is not None else os.environ
+    flag = (env.get("SUBLIFT_CPP_PADDLE") or "").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return False
+
+    from sublift.worker_bin import resolve_worker_bin
+
+    if resolve_worker_bin(repo_root) is None:
+        return False
+
+    model_dir = (env.get("SUBLIFT_PADDLE_MODEL_DIR") or "").strip()
+    if model_dir:
+        root = Path(model_dir).expanduser()
+    else:
+        root = Path.home() / ".cache" / "sublift" / "rapidocr-models"
+
+    det = root / "PP-OCRv6_det_small.onnx"
+    rec = root / "PP-OCRv6_rec_small.onnx"
+    keys = root / "ppocrv6_dict.txt"
+    keys_alt = root / "ppocrv6_tiny_dict.txt"
+    return det.is_file() and rec.is_file() and (keys.is_file() or keys_alt.is_file())
 
 
 def resolve_runtime(

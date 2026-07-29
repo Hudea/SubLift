@@ -58,6 +58,12 @@ def test_resolve_runtime_paddle_cpp_available() -> None:
     assert choice.resolved_via == FLAG
 
 
+def test_probe_cpp_paddle_respects_env_off() -> None:
+    from sublift.runtime import probe_cpp_paddle_available
+
+    assert probe_cpp_paddle_available(env_override={"SUBLIFT_CPP_PADDLE": "0"}) is False
+
+
 
 def test_resolve_runtime_env_override() -> None:
     env = {"SUBLIFT_RUNTIME": "cpp"}

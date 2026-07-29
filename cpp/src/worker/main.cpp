@@ -12,7 +12,8 @@
 #include "engine_factory.hpp"
 
 static void print_usage(const char* prog) {
-  std::cout << "Usage: " << prog << " --socket <socket_path> [--engine mock|vision]\n";
+  std::cout << "Usage: " << prog
+            << " --socket <socket_path> [--engine mock|vision|paddle]\n";
 }
 
 int main(int argc, char* argv[]) {

@@ -29,10 +29,11 @@ ImageView (RGB24 优先，与 extractor / Vision 一致)
 | Runtime 策略 | 有 C++ paddle 时允许 `runtime=cpp`；否则保留 `paddle_override → Python` |
 | Parity | box/颜色 L0；合成图/固定夹具 L2–L3；live 文本 L4；**不**要求与 Vision 同字 |
 
-**本子阶段结束时（理想状态）：**
+**本子阶段结束时（目标 / 验收状态）：**
 
-- macOS / Linux（有 ONNX）可构建并运行 **C++ paddle**；
-- 产品默认：`paddle` → **优先 C++ worker**（若已构建且可用），否则 **显式** 回退 Python（不静默改引擎）；
+- macOS / Linux（有 ONNX）可构建并运行 **C++ paddle**（`SUBLIFT_ENABLE_PADDLE=ON` + ORT + PP-OCRv6 模型）；
+- 产品默认：`paddle` → **优先 C++ worker**（`probe_cpp_paddle_available` / `is_paddle_available` 为真时），否则 **显式** 回退 Python（不静默改引擎）；
+- Det 后处理为 **简化连通域 AABB**（非完整 DB unclip）；文本 parity 为 **L4**，不要求与 rapidocr 逐字 identical；
 - Python `PaddleOcrEngine` **保留**为 Oracle / 回滚 / 无 ONNX 环境。
 
 **本子阶段不结束：** 删除 Python 树、`.app` 内嵌模型与公证、去 `uv` 的完整无 Python 分发（见 §2 不做 / 6.8+）。
