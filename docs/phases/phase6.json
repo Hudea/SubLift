@@ -1564,8 +1564,8 @@
           "description": "引用/抽测 6.8 paddle 门。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Python-free Standalone Native 运行验证门。创建 scripts/check_python_free.py 支持 env -i 干净隔离环境运行 sublift_cli，包含实时进程树零 Python/uv 子进程监控断言；check_app_bundle.py --strict 校验零外部 venv/brew 硬绑定 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06913",
