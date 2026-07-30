@@ -46,14 +46,4 @@ if(SUBLIFT_ENABLE_PADDLE AND ONNXRuntime_FOUND)
   target_link_libraries(sublift_paddle PRIVATE ONNXRuntime::ONNXRuntime)
 endif()
 
-# Explicit diagnostic utility for Phase 6.8 stage parity. It is not part of
-# the product CLI/Worker path and only captures tensors when invoked directly.
-add_executable(sublift_paddle_trace paddle_trace_main.cpp)
-target_link_libraries(sublift_paddle_trace PRIVATE
-  sublift_paddle
-  sublift_test_support
-  nlohmann_json::nlohmann_json
-)
-if(COMMAND sublift_use_bundled_onnxruntime)
-  sublift_use_bundled_onnxruntime(sublift_paddle_trace)
-endif()
+

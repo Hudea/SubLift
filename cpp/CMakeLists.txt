@@ -40,8 +40,8 @@ if(SUBLIFT_REQUIRE_PADDLE)
 endif()
 
 
-# OpenCV: private impl detail of the signature pipeline (feat-06101). Linked
-# PRIVATE into sublift_core only — no cv::Mat on the public API
+# OpenCV: private impl detail of the signature pipeline. Linked
+# PRIVATE into sublift_pipeline only — no cv::Mat on the public API
 # (architecture.md §3). Soft discovery keeps models/image builds working
 # without a system OpenCV install (architecture.md §2.1 optional OpenCV).
 if(SUBLIFT_REQUIRE_OPENCV)
@@ -139,15 +139,6 @@ if(SUBLIFT_ENABLE_PADDLE)
   endif()
 endif()
 
-
-add_subdirectory(src/core)
-add_subdirectory(src/ffmpeg)
-add_subdirectory(src/test_support)
-add_subdirectory(src/worker)
-add_subdirectory(src/cli)
-add_subdirectory(src/paddle)
-
-
 if(SUBLIFT_ENABLE_VISION)
   if(NOT APPLE)
     message(FATAL_ERROR "SUBLIFT_ENABLE_VISION requires macOS (AppleClang + OBJCXX)")
@@ -155,7 +146,17 @@ if(SUBLIFT_ENABLE_VISION)
   enable_language(OBJCXX)
 endif()
 
-add_subdirectory(src/vision_macos)
+add_subdirectory(src/core)
+add_subdirectory(src/pipeline)
+add_subdirectory(src/protocol)
+add_subdirectory(src/application)
+add_subdirectory(src/adapters/ffmpeg)
+add_subdirectory(src/adapters/paddle)
+add_subdirectory(src/adapters/vision_macos)
+add_subdirectory(src/test_support)
+add_subdirectory(src/worker)
+add_subdirectory(src/cli)
+add_subdirectory(diagnostics/paddle_trace)
 
 if(SUBLIFT_BUILD_TESTS)
   enable_testing()

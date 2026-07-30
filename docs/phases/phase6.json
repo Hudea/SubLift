@@ -1387,8 +1387,8 @@
           "description": "全量相关 ctest + ./init.sh；golden diff 空。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地机械目录与 include 布局。物理目录收拢为 adapters/{ffmpeg,paddle,vision_macos}、protocol、application、pipeline、diagnostics/paddle_trace；include/sublift 建立 core/ports/pipeline 分层并保留 21 个无缝转发头；更新所有 CMakeLists.txt；ctest 175/175 100% PASS；./init.sh 10/10 PASS；git diff 确认 golden/fixtures 零差异。"
     },
     {
       "id": "feat-06906",

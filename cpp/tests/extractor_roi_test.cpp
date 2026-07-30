@@ -3,7 +3,7 @@
 #include <memory>
 #include <utility>
 
-#include "../src/ffmpeg/process_utils.hpp"
+#include "../src/adapters/ffmpeg/process_utils.hpp"
 #include "sublift/bottom_crop_detector.hpp"
 #include "sublift/ffmpeg.hpp"
 #include "sublift/fixed_detector.hpp"

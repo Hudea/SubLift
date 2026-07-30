@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 
-#include "../src/ffmpeg/process_utils.hpp"
+#include "../src/adapters/ffmpeg/process_utils.hpp"
 #include "sublift/ffmpeg.hpp"
 
 using namespace sublift;
