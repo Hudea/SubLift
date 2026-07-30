@@ -163,3 +163,9 @@ if(SUBLIFT_BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)
 endif()
+
+add_custom_target(bundle
+  COMMAND "${CMAKE_SOURCE_DIR}/../scripts/build_app_bundle.sh" --no-build
+  DEPENDS sublift_cli sublift_worker
+  COMMENT "Building macOS SubLift.app Bundle"
+)

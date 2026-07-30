@@ -1514,8 +1514,8 @@
           "description": "随包资源可完成提取 smoke。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 macOS Product Bundle 布局。建立 SubLift.app 规范 6 大目录树 (Contents/{MacOS,Helpers,Resources/models,Resources/bin,Frameworks,Info.plist})；scripts/build_app_bundle.sh 支持 --no-build 与 relative RPATH 注入；cpp/CMakeLists.txt 增加 bundle target；scripts/check_app_bundle.py 机械校验 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06911",
