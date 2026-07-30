@@ -31,14 +31,18 @@ final class RuntimePolicyTests: XCTestCase {
         XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .vision, resolvedVia: .explicitFlag))
     }
 
-    func testPaddleEngineFallsBackWhenCppUnavailable() throws {
-        let choice = try RuntimePolicy.resolve(
-            requestedRuntime: "cpp",
-            requestedEngine: "paddle",
-            envOverride: ["SUBLIFT_RUNTIME": "cpp"],
-            defaultRuntime: .python
-        )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride))
+    func testPaddleEngineThrowsWhenCppUnavailable() {
+        XCTAssertThrowsError(
+            try RuntimePolicy.resolve(
+                requestedRuntime: "cpp",
+                requestedEngine: "paddle",
+                envOverride: ["SUBLIFT_RUNTIME": "cpp"],
+                defaultRuntime: .python,
+                isCppPaddleAvailable: false
+            )
+        ) { error in
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.paddleCppUnavailable)
+        }
     }
 
     func testPaddleProductDefaultUsesCppWhenAvailable() throws {
@@ -52,15 +56,18 @@ final class RuntimePolicyTests: XCTestCase {
         XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: .productDefault))
     }
 
-    func testPaddleProductDefaultFallsBackWhenUnavailable() throws {
-        let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
-            requestedEngine: "paddle",
-            envOverride: [:],
-            defaultRuntime: .cpp,
-            isCppPaddleAvailable: false
-        )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride))
+    func testPaddleProductDefaultThrowsWhenUnavailable() {
+        XCTAssertThrowsError(
+            try RuntimePolicy.resolve(
+                requestedRuntime: nil,
+                requestedEngine: "paddle",
+                envOverride: [:],
+                defaultRuntime: .cpp,
+                isCppPaddleAvailable: false
+            )
+        ) { error in
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.paddleCppUnavailable)
+        }
     }
 
     func testPaddleExplicitPythonRemainsRollback() throws {

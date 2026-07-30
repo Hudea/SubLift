@@ -344,7 +344,7 @@ public final class PipelineClient: @unchecked Sendable {
                 "--log-level", "INFO"
             ]
             if choice.engine == .paddle {
-                let status = choice.resolvedVia == .paddleOverride ? "fallback" : "stable"
+                let status = choice.runtime == .python ? "oracle_or_rollback" : "stable"
                 print("[SubLift] IPC worker start python=\(resolvedPath) engine=paddle runtime=python model=PP-OCRv6-small status=\(status) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
             } else {
                 print("[SubLift] IPC Python server start python=\(resolvedPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")

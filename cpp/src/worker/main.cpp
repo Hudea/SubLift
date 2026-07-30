@@ -10,6 +10,7 @@
 
 #include "connection.hpp"
 #include "engine_factory.hpp"
+#include "path_media_services.hpp"
 
 static void print_usage(const char* prog) {
   std::cout << "Usage: " << prog
@@ -54,7 +55,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  sublift::worker::EngineFactory engine_factory(engine);
+
 
   if (socket_path.size() >= sizeof(sockaddr_un::sun_path)) {
     std::cerr << "Error: --socket path is too long for AF_UNIX (max "
@@ -106,7 +107,10 @@ int main(int argc, char* argv[]) {
       break;
     }
 
-    sublift::worker::WorkerConnection conn(client_fd, engine_factory);
+    sublift::worker::WorkerConnection conn(
+        client_fd,
+        std::make_unique<sublift::worker::EngineFactory>(engine),
+        std::make_unique<sublift::worker::FfmpegPathMediaServices>());
     conn.run();
   }
 

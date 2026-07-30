@@ -1,28 +1,29 @@
 #pragma once
 
+#include <memory>
 #include <mutex>
+
 #include "bridge.hpp"
-#include "engine_factory.hpp"
+#include "sublift/application/ocr_engine_factory.hpp"
+#include "sublift/application/path_media_services.hpp"
 
 namespace sublift::worker {
 
 class WorkerConnection {
  public:
-  WorkerConnection(int client_fd, EngineFactory engine_factory);
+  WorkerConnection(int client_fd,
+                   std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
+                   std::unique_ptr<sublift::application::IPathMediaServices> path_media);
   ~WorkerConnection();
 
   WorkerConnection(const WorkerConnection&) = delete;
   WorkerConnection& operator=(const WorkerConnection&) = delete;
 
-  /// Run blocking socket reading loop until peer disconnects or sends bye.
   void run();
-
-  /// Thread-safe send framed message to client_fd.
   void send_message(const ipc::Message& msg);
 
  private:
   int fd_{-1};
-  EngineFactory engine_factory_;
   std::mutex write_mutex_;
   BridgeHandler bridge_handler_;
 };

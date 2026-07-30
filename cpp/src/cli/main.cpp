@@ -153,8 +153,14 @@ void print_usage(const char* prog) {
     if (fs::exists(p)) return p;
   }
   if (auto dir = executable_dir()) {
+    // Same directory (dev build: bin/sublift next to bin/sublift_worker)
     fs::path sibling = *dir / "sublift_worker";
     if (fs::exists(sibling)) return sibling;
+    // Product .app: Contents/MacOS/sublift_cli → Contents/Helpers/sublift_worker
+    if (dir->filename() == "MacOS" && dir->parent_path().filename() == "Contents") {
+      fs::path helper = dir->parent_path() / "Helpers" / "sublift_worker";
+      if (fs::exists(helper)) return helper;
+    }
   }
   return find_worker_bin(std::nullopt);
 }

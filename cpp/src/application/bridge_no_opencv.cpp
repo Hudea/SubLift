@@ -12,12 +12,12 @@ constexpr const char* kPipelineUnavailable =
 
 }  // namespace
 
-BridgeHandler::BridgeHandler(EngineFactory engine_factory)
-    : engine_factory_(std::move(engine_factory)) {}
+BridgeHandler::BridgeHandler(
+    std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
+    std::unique_ptr<sublift::application::IPathMediaServices> path_media)
+    : engine_factory_(std::move(engine_factory)), path_media_(std::move(path_media)) {}
 
-BridgeHandler::~BridgeHandler() {
-  cancel_job();
-}
+BridgeHandler::~BridgeHandler() { cancel_job(); }
 
 void BridgeHandler::release_job_resources() {
   std::lock_guard<std::mutex> lock(state_mutex_);
@@ -37,18 +37,30 @@ void BridgeHandler::cancel_job() {
   is_path_mode_ = false;
 }
 
-std::optional<ipc::Message> BridgeHandler::handle(const ipc::Message& msg, PushCallback push_cb) {
+std::optional<ipc::Message> BridgeHandler::handle(const ipc::Message& msg, PushCallback) {
   return std::visit(
-      [this, &push_cb](auto&& arg) -> std::optional<ipc::Message> {
+      [this](auto&& arg) -> std::optional<ipc::Message> {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, ipc::HelloMsg>) {
           return handle_hello(arg);
         } else if constexpr (std::is_same_v<T, ipc::StartJobMsg>) {
-          return handle_start_job(arg, push_cb);
+          return ipc::DoneMsg{
+              .video_id = arg.video_id,
+              .ok = false,
+              .error = kPipelineUnavailable,
+          };
         } else if constexpr (std::is_same_v<T, ipc::FrameMsg>) {
-          return handle_frame(arg, push_cb);
+          return ipc::DoneMsg{
+              .video_id = arg.video_id,
+              .ok = false,
+              .error = kPipelineUnavailable,
+          };
         } else if constexpr (std::is_same_v<T, ipc::FinalizeMsg>) {
-          return handle_finalize(arg, push_cb);
+          return ipc::DoneMsg{
+              .video_id = arg.video_id,
+              .ok = false,
+              .error = kPipelineUnavailable,
+          };
         } else if constexpr (std::is_same_v<T, ipc::CancelJobMsg>) {
           return handle_cancel(arg);
         } else {
@@ -58,53 +70,36 @@ std::optional<ipc::Message> BridgeHandler::handle(const ipc::Message& msg, PushC
       msg);
 }
 
-ipc::Message BridgeHandler::handle_hello(const ipc::HelloMsg& /*msg*/) {
+ipc::Message BridgeHandler::handle_hello(const ipc::HelloMsg&) {
   return ipc::ByeMsg{
       .protocol_version = 1,
       .runtime = "cpp",
-      .engines = engine_factory_.supported_engines(),
-      .capabilities = engine_factory_.capabilities(),
+      .engines = engine_factory_ ? engine_factory_->supported_engines()
+                                 : std::vector<std::string>{},
+      .capabilities = engine_factory_ ? engine_factory_->capabilities()
+                                      : std::vector<std::string>{},
   };
 }
 
-std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobMsg& msg,
-                                                            PushCallback /*push_cb*/) {
-  return ipc::DoneMsg{
-      .video_id = msg.video_id,
-      .ok = false,
-      .error = kPipelineUnavailable,
-  };
+std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobMsg&,
+                                                            PushCallback) {
+  return std::nullopt;
 }
 
-std::optional<ipc::Message> BridgeHandler::handle_frame(const ipc::FrameMsg& /*msg*/,
-                                                        PushCallback /*push_cb*/) {
-  return ipc::ErrorMsg{.message = kPipelineUnavailable};
+std::optional<ipc::Message> BridgeHandler::handle_frame(const ipc::FrameMsg&, PushCallback) {
+  return std::nullopt;
 }
 
-std::optional<ipc::Message> BridgeHandler::handle_finalize(const ipc::FinalizeMsg& msg,
-                                                           PushCallback /*push_cb*/) {
-  return ipc::DoneMsg{
-      .video_id = msg.video_id,
-      .ok = false,
-      .error = kPipelineUnavailable,
-  };
+std::optional<ipc::Message> BridgeHandler::handle_finalize(const ipc::FinalizeMsg&,
+                                                            PushCallback) {
+  return std::nullopt;
 }
 
 ipc::Message BridgeHandler::handle_cancel(const ipc::CancelJobMsg& msg) {
   cancel_job();
-  return ipc::DoneMsg{
-      .video_id = msg.video_id,
-      .ok = false,
-      .error = "cancelled",
-  };
+  return ipc::DoneMsg{.video_id = msg.video_id, .ok = true, .error = ""};
 }
 
-void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
-  push_cb(ipc::DoneMsg{
-      .video_id = std::move(msg.video_id),
-      .ok = false,
-      .error = kPipelineUnavailable,
-  });
-}
+void BridgeHandler::run_path_mode(ipc::StartJobMsg, PushCallback) {}
 
 }  // namespace sublift::worker

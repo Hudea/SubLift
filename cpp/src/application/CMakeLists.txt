@@ -10,18 +10,16 @@ add_library(sublift::application ALIAS sublift_application)
 
 target_include_directories(sublift_application PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${PROJECT_SOURCE_DIR}/src/worker
   $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 
+# Application depends on pipeline + protocol + ports (headers). Concrete FFmpeg /
+# OCR adapters are injected by the Worker composition root.
 target_link_libraries(sublift_application PUBLIC
   sublift_pipeline
   sublift_protocol
   sublift_core
-  sublift_ffmpeg
-  sublift_vision_macos
-  sublift_paddle
   nlohmann_json::nlohmann_json
 )
 
@@ -31,8 +29,9 @@ else()
   target_compile_definitions(sublift_application PUBLIC SUBLIFT_HAS_OPENCV=0)
 endif()
 
+# Frame-mode JPEG decode (IPC payload) uses ImageIO on Apple — PRIVATE only.
 if(APPLE)
-  target_link_libraries(sublift_application PUBLIC
+  target_link_libraries(sublift_application PRIVATE
     "-framework CoreFoundation"
     "-framework CoreGraphics"
     "-framework ImageIO"

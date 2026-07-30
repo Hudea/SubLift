@@ -26,7 +26,7 @@ class ResolutionSource(StrEnum):
     EXPLICIT_FLAG = "explicit_flag"
     ENV_VAR = "env_var"
     PRODUCT_DEFAULT = "product_default"
-    PADDLE_OVERRIDE = "paddle_override"
+
 
 
 @dataclass(frozen=True)
@@ -98,8 +98,8 @@ def resolve_runtime(
     Cross-matrix rules:
     - engine == 'paddle' routes to runtime='cpp' when the resolved runtime is
       'cpp' and C++ paddle is available.
-    - engine == 'paddle' routes to runtime='python' via PADDLE_OVERRIDE whenever
-      the resolved runtime is 'cpp' but C++ paddle is unavailable.
+    - engine == 'paddle' and runtime == 'cpp' raises RuntimePolicyError if C++
+      paddle is unavailable.
     - Explicit/env runtime='python' remains the rollback path.
     - engine in ('vision', 'mock') routes to resolved runtime.
     - Unsupported engines or invalid runtimes raise RuntimePolicyError.
@@ -136,10 +136,9 @@ def resolve_runtime(
         if raw_runtime == "cpp" and cpp_paddle_available:
             return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
         if raw_runtime == "cpp":
-            return WorkerChoice(
-                runtime="python",
-                engine="paddle",
-                resolved_via=ResolutionSource.PADDLE_OVERRIDE,
+            raise RuntimePolicyError(
+                "Paddle C++ engine is unavailable on this system. "
+                "Use '--runtime python' to explicitly request Python Paddle fallback."
             )
         return WorkerChoice(runtime="python", engine="paddle", resolved_via=source)
 

@@ -49,11 +49,9 @@ TEST_CASE("ResourceLocator - Paddle Model Bundle Probe & Locate", "[models][reso
     std::filesystem::create_directories(empty_dir);
 
     auto probe_res = locator.probe_model_bundle(empty_dir.string(), sublift::models::ModelType::Small);
-    auto locate_res = locator.locate_model_bundle(empty_dir.string(), sublift::models::ModelType::Small);
+    REQUIRE_FALSE(probe_res.found);
 
-    REQUIRE(probe_res.found == locate_res.found);
-    REQUIRE(probe_res.source == locate_res.source);
-    REQUIRE(probe_res.error_msg == locate_res.error_msg);
+    REQUIRE_THROWS_AS(locator.locate_model_bundle(empty_dir.string(), sublift::models::ModelType::Small), std::runtime_error);
 
     // Verify PaddleOcrEngine constructor throws identical error message when probe fails
     sublift::PaddleOcrOptions opts;

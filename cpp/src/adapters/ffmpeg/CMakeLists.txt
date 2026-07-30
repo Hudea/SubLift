@@ -12,4 +12,6 @@ target_link_libraries(sublift_ffmpeg
   PUBLIC
     sublift_core
     nlohmann_json::nlohmann_json
+  PRIVATE
+    sublift_models
 )

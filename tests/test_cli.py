@@ -308,7 +308,7 @@ class TestCliCutoverRouting:
 
         assert called["python"] is True
 
-    def test_cli_paddle_override_prints_notice(
+    def test_cli_paddle_cpp_unavailable_throws(
         self,
         tmp_path: Path,
         capsys: pytest.CaptureFixture[str],
@@ -318,19 +318,14 @@ class TestCliCutoverRouting:
         video.write_bytes(b"\x00")
         output = tmp_path / "out.srt"
 
-        called = {"python": False}
-
-        def mock_python(*args: object, **kwargs: object) -> None:
-            called["python"] = True
-
-        monkeypatch.setattr("sublift.cli._run_extract_python", mock_python)
         monkeypatch.setattr("sublift.cli.probe_cpp_paddle_available", lambda: False)
 
-        main(["extract", str(video), "-o", str(output), "--engine", "paddle", "--runtime", "cpp"])
-
-        assert called["python"] is True
-        captured = capsys.readouterr()
-        assert "C++ Paddle 不可用" in captured.err
+        from sublift.runtime import RuntimePolicyError
+        with pytest.raises(RuntimePolicyError, match="Paddle C\\+\\+ engine is unavailable"):
+            main([
+                "extract", str(video), "-o", str(output),
+                "--engine", "paddle", "--runtime", "cpp"
+            ])
 
     def test_cli_cpp_missing_binary_exits_1(
         self,

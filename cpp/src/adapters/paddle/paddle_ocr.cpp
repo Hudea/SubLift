@@ -1,4 +1,6 @@
 #include "sublift/paddle.hpp"
+#include "sublift/diagnostics/paddle_stage_trace.hpp"
+#include "sublift/ports/paddle_geometry.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -113,16 +115,35 @@ Point2D map_point_to_original(
 }  // namespace
 
 bool is_paddle_available() noexcept {
+  return PaddleOcrEngine::probe_capabilities().available;
+}
+
+PaddleCapabilities PaddleOcrEngine::probe_capabilities(
+    const std::string& model_root_dir, const std::string& model_type) {
+  PaddleCapabilities caps;
+  caps.model_type = model_type;
+  caps.model_root = model_root_dir;
 #if !SUBLIFT_HAS_PADDLE
-  return false;
+  caps.available = false;
+  caps.detail = "SUBLIFT_ENABLE_PADDLE=OFF";
+  return caps;
 #else
   try {
     models::ResourceLocator locator;
-    auto res = locator.probe_model_bundle("", models::ModelType::Small);
-    return res.found;
-  } catch (...) {
-    return false;
+    auto type = models::parse_model_type(model_type);
+    auto res = locator.probe_model_bundle(model_root_dir, type);
+    caps.available = res.found;
+    if (res.found) {
+      caps.model_root = res.value.det_path.parent_path().string();
+      caps.detail = "ok";
+    } else {
+      caps.detail = res.error_msg;
+    }
+  } catch (const std::exception& e) {
+    caps.available = false;
+    caps.detail = e.what();
   }
+  return caps;
 #endif
 }
 
@@ -156,11 +177,7 @@ struct PaddleOcrEngine::Impl {
             Ort::MemoryInfo::CreateCpu(
                 OrtArenaAllocator, OrtMemTypeDefault)) {
     models::ResourceLocator locator;
-    auto res = locator.locate_model_bundle(options.model_root_dir, model_type);
-    if (!res.found) {
-      throw std::runtime_error(res.error_msg);
-    }
-    model_paths = res.value;
+    model_paths = locator.locate_model_bundle(options.model_root_dir, model_type);
     model_dir = model_paths.det_path.parent_path();
 
     // Match RapidOCR 3.9.2: leave intra/inter thread counts at ORT defaults,
@@ -687,8 +704,16 @@ PaddleRuntimeStats PaddleOcrEngine::runtime_stats() const noexcept {
 
 #else
 
-bool is_paddle_available() noexcept {
-  return false;
+bool is_paddle_available() noexcept { return false; }
+
+PaddleCapabilities PaddleOcrEngine::probe_capabilities(
+    const std::string& model_root_dir, const std::string& model_type) {
+  PaddleCapabilities caps;
+  caps.available = false;
+  caps.model_type = model_type;
+  caps.model_root = model_root_dir;
+  caps.detail = "SUBLIFT_ENABLE_PADDLE=OFF";
+  return caps;
 }
 
 struct PaddleOcrEngine::Impl {};

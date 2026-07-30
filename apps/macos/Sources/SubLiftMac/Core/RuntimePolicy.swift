@@ -15,7 +15,6 @@ public enum ResolutionSource: String, Codable, Equatable, Sendable {
     case explicitFlag = "explicit_flag"
     case envVar = "env_var"
     case productDefault = "product_default"
-    case paddleOverride = "paddle_override"
 }
 
 public struct WorkerChoice: Codable, Equatable, Sendable {
@@ -33,6 +32,8 @@ public struct WorkerChoice: Codable, Equatable, Sendable {
 public enum RuntimePolicyError: Error, Equatable, LocalizedError {
     case unsupportedEngine(String)
     case invalidRuntime(String)
+    /// Product default/cpp path cannot silently fall back to Python when C++ Paddle is missing.
+    case paddleCppUnavailable
 
     public var errorDescription: String? {
         switch self {
@@ -42,6 +43,9 @@ public enum RuntimePolicyError: Error, Equatable, LocalizedError {
         case .invalidRuntime(let r):
             let supported = SubLiftRuntime.allCases.map { $0.rawValue }.sorted().joined(separator: ", ")
             return "Invalid runtime '\(r)'. Supported: [\(supported)]"
+        case .paddleCppUnavailable:
+            return "Paddle C++ engine is unavailable on this system. "
+                + "Set SUBLIFT_RUNTIME=python or request runtime=python explicitly for Oracle/rollback."
         }
     }
 }
@@ -82,8 +86,10 @@ public enum RuntimePolicy {
                 return WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: source)
             }
             if candidateRuntime == .cpp {
-                return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
+                // Align with Python resolve_runtime: no silent paddle_override.
+                throw RuntimePolicyError.paddleCppUnavailable
             }
+            // Explicit/env python remains the only product-visible rollback.
             return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: source)
         }
 

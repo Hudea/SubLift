@@ -442,56 +442,56 @@
             "feat-06607"
           ]
         },
-      {
-        "id": "phase6.paddle-native",
-        "name": "6.7 PaddleOCR C++ Native MVP",
-        "description": "ONNX Runtime + PP-OCRv6 实现 IOcrEngine（sublift_paddle），完成模型加载、基础 Det/Rec、Worker/Runtime 接线和合成几何 golden。该完成状态只代表 Native MVP 可运行；Det 仍为简化连通域 AABB，真实推理质量与性能未达到产品默认门。设计：docs/cpp/phase6.7-paddle.md。覆盖 feat-06701~06706。",
-        "status": "done",
-        "covers": [
-          "feat-06701",
+        {
+          "id": "phase6.paddle-native",
+          "name": "6.7 PaddleOCR C++ Native MVP",
+          "description": "ONNX Runtime + PP-OCRv6 实现 IOcrEngine（sublift_paddle），完成模型加载、基础 Det/Rec、Worker/Runtime 接线和合成几何 golden。该完成状态只代表 Native MVP 可运行；Det 仍为简化连通域 AABB，真实推理质量与性能未达到产品默认门。设计：docs/cpp/phase6.7-paddle.md。覆盖 feat-06701~06706。",
+          "status": "done",
+          "covers": [
+            "feat-06701",
             "feat-06702",
             "feat-06703",
             "feat-06704",
             "feat-06705",
-          "feat-06706"
-        ]
-      },
-      {
-        "id": "phase6.paddle-hardening",
-        "name": "6.8 Paddle Native 质量与性能加固",
-        "description": "完整 DB/unclip、Quad/Cls/Rec parity、多源 Paddle GT、性能、720s 长流、cancel/restart 与回滚均已完成；canonical C++ wall=Python×0.8956、RSS=×0.9152、逐源输出 exact，Paddle C++ 已成为 available 时的 stable 产品默认。设计：docs/cpp/phase6.8-paddle-hardening.md。覆盖 feat-06801~06807。",
-        "status": "done",
-        "covers": [
-          "feat-06801",
-          "feat-06802",
-          "feat-06803",
-          "feat-06804",
-          "feat-06805",
-          "feat-06806",
-          "feat-06807"
-        ]
-      },
-      {
-        "id": "phase6.post-cutover",
-        "name": "6.9 Native 产品架构整理 / 去 Python 分发",
-        "description": "Target/目录/公共面整理、ModelBundle、Native CLI parity、macOS bundle、Python-free 门与 fallback 退役。目标态 docs/cpp/phase6.9-native-product-architecture.md；实施计划 docs/cpp/phase6.9-implementation-plan.md。覆盖 feat-06901–06913。",
-        "status": "done",
-        "covers": [
-          "feat-06901",
-          "feat-06902",
-          "feat-06903",
-          "feat-06904",
-          "feat-06905",
-          "feat-06906",
-          "feat-06907",
-          "feat-06908",
-          "feat-06909",
-          "feat-06910",
-          "feat-06911",
-          "feat-06912",
-          "feat-06913"
-        ]
-      }
+            "feat-06706"
+          ]
+        },
+        {
+          "id": "phase6.paddle-hardening",
+          "name": "6.8 Paddle Native 质量与性能加固",
+          "description": "完整 DB/unclip、Quad/Cls/Rec parity、多源 Paddle GT、性能、720s 长流、cancel/restart 与回滚均已完成；canonical C++ wall=Python×0.8956、RSS=×0.9152、逐源输出 exact，Paddle C++ 已成为 available 时的 stable 产品默认。设计：docs/cpp/phase6.8-paddle-hardening.md。覆盖 feat-06801~06807。",
+          "status": "done",
+          "covers": [
+            "feat-06801",
+            "feat-06802",
+            "feat-06803",
+            "feat-06804",
+            "feat-06805",
+            "feat-06806",
+            "feat-06807"
+          ]
+        },
+        {
+          "id": "phase6.post-cutover",
+          "name": "6.9 Native 产品架构整理 / 去 Python 分发",
+          "description": "6.9 Native 产品架构整理：Wave A 主体+设计差距修复进行中；06911 blocked；§19 未全勾。见 phase6.9-design-gap-fix.md",
+          "status": "in-progress",
+          "covers": [
+            "feat-06901",
+            "feat-06902",
+            "feat-06903",
+            "feat-06904",
+            "feat-06905",
+            "feat-06906",
+            "feat-06907",
+            "feat-06908",
+            "feat-06909",
+            "feat-06910",
+            "feat-06911",
+            "feat-06912",
+            "feat-06913"
+          ]
+        }
       ]
     }
   ]

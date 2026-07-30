@@ -355,7 +355,7 @@ final class SubtitleExtractor: ObservableObject {
         guard choice.engine == .paddle else {
             return "\(choice.engine.rawValue) · \(choice.runtime.rawValue)"
         }
-        let state = choice.resolvedVia == .paddleOverride ? "fallback" : "stable"
+        let state = choice.runtime == .python ? "oracle_or_rollback" : "stable"
         return "PaddleOCR · \(choice.runtime.rawValue) · PP-OCRv6 small · \(state)"
     }
 

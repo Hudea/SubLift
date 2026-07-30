@@ -1,7 +1,9 @@
 #include "bridge.hpp"
 
-#include "sublift/paddle.hpp"
+#include "sublift/bottom_crop_detector.hpp"
+#include "sublift/fixed_detector.hpp"
 #include "sublift/pipeline.hpp"
+#include "sublift/roi_passthrough_detector.hpp"
 
 #include <algorithm>
 #include <array>
@@ -40,25 +42,13 @@ static const std::array<int, 256> kBase64Table = [] {
   return table;
 }();
 
-void emit_paddle_perf_stats(
-    const sublift::Pipeline& pipeline,
-    const sublift::IOcrEngine* engine) {
+void emit_perf_stats(const sublift::Pipeline& pipeline) {
   const char* enabled = std::getenv("SUBLIFT_PADDLE_PERF_DIAGNOSTICS");
   if (enabled == nullptr || std::string_view(enabled) != "1") {
     return;
   }
-  const auto* paddle_engine =
-      dynamic_cast<const sublift::PaddleOcrEngine*>(engine);
-  if (paddle_engine == nullptr) {
-    return;
-  }
-  const auto stats = paddle_engine->runtime_stats();
-  std::cerr << "SUBLIFT_PADDLE_PERF_STATS"
-            << " ocr_calls=" << pipeline.ocr_call_count()
-            << " recognize_calls=" << stats.recognize_calls
-            << " det_boxes=" << stats.det_boxes
-            << " cls_batches=" << stats.cls_batches
-            << " rec_batches=" << stats.rec_batches << '\n';
+  std::cerr << "SUBLIFT_PERF_STATS"
+            << " ocr_calls=" << pipeline.ocr_call_count() << '\n';
 }
 
 std::vector<std::uint8_t> decode_base64(std::string_view input) {
@@ -191,8 +181,10 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
 
 }  // namespace
 
-BridgeHandler::BridgeHandler(EngineFactory engine_factory)
-    : engine_factory_(std::move(engine_factory)) {}
+BridgeHandler::BridgeHandler(
+    std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
+    std::unique_ptr<sublift::application::IPathMediaServices> path_media)
+    : engine_factory_(std::move(engine_factory)), path_media_(std::move(path_media)) {}
 
 BridgeHandler::~BridgeHandler() {
   cancel_job();
@@ -209,7 +201,7 @@ void BridgeHandler::release_job_resources() {
 
 void BridgeHandler::cancel_job() {
   cancelled_ = true;
-  std::shared_ptr<sublift::ffmpeg::FfmpegExtractor> extractor;
+  std::shared_ptr<sublift::application::IStreamingExtractor> extractor;
   std::shared_ptr<sublift::Pipeline> pipeline;
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
@@ -258,8 +250,8 @@ ipc::Message BridgeHandler::handle_hello(const ipc::HelloMsg& /*msg*/) {
   return ipc::ByeMsg{
       .protocol_version = 1,
       .runtime = "cpp",
-      .engines = engine_factory_.supported_engines(),
-      .capabilities = engine_factory_.capabilities(),
+      .engines = engine_factory_->supported_engines(),
+      .capabilities = engine_factory_->capabilities(),
   };
 }
 
@@ -273,7 +265,7 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
     };
   }
 
-  auto err = engine_factory_.validate_engine(msg.engine);
+  auto err = engine_factory_->validate_engine(msg.engine);
   if (err.has_value()) {
     return ipc::DoneMsg{
         .video_id = msg.video_id,
@@ -353,7 +345,7 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
       detector = std::make_unique<sublift::BottomCropDetector>(cfg.region_bottom_ratio);
     }
 
-    auto ocr_engine = engine_factory_.create_engine();
+    auto ocr_engine = engine_factory_->create_engine();
 
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
@@ -464,7 +456,7 @@ std::optional<ipc::Message> BridgeHandler::handle_finalize(const ipc::FinalizeMs
 
   try {
     std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
-    emit_paddle_perf_stats(*pipeline, job_ocr_engine_.get());
+    emit_perf_stats(*pipeline);
 
     push_cb(ipc::EntriesMsg{
         .video_id = msg.video_id,
@@ -548,9 +540,17 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       };
     }
 
-    sublift::FrameIOPlan plan = sublift::ffmpeg::plan_frame_io(
-        video_path, region_box_src, "auto", sublift::ffmpeg::TransformPolicy::FallbackFull,
-        cfg.region_bottom_ratio);
+    if (!path_media_) {
+      push_cb(ipc::DoneMsg{
+          .video_id = video_id,
+          .ok = false,
+          .error = "path media services not configured",
+      });
+      return;
+    }
+
+    sublift::FrameIOPlan plan =
+        path_media_->plan_frame_io(video_path, region_box_src, "auto", cfg.region_bottom_ratio);
 
     std::unique_ptr<sublift::IDetector> detector;
     if (plan.output_crop.has_value()) {
@@ -560,8 +560,8 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       detector = std::make_unique<sublift::BottomCropDetector>(cfg.region_bottom_ratio);
     }
 
-    auto ocr_engine = engine_factory_.create_engine();
-    auto extractor = std::make_shared<sublift::ffmpeg::FfmpegExtractor>(fps, plan.output_crop);
+    auto ocr_engine = engine_factory_->create_engine();
+    auto extractor = path_media_->create_extractor(fps, plan.output_crop);
 
     std::shared_ptr<sublift::Pipeline> pipeline;
     {
@@ -584,7 +584,7 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       });
     }
 
-    const std::int64_t dur_ms = sublift::ffmpeg::probe_duration_ms(video_path);
+    const std::int64_t dur_ms = path_media_->probe_duration_ms(video_path);
     const double duration_s = static_cast<double>(dur_ms) / 1000.0;
     int estimated_total = static_cast<int>(duration_s * fps);
     if (estimated_total < 1) estimated_total = 1;
@@ -637,7 +637,7 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
     });
 
     std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
-    emit_paddle_perf_stats(*pipeline, job_ocr_engine_.get());
+    emit_perf_stats(*pipeline);
 
     if (!cancelled_) {
       push_cb(ipc::EntriesMsg{

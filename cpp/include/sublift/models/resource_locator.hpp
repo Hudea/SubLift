@@ -31,13 +31,15 @@ class ResourceLocator {
   [[nodiscard]] ResourceResult<ModelPaths> probe_model_bundle(
       const std::string& custom_dir = "", ModelType type = ModelType::Small) const;
 
-  [[nodiscard]] ResourceResult<ModelPaths> locate_model_bundle(
-      const std::string& custom_dir = "", ModelType type = ModelType::Small) const {
-    return probe_model_bundle(custom_dir, type);
-  }
+  [[nodiscard]] ModelPaths locate_model_bundle(
+      const std::string& custom_dir = "", ModelType type = ModelType::Small) const;
 
-  /// Locate FFmpeg / ffprobe executable.
+  /// Locate FFmpeg executable (override → env → app bundle → PATH → system).
   [[nodiscard]] ResourceResult<std::filesystem::path> locate_ffmpeg_executable(
+      const std::string& custom_path = "") const;
+
+  /// Locate ffprobe executable (same order as ffmpeg; may share bundle bin/).
+  [[nodiscard]] ResourceResult<std::filesystem::path> locate_ffprobe_executable(
       const std::string& custom_path = "") const;
 
   /// Locate ONNX Runtime shared library.

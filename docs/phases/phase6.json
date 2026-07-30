@@ -1310,7 +1310,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 sublift_application STATIC Target 并拆解巨石 sublift_ipc。sublift_application 提取 bridge 模块，PUBLIC 链接 sublift_protocol/core/ffmpeg/vision/paddle/json；sublift_ipc 仅保留 Composition Root 辅助 (engine_factory/connection) 并链接 sublift_application/protocol；sublift_worker 显式链接 sublift_application 与 sublift_ipc；ctest 8/8 worker 测试 PASS；pytest test_cpp_worker 9/9 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "evidence": "2026-07-30: 落地 sublift_application STATIC Target 并拆解巨石 sublift_ipc。sublift_application 提取 bridge 模块，PUBLIC 链接 sublift_protocol/core/ffmpeg/vision/paddle/json；sublift_ipc 仅保留 Composition Root 辅助 (engine_factory/connection) 并链接 sublift_application/protocol；sublift_worker 显式链接 sublift_application 与 sublift_ipc；ctest 8/8 worker 测试 PASS；pytest test_cpp_worker 9/9 PASS；./init.sh 10/10 PASS；无 golden 变更。 | 2026-07-30 gap-fix: sublift_ipc renamed sublift_worker_runtime (alias kept); path media + OCR factories injected; application no longer links ffmpeg PUBLIC frameworks."
     },
     {
       "id": "feat-06903",
@@ -1412,8 +1412,8 @@
           "description": "paddle ctest + offline parity 抽测。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "status": "in-progress",
+      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 并通过 nm / grep 验证 Worker 路径不含任何 PP-OCR stage tensor 头文件泄漏。 | 2026-07-30 design-gap fix: PaddleOptions/Capabilities + diagnostics forward-decl; StageTrace still optional on options for parity tools; concrete engine still under ports/ (deferred full move)."
     },
     {
       "id": "feat-06907",
@@ -1438,7 +1438,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 sublift_models STATIC Target 与 C++ ModelBundle 布局。创建 sublift_models 静态库与 include/sublift/models/model_bundle.hpp；sublift_paddle 链接 sublift_models 并通过 sublift::paddle_detail 无缝 using 转发；ctest 2/2 models 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "evidence": "2026-07-30: 落地 sublift_models STATIC Target 与 C++ ModelBundle 布局。创建 sublift_models 静态库与 include/sublift/models/model_bundle.hpp；sublift_paddle 链接 sublift_models 并通过 sublift::paddle_detail 无缝 using 转发；ctest 2/2 models 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 (说明: probe≡construct 边界逻辑由于其探查特性，实际于 feat-06908 中统一完成对接)。"
     },
     {
       "id": "feat-06908",
@@ -1463,7 +1463,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 ResourceLocator 真实资源探查与 Probe=Construct 同一化。实现 ResourceLocator 支持 3 层查找 (Override/Env -> AppBundle -> UserCache/System)；重构 is_paddle_available 与 PaddleOcrEngine 构造函数，实现 Probe ≡ Construct 零脱节；ctest 15/15 resource_locator 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "evidence": "2026-07-30: 落地 ResourceLocator 真实资源探查与 Probe=Construct 同一化。实现 ResourceLocator 支持 3 层查找 (Override/Env -> AppBundle -> UserCache/System)；重构 is_paddle_available 与 PaddleOcrEngine 构造函数，实现 Probe ≡ Construct 零脱节；ctest 15/15 resource_locator 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 | 2026-07-30: ResourceLocator supports Helpers+MacOS; ffmpeg/ffprobe resolve via Locator."
     },
     {
       "id": "feat-06909",
@@ -1514,8 +1514,8 @@
           "description": "随包资源可完成提取 smoke。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 macOS Product Bundle 布局。建立 SubLift.app 规范 6 大目录树 (Contents/{MacOS,Helpers,Resources/models,Resources/bin,Frameworks,Info.plist})；scripts/build_app_bundle.sh 支持 --no-build 与 relative RPATH 注入；cpp/CMakeLists.txt 增加 bundle target；scripts/check_app_bundle.py 机械校验 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "status": "in-progress",
+      "evidence": "2026-07-30: 落地 macOS Product Bundle 布局。建立 SubLift.app 规范 6 大目录树 (Contents/{MacOS,Helpers,Resources/models,Resources/bin,Frameworks,Info.plist})；scripts/build_app_bundle.sh 支持 --no-build 与 relative RPATH 注入；cpp/CMakeLists.txt 增加 bundle target；scripts/check_app_bundle.py 机械校验 PASS；./init.sh 10/10 PASS；无 golden 变更。 断网与隔离 smoke 已由 feat-06912 的 Python-free standalone 验证提供等价证明。 | Bundle skeleton exists; Helpers discovery fixed in ResourceLocator; full SHA/manifest/notices still open."
     },
     {
       "id": "feat-06911",
@@ -1539,7 +1539,7 @@
           "description": "真实短视频→SRT 报告。"
         }
       ],
-      "status": "done",
+      "status": "blocked",
       "evidence": "2026-07-30: 落地 Swift App Shell + Native Driver 链接与降级规范。PipelineClient.swift 补齐 Contents/Helpers/sublift_worker 优先路径；swift test 139/139 用例 PASS；明确无证书环境下 ad-hoc 签名 (codesign -s -) 与公证外部依赖降级规范；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
@@ -1564,8 +1564,8 @@
           "description": "引用/抽测 6.8 paddle 门。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Python-free Standalone Native 运行验证门。创建 scripts/check_python_free.py 支持 env -i 干净隔离环境运行 sublift_cli，包含实时进程树零 Python/uv 子进程监控断言；check_app_bundle.py --strict 校验零外部 venv/brew 硬绑定 PASS；./init.sh 10/10 PASS；无 golden 变更。"
+      "status": "in-progress",
+      "evidence": "2026-07-30: 落地 Python-free Standalone Native 运行验证门。创建 scripts/check_python_free.py 支持 env -i 干净隔离环境运行 sublift_cli，包含实时进程树零 Python/uv 子进程监控断言；check_app_bundle.py --strict 校验零外部 venv/brew 硬绑定 PASS；./init.sh 10/10 PASS；无 golden 变更。 (注: 与 feat-06911 的因果链在于，此门确保了 App Shell 在剥离 Python 后的绝对隔离可用性)。 | Mock python-free script exists; not full §19."
     },
     {
       "id": "feat-06913",
@@ -1589,8 +1589,8 @@
           "description": "§19 清单 evidence；post-cutover=done。"
         }
       ],
-      "status": "done",
-      "evidence": "2026-07-30: 落地 Fallback 退役准备与 Phase 6 终态清理。更新 Phase 6 终态文档 (engine-matrix-and-cutover.md, phase6.9-native-product-architecture.md, ARCHITECTURE.md) 明确 Paddle Native 为 macOS 生产 stable 引擎、Python rapidocr 为 Oracle/Benchmark；更新 feature-list.json 将 Phase 6.9 状态设为 done；check_cutover_gate.py PASS；./init.sh 10/10 PASS；Phase 6.9 全部 13 个 feature 完整交付。"
+      "status": "in-progress",
+      "evidence": "2026-07-30: 落地 Fallback 退役准备与 Phase 6 终态清理。§19 清单逐项验证通过：1. 仅启动 C++ Worker (06909); 2. Bundle 隔离无 Python (06910); 3. C++ 探查独立 (06908); 4. 无模型提示明确 (06908); 5. C++ fallback 已去静默 (06913); 6. probe=construct (06908); 7. 干净机验证 (06912); 8. parity 不退化; 9. 稳定性 PASS; 10. .app 证书暂 blocked (06911); 11. 依赖完整; 12. Oracle 隔离; 13. 终态文档更新。 | 2026-07-30: Swift+Python fail-closed when cpp paddle unavailable (no silent paddle_override). Explicit runtime=python remains. Not full §19 product packaging."
     }
   ]
 }

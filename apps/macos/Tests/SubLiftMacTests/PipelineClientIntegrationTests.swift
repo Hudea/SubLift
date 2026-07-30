@@ -114,22 +114,21 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertEqual(e.videoId, "VID-CPP-001")
     }
 
-    func testPaddleEngineFallsBackToPythonWhenCppDisabled() throws {
+    func testPaddleEngineFailsClosedWhenCppDisabled() {
         let client = PipelineClient()
         defer { client.stop() }
 
-        // 显式关闭 C++ Paddle 时，产品默认/显式 cpp 都必须可观测地 fallback。
-        let success = try client.start(
-            requestedRuntime: "cpp",
-            engine: "paddle",
-            pythonExecutable: pythonPath,
-            envOverride: ["SUBLIFT_CPP_PADDLE": "0"]
-        )
-        XCTAssertTrue(success, "Paddle fallback 至 Python Worker 后应成功握手")
-        XCTAssertEqual(
-            client.lastWorkerChoice,
-            WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
-        )
+        // 显式关闭 C++ Paddle 时，产品 cpp 路径必须 fail-closed，不得静默 Python。
+        XCTAssertThrowsError(
+            try client.start(
+                requestedRuntime: "cpp",
+                engine: "paddle",
+                pythonExecutable: pythonPath,
+                envOverride: ["SUBLIFT_CPP_PADDLE": "0"]
+            )
+        ) { error in
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.paddleCppUnavailable)
+        }
     }
 
     func testPaddleProductDefaultStartsCppWhenAvailable() throws {

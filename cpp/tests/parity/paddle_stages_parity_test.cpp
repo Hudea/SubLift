@@ -6,6 +6,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "sublift/diagnostics/paddle_stage_trace.hpp"
 #include "sublift/paddle.hpp"
 
 #ifndef SUBLIFT_PARITY_GOLDEN_PADDLE_STAGES

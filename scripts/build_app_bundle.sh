@@ -45,8 +45,8 @@ chmod +x "${BUNDLE_DIR}/Contents/MacOS/sublift_cli"
 chmod +x "${BUNDLE_DIR}/Contents/Helpers/sublift_worker"
 
 # Inject relative RPATH for Frameworks lookup
-install_name_tool -add_rpath "@executable_path/../Frameworks" "${BUNDLE_DIR}/Contents/MacOS/sublift_cli" 2>/dev/null || true
-install_name_tool -add_rpath "@executable_path/../Frameworks" "${BUNDLE_DIR}/Contents/Helpers/sublift_worker" 2>/dev/null || true
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${BUNDLE_DIR}/Contents/MacOS/sublift_cli"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "${BUNDLE_DIR}/Contents/Helpers/sublift_worker"
 
 # Copy Info.plist
 cp "${ROOT_DIR}/cpp/packaging/macos/Info.plist.in" "${BUNDLE_DIR}/Contents/Info.plist"

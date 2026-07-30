@@ -13,7 +13,7 @@ final class SubtitleExtractorLogTests: XCTestCase {
 
     func testPythonPathModeLogFieldsNamePythonBackendAndExtractor() {
         let fields = SubtitleExtractor.pathModeLogFields(
-            for: WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
+            for: WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .explicitFlag)
         )
 
         XCTAssertEqual(fields.backend, "Python")

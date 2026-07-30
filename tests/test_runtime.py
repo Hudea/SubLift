@@ -18,7 +18,7 @@ from sublift.worker_bin import resolve_worker_bin
 P_DEF = ResolutionSource.PRODUCT_DEFAULT
 FLAG = ResolutionSource.EXPLICIT_FLAG
 ENV_VAR = ResolutionSource.ENV_VAR
-PADDLE_OVR = ResolutionSource.PADDLE_OVERRIDE
+
 
 
 def test_resolve_runtime_default_product_path() -> None:
@@ -42,12 +42,9 @@ def test_resolve_runtime_explicit_flag_cpp() -> None:
     assert choice.resolved_via == FLAG
 
 
-def test_resolve_runtime_paddle_force_python() -> None:
-    choice = resolve_runtime(requested_runtime="cpp", requested_engine="paddle")
-    assert choice.runtime == "python"
-    assert choice.engine == "paddle"
-    assert choice.resolved_via == PADDLE_OVR
-
+def test_resolve_runtime_paddle_cpp_unavailable_throws() -> None:
+    with pytest.raises(RuntimePolicyError, match="Paddle C\\+\\+ engine is unavailable"):
+        resolve_runtime(requested_runtime="cpp", requested_engine="paddle")
 
 def test_resolve_runtime_paddle_cpp_available() -> None:
     choice = resolve_runtime(
@@ -67,13 +64,13 @@ def test_resolve_runtime_paddle_product_default_cpp_available() -> None:
     assert choice == WorkerChoice("cpp", "paddle", P_DEF)
 
 
-def test_resolve_runtime_paddle_product_default_cpp_unavailable() -> None:
-    choice = resolve_runtime(
-        requested_engine="paddle",
-        default_runtime="cpp",
-        cpp_paddle_available=False,
-    )
-    assert choice == WorkerChoice("python", "paddle", PADDLE_OVR)
+def test_resolve_runtime_paddle_product_default_cpp_unavailable_throws() -> None:
+    with pytest.raises(RuntimePolicyError, match="Paddle C\\+\\+ engine is unavailable"):
+        resolve_runtime(
+            requested_engine="paddle",
+            default_runtime="cpp",
+            cpp_paddle_available=False,
+        )
 
 
 def test_probe_cpp_paddle_respects_env_off() -> None:
@@ -114,15 +111,12 @@ def test_resolve_runtime_whitespace_and_case_trimmed() -> None:
         # Default cpp; unavailable Paddle falls back explicitly.
         (None, None, "vision", "cpp", WorkerChoice("cpp", "vision", P_DEF)),
         (None, None, "mock", "cpp", WorkerChoice("cpp", "mock", P_DEF)),
-        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", PADDLE_OVR)),
         # Env variable override
         (None, "cpp", "vision", "python", WorkerChoice("cpp", "vision", ENV_VAR)),
         (None, "python", "vision", "cpp", WorkerChoice("python", "vision", ENV_VAR)),
-        (None, "cpp", "paddle", "python", WorkerChoice("python", "paddle", PADDLE_OVR)),
         # Explicit flag overrides everything
         ("python", "cpp", "vision", "cpp", WorkerChoice("python", "vision", FLAG)),
         ("cpp", "python", "mock", "python", WorkerChoice("cpp", "mock", FLAG)),
-        ("cpp", "python", "paddle", "cpp", WorkerChoice("python", "paddle", PADDLE_OVR)),
     ],
 )
 def test_resolve_runtime_matrix(

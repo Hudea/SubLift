@@ -28,7 +28,6 @@ from sublift.ocr import (
 )
 from sublift.pipeline import Pipeline
 from sublift.runtime import (
-    ResolutionSource,
     WorkerChoice,
     probe_cpp_paddle_available,
     resolve_runtime,
@@ -119,15 +118,7 @@ def _run_extract(
         requested_engine=engine,
         cpp_paddle_available=cpp_paddle,
     )
-
-    if choice.resolved_via == ResolutionSource.PADDLE_OVERRIDE:
-        print(
-            "[SubLift] engine=paddle runtime=python model=PP-OCRv6-small "
-            "status=fallback via=paddle_override；C++ Paddle 不可用（未构建/无模型），"
-            "可设置 SUBLIFT_PADDLE_MODEL_DIR 或启用 SUBLIFT_ENABLE_PADDLE 构建。",
-            file=sys.stderr,
-        )
-    elif choice.engine == "paddle":
+    if choice.engine == "paddle":
         print(
             f"[SubLift] engine=paddle runtime={choice.runtime} "
             "model=PP-OCRv6-small status=stable "
