@@ -21,7 +21,8 @@
 | [phase6.6-hardening.md](phase6.6-hardening.md) | **6.6 Worker Hardening**（feat-06606，标准开发门已完成） |
 | [phase6.6-sanitizer-isolation.md](phase6.6-sanitizer-isolation.md) | **6.6 Sanitizer 依赖隔离**（feat-06607，诊断隔离已完成；发布门仍待解决） |
 | [phase6.7-paddle.md](phase6.7-paddle.md) | **6.7 PaddleOCR C++ Native MVP**（ONNX / PP-OCRv6；**done**） |
-| [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) | **6.8 Paddle Native 质量与性能加固**（feat-06801–06807；**not-started**） |
+| [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) | **6.8 Paddle Native 质量、性能与产品 Cutover**（feat-06801–06807；**done**） |
+| [phase6.8-review-index.md](phase6.8-review-index.md) | **6.8 回顾索引**：问题审计 → 设计 → 逐 feature 修改 → ADR → 验收与复跑入口 |
 
 ### 架构与契约
 
@@ -49,6 +50,8 @@
 3. **SwiftUI + UDS 保留**；Worker 换 C++（vision/mock；6.7+ paddle native）；见引擎矩阵。
 4. **`sublift_core` 不依赖 ObjC/Swift/Vision/ORT**；OCR adapter 分 target；图见 architecture。
 5. **一次只做一个可独立验收 feature**（`AGENTS.md`）。
-6. **6.6 已完成**：vision/mock 产品默认 C++ worker；paddle 仍 Python；`SUBLIFT_RUNTIME=python` 回滚；门禁报告 `docs/reports/phase6.6-cutover-gate.md`；GT L3 缺资产见 ADR-0022。
+6. **6.6 已完成**：vision/mock 产品默认 C++ worker；当时 paddle 仍 Python；`SUBLIFT_RUNTIME=python` 回滚；门禁报告 `docs/reports/phase6.6-cutover-gate.md`。
 7. **6.7 Native MVP 已完成**：Paddle C++ adapter 能运行并接入产品，但简化 Det 与 synthetic golden 不代表真实 RapidOCR parity。
-8. **6.8 待开始**：先安全回退默认路由，再完成 Det/Cls/Rec 质量、E2E GT、性能和重新 cutover；见 [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。
+8. **6.8 已完成**：完整 Det/Cls/Rec、E2E GT、性能、720s 长流和回滚全部过门；
+   Paddle available 时默认 C++ stable，Python 保留 fallback；见
+   [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。

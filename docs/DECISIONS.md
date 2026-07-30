@@ -5,6 +5,126 @@
 
 ---
 
+## ADR-0029 Paddle 全门通过后默认 C++；build tree 自带已验收 ORT（2026-07-30）
+
+- **状态**：已确认并由 feat-06807 实施。
+- **背景**：feat-06803–06806 已证明完整算子、质量和性能达标，但产品仍处于 Python
+  安全默认；同时最初 Candidate 的 `@rpath` 指向虚拟环境，依赖手工 ABI 软链，不满足
+  可复现产品构建。
+- **决策**：
+  1. `engine=paddle` + C++ capability 的产品默认改为 C++ stable；capability 缺失只允许
+     `paddle_override` 到 Python Paddle，显式/env Python 始终保留回滚。
+  2. Swift 不再自行猜测模型文件集合，直接执行将启动 Worker 的
+     `--probe-engine paddle`；CLI/Worker/GUI 都显示 runtime、PP-OCRv6-small 与
+     stable/fallback。
+  3. Paddle-enabled build 将所选 ORT 复制到 build `lib/`，可执行文件使用
+     `@loader_path/../lib`（Linux 为 `$ORIGIN/../lib`）；cutover gate 校验 bundled ORT
+     SHA 等于已验收官方二进制。
+  4. Python Paddle 至少保留一个小版本周期；`.app` 模型/ORT 签名、公证和跨平台分发
+     仍属于 6.9+，不以开发 build bundle 冒充分发完成。
+- **结果**：移除虚拟环境 ABI 软链后 Paddle probe、22 个 C++ cases 与完整产品门仍通过。
+  默认 C++→强制 Python→默认 C++ restart 输出 SHA exact；720s 长流完成，cancel 2.8ms，
+  restart readiness 0.1ms。标准 init 10/10、Swift live/default/fallback 全绿。
+- **影响**：Python/Swift runtime policy、CLI/GUI/Worker 可观测性、CMake ORT bundle、
+  `check_paddle_cutover.py`、引擎矩阵和 Phase 6.8 完成状态。
+
+---
+
+## ADR-0028 Paddle 性能验收固定 ORT 二进制；不以输出漂移换取微基准收益（2026-07-30）
+
+- **状态**：已确认并由 feat-06806 实施。
+- **背景**：十阶段归因表明 C++ 图像前后处理并非 06805 后约 14% 回退的主因；
+  Homebrew ONNX Runtime 1.28.0 动态库在同一模型上显著慢于 Python wheel 随带的官方
+  1.28.0 动态库。两者版本/provider 相同但 SHA256 不同，说明版本号不足以定义性能候选。
+  Rec batch=1 虽在双行微基准更快，却改变了 Latin 源最终 SRT SHA256。
+- **决策**：
+  1. canonical 性能门同时固定输入、模型、输出和 ORT 动态库 SHA256；Candidate 必须使用与
+     Python Oracle 相同的官方 ORT 二进制，缺指纹或输出 hash 不同直接失败。
+  2. 在当前 4 个性能核的平台采用 ORT intra-op threads=4；保留配置入口，不把机器特定值
+     写死进算子语义。
+  3. Det/Cls/Rec 归一化使用 float32 精确查表，`Ort::MemoryInfo` 与 session 同生命周期，
+     避免每像素重复算术和每次调用分配。
+  4. 产品 Rec batch 保持 6。任何只提升微基准、但改变端到端字幕 hash 的 batch/执行策略
+     都不得进入产品默认。
+  5. 性能门真实运行产品 CLI，预热后 Python/C++ 交错 3 轮取中位数，并统计完整进程树 RSS、
+     OCR/box/Cls/Rec batch 数；不得使用硬编码样例指标。
+- **结果**：冻结 120s canonical 视频上 Python/C++ wall median 分别为 50.700s /
+  45.407s，比例 `0.8956x`（C++ 快 10.44%）；进程树 RSS 分别为 1864.406 /
+  1706.297 MiB，比例 `0.9152x`。两端均为 123 次 OCR、44 条字幕且 SRT SHA256 完全一致。
+  性能优化后 3 来源 614.272s 质量门仍逐源 hash exact、全部指标 delta=0。
+- **影响**：`check_paddle_perf.py`、性能 manifest、Paddle options/stats/trace、
+  `check_paddle_gate.py` 的逐源输出 hash 硬门，以及 Phase 6.8 cutover 的 ORT 构建约束。
+
+---
+
+## ADR-0027 Paddle E2E 门必须真实运行；Det 几何漂移不得靠 Cls 阈值掩盖（2026-07-30）
+
+- **状态**：已确认并由 feat-06805 实施。
+- **背景**：旧 `check_paddle_gate.py` 只比较硬编码示例指标，既不启动产品 CLI，也不检查
+  输入素材、模型和输出，因此会假通过。真实三源门发现 Det quad 仅偏 1px 时，同一字幕的
+  Cls 180° score 会从 Python 的 0.6868 放大为 C++ 的 0.9383，跨过 0.9 阈值并造成错误旋转。
+- **决策**：
+  1. Paddle E2E 门必须分别以 `runtime=python|cpp` 运行真实 `sublift extract`，统一交给
+     `benchmark.diagnostics`，并同时过当前 Oracle 相对门与冻结 Python 绝对门。
+  2. Manifest 必须固定来源、视频/GT/recipe/generator/font hash；缺素材、模型、worker、
+     baseline 或 hash 不符一律 fail-closed。
+  3. DB unclip 精确复刻 pyclipper/Clipper 6 的整数 offset、round join 与 arc tolerance，
+     不以提高 Cls 阈值或放宽 CER/坐标门掩盖上游几何误差。
+  4. 质量与性能分开验收；质量一致不能被性能结果替代，性能优化也必须重跑质量门。
+- **结果**：3 来源共 614.272s 的 Python/C++ SRT SHA256 逐源一致；18 个相对/绝对门
+  全部通过且所有聚合指标 delta=0。06805 冻结点的 C++ wall 仍慢约 14%–15%，后由
+  feat-06806 / ADR-0028 解决。
+- **影响**：`check_paddle_gate.py`、质量 manifest/frozen baseline、DB postprocess 回归测试
+  与 Phase 6.8 cutover 证据。
+
+---
+
+## ADR-0026 Paddle Rec 字典与 uint8 resize 必须具有模型/算术级确定性（2026-07-30）
+
+- **状态**：已确认并由 feat-06804 实施。
+- **背景**：RapidOCR 的 PP-OCRv6 Rec 模型自带 `character` metadata，旧 C++ 却无条件读取相邻
+  文本字典，存在模型与字典错配风险；同时 Python OpenCV 4.13 与 Homebrew OpenCV 4.14 的
+  `INTER_LINEAR` uint8 SIMD 舍入会让同一 crop 的归一化 tensor 相差 1 个灰度级，掩盖真正的
+  适配器回归。
+- **决策**：
+  1. Rec 字符表优先读取当前 ONNX session 的 `character` metadata；metadata 缺失时只允许
+     SHA-256 白名单验证通过的外部字典，未知字典 fail-closed。
+  2. Cls/Rec 的 uint8 resize 固定为 OpenCV `INTER_LINEAR` 的 11-bit coefficient 与专用
+     vertical cast 算术边界，不把 tensor 结果交给随 OpenCV 小版本变化的 SIMD kernel。
+  3. 以 frozen Det quad 隔离验证 Crop/Cls/Rec：输入 tensor 仍要求逐元素 `max_abs<=1e-5`，
+     不因 OpenCV/ORT 构建不同放宽预处理门。
+  4. frozen-quad override 只属于显式 diagnostic trace，不进入 `IOcrEngine` 或正常产品调用。
+- **理由**：字典必须与模型同源；预处理是可确定的纯算子，应消除第三方二进制实现细节造成的
+  假漂移。这样 ORT 推理尾数与适配器算法误差可被分别归因。
+- **结果**：9 个 fixture 在固定 Python Det quad 后 crop 像素、Cls tensor、Rec tensor 均
+  逐元素完全一致；180°、双行 batch、CTC token/text 与最终 AABB 全部门通过。
+- **影响**：`sublift_core` 新增无第三方依赖的 SHA-256 工具；`sublift_paddle` 仍是唯一
+  ORT/OpenCV 依赖边界；新增 `check_paddle_rec_parity.py`。
+
+---
+
+## ADR-0025 Paddle 数值门必须区分 ORT 版本与二进制构建（2026-07-30）
+
+- **状态**：已确认并由 feat-06803 实施。
+- **背景**：Det input tensor 已逐元素完全一致，但同为 ONNX Runtime 1.28.0 /
+  CPUExecutionProvider 的 Python wheel 与 Homebrew C++ dylib 在 probability map 上仍有
+  `max_abs=1.9729137420654297e-5`；两者 SHA256 不同。让 C++ 链接 Python wheel 的同一
+  dylib 后，9 个 fixture 的 probability map 逐元素差异降为 0。
+- **决策**：
+  1. Paddle stage/Det 报告记录 Oracle 与 Candidate 的 ORT 动态库 SHA256，不能只记版本和
+     provider。
+  2. 同一 ORT 二进制使用 `probability max_abs <= 1e-5` 严格门；同版本/provider 但不同构建
+     使用实测上界留裕量后的 `<=2.5e-5` 跨构建门。
+  3. 跨构建只放宽推理浮点尾数；Det tensor 仍要求 exact，box precision/recall、IoU、坐标和
+     score 门均不放宽。
+  4. 报告必须明确 `same_binary` 与实际激活阈值，缺动态库指纹 fail-closed。
+- **理由**：编译器和 kernel 构建差异会改变卷积归约尾数；把它误判为适配器算法回归会造成
+  假失败，把版本号误当同一运行时又会造成假精确。最终 boxes 与文本质量仍由独立硬门约束。
+- **影响**：`freeze_paddle_manifest.json`、`dump_paddle_stages.py`、
+  `check_paddle_det_parity.py`、Phase 6.8 验收报告。
+
+---
+
 ## ADR-0024 Phase 6.8 Paddle Native 质量 / 性能加固先于去 Python 分发（2026-07-29）
 
 - **状态**：已确认（路线与验收门冻结；实现从 feat-06801 开始）。

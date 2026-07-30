@@ -18,6 +18,87 @@
 
 ---
 
+### Paddle Det 仅 1px quad 漂移却触发错误 180° 分类
+- **日期**：2026-07-30
+- **状态**：已解决（feat-06805 / ADR-0027）。
+- **现象**：Phase 6.8 首轮真实三源质量门中，C++ 与 Python 只在一条 CJK 字幕上出现
+  CER 超限。上游 Det quad 只有 1px 差异，但同一 upright crop 的 Cls 180° score 从
+  Python `0.6868` 变为 C++ `0.9383`，跨过 `0.9` 阈值后错误旋转，最终文字发生变化。
+- **排查路径**：
+  1. 用冻结 stage trace 对比 Det tensor、probability map、quad、crop、Cls tensor/score
+     和 Rec 输出，确认神经网络输入与概率图不是主要差异。
+  2. 固定 Python Det quad 重放 C++ Crop/Cls/Rec，所有下游 tensor/text 恢复 exact，
+     将问题隔离到 DB unclip 几何。
+  3. 对比 RapidOCR/pyclipper 与 C++ offset，发现近似浮点矩形扩张没有复刻 Clipper 6 的
+     float→integer、round join、arc tolerance 和二次 `minAreaRect` 语义。
+  4. 没有通过提高 Cls 阈值或放宽 CER/坐标门掩盖问题，而是新增 rotated-contour 黑盒回归。
+- **根本原因**：方向分类器对 crop 边缘、背景和透视几何高度敏感；1px quad 误差不是
+  “无害的坐标尾数”，它会被 crop 和 Cls 非线性放大。C++ unclip 的几何算法与 Python
+  Oracle 并非真正等价。
+- **解决方案**：精确复刻 pyclipper/Clipper 6 的整数 round offset、round join、
+  `arc_tolerance=0.25` 与二次 `minAreaRect`，并保持 Cls `score > 0.9` 契约不变。
+- **验证结果**：9/9 Det fixture quad 坐标 `max_abs=0`，box recall/mean IoU=1.0；
+  三来源 Python/C++ SRT SHA256 逐源 exact，全部质量指标 delta=0。
+- **相关文件**：`cpp/src/paddle/ppocr_db_postprocess.cpp`、
+  `cpp/tests/paddle_db_test.cpp`、`scripts/parity/check_paddle_det_parity.py`、
+  `scripts/parity/check_paddle_gate.py`、`docs/DECISIONS.md` ADR-0027。
+
+---
+
+### 相同 ONNX Runtime 版本与 provider 仍出现显著 Paddle 性能和数值差异
+- **日期**：2026-07-30
+- **状态**：已解决（feat-06803、feat-06806 / ADR-0025、ADR-0028）。
+- **现象**：算子正确性收敛后，C++ Paddle 在质量冻结点仍比 Python 慢约
+  `1.14–1.15x`；更早的 Phase 6.7 简化实现约为 Python `2.74x`。Python wheel 与
+  Homebrew 都报告 ONNX Runtime 1.28.0、CPUExecutionProvider，却同时存在性能差距和
+  Det probability map `1.9729137420654297e-5` 的最大尾数差异。
+- **排查路径**：
+  1. 建立 input、Det preprocess/infer/postprocess、crop、Cls、Rec 和 output 十阶段 trace，
+     排除完整 DB 与图像前后处理是修复后剩余回退的主因。
+  2. 记录实际加载的 ORT dylib SHA，而不只看版本字符串和 provider。
+  3. 让 C++ Candidate 改用 Python wheel 随带的同一官方 dylib；Det probability map
+     变为逐元素 exact，Det/Rec 速度追平或领先。
+  4. 执行 ORT intra-op 1/2/4/default sweep，aggregate median 分别为
+     `1448.356/856.939/615.711/649.736ms`。
+- **根本原因**：ONNX Runtime 的版本号和 provider 名称不足以定义实际 kernel、编译选项与
+  归约行为；不同发行来源的同版本二进制既可能产生浮点尾数差异，也可能具有显著不同的
+  CPU 性能。
+- **解决方案**：canonical 门固定官方 ORT dylib SHA
+  `cadd9517e089d197e5d381bc31813875eb8addce8712bac501645fea8008800c`，
+  使用 4 个 intra-op threads；CMake 将该 dylib 复制到 build `lib/` 并写相对 rpath。
+  同二进制保留严格 `1e-5` probability 门，跨构建诊断允许指纹化 `2.5e-5`，但 box、
+  score、文本和产品输出门不放宽。
+- **验证结果**：120s canonical Python/C++ wall median `50.700/45.407s`
+ （`0.8956x`），RSS `1864.406/1706.297MiB`（`0.9152x`）；移除虚拟环境 ABI
+  软链后 probe、22 个 Paddle cases 与最终 cutover 门仍通过。
+- **相关文件**：`cpp/src/paddle/paddle_models.cpp`、
+  `scripts/parity/check_paddle_det_parity.py`、`scripts/parity/check_paddle_perf.py`、
+  `cpp/CMakeLists.txt`、`docs/DECISIONS.md` ADR-0025/ADR-0028/ADR-0029。
+
+---
+
+### Rec batch=1 微基准更快，但改变 Latin 产品字幕输出
+- **日期**：2026-07-30
+- **状态**：已解决，优化被拒绝（feat-06806 / ADR-0028）。
+- **现象**：Rec batch 1/2/4/6 sweep 中，batch=1 在双行微基准更快；若只看局部耗时，
+  它会成为候选默认。但真实 Latin 产品源的最终 SRT SHA256 与冻结 Python Oracle 不再
+  一致。
+- **排查路径**：
+  1. 先用固定 crop 验证 batch=1 与 batch=N 的 tensor、token、text 与置信度门。
+  2. 再运行真实产品 CLI 和多源质量门，而不是用算子微基准替代端到端结果。
+  3. 将逐源输出 SHA 纳入性能候选的 fail-closed 条件，确认漂移只在该执行策略下出现。
+- **根本原因**：局部算子输出的容差通过不等于最终产品语义 exact；batch 形状与执行顺序
+  可以改变推理尾数，尾数再经过 CTC/confidence/filter/跨帧选择后可能跨越离散决策边界。
+- **解决方案**：产品 Rec batch 保持 6；新增 `source_output_sha256_exact` 硬门。任何
+  提升微基准但改变任一来源最终 SRT hash 的线程、batch 或执行策略都不得进入默认配置。
+- **验证结果**：batch=6 的 120s canonical C++ wall 仍比 Python 快 10.44%，性能后
+  3 来源/614.272s 的 SRT SHA 和全部质量指标继续 exact。
+- **相关文件**：`cpp/include/sublift/paddle.hpp`、
+  `cpp/src/paddle/paddle_ocr.cpp`、`scripts/parity/check_paddle_perf.py`、
+  `scripts/parity/check_paddle_gate.py`、`docs/DECISIONS.md` ADR-0028。
+
+---
+
 ### macOS ASan 在 OpenCV/TBB 退出期崩溃，阻断发布级 sanitizer 门
 - **日期**：2026-07-29
 - **状态**：未解决；已完成最小隔离与可复现对照（feat-06607）。

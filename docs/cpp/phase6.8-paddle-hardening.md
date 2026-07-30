@@ -4,8 +4,10 @@
 > 任务跟踪：`docs/phases/phase6.json`
 > 前置：Phase 6.7 已交付可运行的 C++ Paddle Native MVP；质量与性能审计表明它尚不具备产品默认条件
 > Python Oracle：`src/sublift/ocr/paddle.py` + `rapidocr==3.9.2` + `onnxruntime==1.28.0` + PP-OCRv6 small
-> 计划中的安全策略（`feat-06801` 实施后）：Paddle 默认 Python；C++ Paddle 仅显式 experimental
-> 当前 6.7 代码状态：C++ Paddle 可用时仍会自动选择；在 06801 完成前应显式 `--runtime python`
+> 当前产品策略：Paddle available → C++ stable；unavailable → Python Paddle
+> `paddle_override`；`SUBLIFT_RUNTIME=python` 保留回滚
+> 当前实施状态：`feat-06801`–`feat-06807` 全部完成
+> 回顾入口：[`phase6.8-review-index.md`](phase6.8-review-index.md)
 
 ## 1. 为什么需要 6.8
 
@@ -20,7 +22,7 @@
 在真实推理、字幕质量和性能上达到可默认切换的水位。2026-07-29 审计发现：
 
 1. Det 后处理是阈值 + 连通域 AABB，不是 RapidOCR 的完整 DB/dilation/contour/
-   score/unclip；
+  score/unclip（现已修复为 pyclipper/Clipper 6 整数 round-offset 精确语义）；
 2. C++ 使用最近邻缩放、AABB crop、逐框 Rec，无完整 Cls/透视 crop/Rec padding parity；
 3. Det 无框时执行整图 Rec，与 Python Oracle 的空结果语义不同；
 4. Paddle golden 只验证手工构造的行排序/AABB，没有运行 Det/Cls/Rec；
@@ -215,6 +217,14 @@ recognize
 | fixture box matching | precision/recall = 1.0 @ IoU 0.95，或书面列出平台 rounding 例外 |
 | empty fixture | 0 box、0 Rec call、空 `OcrResult` |
 
+> ORT 二进制指纹补充（2026-07-30）：版本号和 provider 相同仍不足以保证逐元素
+> 尾数一致。Python wheel 与 Homebrew ORT 1.28.0 的 dylib SHA256 不同；同一
+> wheel dylib 下 probability map 为逐元素完全一致，Homebrew↔wheel 的实测
+> `max_abs=1.9729137420654297e-5`，且 box P/R=1.0、坐标误差≤1px。因此 Det
+> gate 同时记录两侧 dylib SHA：同二进制保留 `1e-5` 硬门；同版本/provider
+> 但不同构建采用经实测上界留裕量的 `2.5e-5`，box/score 门不放宽。报告不得
+> 省略所激活的门和二进制指纹。
+
 **验收命令：**
 
 - 无模型的纯 postprocess Catch2 fixture；
@@ -305,6 +315,25 @@ engine=paddle, runtime=cpp     (Candidate)
 - runtime/engine/model hash/commit/config fingerprint；
 - 报告默认写 `/tmp`，发布时显式归档。
 
+**2026-07-30 完成证据：**
+
+- Q0：9 个 committed stage fixtures；修复后 Det quad 坐标误差 `0px`，
+  matched line box recall / mean IoU 均为 `1.0`。
+- Q1：manifest 显式冻结 CJK、Latin、mixed 各 30 秒窗口。
+- Q2：3 来源、总时长 `614.272s`。其中 1 个为外置真实 CJK 片源，2 个为
+  committed ASS/SRT recipe + generator/font hash 确定的 Latin/mixed 生成源；
+  该组成用于冻结可复现相对门，不宣称等同于广泛真实片源覆盖。
+- 产品路径：逐源真实运行 `sublift extract --engine paddle
+  --runtime python|cpp`，缺素材/hash/model/worker/baseline 一律 FAIL。
+- 结果：三个来源的 Python/C++ SRT SHA256 分别完全一致；聚合 timing、
+  CER、usable、noise/empty 全部 `delta=0`；18 个相对/绝对门全部 PASS。
+- 首轮失败与修复：近似矩形 unclip 产生 1px quad 漂移，使同一 upright crop 的
+  Cls 180° score 从 `0.6868` 变为 `0.9383` 并错误旋转。实现改为精确复刻
+  pyclipper/Clipper 6 的 float→integer、round join、0.25 arc tolerance 和
+  二次 `minAreaRect`，并新增 rotated-contour 黑盒回归；未调整 Cls 阈值。
+- 06805 冻结点观察耗时仍约 `1.14–1.15x` Python；该回退已由 06806 的 ORT
+  二进制归因与算子优化解决，不以质量通过代替性能验收。
+
 ---
 
 ### feat-06806 — Paddle Native 性能加固
@@ -343,6 +372,26 @@ engine=paddle, runtime=cpp     (Candidate)
 
 若硬门未过，06806 不得 `done`，06807 不得开始。
 
+**完成证据（2026-07-30）：**
+
+- 十阶段归因确认 Homebrew ORT 1.28.0 dylib 是主要回退来源；canonical Candidate 固定为
+  与 Python wheel 相同的官方 ORT dylib（SHA256 `cadd9517…`），仅有相同版本/provider
+  不再视为同一性能环境。
+- ORT 1/2/4/default thread sweep 的 aggregate median 为
+  `1448.356/856.939/615.711/649.736ms`，选择与本机性能核数相同的 4 threads。
+- Det/Cls/Rec 采用 exact float32 normalization LUT，Det preprocess 约
+  `7.8ms → 4.9ms`；`Ort::MemoryInfo` 与 session 同生命周期。
+- Rec batch=1 虽在双行微基准更快，但使 Latin 产品 SRT SHA 漂移；新增逐源
+  `source_output_sha256_exact` 硬门并拒绝该优化，产品保持 batch=6。
+- 新性能门真实运行 120s 产品 CLI，预热后交错 3 轮：Python/C++ wall median
+  `50.700/45.407s`，比例 `0.8956x`；进程树 RSS `1864.406/1706.297MiB`，
+  比例 `0.9152x`；123 OCR calls、44 entries 与输出 SHA 均 exact。
+- 性能后 Q2 质量门再次通过：CJK `115.914/103.468s`、Latin
+  `67.453/60.446s`、mixed `5.349/4.431s`，全部质量指标 delta=0 且逐源 SRT
+  SHA exact；Det 与 Crop/Cls/Rec live operator gates exact。
+- mock runtime control 仍通过：Python/C++ wall `0.110/0.112s`，cancel
+  `35.0/4.3ms`，restart `2.6/2.6ms`。
+
 ---
 
 ### feat-06807 — Paddle C++ 产品 Cutover
@@ -379,19 +428,39 @@ engine=paddle, runtime=cpp     (Candidate)
 - progress 导航；
 - Python Paddle 至少保留一个小版本周期。
 
+**完成证据（2026-07-30）：**
+
+- Python/Swift policy 均将 product default `cpp` + Paddle capability 解析为 C++；
+  capability 缺失才标记 `paddle_override` 回到 Python Paddle；显式 Python 仍优先。
+- Swift 直接运行目标 Worker 的 `--probe-engine paddle`，CLI/Worker/GUI 显示
+  runtime、PP-OCRv6-small 与 stable/fallback，不再保留 experimental 标识。
+- Post-cutover GUI 实跑发现 `start_job` / `frame_path` 仍硬编码为 Python；现已改为
+  依据 `PipelineClient.lastWorkerChoice` 显示实际 C++ / Python runtime、解析来源与
+  对应 `FfmpegExtractor`，身份缺失时 fail-closed 显示 unknown。
+- CMake 将指定 ORT 复制到 build `lib/`，以 `@loader_path/../lib` 加载；移除 venv
+  ABI 软链后 probe、22 个 Paddle C++ cases 与全套 cutover 仍通过。
+- 默认 C++ → 强制 Python → 默认 C++ restart wall=`4.615/5.097/4.491s`，
+  10 entries 与 SRT SHA `44a8b520…` 全部 exact。
+- 720s 连续 C++ Paddle 流 wall=`15.522s`、40 entries；真实 in-flight cancel
+  `2.8ms`，同 Worker restart readiness `0.1ms`。
+- Swift 37 XCTest + 139 Swift Testing 全绿；标准 `./init.sh` 10/10；Release
+  Paddle 22 cases/409 assertions。Release 全量 175 项中 174 通过，唯一失败为既有
+  Apple Vision synthetic OCR 环境用例，与 Paddle target/路由无关。
+- 最终报告：`docs/reports/phase6.8-paddle-cutover.md`。
+
 ## 6. 6.8 完成定义
 
 只有同时满足以下条件，Phase 6.8 才可宣告完成：
 
-- [ ] `feat-06801`–`feat-06807` 全部 `done`；
-- [ ] C++ Paddle 不再包含简化连通域或无框整图 fallback；
-- [ ] Det/Cls/Rec stage fixture parity 全绿；
-- [ ] 多源 Paddle GT 相对/绝对质量门全绿；
-- [ ] canonical 性能硬门全绿；
-- [ ] 默认 C++ Paddle 与 Python 回滚都经过真实 CLI/GUI 验收；
-- [ ] 标准 `./init.sh` 全绿且未塞入长视频/模型下载；
-- [ ] 验证证据记录于 `docs/phases/phase6.json`；
-- [ ] 6.9+ 才开始删除 Python 产品依赖或处理分发打包。
+- [x] `feat-06801`–`feat-06807` 全部 `done`；
+- [x] C++ Paddle 不再包含简化连通域或无框整图 fallback；
+- [x] Det/Cls/Rec stage fixture parity 全绿；
+- [x] 多源 Paddle GT 相对/绝对质量门全绿；
+- [x] canonical 性能硬门全绿；
+- [x] 默认 C++ Paddle 与 Python 回滚都经过真实 CLI/GUI 验收；
+- [x] 标准 `./init.sh` 全绿且未塞入长视频/模型下载；
+- [x] 验证证据记录于 `docs/phases/phase6.json`；
+- [x] 6.9+ 才开始删除 Python 产品依赖或处理分发打包。
 
 ## 7. 风险与止损
 

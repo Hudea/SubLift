@@ -32,7 +32,7 @@ SwiftUI ──UDS/JSON──► sublift-worker (C++ 或按引擎选 Python)
 CLI ─────────────────────►│  lib targets（见 architecture.md）
                          ▼
                     SubtitleEntry
-Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
+Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵）
 ```
 
 **可执行依赖图与工具链锁定**见 [architecture.md](architecture.md)（`sublift_core` / `sublift_ffmpeg` / `sublift_vision_macos` / `sublift_worker` / `sublift_cli` / `sublift_test_support`）。
@@ -56,7 +56,7 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 | **6.5 Worker** | `feat-065xx` | 按 [worker-ipc-contract.md](worker-ipc-contract.md) 实现 | 可双轨 |
 | **6.6 Cutover** | `feat-066xx` | 按 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 默认化 | vision/mock→C++；paddle→Python |
 | **6.7 Paddle Native MVP** | `feat-067xx` | [phase6.7-paddle.md](phase6.7-paddle.md)：ONNX PP-OCRv6 `IOcrEngine` 可运行、接线与基础 golden | 当前实现可用时自动 C++；真实质量/性能未过产品门 |
-| **6.8 Paddle hardening** | `feat-068xx` | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)：安全路由、完整 Det/Cls/Rec parity、多源质量门、性能与重新 cutover | 先 Python 默认 / C++ experimental；过门后才 C++ 默认 |
+| **6.8 Paddle hardening** | `feat-068xx` | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)：完整 Det/Cls/Rec parity、多源质量、性能、长流与回滚 | **done：available→C++ stable** |
 | **6.9+** | `feat-069xx`… | 去 Python 产品依赖 / 打包分发等 | 后置 |
 
 **进入 6.1 的硬门槛：** `feat-06001`–`feat-06005` 全部 `done`。
@@ -88,7 +88,7 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - C++ **6.0–6.6 不实现**原生 Paddle；cutover 后 **paddle 显式走 Python worker**，vision/mock 走 C++。
 - **6.7** 已落地 C++ adapter（ONNX Runtime + PP-OCRv6），证明 Native MVP 可运行；其
   synthetic golden 与 L4 文本检查不等于 RapidOCR 真实推理质量 parity。
-- **6.8** 负责完整 Det/Cls/Rec parity、多源 Paddle GT、性能门与产品重新 cutover。
+- **6.8** 已完成完整 Det/Cls/Rec parity、多源 Paddle GT、性能门与产品重新 cutover。
   设计：[phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。完整矩阵：见
   [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md)。
 
@@ -97,7 +97,7 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - 不把 `.py` 逐文件机械翻译当成功标准。
 - 不在迁移中「顺手」修 signature 色域、时间戳语义、行选阈值。
 - 不上 libav、不做 Swift C++ interop 单进程合并。
-- 不删除仓库内 Python（oracle / benchmark / paddle）。
+- 不删除仓库内 Python（oracle / benchmark / Paddle fallback）。
 - 不把完整 Phase 4.2 归因树作为 6.0–6.5 必达项。
 
 ## 8. 契约索引（P1）
@@ -119,8 +119,9 @@ Python ── 仅冻结 Oracle / benchmark / paddle 路径（见引擎矩阵）
 - **6.5 C++ Worker：** **done** — [phase6.5-worker.md](phase6.5-worker.md)（feat-06501–06505；opt-in 双轨）
 - **6.6 Cutover：** **done** — [phase6.6-cutover.md](phase6.6-cutover.md)（feat-06601–06605）
 - **6.7 Paddle C++ Native MVP：** **done** — [phase6.7-paddle.md](phase6.7-paddle.md)（feat-06701–06706）
-- **6.8 Paddle Native hardening：** **not-started** — [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)（feat-06801–06807）
-- **当前实现（6.7）：** vision/mock → C++；paddle 在 C++ adapter 可用时也自动 → C++，否则 Python；`SUBLIFT_RUNTIME=python` 可回滚
-- **6.8 第一项安全变更：** 在 hardening 期间把 paddle 自动默认恢复为 Python，仅显式 override 进入 C++ experimental
+- **6.8 Paddle Native hardening：** **done** — [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)（feat-06801–06807）
+- **当前实现：** vision/mock → C++；Paddle available → C++ stable，unavailable → Python Paddle fallback；`SUBLIFT_RUNTIME=python` 可回滚
 - **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 oracle / 回滚 / paddle 无 native 时
-- **残差风险：** 固定 GT clip 不入库 → live GT L3 按 [ADR-0022](../DECISIONS.md) 豁免；merged residual；当前 Paddle C++ 默认路由尚未执行 06801 安全回退；Native Det/Cls/Rec 质量与性能待 6.8 收口
+- **残差风险：** Paddle Q2 为 1 个真实 CJK + 2 个确定生成源，仍需扩充真实 Latin/混排；
+  正式 `.app` 内置 ORT/模型、签名公证属于 6.9+；Release Vision synthetic 用例的既有
+  环境失败不属于 Paddle cutover。

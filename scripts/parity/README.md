@@ -24,6 +24,100 @@ Golden path: `benchmark/parity/goldens/config/default_config.v1.json`.
 
 C++ loads the same file in Catch2 `[parity][config]` (offline; no Python at test time).
 
+## Paddle stage golden (feat-06802)
+
+```bash
+# 日常离线校验：不加载/下载 OCR 模型
+uv run python scripts/parity/dump_paddle_stages.py --check
+
+# 显式 live 双运行时重放：要求本机模型与 Paddle C++ trace executable
+uv run python scripts/parity/dump_paddle_stages.py --check --runtime \
+  --report-out /tmp/sublift_paddle_stages_live.json \
+  --raw-dir /tmp/sublift_paddle_stages_raw
+
+# 仅在有意更新冻结 Oracle/Candidate 时重建 v2 golden
+uv run python scripts/parity/dump_paddle_stages.py --runtime
+```
+
+Golden: `benchmark/parity/goldens/paddle/paddle_stages.v2.json`。冻结环境、模型、
+字典与参数位于 `freeze_paddle_manifest.json`；live 模式会在推理前核验实际文件
+SHA256。产品路径默认不捕获 tensor，逐阶段大对象只存在于显式诊断工具。
+
+## Paddle Det live gate (feat-06803)
+
+```bash
+# 产品构建：自动记录 Python/C++ ORT dylib SHA，并选择同构建/跨构建门
+uv run python scripts/parity/check_paddle_det_parity.py --check \
+  --report-out /tmp/sublift_paddle_det_gate.json
+
+# 严格同 ORT 二进制复验时，显式给出 Candidate 动态库
+uv run python scripts/parity/check_paddle_det_parity.py --check \
+  --candidate-ort-library /path/to/libonnxruntime \
+  --report-out /tmp/sublift_paddle_det_strict.json
+```
+
+硬门覆盖 Det input/probability tensor、quad IoU/坐标/score 和 empty 的
+`0 box / 0 Rec`。同 ORT 二进制 probability `max_abs <= 1e-5`；同版本/provider
+但不同二进制构建使用 `2.5e-5`，报告必须带双方 SHA256，box 门不放宽。
+
+## Paddle Crop / Cls / Rec live gate (feat-06804)
+
+```bash
+uv run python scripts/parity/check_paddle_rec_parity.py --check \
+  --report-out /tmp/sublift_paddle_rec_gate.json
+```
+
+该门使用冻结 Python Det quad 隔离下游算子，检查 perspective crop、Cls/Rec tensor、
+batch call、CTC token/text、最终顺序与 AABB；产品端到端路径仍由 stage 与质量门覆盖。
+
+## Paddle E2E quality gate (feat-06805)
+
+```bash
+# 缺外置真实源、生成素材、模型、Release worker 或 frozen baseline 时直接失败
+uv run python scripts/parity/check_paddle_gate.py --check \
+  --report-out /tmp/sublift_paddle_quality_gate.md \
+  --json-out /tmp/sublift_paddle_quality_gate.json
+
+# 仅在有意接受新的 Python Oracle 水位时更新，不能用于日常验收
+uv run python scripts/parity/check_paddle_gate.py --freeze-oracle
+```
+
+Manifest 位于 `benchmark/fixtures/paddle_quality/manifest.v1.json`，冻结 3 个来源共
+614.272s 的输入/GT/生成 recipe 与 font hash。门会真实执行 Python/C++ 产品 CLI，
+同时检查当前 Oracle 相对门、冻结 Python 绝对门、逐 clip noise/empty 与 Q0 live box；
+不接受硬编码指标或缺依赖 skip。
+
+## Paddle canonical performance gate (feat-06806)
+
+```bash
+uv run python scripts/parity/check_paddle_perf.py --check \
+  --candidate-worker /path/to/release/sublift_worker \
+  --candidate-ort-library /path/to/official/libonnxruntime.1.dylib \
+  --report-out /tmp/sublift_paddle_perf_gate.md \
+  --json-out /tmp/sublift_paddle_perf_gate.json
+```
+
+Manifest 位于 `benchmark/fixtures/paddle_performance/manifest.v1.json`，冻结 120s 输入、
+预期 SRT、模型、官方 ORT dylib SHA 与 thread/batch 配置。门会先预热，再交错执行
+Python/C++ 各 3 轮产品 CLI，取 wall median 并采样完整进程树 RSS，同时记录
+OCR/Det box/Cls/Rec batch 计数。输入、模型、worker、ORT 指纹、统计或输出 hash
+任一缺失均 FAIL；`--skip-runtime` 不构成验收。
+
+## Paddle product cutover gate (feat-06807)
+
+```bash
+uv run python scripts/parity/check_paddle_cutover.py --check \
+  --worker build/cpp-rel/bin/sublift_worker \
+  --ort-library .venv/lib/python3.12/site-packages/onnxruntime/capi/libonnxruntime.1.28.0.dylib \
+  --report-out /tmp/sublift_paddle_cutover.md \
+  --json-out /tmp/sublift_paddle_cutover.json
+```
+
+该门验证 available 时的产品默认 C++、强制 Python 回滚、再次默认 C++ restart
+三次 SRT SHA exact；生成并执行 ≥600s 连续长流，并在真实 Paddle path job 进度大于
+0 后测 cancel/restart。macOS 同时要求 Worker 通过相对 `@loader_path` 加载 build
+tree 内的 bundled ORT，且 SHA 与性能 Candidate exact。门禁不会把报告默认写入仓库。
+
 ## Signature golden (feat-06101)
 
 Full sub-phase plan: [`docs/cpp/phase6.1-pure-pipeline.md`](../../docs/cpp/phase6.1-pure-pipeline.md).

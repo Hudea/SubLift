@@ -1134,8 +1134,8 @@
           "description": "覆盖 empty、单/双行、CJK/Latin/混排、低对比、倾斜/旋转与相邻框；同一 manifest 驱动 Python/C++。"
         }
       ],
-      "status": "in-progress",
-      "evidence": "2026-07-30: 已建立 freeze_paddle_manifest.json 结构与辅助基座，正在对接真实 Python RapidOCR 抓取与真实 C++ Stage Dump 导出。"
+      "status": "done",
+      "evidence": "2026-07-30：建立真实 Python RapidOCR Oracle / C++ Native Candidate 十阶段观测链。新增 opt-in PaddleStageTrace 与诊断专用 sublift_paddle_trace，记录输入、Det tensor/probability/quads、perspective crops、Cls、Rec tensor/logits/CTC tokens、最终 lines 及阶段计数/耗时；默认产品路径不复制/落盘 tensor。freeze_paddle_manifest.json 锁定 rapidocr 3.9.2、onnxruntime 1.28.0、OpenCV/Python 版本、PP-OCRv6 small Det/Cls/Rec/字典 SHA256 和全量关键参数，live replay 在运行前逐文件校验 hash。9 个同源离线 fixture 覆盖 empty、CJK/Latin/混排、描边、低对比模糊、倾斜、相邻双行、180° Cls，v2 golden 保存真实双运行时中间量而非手写通过值。验证：ruff clean；Release Paddle build 成功；ctest -R Paddle 11/11；dump_paddle_stages.py --check offline PASS；--check --runtime + raw/report PASS；./init.sh 10/10 PASS。基线真实暴露 C++ Det input 256x960 vs Python 736x2752 且 Rec 几乎空，作为 06803/06804 的冻结修复起点。"
     },
     {
       "id": "feat-06803",
@@ -1159,8 +1159,8 @@
           "description": "固定 probability map box count exact、坐标≤1px、score≤1e-4；真实 fixture precision/recall=1.0@IoU0.95；empty 为 0 box/0 Rec call。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30：完成 RapidOCR 3.9.2 Det 算子语义复刻。新增独立 ppocr_det_preprocess 模块，对齐 global 30/2000 resize、vertical padding/原坐标回映、min-side=736、Python half-even 32 倍数、OpenCV INTER_LINEAR、RGB→BGR、float32 NCHW；C++ Det tensor 9/9 fixture shape exact 且逐元素 max_abs=0。DBPostProcess 对齐 strict >0.3 threshold、2x2 dilation、RETR_LIST/CHAIN_APPROX_SIMPLE、ordered minAreaRect、pyclipper/Clipper 6 的 float→integer round offset（unclip_ratio=1.6、arc tolerance=0.25）、二次 minAreaRect、round/clip/filter/sort；内部 quad 到最终 OcrLine 才转 AABB，empty 保持 0 box/0 Rec。新增 check_paddle_det_parity.py 硬门和 ORT dylib SHA 指纹：9/9 fixture box precision=recall=1.0@IoU0.95、06805 精确 offset 修复后坐标 max_abs=0、score max_abs=2.72e-7；同一 ORT dylib 下 probability max_abs=0，Python wheel↔Homebrew 同版本/provider 不同构建 max_abs=1.9729137420654297e-5，并以指纹化 2.5e-5 cross-build 门通过。冻结 C++/Python 输出已更新；除 180° Cls 样例外，其余 7 个非空样例文本已相同（方向分类归 06804）。验证：ruff clean；mypy 74 files；pytest Det gate helpers 2/2；Release Paddle/DB/trace targets build；Paddle/Det 定向 CTest 13/13；标准 ./init.sh 10/10 PASS（含 Debug 全量 CTest、Python 全量、parity）。Release 全量另见风险：171/172，唯一失败为未改动的 Apple Vision synthetic OCR 集成用例；标准 Debug 门通过。第三方算法来源已记录 THIRD_PARTY_NOTICES.md。"
     },
     {
       "id": "feat-06804",
@@ -1184,8 +1184,8 @@
           "description": "固定 crop text exact、confidence≤1e-4；最终文本 exact、AABB≤1px、顺序 exact；缺 Cls 模型时诚实失败。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30：完成 Det 后完整 Quad crop→Cls→Rec→CTC→final parity。C++ 新增长生命周期 Cls session，模型路径/availability 必须同时校验 Det/Cls/Rec；Rec 字典优先读取 ONNX `character` metadata，缺失时仅接受 SHA-256 白名单外部字典。Perspective crop 对齐 RapidOCR 的 INTER_CUBIC/BORDER_REPLICATE 与高窄 `np.rot90` 逆时针语义；Cls 实现 3x48x192 BGR NCHW、width sort、batch=6、strict score>0.9 的 180° 旋转；Rec 实现 3x48x320 基准、逐 batch 动态 max width、ceil valid width、右侧 exact-zero padding、width sort/batch=6 和原序恢复；CTC 对齐 blank/duplicate/space 与逐字符/均值 5 位 rounding。为消除 Python OpenCV 4.13 与系统 OpenCV 4.14 的 uint8 resize 舍入漂移，移植并固定 OpenCV INTER_LINEAR 的 11-bit coefficient/专用 vertical cast 算术边界，输入 tensor 不再依赖 OpenCV 小版本 SIMD。新增 diagnostic frozen-quad override 与 `check_paddle_rec_parity.py` 硬门：9/9 fixture PASS；固定 Python Det quad 后 crop dimension/pixel、Cls tensor/score、Rec tensor 全部 exact（aggregate max_abs=0），padding 全零，Cls label exact，batch call count exact；CTC token/text exact，confidence max_abs=1e-5；端到端 empty/CJK/Latin/混排/描边/模糊/倾斜/双行/180° 文本和顺序 exact，AABB max_abs=1px。缺 Cls 模型测试确认 fail-closed。验证：ruff clean；mypy 75 files；Python gate helpers 5/5；C++ `[paddle]` 21 cases/396 assertions；Release Paddle CTest 13/13；live gate `/tmp/sublift_paddle_rec_gate.json` PASS；标准 `./init.sh` 10/10 PASS（Debug CTest、Python 全量、offline parity）。"
     },
     {
       "id": "feat-06805",
@@ -1209,8 +1209,8 @@
           "description": "冻结 Python Paddle 水位；Candidate 同时过相对/绝对门；报告记录 engine/runtime/model/config/commit，默认写 /tmp。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30：建立 fail-closed 的真实 Paddle Q0/Q1/Q2 产品质量门，彻底替换原 check_paddle_gate.py 的硬编码示例指标。Q0 复用 9 个 committed stage fixtures；Q1 在 manifest 中显式冻结 CJK/Latin/混排各 30s 窗口；Q2 使用 1 个外置真实 CJK 源与 2 个由 committed ASS/SRT recipe 确定生成的 Latin/mixed 源，共 3 来源、614.272s，覆盖无字幕间隔、单/双行、描边、低对比和运动背景。manifest 固定视频/GT/recipe/generator/font SHA256；缺素材、hash、模型、worker 或 baseline 均 FAIL。真实 `sublift extract --engine paddle --runtime python|cpp` 逐源运行后统一交给 benchmark.diagnostics；冻结 `paddle_quality_baseline.v1.json` Python 绝对水位，并同时执行当前 Oracle 相对门、冻结绝对门、逐 clip noise/empty 门和 Q0 live box 门。首轮真实门只在 Zootopia 一条字幕上 CER macro 超限：定位到近似矩形 unclip 造成 1px quad 漂移，把 Cls 180° score 从 0.6868 放大到 0.9383；C++ 改为精确复刻 pyclipper/Clipper 6 的整数 round offset（0.25 arc tolerance），新增 rotated-contour 黑盒回归。修复后 Det 9/9 quad 坐标 max_abs=0，Q0 box recall/mean IoU=1.0；三来源 Python/C++ SRT SHA256 逐源完全相同，timing F1/precision/recall、CER macro/micro、usable、noise/empty 聚合 delta 全为 0，18 个相对+绝对门全 PASS。实测报告：`/tmp/sublift_paddle_quality_gate_after_unclip.{json,md}`；质量脚本单测 8/8，C++ `[paddle]` 22 cases/406 assertions，Det/Rec live gate PASS，v2 stage golden 已重建并 live check PASS。当前性能观察仍为 CJK 132.382/116.068=1.141x、Latin 76.605/66.889=1.145x，明确留给 feat-06806，不影响本 feature 只冻结正确性的完成定义。"
     },
     {
       "id": "feat-06806",
@@ -1234,8 +1234,8 @@
           "description": "warm-up 后 Python/C++ 交错≥3轮取 median；2min C++ wall≤Python×1.20（目标×1.10），RSS≤×1.25，mock/cancel/restart不退化。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30：完成 Paddle Native 可归因性能加固与真实 canonical 产品门。十阶段 trace 定位 06805 后约 1.14x 回退主要来自 Homebrew ORT dylib，而非 C++ Det/Cls/Rec 算子；同一官方 Python wheel ORT 1.28.0（SHA256=cadd9517…）下 C++ Det/Rec 已追平或领先。完成 ORT intra-op 1/2/4/default sweep（aggregate median 1448.356/856.939/615.711/649.736ms），按本机 4 个性能核选 4 threads；Det/Cls/Rec 使用精确 float32 normalize LUT，Det preprocess 约 7.8ms→4.9ms；Ort::MemoryInfo 改为长生命周期，并加入可配置 thread/Cls/Rec batch 与 opt-in 运行统计。Rec batch 1/2/4/6 微基准后曾入围 batch=1，但真实 Latin SRT SHA 漂移，新增逐源 source_output_sha256_exact 硬门并拒绝该优化，产品保持 batch=6。彻底重写 check_paddle_perf.py，冻结 120s canonical 视频/预期 SRT/模型/官方 ORT hash，真实执行 sublift extract，预热后 Python/C++ 交错 3 轮，记录 /usr/bin/time、完整进程树 RSS、OCR/box/Cls/Rec batch，缺依赖/指纹/统计或输出不一致一律 FAIL。最终 Python/C++ wall median=50.700/45.407s，ratio=0.8956x（C++ 快 10.44%）；RSS=1864.406/1706.297MiB，ratio=0.9152x；均为 123 OCR calls、44 entries、SRT SHA exact，182 Det boxes/98 Cls/98 Rec batches。性能后完整 3 来源/614.272s 质量门再次 PASS：CJK 115.914/103.468s、Latin 67.453/60.446s、mixed 5.349/4.431s，全部质量 delta=0 且逐源 SHA exact；Det tensor/probability/quad 与 Crop/Cls/Rec tensor/final AABB live gates exact。非 OCR runtime control PASS：12/12 parity，Python/C++ mock wall 0.110/0.112s，cancel 35.0/4.3ms，restart 2.6/2.6ms。报告：/tmp/sublift_paddle_perf_gate_batch6.{json,md}、/tmp/sublift_paddle_quality_after_perf_batch6.{json,md}；ruff clean，mypy 75 files，perf+quality tests 17 passed，Release C++ [paddle] 22 cases/409 assertions。"
     },
     {
       "id": "feat-06807",
@@ -1259,7 +1259,8 @@
           "description": "默认 cpp→强制 Python→cpp restart 无串扰；更新矩阵/README/架构/需求/跟踪与 cutover 报告；Python Paddle 至少保留一个小版本周期。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30：完成 Paddle C++ 产品 Cutover。Python resolve_runtime 与 Swift RuntimePolicy 统一最终矩阵：product default cpp + Paddle capability→C++ stable；capability 缺失→Python Paddle paddle_override；显式 flag/env runtime=python 始终为回滚，绝不改写 Vision/Mock。Swift probe 改为执行目标 Worker `--probe-engine paddle`，避免仅检查文件名造成 capability 漂移；PipelineClient/SubtitleExtractor/GUI 与 Python CLI/C++ Worker 公开 engine=paddle、runtime、PP-OCRv6-small、stable/fallback。CMake 新增 SUBLIFT_BUNDLE_ONNXRUNTIME，复制已验收 ORT 到 build/lib 并给 Worker/CLI/trace/tests 写相对 @loader_path/../lib；删除 venv ABI 软链后 probe、22 个 Paddle cases 与最终 gate 仍通过。新增 fail-closed check_paddle_cutover.py：验证 Worker/ORT/source hash、默认路由、产品 marker、C++→Python→C++ SRT exact、≥10min 连续流和真实 Paddle cancel/restart。最终 bundled Worker SHA=2446b1d7…，ORT SHA=cadd9517…；默认 C++ 4.615s→强制 Python 5.097s→默认 C++ restart 4.491s，均 10 entries 且 SRT SHA=44a8b520… exact；720s 连续 C++ 流 15.522s/40 entries；in-flight cancel=2.8ms，same-Worker restart readiness=0.1ms。Post-cutover GUI 实跑发现 `start_job` / `frame_path` 仍硬编码为 Python；现已依据 `PipelineClient.lastWorkerChoice` 显示实际 C++ / Python runtime、resolved_via 与对应 FfmpegExtractor，身份缺失时显示 unknown，不再误报 Python。Swift 37 XCTest + 139 Swift Testing 全绿（含 3 个 runtime-aware path log tests、live 默认 C++ Paddle 握手及 disabled fallback）；Python 路由/CLI 51 tests；标准 ./init.sh 10/10；Release [paddle] 22 cases/409 assertions。Release 全量 CTest 174/175，唯一失败为既有 Apple Vision synthetic OCR 环境用例，与 Paddle target/路由无关。最终报告 docs/reports/phase6.8-paddle-cutover.md；历史问题归档 docs/reports/phase6.7-paddle-quality-audit-2026-07-29.md；统一回顾入口 docs/cpp/phase6.8-review-index.md；Python Paddle 至少保留一个小版本周期。"
+    }
   ]
 }

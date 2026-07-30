@@ -1,7 +1,8 @@
 # 引擎矩阵、Cutover 与回滚
 
 > 状态：Phase 6 (Phase 6.7 & Phase 6.8) 已全面完成 Paddle C++ Native 加固与 Cutover。
-> 已过全量 12 项 Parity Goldens、10 阶段 Stage Dump、5 维多源 E2E 质量门与 4 维性能硬门。
+> 已过 12 项 Parity Goldens、10 阶段 Stage Dump、多源 E2E 质量门、严格快于 Python
+> 的性能门、720s 长流与真实 cancel/restart/rollback 门。
 > C++ `sublift_paddle` 已成为 `engine=paddle` 的正式产品默认 Runtime；不可用时显式 `paddle_override` 降级 Python。
 
 ## 1. 引擎 × Runtime 矩阵（终局策略）
@@ -21,7 +22,7 @@
   - 设置里 paddle 显示「需 Python runtime」或切换到 Python worker 启动；或
   - 选 paddle 时 **显式** spawn Python worker（双 worker 策略）。
 
-### 1.2 推荐产品行为（6.6）
+### 1.2 历史过渡行为（6.6–6.8 hardening）
 
 **双 Worker 按引擎选择（推荐）：**
 
@@ -55,6 +56,19 @@ engine == paddle，显式 runtime=cpp 但 unavailable → 明确错误或显式 
 
 只有 `feat-06803`–`feat-06806` 的 stage、质量、性能和稳定性门全部通过，
 `feat-06807` 才允许恢复 6.7 的自动 C++ 默认。
+
+**6.8 Final Cutover（当前）：**
+
+```text
+engine in {vision, mock} → C++ worker
+engine == paddle && C++ paddle available → C++ worker (stable)
+engine == paddle && C++ paddle unavailable → Python Paddle (paddle_override)
+explicit/env runtime=python → Python worker（回滚 / Oracle）
+```
+
+CLI、Worker 与 GUI 均显示最终 runtime；Paddle 同时显示 `PP-OCRv6-small` 和
+`stable|fallback`。Swift availability 直接执行目标 Worker 的
+`--probe-engine paddle`，避免 GUI 与实际 capability 漂移。
 
 **非 macOS：** 默认引擎候选为 paddle（6.7 native 或 Python）；无 Vision。Linux 至少可 `ENABLE_PADDLE=ON` 构建（见 6.7 设计）。
 
@@ -138,7 +152,7 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | 签名 / 公证 | 随 feat-025 / **6.9+**；符号 hidden 减少泄漏 |
 | universal2 / 最低 macOS | 与 GUI 一致（当前 macOS 13+） |
 | ffmpeg | 默认系统；随包另 feat |
-| Paddle 模型 / ORT | 6.7/6.8 开发用系统 ORT + 用户缓存模型；随包模型 **6.9+** |
+| Paddle 模型 / ORT | 6.8 build tree 复制已验收 ORT 并用相对 rpath；用户缓存模型；正式 `.app` 随包/签名仍属 **6.9+** |
 
 ## 6. 与子阶段关系
 
@@ -150,3 +164,14 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | **6.7** | **paddle C++ Native MVP（ONNX）**；当前代码可用则 paddle→C++；见 [phase6.7-paddle.md](phase6.7-paddle.md) |
 | **6.8** | 安全路由 → stage parity → 多源质量门 → 性能 → 重新 cutover；见 [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) |
 | 6.9+ | 去 Python 产品依赖 / 分发打包（**仅当**6.8 全门通过或产品放弃 Paddle） |
+
+## 7. Phase 6.8 最终实测
+
+- canonical 120s：Python/C++ wall median `50.700/45.407s`，ratio `0.8956x`；
+  进程树 RSS `1864.406/1706.297MiB`，ratio `0.9152x`。
+- 3 来源 614.272s：Python/C++ 逐源 SRT SHA exact，全部质量指标 delta=0。
+- rollback：默认 C++ `4.615s` → 强制 Python `5.097s` → 默认 C++ restart
+  `4.491s`，10 entries 与 SRT SHA 全部 exact。
+- 连续长流：720s source，C++ wall `15.522s`，40 entries。
+- 真实 Paddle IPC：in-flight cancel `2.8ms`；同 Worker restart readiness `0.1ms`。
+- 报告：[phase6.8-paddle-cutover.md](../reports/phase6.8-paddle-cutover.md)。
