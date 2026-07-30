@@ -18,6 +18,7 @@ namespace sublift::paddle_detail {
 struct CtcResult {
   std::string text;
   double confidence{0.0};
+  std::vector<std::int32_t> token_indices;
 };
 
 /// CTC 贪婪解码
@@ -30,13 +31,17 @@ inline CtcResult ctc_greedy_decode(const float* logits,
                                    int num_classes,
                                    const std::vector<std::string>& dictionary) {
   if (!logits || seq_len <= 0 || num_classes <= 1) {
-    return CtcResult{"", 0.0};
+    return CtcResult{"", 0.0, {}};
   }
 
   std::string decoded_text;
+  std::vector<std::int32_t> token_indices;
   double score_sum = 0.0;
   int valid_count = 0;
   int last_index = 0;  // 0 is blank
+  const auto round_to_five = [](double value) {
+    return std::round(value * 100000.0) / 100000.0;
+  };
 
   for (int i = 0; i < seq_len; ++i) {
     const float* row = logits + i * num_classes;
@@ -54,15 +59,24 @@ inline CtcResult ctc_greedy_decode(const float* logits,
       size_t dict_idx = static_cast<size_t>(max_idx - 1);
       if (dict_idx < dictionary.size()) {
         decoded_text += dictionary[dict_idx];
-        score_sum += max_val;
+        token_indices.push_back(max_idx);
+        // RapidOCR rounds each selected probability before averaging.
+        score_sum += round_to_five(static_cast<double>(max_val));
         valid_count++;
       }
     }
     last_index = max_idx;
   }
 
-  double avg_conf = valid_count > 0 ? (score_sum / valid_count) : 0.0;
-  return CtcResult{std::move(decoded_text), avg_conf};
+  const double avg_conf =
+      valid_count > 0
+          ? round_to_five(score_sum / static_cast<double>(valid_count))
+          : 0.0;
+  return CtcResult{
+      std::move(decoded_text),
+      avg_conf,
+      std::move(token_indices),
+  };
 }
 
 }  // namespace sublift::paddle_detail

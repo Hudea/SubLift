@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
@@ -40,4 +41,44 @@ TEST_CASE("Rec tensor preparation right-zero padding", "[paddle][rec_tensor]") {
   // Right padding area (> valid_w = 100) should be exact 0.0f
   CHECK(tensor[150] == 0.0f);
   CHECK(tensor[319] == 0.0f);
+}
+
+TEST_CASE("Cls preprocessing preserves BGR model order and zero padding",
+          "[paddle][cls_tensor]") {
+  sublift::paddle::CropResult crop;
+  crop.width = 96;
+  crop.height = 48;
+  crop.rgb_data.resize(96 * 48 * 3);
+  for (std::size_t pixel = 0; pixel < 96U * 48U; ++pixel) {
+    crop.rgb_data[pixel * 3] = 255;
+    crop.rgb_data[pixel * 3 + 1] = 127;
+    crop.rgb_data[pixel * 3 + 2] = 0;
+  }
+
+  std::vector<float> tensor(3 * 48 * 192, 1.0F);
+  sublift::paddle::prepare_cls_tensor(crop, tensor.data());
+
+  CHECK(tensor[0] == -1.0F);
+  CHECK(tensor[48 * 192] == Catch::Approx(-0.0039215686F));
+  CHECK(tensor[2 * 48 * 192] == 1.0F);
+  CHECK(tensor[96] == 0.0F);
+  CHECK(tensor[191] == 0.0F);
+}
+
+TEST_CASE("Cls 180 rotation uses RapidOCR strict threshold",
+          "[paddle][cls]") {
+  sublift::paddle::CropResult crop;
+  crop.width = 2;
+  crop.height = 1;
+  crop.rgb_data = {1, 2, 3, 4, 5, 6};
+
+  auto equal_threshold =
+      sublift::paddle::apply_cls_result(crop, 1, 0.9F, 0.9F);
+  CHECK_FALSE(equal_threshold.rotated_180);
+  CHECK(crop.rgb_data == std::vector<std::uint8_t>{1, 2, 3, 4, 5, 6});
+
+  auto above_threshold =
+      sublift::paddle::apply_cls_result(crop, 1, 0.9001F, 0.9F);
+  CHECK(above_threshold.rotated_180);
+  CHECK(crop.rgb_data == std::vector<std::uint8_t>{4, 5, 6, 1, 2, 3});
 }

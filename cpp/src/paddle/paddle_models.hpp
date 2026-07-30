@@ -29,6 +29,7 @@ std::filesystem::path resolve_model_dir(const std::string& custom_dir = "");
 /// 5. 预期模型路径组合
 struct ModelPaths {
   std::filesystem::path det_path;
+  std::filesystem::path cls_path;
   std::filesystem::path rec_path;
   std::filesystem::path keys_path;
 };

@@ -58,4 +58,15 @@ TEST_CASE("Paddle CTC - Greedy Decode", "[paddle][ctc]") {
     auto res = sublift::paddle_detail::ctc_greedy_decode(logits.data(), 3, 5, dict);
     REQUIRE(res.text == "AA");
   }
+
+  SECTION("Confidence follows RapidOCR five-decimal rounding") {
+    std::vector<float> logits = {
+        0.0f, 0.123456f, 0.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 0.654321f, 0.0f, 0.0f,
+    };
+    auto res =
+        sublift::paddle_detail::ctc_greedy_decode(logits.data(), 2, 5, dict);
+    REQUIRE(res.text == "AB");
+    REQUIRE(res.confidence == 0.38889);
+  }
 }

@@ -80,6 +80,7 @@ ModelPaths get_expected_model_paths(const std::filesystem::path& model_dir, Mode
   const std::string suffix = model_type_to_string(model_type);
   ModelPaths paths;
   paths.det_path = model_dir / ("PP-OCRv6_det_" + suffix + ".onnx");
+  paths.cls_path = model_dir / "ch_ppocr_mobile_v2.0_cls_mobile.onnx";
   paths.rec_path = model_dir / ("PP-OCRv6_rec_" + suffix + ".onnx");
   if (model_type == ModelType::Tiny) {
     paths.keys_path = model_dir / "ppocrv6_tiny_dict.txt";
@@ -93,6 +94,9 @@ bool validate_model_paths(const ModelPaths& paths, std::string* error_msg) {
   std::vector<std::string> missing;
   if (!std::filesystem::exists(paths.det_path)) {
     missing.push_back(paths.det_path.filename().string());
+  }
+  if (!std::filesystem::exists(paths.cls_path)) {
+    missing.push_back(paths.cls_path.filename().string());
   }
   if (!std::filesystem::exists(paths.rec_path)) {
     missing.push_back(paths.rec_path.filename().string());

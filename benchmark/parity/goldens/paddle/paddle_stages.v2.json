@@ -1,0 +1,4784 @@
+{
+  "schema_version": 2,
+  "kind": "paddle_stage_parity",
+  "oracle_commit": "544426ea5ecbf4934e3b3801c3809cd8171c9dec",
+  "fingerprint": {
+    "schema_version": 2,
+    "oracle_commit": "544426ea5ecbf4934e3b3801c3809cd8171c9dec",
+    "dependencies": {
+      "python": "3.12",
+      "rapidocr": "3.9.2",
+      "onnxruntime": "1.28.0",
+      "onnxruntime_library_sha256": "sha256:cadd9517e089d197e5d381bc31813875eb8addce8712bac501645fea8008800c",
+      "opencv": "4.13.0",
+      "numpy": "2.5.0",
+      "pillow": "12.3.0",
+      "provider": "CPUExecutionProvider"
+    },
+    "model": {
+      "root": "~/.cache/sublift/rapidocr-models",
+      "type": "small",
+      "det_file": "PP-OCRv6_det_small.onnx",
+      "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+      "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+      "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+      "rec_file": "PP-OCRv6_rec_small.onnx",
+      "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+      "dictionary_file": "ppocrv6_dict.txt",
+      "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d"
+    },
+    "parameters": {
+      "global": {
+        "use_preprocess_img": true,
+        "min_side_len": 30,
+        "max_side_len": 2000,
+        "use_vertical_padding": true,
+        "vertical_min_height": 30,
+        "vertical_width_height_ratio": 8.0,
+        "text_score": 0.5
+      },
+      "det": {
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "threshold": 0.3,
+        "box_threshold": 0.5,
+        "unclip_ratio": 1.6,
+        "use_dilation": true,
+        "score_mode": "fast",
+        "max_candidates": 1000,
+        "min_size": 3
+      },
+      "cls": {
+        "enabled": true,
+        "image_shape": [
+          3,
+          48,
+          192
+        ],
+        "batch_size": 6,
+        "threshold": 0.9,
+        "labels": [
+          "0",
+          "180"
+        ]
+      },
+      "rec": {
+        "image_shape": [
+          3,
+          48,
+          320
+        ],
+        "batch_size": 6,
+        "right_padding": 0.0,
+        "ctc_blank_index": 0
+      },
+      "onnxruntime": {
+        "intra_op_num_threads": -1,
+        "inter_op_num_threads": -1,
+        "enable_cpu_mem_arena": false
+      }
+    }
+  },
+  "fixture_manifest_sha256": "sha256:028613deb538ecafc036e0301762b42e84783776f185a0c28882b7ea18743476",
+  "runtime_versions": {
+    "python": "3.12.13",
+    "rapidocr": "3.9.2",
+    "onnxruntime": "1.28.0",
+    "opencv": "4.13.0",
+    "pillow": "12.3.0",
+    "numpy": "2.5.0",
+    "onnxruntime_library_sha256": "sha256:cadd9517e089d197e5d381bc31813875eb8addce8712bac501645fea8008800c"
+  },
+  "cases": [
+    {
+      "case_id": "empty",
+      "asset": "empty.png",
+      "asset_sha256": "sha256:41e78319e8574a84eb591b633cbcb16f0db86ea36a01b7318c624ed8cbfa4799",
+      "expected_text": [],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:ebd130d96266eca22ce7c7f1caa23ddb5dd851c6de1f3594579f74eb2a515350",
+              "min": 18.0,
+              "max": 24.0,
+              "mean": 20.666666666666668,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:c1dcb57c04f69e170e5d0760c1cc26a5e6e0b750379a64fe01689ddf9c8ee7b4",
+              "min": 18.0,
+              "max": 24.0,
+              "mean": 20.666666666666668,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:c1dcb57c04f69e170e5d0760c1cc26a5e6e0b750379a64fe01689ddf9c8ee7b4",
+              "min": 18.0,
+              "max": 24.0,
+              "mean": 20.666666666666668,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:0ffdc0cfa67bbcd6a4b560457664c9ae25c88c61caed3d79275c4f4e645d3db2",
+              "min": -0.8588235378265381,
+              "max": -0.8117647171020508,
+              "mean": -0.8379085063934326
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:9d445d77b8d818382b0d5cff9f23d971f49180d4e9c4129bdd1dc26b397315e3",
+              "min": 0.0,
+              "max": 0.11947646737098694,
+              "mean": 0.046730711254524535
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 0,
+            "quads": []
+          },
+          "5_perspective_crop": {
+            "crop_count": 0,
+            "crops": []
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 0,
+            "tensors": [],
+            "logits": [],
+            "results": []
+          },
+          "7_rec_preprocess": {
+            "batch_count": 0,
+            "tensors": []
+          },
+          "8_rec_infer": {
+            "batch_count": 0,
+            "logits": []
+          },
+          "9_rec_decode": {
+            "decoded_count": 0,
+            "results": []
+          },
+          "10_output": {
+            "text": "",
+            "confidence": 0.0,
+            "line_count": 0,
+            "lines": []
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 0,
+          "cls_calls": 0,
+          "rec_calls": 0
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 0,
+          "det_boxes": 0,
+          "det_calls": 1,
+          "rec_calls": 0,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.0,
+            "line_count": 0,
+            "lines": [],
+            "text": ""
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 24.0,
+              "mean": 20.666666666666668,
+              "min": 18.0,
+              "sha256": "sha256:ebd130d96266eca22ce7c7f1caa23ddb5dd851c6de1f3594579f74eb2a515350",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 24.0,
+              "mean": 20.666666666666668,
+              "min": 18.0,
+              "sha256": "sha256:ebd130d96266eca22ce7c7f1caa23ddb5dd851c6de1f3594579f74eb2a515350",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": -0.8117647171020508,
+              "mean": -0.8379085063934326,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:0ffdc0cfa67bbcd6a4b560457664c9ae25c88c61caed3d79275c4f4e645d3db2",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.11947810649871826,
+              "mean": 0.04673128336823627,
+              "min": 0.0,
+              "sha256": "sha256:7cd4218987d8dc1164c31ce6042971533e70fe07c03102dd2d81fcd8e99428bb",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 0,
+            "quads": []
+          },
+          "5_perspective_crop": {
+            "crop_count": 0,
+            "crops": []
+          },
+          "6_cls": {
+            "batch_count": 0,
+            "enabled": true,
+            "logits": [],
+            "results": [],
+            "tensors": []
+          },
+          "7_rec_preprocess": {
+            "batch_count": 0,
+            "tensors": []
+          },
+          "8_rec_infer": {
+            "batch_count": 0,
+            "logits": []
+          },
+          "9_rec_decode": {
+            "decoded_count": 0,
+            "results": []
+          }
+        }
+      }
+    },
+    {
+      "case_id": "cjk_single_line",
+      "asset": "cjk_single_line.png",
+      "asset_sha256": "sha256:0463cc7fda10d069e3a19fdf01df51e623c8f963ec5aa91280d454ef73bc10a2",
+      "expected_text": [
+        "硬字幕提取测试"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:a550b23d3bf0d90551241734424ab8b0b6a3122fcfc0b9f2584974d608b2fb0f",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.856673177083334,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:54f191ce2380ca5d2ad8a46c4c9c9df9aab28caea4ad037b562e3e4261fd1263",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.856673177083334,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:54f191ce2380ca5d2ad8a46c4c9c9df9aab28caea4ad037b562e3e4261fd1263",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.856673177083334,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:7c29b784af7dc3ab79546e941cf4ccddcf17fefca781b6c10d97d5d26f2f2a72",
+              "min": -0.8588235378265381,
+              "max": 0.9450981616973877,
+              "mean": -0.8129141798954014
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:d4ad5c8fe79e6c359b4e13d3766ac58b6f92ace7d2f40724d9344afc684b0506",
+              "min": 0.0,
+              "max": 0.9999687671661377,
+              "mean": 0.025125521168544045
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    324.0,
+                    83.0
+                  ],
+                  [
+                    636.0,
+                    83.0
+                  ],
+                  [
+                    636.0,
+                    143.0
+                  ],
+                  [
+                    324.0,
+                    143.0
+                  ]
+                ],
+                "score": 0.9020800371078631
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    60,
+                    312,
+                    3
+                  ],
+                  "count": 56160,
+                  "sha256": "sha256:6ffb504abcb341beb0a47a2898b642d9d6e47089a36868bd14c24ec823f247f2",
+                  "min": 18.0,
+                  "max": 248.0,
+                  "mean": 62.5457264957265,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:a88dd1599d54a318db3ca78f202e5dbfb3e2af109007c031b1d06888c83ea732",
+                "min": -0.8588235378265381,
+                "max": 0.9450980424880981,
+                "mean": -0.5078950532824146
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:b1f315e6350247ac0f4586abbfcd9bf7f9de5fb6405994b00414a9da5b0c3311",
+                "min": 2.9670099266354555e-08,
+                "max": 1.0,
+                "mean": 0.5000000148350496
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ],
+                "count": 46080,
+                "sha256": "sha256:57d5cf70095c2c78f4dc1bce066ad6aea516973004e13e15a43186ced4180c7c",
+                "min": -0.8588235378265381,
+                "max": 0.9450980424880981,
+                "mean": -0.3986688137313144
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ],
+                "count": 748400,
+                "sha256": "sha256:208f3d07864e151f173c04c6c2b6185b7be76a4770bf8e0364986005e6f97f74",
+                "min": 2.1469835611721363e-26,
+                "max": 1.0,
+                "mean": 5.344735734757294e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  9990,
+                  4552,
+                  5119,
+                  6195,
+                  3184,
+                  7942,
+                  13763
+                ],
+                "text": "硬字幕提取测试",
+                "confidence": 0.99987
+              }
+            ]
+          },
+          "10_output": {
+            "text": "硬字幕提取测试",
+            "confidence": 0.99987,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "硬字幕提取测试",
+                "confidence": 0.99987,
+                "box": {
+                  "x": 324,
+                  "y": 83,
+                  "width": 312,
+                  "height": 60
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99987,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 60,
+                  "width": 312,
+                  "x": 324,
+                  "y": 83
+                },
+                "confidence": 0.99987,
+                "text": "硬字幕提取测试"
+              }
+            ],
+            "text": "硬字幕提取测试"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 23.856673177083334,
+              "min": 18.0,
+              "sha256": "sha256:a550b23d3bf0d90551241734424ab8b0b6a3122fcfc0b9f2584974d608b2fb0f",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 23.856673177083334,
+              "min": 18.0,
+              "sha256": "sha256:a550b23d3bf0d90551241734424ab8b0b6a3122fcfc0b9f2584974d608b2fb0f",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.9450981616973877,
+              "mean": -0.8129141798954014,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:7c29b784af7dc3ab79546e941cf4ccddcf17fefca781b6c10d97d5d26f2f2a72",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9999687671661377,
+              "mean": 0.02512552298144195,
+              "min": 0.0,
+              "sha256": "sha256:0b8556baf55f0526478e8395724cc9501a3be92f51cc1183d81cd7e7c9314445",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    324.0,
+                    83.0
+                  ],
+                  [
+                    636.0,
+                    83.0
+                  ],
+                  [
+                    636.0,
+                    143.0
+                  ],
+                  [
+                    324.0,
+                    143.0
+                  ]
+                ],
+                "score": 0.9020800590515137
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 56160,
+                  "dtype": "uint8",
+                  "max": 248.0,
+                  "mean": 62.5457264957265,
+                  "min": 18.0,
+                  "sha256": "sha256:71891cc901ec9565aae8306ca62dc0c68755bae2c25c93dfd75f128d41c1607a",
+                  "shape": [
+                    60,
+                    312,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.5000000148351065,
+                "min": 2.9670212953192276e-08,
+                "sha256": "sha256:d6ee490cb773c8fc5b651ee6538992aeefd60ea0b6e13a58e3cd3801abdd4f27",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 0.9450980424880981,
+                "mean": -0.5078950532824146,
+                "min": -0.8588235378265381,
+                "sha256": "sha256:a88dd1599d54a318db3ca78f202e5dbfb3e2af109007c031b1d06888c83ea732",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 46080,
+                "dtype": "float32-le",
+                "max": 0.9450980424880981,
+                "mean": -0.3986688137313144,
+                "min": -0.8588235378265381,
+                "sha256": "sha256:57d5cf70095c2c78f4dc1bce066ad6aea516973004e13e15a43186ced4180c7c",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 748400,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.3447357350914185e-05,
+                "min": 2.1470818606364978e-26,
+                "sha256": "sha256:1711e72463db4588a0704288b072857a7fab6fcd36cb3adeaaa7acc3e4aeaccc",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99987,
+                "text": "硬字幕提取测试",
+                "tokens": [
+                  9990,
+                  4552,
+                  5119,
+                  6195,
+                  3184,
+                  7942,
+                  13763
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "latin_single_line",
+      "asset": "latin_single_line.png",
+      "asset_sha256": "sha256:b47fa2b84809e4cfa63c59e289b1ec0c1a0f22fce3967defab576a79aaaa1e1a",
+      "expected_text": [
+        "SubLift Hard Subtitle Extractor"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:4d14d9bca1055e90198c3fe99ae2d317c21c7bdbfa04eea1257af4934e2b9f59",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.98798828125,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:a90cabaf5a48d6381a045369911f0893bf674ef302cfae567c649f5b92b696ed",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.98798828125,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:a90cabaf5a48d6381a045369911f0893bf674ef302cfae567c649f5b92b696ed",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 23.98798828125,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:ce9e0b0d1186639b23cf05396b7ba9246934c2bc154aec886fda25f99f32fc2b",
+              "min": -0.8588235378265381,
+              "max": 0.9450981616973877,
+              "mean": -0.8118884551983726
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:2194a354619e16a478e157c0e24039e9f5b8eeb9db484cbaf39b679e7f3f7e2b",
+              "min": 0.0,
+              "max": 0.9997071027755737,
+              "mean": 0.032838644824244784
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    200.0,
+                    89.0
+                  ],
+                  [
+                    762.0,
+                    90.0
+                  ],
+                  [
+                    762.0,
+                    135.0
+                  ],
+                  [
+                    200.0,
+                    134.0
+                  ]
+                ],
+                "score": 0.8551163895954316
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    45,
+                    562,
+                    3
+                  ],
+                  "count": 75870,
+                  "sha256": "sha256:148fe98d42de28cb1a3d7e7570e110a16a34e0686eb6c907b3cd9288c7fb0a6e",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 52.79815473836826,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:e3d4993dcd470483709778162a896de154877f9d22e4e43e3f40711c8126bfcd",
+                "min": -0.9921568632125854,
+                "max": 1.0,
+                "mean": -0.5889260548520489
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:3a47a37cec683cc5b38c8a6cd974d3cb2bc2298888194d410426da598d67293e",
+                "min": 1.7248818551252043e-07,
+                "max": 0.9999998807907104,
+                "mean": 0.500000026639448
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 0.9999998807907104
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  599
+                ],
+                "count": 86256,
+                "sha256": "sha256:366c0ffd807fc1d282d51cd8546c16eb94a54f90024a872eb4bf83a9f7534a4e",
+                "min": -0.9921568632125854,
+                "max": 1.0,
+                "mean": -0.586214682950041
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  75,
+                  18710
+                ],
+                "count": 1403250,
+                "sha256": "sha256:266b42f00f46d47298781b901e4aac61662461a23056809b8938a70fb1559806",
+                "min": 3.786483554329413e-20,
+                "max": 1.0,
+                "mean": 5.344736253312448e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  61,
+                  89,
+                  70,
+                  54,
+                  77,
+                  74,
+                  88,
+                  18709,
+                  50,
+                  69,
+                  86,
+                  72,
+                  18709,
+                  61,
+                  89,
+                  70,
+                  88,
+                  77,
+                  88,
+                  80,
+                  73,
+                  18709,
+                  47,
+                  92,
+                  88,
+                  86,
+                  69,
+                  71,
+                  88,
+                  83,
+                  86
+                ],
+                "text": "SubLift Hard Subtitle Extractor",
+                "confidence": 0.99893
+              }
+            ]
+          },
+          "10_output": {
+            "text": "SubLift Hard Subtitle Extractor",
+            "confidence": 0.99893,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "SubLift Hard Subtitle Extractor",
+                "confidence": 0.99893,
+                "box": {
+                  "x": 200,
+                  "y": 89,
+                  "width": 562,
+                  "height": 46
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99893,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 46,
+                  "width": 562,
+                  "x": 200,
+                  "y": 89
+                },
+                "confidence": 0.99893,
+                "text": "SubLift Hard Subtitle Extractor"
+              }
+            ],
+            "text": "SubLift Hard Subtitle Extractor"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 23.98798828125,
+              "min": 18.0,
+              "sha256": "sha256:4d14d9bca1055e90198c3fe99ae2d317c21c7bdbfa04eea1257af4934e2b9f59",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 23.98798828125,
+              "min": 18.0,
+              "sha256": "sha256:4d14d9bca1055e90198c3fe99ae2d317c21c7bdbfa04eea1257af4934e2b9f59",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.9450981616973877,
+              "mean": -0.8118884551983726,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:ce9e0b0d1186639b23cf05396b7ba9246934c2bc154aec886fda25f99f32fc2b",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9997071623802185,
+              "mean": 0.03283864053846297,
+              "min": 0.0,
+              "sha256": "sha256:cd8634adf9f8a355f1f7b77690f205fd3ddb86a391c870737ac91328d01c587c",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    200.0,
+                    89.0
+                  ],
+                  [
+                    762.0,
+                    90.0
+                  ],
+                  [
+                    762.0,
+                    135.0
+                  ],
+                  [
+                    200.0,
+                    134.0
+                  ]
+                ],
+                "score": 0.8551163077354431
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 75870,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 52.79815473836826,
+                  "min": 0.0,
+                  "sha256": "sha256:db66798014792ea67f38c40f2cae985d4be870769d12d0a7f0834effb661c695",
+                  "shape": [
+                    45,
+                    562,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 0.9999998807907104,
+                "mean": 0.5000000266390359,
+                "min": 1.7248736128294695e-07,
+                "sha256": "sha256:5bae144dbb03db58a0293ee739ab6e6c489faa59f4e0ddefa60c837d543fa739",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 0.9999998807907104
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5889260548520489,
+                "min": -0.9921568632125854,
+                "sha256": "sha256:e3d4993dcd470483709778162a896de154877f9d22e4e43e3f40711c8126bfcd",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 86256,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.586214682950041,
+                "min": -0.9921568632125854,
+                "sha256": "sha256:366c0ffd807fc1d282d51cd8546c16eb94a54f90024a872eb4bf83a9f7534a4e",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  599
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 1403250,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.344736262570127e-05,
+                "min": 3.7865413923488065e-20,
+                "sha256": "sha256:ac5cd4d28d66e524bb12e6a6924a7a6db0acb53aeb199309dd2610f5f151e840",
+                "shape": [
+                  1,
+                  75,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99893,
+                "text": "SubLift Hard Subtitle Extractor",
+                "tokens": [
+                  61,
+                  89,
+                  70,
+                  54,
+                  77,
+                  74,
+                  88,
+                  18709,
+                  50,
+                  69,
+                  86,
+                  72,
+                  18709,
+                  61,
+                  89,
+                  70,
+                  88,
+                  77,
+                  88,
+                  80,
+                  73,
+                  18709,
+                  47,
+                  92,
+                  88,
+                  86,
+                  69,
+                  71,
+                  88,
+                  83,
+                  86
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "mixed_cjk_latin",
+      "asset": "mixed_cjk_latin.png",
+      "asset_sha256": "sha256:5b1ad6a4c3fb6e347a9b872481f1f8745ab12aa15ec25fd1dd56369e30ed82db",
+      "expected_text": [
+        "SubLift 自动提取 100%"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:ead6df1c33779e08dadd8c989c2fb4fcdf510bba282ab1ac0b22f6120254b138",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.375634765625,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:5a70801f522f60109c79b64dfdc07e73b8f5f554fde5cb4f6c21b946212d128b",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.375634765625,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:5a70801f522f60109c79b64dfdc07e73b8f5f554fde5cb4f6c21b946212d128b",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.375634765625,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:663cf24c58bdfc48e67b606c644871b9bf53e9901aad0fc8c9c6817812c61b6f",
+              "min": -0.8588235378265381,
+              "max": 0.9450981616973877,
+              "mean": -0.8088416060375839
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:328fff7163404f74d8454e29b24bd21f3359e8f07015496cace9425b23353bdc",
+              "min": 0.0,
+              "max": 0.9997180700302124,
+              "mean": 0.03576194339202758
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    238.0,
+                    85.0
+                  ],
+                  [
+                    720.0,
+                    82.0
+                  ],
+                  [
+                    720.0,
+                    141.0
+                  ],
+                  [
+                    238.0,
+                    143.0
+                  ]
+                ],
+                "score": 0.8280097344174717
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    59,
+                    482,
+                    3
+                  ],
+                  "count": 85314,
+                  "sha256": "sha256:af87a977f61b4d5be5d2be23a52ec0d7bb1fd4febac7ac74de692c11fb16300f",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 52.74483672081956,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:7e6916b943972380962b58c25b810dd1554cb95fa1fcb465bba12d6973ca8aff",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.5845460620562166
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:af8ffb6b8d69e27d35f481011c71162348825fe329ab1bdb3a5ae8ba5b6783d5",
+                "min": 8.731060916034039e-06,
+                "max": 0.9999912977218628,
+                "mean": 0.5000000143913894
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 0.9999912977218628
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  392
+                ],
+                "count": 56448,
+                "sha256": "sha256:ef33eebce669701a192cd30580c07b994c1d1c8c3331aa7fb1b6224da77e1057",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.5862961893240222
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  49,
+                  18710
+                ],
+                "count": 916790,
+                "sha256": "sha256:2b2db4ff99653f1b00e197086154ff6c81f25f28b97a7722df49a8cf5d7f3fbe",
+                "min": 1.7877762212962917e-23,
+                "max": 1.0,
+                "mean": 5.344736745789589e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  61,
+                  89,
+                  70,
+                  54,
+                  77,
+                  74,
+                  88,
+                  18709,
+                  11784,
+                  2978,
+                  6195,
+                  3184,
+                  18709,
+                  34,
+                  33,
+                  33,
+                  5
+                ],
+                "text": "SubLift 自动提取 100%",
+                "confidence": 0.97272
+              }
+            ]
+          },
+          "10_output": {
+            "text": "SubLift 自动提取 100%",
+            "confidence": 0.97272,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "SubLift 自动提取 100%",
+                "confidence": 0.97272,
+                "box": {
+                  "x": 238,
+                  "y": 82,
+                  "width": 482,
+                  "height": 61
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.97272,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 61,
+                  "width": 482,
+                  "x": 238,
+                  "y": 82
+                },
+                "confidence": 0.97272,
+                "text": "SubLift 自动提取 100%"
+              }
+            ],
+            "text": "SubLift 自动提取 100%"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 24.375634765625,
+              "min": 18.0,
+              "sha256": "sha256:ead6df1c33779e08dadd8c989c2fb4fcdf510bba282ab1ac0b22f6120254b138",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 24.375634765625,
+              "min": 18.0,
+              "sha256": "sha256:ead6df1c33779e08dadd8c989c2fb4fcdf510bba282ab1ac0b22f6120254b138",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.9450981616973877,
+              "mean": -0.8088416060375839,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:663cf24c58bdfc48e67b606c644871b9bf53e9901aad0fc8c9c6817812c61b6f",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9997180104255676,
+              "mean": 0.035761944367506175,
+              "min": 0.0,
+              "sha256": "sha256:119773310d8da2585f82dd6d444201d1c3a232d5f96be4004b01b2b86711a0b4",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    238.0,
+                    85.0
+                  ],
+                  [
+                    720.0,
+                    82.0
+                  ],
+                  [
+                    720.0,
+                    141.0
+                  ],
+                  [
+                    238.0,
+                    143.0
+                  ]
+                ],
+                "score": 0.8280097246170044
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 85314,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 52.74483672081956,
+                  "min": 0.0,
+                  "sha256": "sha256:2e9c04ae9c3c1a5cb72a0c581f6115a8879b0e2894a28f3fb0490ea0470fdbe5",
+                  "shape": [
+                    59,
+                    482,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 0.9999912977218628,
+                "mean": 0.5000000143581929,
+                "min": 8.73099452292081e-06,
+                "sha256": "sha256:c144083b7a03dde3f97e958d3e2cfd33475c5b498ddd0ddcec24988eb4762a24",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 0.9999912977218628
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5845460620562166,
+                "min": -1.0,
+                "sha256": "sha256:7e6916b943972380962b58c25b810dd1554cb95fa1fcb465bba12d6973ca8aff",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 56448,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5862961893240222,
+                "min": -1.0,
+                "sha256": "sha256:ef33eebce669701a192cd30580c07b994c1d1c8c3331aa7fb1b6224da77e1057",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  392
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 916790,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.344736765963357e-05,
+                "min": 1.7878035158836123e-23,
+                "sha256": "sha256:b11e24fd6d191448d85bfbf33d7a348b7772ba0726fbc2179455f846877cfe7c",
+                "shape": [
+                  1,
+                  49,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.97272,
+                "text": "SubLift 自动提取 100%",
+                "tokens": [
+                  61,
+                  89,
+                  70,
+                  54,
+                  77,
+                  74,
+                  88,
+                  18709,
+                  11784,
+                  2978,
+                  6195,
+                  3184,
+                  18709,
+                  34,
+                  33,
+                  33,
+                  5
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "stroke_outlined",
+      "asset": "stroke_outlined.png",
+      "asset_sha256": "sha256:c2efd55a8bfbab2953cf36c50f97f4c4726eb6e9229c23275266cc31de99d3b8",
+      "expected_text": [
+        "描边字幕质量测试"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:47d4a8a0706d39aa43ddd7b88b336bb3fb4d00b8b1beeed710c9c596fb4184dc",
+              "min": 10.0,
+              "max": 255.0,
+              "mean": 23.128272840711805,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:f4e623bce9b383a5efc10677572d7a1b755e15c1ee30ef72a443ce4ae9753b83",
+              "min": 10.0,
+              "max": 255.0,
+              "mean": 23.128272840711805,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:f4e623bce9b383a5efc10677572d7a1b755e15c1ee30ef72a443ce4ae9753b83",
+              "min": 10.0,
+              "max": 255.0,
+              "mean": 23.128272840711805,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:597197759e8bc8b6c012134b6bd10cb43037126e7067894f08fcc52d58e60a15",
+              "min": -0.9215686321258545,
+              "max": 1.0,
+              "mean": -0.8186353404359726
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:b0d269a3310a0fa2d7d0d0db2505da9af3c74fc5c71cc2b890af642ef4ae50b4",
+              "min": 0.0,
+              "max": 0.9998983144760132,
+              "mean": 0.02810297729640823
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    301.0,
+                    84.0
+                  ],
+                  [
+                    653.0,
+                    83.0
+                  ],
+                  [
+                    653.0,
+                    142.0
+                  ],
+                  [
+                    301.0,
+                    142.0
+                  ]
+                ],
+                "score": 0.9177345828882704
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    59,
+                    352,
+                    3
+                  ],
+                  "count": 62304,
+                  "sha256": "sha256:786b7c6ed8d527e47501d0959a6432fb9f56e0299cdadd936d13c61dd70bb300",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 49.61577105803801,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:870887c41a9dedc5d3dce9a5bf18385d8bfe78f33e53c507ab328aede6ff26d6",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.6105724080871032
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:c93c5965b75cb01e7792e714a5640000ba807f6f510b5b3c92848c2ec8a52c53",
+                "min": 2.3960792117777574e-13,
+                "max": 1.0,
+                "mean": 0.5000000000001198
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ],
+                "count": 46080,
+                "sha256": "sha256:c188cd73fc1809aedc31e3ea4dd1b95cd3ff2b39e00ca7dfd53b1158e018caba",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.5483922268897813
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ],
+                "count": 748400,
+                "sha256": "sha256:79fab31f32947c8a66249f06a12e658b50006af36c3f8a3cf29d06cd541c55d3",
+                "min": 4.7343360115462694e-27,
+                "max": 1.0,
+                "mean": 5.3447356853457054e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  6194,
+                  14558,
+                  4552,
+                  5119,
+                  14036,
+                  14997,
+                  7942,
+                  13763
+                ],
+                "text": "描边字幕质量测试",
+                "confidence": 0.99988
+              }
+            ]
+          },
+          "10_output": {
+            "text": "描边字幕质量测试",
+            "confidence": 0.99988,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "描边字幕质量测试",
+                "confidence": 0.99988,
+                "box": {
+                  "x": 301,
+                  "y": 83,
+                  "width": 352,
+                  "height": 59
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99988,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 59,
+                  "width": 352,
+                  "x": 301,
+                  "y": 83
+                },
+                "confidence": 0.99988,
+                "text": "描边字幕质量测试"
+              }
+            ],
+            "text": "描边字幕质量测试"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 255.0,
+              "mean": 23.128272840711805,
+              "min": 10.0,
+              "sha256": "sha256:47d4a8a0706d39aa43ddd7b88b336bb3fb4d00b8b1beeed710c9c596fb4184dc",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 255.0,
+              "mean": 23.128272840711805,
+              "min": 10.0,
+              "sha256": "sha256:47d4a8a0706d39aa43ddd7b88b336bb3fb4d00b8b1beeed710c9c596fb4184dc",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 1.0,
+              "mean": -0.8186353404359726,
+              "min": -0.9215686321258545,
+              "sha256": "sha256:597197759e8bc8b6c012134b6bd10cb43037126e7067894f08fcc52d58e60a15",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9998983144760132,
+              "mean": 0.028102981923814274,
+              "min": 0.0,
+              "sha256": "sha256:24105cac537c54a8bb1f309237065b0b45a3cfe4b6e5fe2a9cdf75e0ee9d2e85",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    301.0,
+                    84.0
+                  ],
+                  [
+                    653.0,
+                    83.0
+                  ],
+                  [
+                    653.0,
+                    142.0
+                  ],
+                  [
+                    301.0,
+                    142.0
+                  ]
+                ],
+                "score": 0.9177347421646118
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 62304,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 49.61577105803801,
+                  "min": 0.0,
+                  "sha256": "sha256:dff80800723e36de5c85ce23144eaecc0ac084e0accfbe7864dde5e6e45bafed",
+                  "shape": [
+                    59,
+                    352,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.5000000000001198,
+                "min": 2.3960884274962235e-13,
+                "sha256": "sha256:5f2dc9cb87ad43404defe82594e1a92a400b63806dfe23e40a5365f054ac00d4",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.6105724080871032,
+                "min": -1.0,
+                "sha256": "sha256:870887c41a9dedc5d3dce9a5bf18385d8bfe78f33e53c507ab328aede6ff26d6",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 46080,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5483922268897813,
+                "min": -1.0,
+                "sha256": "sha256:c188cd73fc1809aedc31e3ea4dd1b95cd3ff2b39e00ca7dfd53b1158e018caba",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 748400,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.34473568583634e-05,
+                "min": 4.7342820855078266e-27,
+                "sha256": "sha256:d4acd329a4653044ff1ddde7c08cfe3a6abf7d26a722ef79d53679f654740e68",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99988,
+                "text": "描边字幕质量测试",
+                "tokens": [
+                  6194,
+                  14558,
+                  4552,
+                  5119,
+                  14036,
+                  14997,
+                  7942,
+                  13763
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "low_contrast_blur",
+      "asset": "low_contrast_blur.png",
+      "asset_sha256": "sha256:cad3d1566476186945f0f747a022f4f3288b410cdb6353be2950e31d430754a2",
+      "expected_text": [
+        "低对比度字幕"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:149af978b4eded5ab2ede5fb9ae2a9a5a7fc5469b34bfc535ec0aebb5f67f2b9",
+              "min": 72.0,
+              "max": 152.0,
+              "mean": 75.45719807942709,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:99dd6d2b5e338cd1060a96ca1a412d8cc1889037cbdcbfe04cbdb3cfa8494ac1",
+              "min": 72.0,
+              "max": 152.0,
+              "mean": 75.45719807942709,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:99dd6d2b5e338cd1060a96ca1a412d8cc1889037cbdcbfe04cbdb3cfa8494ac1",
+              "min": 72.0,
+              "max": 152.0,
+              "mean": 75.45719807942709,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:dd53abc67cfa44ca3524aa3a8ce178b4506590db3e9c91e8c702158a2c9fa779",
+              "min": -0.43529409170150757,
+              "max": 0.18431377410888672,
+              "mean": -0.40820792075832574
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:485d19fada2eaafc8d24bab89df9d20d42fe0db6e15aa4b5cd63ed5c7ddc8520",
+              "min": 0.0,
+              "max": 0.9999998211860657,
+              "mean": 0.024125188710131515
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    343.0,
+                    79.0
+                  ],
+                  [
+                    617.0,
+                    79.0
+                  ],
+                  [
+                    617.0,
+                    147.0
+                  ],
+                  [
+                    343.0,
+                    147.0
+                  ]
+                ],
+                "score": 0.8859747406251222
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    68,
+                    274,
+                    3
+                  ],
+                  "count": 55896,
+                  "sha256": "sha256:da9fb1950982037f1af4245a733bc7664f41ea042611f7afc7d4b125b1539796",
+                  "min": 72.0,
+                  "max": 152.0,
+                  "mean": 85.09394232145412,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:315ec99a81fb3fd74545452bcad5e142b20128027693fb0f0ce2d6ce41953213",
+                "min": -0.43529409170150757,
+                "max": 0.18431377410888672,
+                "mean": -0.3329194216273242
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:b3eadb7a293ae0b37dc184dc168870bd34ec24c7d134dcdb8a7691ca27863c79",
+                "min": 3.2915787873122326e-09,
+                "max": 1.0,
+                "mean": 0.5000000016457894
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ],
+                "count": 46080,
+                "sha256": "sha256:963bd4bfc02ddda1c1c02a076324ef959f00ca6f6afcd13efae177149c366e66",
+                "min": -0.43529409170150757,
+                "max": 0.17647063732147217,
+                "mean": -0.20181200810863326
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ],
+                "count": 748400,
+                "sha256": "sha256:b96efba514d371d8bbd12dca787fa97d045efc5ceffca1008d04270fe5cad214",
+                "min": 2.0836492779137642e-26,
+                "max": 1.0,
+                "mean": 5.344735762421786e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  2329,
+                  4677,
+                  7659,
+                  5187,
+                  4552,
+                  5119
+                ],
+                "text": "低对比度字幕",
+                "confidence": 0.9998
+              }
+            ]
+          },
+          "10_output": {
+            "text": "低对比度字幕",
+            "confidence": 0.9998,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "低对比度字幕",
+                "confidence": 0.9998,
+                "box": {
+                  "x": 343,
+                  "y": 79,
+                  "width": 274,
+                  "height": 68
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99981,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 68,
+                  "width": 274,
+                  "x": 343,
+                  "y": 79
+                },
+                "confidence": 0.99981,
+                "text": "低对比度字幕"
+              }
+            ],
+            "text": "低对比度字幕"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 152.0,
+              "mean": 75.45719807942709,
+              "min": 72.0,
+              "sha256": "sha256:149af978b4eded5ab2ede5fb9ae2a9a5a7fc5469b34bfc535ec0aebb5f67f2b9",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 152.0,
+              "mean": 75.45719807942709,
+              "min": 72.0,
+              "sha256": "sha256:149af978b4eded5ab2ede5fb9ae2a9a5a7fc5469b34bfc535ec0aebb5f67f2b9",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.18431377410888672,
+              "mean": -0.40820792075832574,
+              "min": -0.43529409170150757,
+              "sha256": "sha256:dd53abc67cfa44ca3524aa3a8ce178b4506590db3e9c91e8c702158a2c9fa779",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9999998807907104,
+              "mean": 0.02412519710231961,
+              "min": 0.0,
+              "sha256": "sha256:aa29b92dc3102e3ddd713d8d813e7965da314dfdbd1888aca8fac36272d3c180",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    343.0,
+                    79.0
+                  ],
+                  [
+                    617.0,
+                    79.0
+                  ],
+                  [
+                    617.0,
+                    147.0
+                  ],
+                  [
+                    343.0,
+                    147.0
+                  ]
+                ],
+                "score": 0.8859750032424927
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 55896,
+                  "dtype": "uint8",
+                  "max": 152.0,
+                  "mean": 85.09394232145412,
+                  "min": 72.0,
+                  "sha256": "sha256:bba069e98bd1d5a07829222a6383c7197c5023547aa70f4766e4ffa7a30d1af9",
+                  "shape": [
+                    68,
+                    274,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.5000000016457894,
+                "min": 3.2915787873122326e-09,
+                "sha256": "sha256:b3eadb7a293ae0b37dc184dc168870bd34ec24c7d134dcdb8a7691ca27863c79",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 0.18431377410888672,
+                "mean": -0.3329194216273242,
+                "min": -0.43529409170150757,
+                "sha256": "sha256:315ec99a81fb3fd74545452bcad5e142b20128027693fb0f0ce2d6ce41953213",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 46080,
+                "dtype": "float32-le",
+                "max": 0.17647063732147217,
+                "mean": -0.20181200810863326,
+                "min": -0.43529409170150757,
+                "sha256": "sha256:963bd4bfc02ddda1c1c02a076324ef959f00ca6f6afcd13efae177149c366e66",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 748400,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.3447357626267106e-05,
+                "min": 2.0836731594450746e-26,
+                "sha256": "sha256:20d14f6b23bcfb1e788c727fbb155e552e01030526cc121c58b98ea6a04a2fd5",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99981,
+                "text": "低对比度字幕",
+                "tokens": [
+                  2329,
+                  4677,
+                  7659,
+                  5187,
+                  4552,
+                  5119
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "tilted_single_line",
+      "asset": "tilted_single_line.png",
+      "asset_sha256": "sha256:8f60b59dfb54bd351a0cda3b10726b4eaa4cd95c79ff054a6d0dfe48c368e6fb",
+      "expected_text": [
+        "轻微倾斜字幕"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:e5d8d41308bbff5610687d7d547e05cc1bd932ef25ec32c9480ee4a74bf16ace",
+              "min": 0.0,
+              "max": 255.0,
+              "mean": 23.144236924913194,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:4a733e3e5cd39d1f8c5485d1000a6d9c33bcaaa6d873c9cb45c99436caa674b4",
+              "min": 0.0,
+              "max": 255.0,
+              "mean": 23.144236924913194,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:4a733e3e5cd39d1f8c5485d1000a6d9c33bcaaa6d873c9cb45c99436caa674b4",
+              "min": 0.0,
+              "max": 255.0,
+              "mean": 23.144236924913194,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:35d21612e418129b08af198b92993c4ee30d9f4ca3ba9a7392ebce67b216b3c6",
+              "min": -1.0,
+              "max": 1.0,
+              "mean": -0.8185085228877161
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:a149909d7c450de4144ab7566046f1211214daad37ea7229a48360c7a39ecc00",
+              "min": 0.0,
+              "max": 0.9999711513519287,
+              "mean": 0.02237857018051661
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    107.0,
+                    167.0
+                  ],
+                  [
+                    376.0,
+                    134.0
+                  ],
+                  [
+                    384.0,
+                    196.0
+                  ],
+                  [
+                    115.0,
+                    229.0
+                  ]
+                ],
+                "score": 0.9033791527225343
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    62,
+                    271,
+                    3
+                  ],
+                  "count": 50406,
+                  "sha256": "sha256:53aa165845e49466489fe3d09fedb67bb1bca9fe79226f35411a80a96a90edc5",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 56.398940602309246,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:4501f78a326efbd48f4c0cfbde0ac7fa8c6fd0b1dd3db054038d6692612e63c5",
+                "min": -0.9921568632125854,
+                "max": 1.0,
+                "mean": -0.5581784479048414
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:d12c179a0b938bf1bb90ec1c2b0a8037d546469ff9e4b9bc582bef1e63f3ea48",
+                "min": 1.6799855728777402e-08,
+                "max": 1.0,
+                "mean": 0.5000000083999279
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ],
+                "count": 46080,
+                "sha256": "sha256:c7966bf406be0f67bfdb3fe45e7c6490abe5c031554ed0cff9715e166a77eb50",
+                "min": -0.9921568632125854,
+                "max": 1.0,
+                "mean": -0.36571929640938633
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ],
+                "count": 748400,
+                "sha256": "sha256:e59803f79561b44a5b399dc818716e0dd84b5d3a7a4b55dfa6448c2b8ddcd05e",
+                "min": 2.4668851471667227e-26,
+                "max": 1.0,
+                "mean": 5.344735859773754e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  14505,
+                  5399,
+                  2517,
+                  6533,
+                  4552,
+                  5119
+                ],
+                "text": "轻微倾斜字幕",
+                "confidence": 0.99978
+              }
+            ]
+          },
+          "10_output": {
+            "text": "轻微倾斜字幕",
+            "confidence": 0.99978,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "轻微倾斜字幕",
+                "confidence": 0.99978,
+                "box": {
+                  "x": 107,
+                  "y": 134,
+                  "width": 277,
+                  "height": 95
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99978,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 95,
+                  "width": 277,
+                  "x": 107,
+                  "y": 134
+                },
+                "confidence": 0.99978,
+                "text": "轻微倾斜字幕"
+              }
+            ],
+            "text": "轻微倾斜字幕"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 255.0,
+              "mean": 23.144236924913194,
+              "min": 0.0,
+              "sha256": "sha256:e5d8d41308bbff5610687d7d547e05cc1bd932ef25ec32c9480ee4a74bf16ace",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 255.0,
+              "mean": 23.144236924913194,
+              "min": 0.0,
+              "sha256": "sha256:e5d8d41308bbff5610687d7d547e05cc1bd932ef25ec32c9480ee4a74bf16ace",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 1.0,
+              "mean": -0.8185085228877161,
+              "min": -1.0,
+              "sha256": "sha256:35d21612e418129b08af198b92993c4ee30d9f4ca3ba9a7392ebce67b216b3c6",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9999711513519287,
+              "mean": 0.02237856986417063,
+              "min": 0.0,
+              "sha256": "sha256:cf5b14f9e51dc04c81e99dabdc721bc78e33a74a973f64194b2e001bbe173b9a",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    107.0,
+                    167.0
+                  ],
+                  [
+                    376.0,
+                    134.0
+                  ],
+                  [
+                    384.0,
+                    196.0
+                  ],
+                  [
+                    115.0,
+                    229.0
+                  ]
+                ],
+                "score": 0.9033791422843933
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 50406,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 56.398940602309246,
+                  "min": 0.0,
+                  "sha256": "sha256:e885f56c8679f2062406ca8dea1650b9c5551418a12056af5fe82375731b5e7c",
+                  "shape": [
+                    62,
+                    271,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.5000000083999279,
+                "min": 1.6799855728777402e-08,
+                "sha256": "sha256:d12c179a0b938bf1bb90ec1c2b0a8037d546469ff9e4b9bc582bef1e63f3ea48",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5581784479048414,
+                "min": -0.9921568632125854,
+                "sha256": "sha256:4501f78a326efbd48f4c0cfbde0ac7fa8c6fd0b1dd3db054038d6692612e63c5",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 46080,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.36571929640938633,
+                "min": -0.9921568632125854,
+                "sha256": "sha256:c7966bf406be0f67bfdb3fe45e7c6490abe5c031554ed0cff9715e166a77eb50",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 748400,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.344735859251672e-05,
+                "min": 2.4668004062491696e-26,
+                "sha256": "sha256:076e899d0f5faca30133cf3e04cd215347453135de52223e68e56b9b344f07ee",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99978,
+                "text": "轻微倾斜字幕",
+                "tokens": [
+                  14505,
+                  5399,
+                  2517,
+                  6533,
+                  4552,
+                  5119
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "adjacent_two_line",
+      "asset": "adjacent_two_line.png",
+      "asset_sha256": "sha256:3863f49b742b819d116047b7d17eadb39643b224beedbf329a279bd1e9a1b3d2",
+      "expected_text": [
+        "第一行相邻字幕",
+        "Second line 第二行"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:94f63f93e85f34d175ad8dceb3a237db78af60a9e294d4009ac3ce520701a569",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.498832194010415,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:a7949778e6baf62ef27ecc698ac1c65213912ea2c0b2ac1593cffdd3b6bcfcfb",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.498832194010415,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:a7949778e6baf62ef27ecc698ac1c65213912ea2c0b2ac1593cffdd3b6bcfcfb",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 24.498832194010415,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:c248c49068ae9610a680dd07048514b6953712d97bea6d49573a4c4d9818864a",
+              "min": -0.8588235378265381,
+              "max": 0.9450981616973877,
+              "mean": -0.807889690323478
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:234de0ed31ed54390c58ed23a60e98fb391892a3e731ec0c205cc4712e053006",
+              "min": 0.0,
+              "max": 0.9998301267623901,
+              "mean": 0.03750560899666855
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 2,
+            "quads": [
+              {
+                "points": [
+                  [
+                    349.0,
+                    48.0
+                  ],
+                  [
+                    611.0,
+                    47.0
+                  ],
+                  [
+                    612.0,
+                    96.0
+                  ],
+                  [
+                    349.0,
+                    97.0
+                  ]
+                ],
+                "score": 0.8162119508749468
+              },
+              {
+                "points": [
+                  [
+                    312.0,
+                    125.0
+                  ],
+                  [
+                    648.0,
+                    125.0
+                  ],
+                  [
+                    648.0,
+                    175.0
+                  ],
+                  [
+                    312.0,
+                    175.0
+                  ]
+                ],
+                "score": 0.8858789114933309
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 2,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    49,
+                    263,
+                    3
+                  ],
+                  "count": 38661,
+                  "sha256": "sha256:4b88af8d42fe16a9add37fc74e6d68dba42a33a37d50a85ebd93de64c9e700a5",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 56.63818835518998,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              },
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    50,
+                    336,
+                    3
+                  ],
+                  "count": 50400,
+                  "sha256": "sha256:31985fb752ae2ab8b830256b3afce106d916daba6c281d8d2740d8267a7de0f6",
+                  "min": 18.0,
+                  "max": 248.0,
+                  "mean": 48.79017857142857,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  2,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 55296,
+                "sha256": "sha256:2b0330970e20d797361f6c3c217f9ed38a31a99e2e60825b1a2156fd448b6553",
+                "min": -0.9843137264251709,
+                "max": 1.0,
+                "mean": -0.5865539365051383
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  2,
+                  2
+                ],
+                "count": 4,
+                "sha256": "sha256:3fddd33f8cb3bfcffcc65f979278b428e219ce43cfce8ca811c45a2363c0a37d",
+                "min": 5.856409801552331e-10,
+                "max": 1.0,
+                "mean": 0.500000001361633
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "score": 1.0
+              },
+              {
+                "label": "0",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  2,
+                  3,
+                  48,
+                  322
+                ],
+                "count": 92736,
+                "sha256": "sha256:6c18b883d31d8e74e8fa46982c5ca4eb91a8ddf65fb8f6259fbc78982f004214",
+                "min": -0.9843137264251709,
+                "max": 1.0,
+                "mean": -0.5316927528209352
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  2,
+                  40,
+                  18710
+                ],
+                "count": 1496800,
+                "sha256": "sha256:5853eaaf4fefe931d44d88e691367ce952c4dd0d20992a2352e48326b6d5f0ae",
+                "min": 9.101705177414599e-26,
+                "max": 1.0,
+                "mean": 5.344736214335013e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 2,
+            "results": [
+              {
+                "tokens": [
+                  10468,
+                  2094,
+                  13087,
+                  9723,
+                  14764,
+                  4552,
+                  5119
+                ],
+                "text": "第一行相邻字幕",
+                "confidence": 0.99954
+              },
+              {
+                "tokens": [
+                  61,
+                  73,
+                  71,
+                  83,
+                  82,
+                  72,
+                  18709,
+                  80,
+                  77,
+                  82,
+                  73,
+                  18709,
+                  10468,
+                  2183,
+                  13087
+                ],
+                "text": "Second line 第二行",
+                "confidence": 0.97414
+              }
+            ]
+          },
+          "10_output": {
+            "text": "第一行相邻字幕\nSecond line 第二行",
+            "confidence": 0.9868399999999999,
+            "line_count": 2,
+            "lines": [
+              {
+                "text": "第一行相邻字幕",
+                "confidence": 0.99954,
+                "box": {
+                  "x": 349,
+                  "y": 47,
+                  "width": 263,
+                  "height": 50
+                }
+              },
+              {
+                "text": "Second line 第二行",
+                "confidence": 0.97414,
+                "box": {
+                  "x": 312,
+                  "y": 125,
+                  "width": 336,
+                  "height": 50
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 2,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 2,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.9868399999999999,
+            "line_count": 2,
+            "lines": [
+              {
+                "box": {
+                  "height": 50,
+                  "width": 263,
+                  "x": 349,
+                  "y": 47
+                },
+                "confidence": 0.99954,
+                "text": "第一行相邻字幕"
+              },
+              {
+                "box": {
+                  "height": 50,
+                  "width": 336,
+                  "x": 312,
+                  "y": 125
+                },
+                "confidence": 0.97414,
+                "text": "Second line 第二行"
+              }
+            ],
+            "text": "第一行相邻字幕\nSecond line 第二行"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 24.498832194010415,
+              "min": 18.0,
+              "sha256": "sha256:94f63f93e85f34d175ad8dceb3a237db78af60a9e294d4009ac3ce520701a569",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 24.498832194010415,
+              "min": 18.0,
+              "sha256": "sha256:94f63f93e85f34d175ad8dceb3a237db78af60a9e294d4009ac3ce520701a569",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.9450981616973877,
+              "mean": -0.807889690323478,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:c248c49068ae9610a680dd07048514b6953712d97bea6d49573a4c4d9818864a",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9998301267623901,
+              "mean": 0.03750560771679156,
+              "min": 0.0,
+              "sha256": "sha256:eaf289ff38170b60e09dff0825017f230413cb8536860f621e92d0090e8ca670",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 2,
+            "quads": [
+              {
+                "points": [
+                  [
+                    349.0,
+                    48.0
+                  ],
+                  [
+                    611.0,
+                    47.0
+                  ],
+                  [
+                    612.0,
+                    96.0
+                  ],
+                  [
+                    349.0,
+                    97.0
+                  ]
+                ],
+                "score": 0.8162119388580322
+              },
+              {
+                "points": [
+                  [
+                    312.0,
+                    125.0
+                  ],
+                  [
+                    648.0,
+                    125.0
+                  ],
+                  [
+                    648.0,
+                    175.0
+                  ],
+                  [
+                    312.0,
+                    175.0
+                  ]
+                ],
+                "score": 0.8858789205551147
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 2,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 38661,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 56.63818835518998,
+                  "min": 0.0,
+                  "sha256": "sha256:090717be3cf20fd55d56340c5dbe7aa798109e3a609a472a4c30ddec20fce201",
+                  "shape": [
+                    49,
+                    263,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              },
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 50400,
+                  "dtype": "uint8",
+                  "max": 248.0,
+                  "mean": 48.79017857142857,
+                  "min": 18.0,
+                  "sha256": "sha256:d1ede478612070e47171d6f42d853527cdbfa242c7de68c4f03b831aa5864b21",
+                  "shape": [
+                    50,
+                    336,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 4,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.500000001361633,
+                "min": 5.856409801552331e-10,
+                "sha256": "sha256:3fddd33f8cb3bfcffcc65f979278b428e219ce43cfce8ca811c45a2363c0a37d",
+                "shape": [
+                  2,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              },
+              {
+                "label": "0",
+                "rotated_180": false,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 55296,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5865539365051383,
+                "min": -0.9843137264251709,
+                "sha256": "sha256:2b0330970e20d797361f6c3c217f9ed38a31a99e2e60825b1a2156fd448b6553",
+                "shape": [
+                  2,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 92736,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5316927528209352,
+                "min": -0.9843137264251709,
+                "sha256": "sha256:6c18b883d31d8e74e8fa46982c5ca4eb91a8ddf65fb8f6259fbc78982f004214",
+                "shape": [
+                  2,
+                  3,
+                  48,
+                  322
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 1496800,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.3447362173437404e-05,
+                "min": 9.101705177414599e-26,
+                "sha256": "sha256:c68e992273b6fe7d2f6b7bf021f7fb47d942988154d29d5f87473efadd2678c6",
+                "shape": [
+                  2,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 2,
+            "results": [
+              {
+                "confidence": 0.99954,
+                "text": "第一行相邻字幕",
+                "tokens": [
+                  10468,
+                  2094,
+                  13087,
+                  9723,
+                  14764,
+                  4552,
+                  5119
+                ]
+              },
+              {
+                "confidence": 0.97414,
+                "text": "Second line 第二行",
+                "tokens": [
+                  61,
+                  73,
+                  71,
+                  83,
+                  82,
+                  72,
+                  18709,
+                  80,
+                  77,
+                  82,
+                  73,
+                  18709,
+                  10468,
+                  2183,
+                  13087
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "case_id": "rotated_180",
+      "asset": "rotated_180.png",
+      "asset_sha256": "sha256:dad07c104b1308b58aee0d6547371013792f7146d21968143baf943d12849033",
+      "expected_text": [
+        "方向分类测试"
+      ],
+      "oracle": {
+        "schema_version": 1,
+        "runtime": "python",
+        "stages": {
+          "1_global_preprocess": {
+            "source_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:11f7db7f8b9e56f7617b559da2abb59f5469a5fe1dbbe67e17dba3843c071524",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 22.908207194010416,
+              "color_order": "RGB"
+            },
+            "loaded_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:efe4f0a8537438748a1aa46e41f61e833f29ed5c9ce424a1ac0824d0d54b09f4",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 22.908207194010416,
+              "color_order": "BGR"
+            },
+            "working_image": {
+              "dtype": "uint8",
+              "shape": [
+                256,
+                960,
+                3
+              ],
+              "count": 737280,
+              "sha256": "sha256:efe4f0a8537438748a1aa46e41f61e833f29ed5c9ce424a1ac0824d0d54b09f4",
+              "min": 18.0,
+              "max": 248.0,
+              "mean": 22.908207194010416,
+              "color_order": "BGR"
+            },
+            "operations": {
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              },
+              "padding_1": {
+                "top": 0,
+                "left": 0
+              }
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ],
+              "count": 6076416,
+              "sha256": "sha256:996aa2d7619a1f0d74aeb2148fc6e0b0b0c892ee088010dbbf8127ef8668439e",
+              "min": -0.8588235378265381,
+              "max": 0.9450981616973877,
+              "mean": -0.8203476657722516
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "dtype": "float32-le",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ],
+              "count": 2025472,
+              "sha256": "sha256:a9b7d6ffbadd777da04f30918717157d49d1c4cb4303b39fb2d55169940d00a1",
+              "min": 0.0,
+              "max": 0.9999953508377075,
+              "mean": 0.025562759050394925
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    340.0,
+                    108.0
+                  ],
+                  [
+                    617.0,
+                    106.0
+                  ],
+                  [
+                    618.0,
+                    179.0
+                  ],
+                  [
+                    340.0,
+                    180.0
+                  ]
+                ],
+                "score": 0.8705849982932837
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "dtype": "uint8",
+                  "shape": [
+                    73,
+                    278,
+                    3
+                  ],
+                  "count": 60882,
+                  "sha256": "sha256:a91079197622dbd33974ab78819ac28d0a282086124cad2f74b1b5feb5d05121",
+                  "min": 0.0,
+                  "max": 255.0,
+                  "mean": 47.80023652311028,
+                  "color_order": "BGR"
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "enabled": true,
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ],
+                "count": 27648,
+                "sha256": "sha256:24bbf51c8129f0b6ba75d2a957b38056e076fa61e3a064fd84835c4acf48d0ca",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.5961485043409522
+              }
+            ],
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  2
+                ],
+                "count": 2,
+                "sha256": "sha256:1d869c84f26f83ad48c7146d4e3ec6ecc2173154c834704ff8abc23b84a67a7d",
+                "min": 1.2497564094715585e-10,
+                "max": 1.0,
+                "mean": 0.5000000000624878
+              }
+            ],
+            "results": [
+              {
+                "label": "180",
+                "score": 1.0
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ],
+                "count": 46080,
+                "sha256": "sha256:1f7541b5e9ba7365aa54210f00610dbefe1c11e215c2d86cbb03a33ea5fb69d7",
+                "min": -1.0,
+                "max": 1.0,
+                "mean": -0.3576891026045713
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "dtype": "float32-le",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ],
+                "count": 748400,
+                "sha256": "sha256:bca7997058ee4bbb23e6cf36b55f70c9322a0dc3aadaa802262b8ac073381048",
+                "min": 6.673432922665699e-25,
+                "max": 1.0,
+                "mean": 5.344735670278874e-05
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "tokens": [
+                  6555,
+                  3231,
+                  2850,
+                  10698,
+                  7942,
+                  13763
+                ],
+                "text": "方向分类测试",
+                "confidence": 0.99996
+              }
+            ]
+          },
+          "10_output": {
+            "text": "方向分类测试",
+            "confidence": 0.99996,
+            "line_count": 1,
+            "lines": [
+              {
+                "text": "方向分类测试",
+                "confidence": 0.99996,
+                "box": {
+                  "x": 340,
+                  "y": 106,
+                  "width": 278,
+                  "height": 74
+                }
+              }
+            ]
+          }
+        },
+        "counts": {
+          "recognize_calls": 1,
+          "det_calls": 1,
+          "det_boxes": 1,
+          "cls_calls": 1,
+          "rec_calls": 1
+        }
+      },
+      "candidate": {
+        "counts": {
+          "cls_calls": 1,
+          "det_boxes": 1,
+          "det_calls": 1,
+          "rec_calls": 1,
+          "recognize_calls": 1
+        },
+        "model": {
+          "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+          "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+          "det_file": "PP-OCRv6_det_small.onnx",
+          "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+          "dictionary_file": "ppocrv6_dict.txt",
+          "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+          "rec_file": "PP-OCRv6_rec_small.onnx",
+          "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+          "type": "small"
+        },
+        "runtime": "cpp",
+        "schema_version": 1,
+        "stages": {
+          "10_output": {
+            "confidence": 0.99996,
+            "line_count": 1,
+            "lines": [
+              {
+                "box": {
+                  "height": 74,
+                  "width": 278,
+                  "x": 340,
+                  "y": 106
+                },
+                "confidence": 0.99996,
+                "text": "方向分类测试"
+              }
+            ],
+            "text": "方向分类测试"
+          },
+          "1_global_preprocess": {
+            "operations": {
+              "padding_1": {
+                "left": 0,
+                "top": 0
+              },
+              "preprocess": {
+                "ratio_h": 1.0,
+                "ratio_w": 1.0
+              }
+            },
+            "source_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 22.908207194010416,
+              "min": 18.0,
+              "sha256": "sha256:11f7db7f8b9e56f7617b559da2abb59f5469a5fe1dbbe67e17dba3843c071524",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            },
+            "stride": 2880,
+            "working_image": {
+              "color_order": "RGB",
+              "count": 737280,
+              "dtype": "uint8",
+              "max": 248.0,
+              "mean": 22.908207194010416,
+              "min": 18.0,
+              "sha256": "sha256:11f7db7f8b9e56f7617b559da2abb59f5469a5fe1dbbe67e17dba3843c071524",
+              "shape": [
+                256,
+                960,
+                3
+              ]
+            }
+          },
+          "2_det_preprocess": {
+            "tensor": {
+              "count": 6076416,
+              "dtype": "float32-le",
+              "max": 0.9450981616973877,
+              "mean": -0.8203476657722516,
+              "min": -0.8588235378265381,
+              "sha256": "sha256:996aa2d7619a1f0d74aeb2148fc6e0b0b0c892ee088010dbbf8127ef8668439e",
+              "shape": [
+                1,
+                3,
+                736,
+                2752
+              ]
+            }
+          },
+          "3_det_infer": {
+            "probability_map": {
+              "count": 2025472,
+              "dtype": "float32-le",
+              "max": 0.9999953508377075,
+              "mean": 0.02556275085329666,
+              "min": 0.0,
+              "sha256": "sha256:e4c68553d5229a95fc86e93b03fd58da31558a3a15321232482b7fbed8ca484f",
+              "shape": [
+                1,
+                1,
+                736,
+                2752
+              ]
+            }
+          },
+          "4_det_postprocess": {
+            "box_count": 1,
+            "quads": [
+              {
+                "points": [
+                  [
+                    340.0,
+                    108.0
+                  ],
+                  [
+                    617.0,
+                    106.0
+                  ],
+                  [
+                    618.0,
+                    179.0
+                  ],
+                  [
+                    340.0,
+                    180.0
+                  ]
+                ],
+                "score": 0.8705847263336182
+              }
+            ]
+          },
+          "5_perspective_crop": {
+            "crop_count": 1,
+            "crops": [
+              {
+                "image": {
+                  "color_order": "RGB",
+                  "count": 60882,
+                  "dtype": "uint8",
+                  "max": 255.0,
+                  "mean": 47.80023652311028,
+                  "min": 0.0,
+                  "sha256": "sha256:b17198bb4c6e6f87b5e3475df324117d933090cad280c87dc6a5e81f40611211",
+                  "shape": [
+                    73,
+                    278,
+                    3
+                  ]
+                },
+                "rotated_90": false
+              }
+            ]
+          },
+          "6_cls": {
+            "batch_count": 1,
+            "enabled": true,
+            "logits": [
+              {
+                "count": 2,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 0.5000000000624886,
+                "min": 1.2497707035930006e-10,
+                "sha256": "sha256:8da6ece828120f094119fa8414c9c005fe57516d834787e77d4ed4036c36877b",
+                "shape": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "results": [
+              {
+                "label": "180",
+                "rotated_180": true,
+                "score": 1.0
+              }
+            ],
+            "tensors": [
+              {
+                "count": 27648,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.5961485043409522,
+                "min": -1.0,
+                "sha256": "sha256:24bbf51c8129f0b6ba75d2a957b38056e076fa61e3a064fd84835c4acf48d0ca",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  192
+                ]
+              }
+            ]
+          },
+          "7_rec_preprocess": {
+            "batch_count": 1,
+            "tensors": [
+              {
+                "count": 46080,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": -0.3576891026045713,
+                "min": -1.0,
+                "sha256": "sha256:1f7541b5e9ba7365aa54210f00610dbefe1c11e215c2d86cbb03a33ea5fb69d7",
+                "shape": [
+                  1,
+                  3,
+                  48,
+                  320
+                ]
+              }
+            ]
+          },
+          "8_rec_infer": {
+            "batch_count": 1,
+            "logits": [
+              {
+                "count": 748400,
+                "dtype": "float32-le",
+                "max": 1.0,
+                "mean": 5.344735670047373e-05,
+                "min": 6.673254442885892e-25,
+                "sha256": "sha256:fd32253bb6124fc71fda0446d708814b820268435960870184683face7186f67",
+                "shape": [
+                  1,
+                  40,
+                  18710
+                ]
+              }
+            ]
+          },
+          "9_rec_decode": {
+            "decoded_count": 1,
+            "results": [
+              {
+                "confidence": 0.99996,
+                "text": "方向分类测试",
+                "tokens": [
+                  6555,
+                  3231,
+                  2850,
+                  10698,
+                  7942,
+                  13763
+                ]
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

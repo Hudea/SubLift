@@ -1,5 +1,6 @@
 set(_sublift_core_srcs
   version.cpp
+  hash.cpp
   image.cpp
   models.cpp
   timeline.cpp

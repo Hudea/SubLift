@@ -16,7 +16,6 @@ set(_sublift_test_srcs
   paddle_geometry_test.cpp
   paddle_stub_test.cpp
   paddle_ctc_test.cpp
-  paddle_db_test.cpp
   paddle_crop_cls_test.cpp
   paddle_models_test.cpp
   worker_framing_test.cpp
@@ -35,6 +34,8 @@ set(_sublift_test_srcs
 )
 if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_test_srcs
+    paddle_db_test.cpp
+    paddle_det_preprocess_test.cpp
     signature_test.cpp
     changepoint_test.cpp
     pipeline_feed_test.cpp
@@ -71,7 +72,7 @@ set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/li
 set(_ext_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/extractor/extractor.v1.json")
 set(_vis_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/vision/vision.v1.json")
 set(_pad_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/paddle/paddle.v1.json")
-set(_pad_stages_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/paddle/paddle_stages.v1.json")
+set(_pad_stages_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/paddle/paddle_stages.v2.json")
 sublift_stringify_path(_tl_golden_esc "${_tl_golden}")
 sublift_stringify_path(_dd_golden_esc "${_dd_golden}")
 sublift_stringify_path(_ls_golden_esc "${_ls_golden}")
@@ -109,6 +110,7 @@ if(SUBLIFT_ENABLE_OPENCV)
     "SUBLIFT_PARITY_FIXTURE_CHANGEPOINT=\"${_cp_fixtures_esc}\""
     "SUBLIFT_PARITY_GOLDEN_PIPELINE=\"${_pl_golden_esc}\""
   )
+  target_include_directories(sublift_tests PRIVATE ${OpenCV_INCLUDE_DIRS})
 endif()
 
 target_link_libraries(sublift_tests

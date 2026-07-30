@@ -1,6 +1,7 @@
 #include "ppocr_crop_cls.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
@@ -51,9 +52,9 @@ CropResult get_rotate_crop(
   cv::Mat crop;
   cv::warpPerspective(src_img, crop, M, cv::Size(crop_w, crop_h), cv::INTER_CUBIC, cv::BORDER_REPLICATE);
 
-  // High-narrow check: rotate 90 degrees if crop_h / crop_w >= 1.5
+  // NumPy rot90 used by RapidOCR rotates counter-clockwise.
   if (static_cast<float>(crop_h) / static_cast<float>(crop_w) >= 1.5f) {
-    cv::rotate(crop, crop, cv::ROTATE_90_CLOCKWISE);
+    cv::rotate(crop, crop, cv::ROTATE_90_COUNTERCLOCKWISE);
     result.rotated_90 = true;
     std::swap(crop_w, crop_h);
   }
@@ -87,19 +88,226 @@ CropResult get_rotate_crop(
   return result;
 }
 
-ClsResult process_cls(CropResult& crop, float cls_thresh) {
-  ClsResult res;
-  if (crop.width <= 0 || crop.height <= 0 || crop.rgb_data.empty()) return res;
+namespace {
+
+std::vector<std::uint8_t> resize_linear_u8(
+    const CropResult& crop,
+    int target_width,
+    int target_height) {
+  if (crop.width == target_width && crop.height == target_height) {
+    return crop.rgb_data;
+  }
+
+  // OpenCV INTER_LINEAR's uint8 path uses 11-bit fixed-point interpolation
+  // coefficients. Implement that scalar contract here so tensors do not
+  // depend on the SIMD/rounding choices of a particular OpenCV minor release.
+  static constexpr int kCoefficientBits = 11;
+  static constexpr int kCoefficientScale = 1 << kCoefficientBits;
+
+  struct Coefficients {
+    int source{0};
+    int first{kCoefficientScale};
+    int second{0};
+  };
+  const auto build_coefficients = [](int source_size, int target_size) {
+    std::vector<Coefficients> result(
+        static_cast<std::size_t>(target_size));
+    const double inverse_scale =
+        static_cast<double>(source_size) / static_cast<double>(target_size);
+    for (int target = 0; target < target_size; ++target) {
+      float position = static_cast<float>(
+          (static_cast<double>(target) + 0.5) * inverse_scale - 0.5);
+      int source = static_cast<int>(std::floor(position));
+      position -= static_cast<float>(source);
+      if (source < 0) {
+        source = 0;
+        position = 0.0F;
+      }
+      if (source >= source_size - 1) {
+        source = source_size - 1;
+        position = 0.0F;
+      }
+      const int second = static_cast<int>(
+          std::lrint(position * static_cast<float>(kCoefficientScale)));
+      result[static_cast<std::size_t>(target)] = Coefficients{
+          .source = source,
+          .first = kCoefficientScale - second,
+          .second = second,
+      };
+    }
+    return result;
+  };
+
+  const auto horizontal = build_coefficients(crop.width, target_width);
+  const auto vertical = build_coefficients(crop.height, target_height);
+  std::vector<std::uint8_t> resized(
+      static_cast<std::size_t>(target_width) *
+      static_cast<std::size_t>(target_height) * 3);
+  for (int y = 0; y < target_height; ++y) {
+    const auto& vertical_coeff = vertical[static_cast<std::size_t>(y)];
+    const int next_y =
+        std::min(vertical_coeff.source + 1, crop.height - 1);
+    for (int x = 0; x < target_width; ++x) {
+      const auto& horizontal_coeff =
+          horizontal[static_cast<std::size_t>(x)];
+      const int next_x =
+          std::min(horizontal_coeff.source + 1, crop.width - 1);
+      for (int channel = 0; channel < 3; ++channel) {
+        const auto top_left = crop.rgb_data[
+            (vertical_coeff.source * crop.width +
+             horizontal_coeff.source) *
+                3 +
+            channel];
+        const auto top_right = crop.rgb_data[
+            (vertical_coeff.source * crop.width + next_x) * 3 + channel];
+        const auto bottom_left = crop.rgb_data[
+            (next_y * crop.width + horizontal_coeff.source) * 3 + channel];
+        const auto bottom_right = crop.rgb_data[
+            (next_y * crop.width + next_x) * 3 + channel];
+        const std::int64_t top =
+            static_cast<std::int64_t>(top_left) * horizontal_coeff.first +
+            static_cast<std::int64_t>(top_right) * horizontal_coeff.second;
+        const std::int64_t bottom =
+            static_cast<std::int64_t>(bottom_left) * horizontal_coeff.first +
+            static_cast<std::int64_t>(bottom_right) * horizontal_coeff.second;
+        // Match OpenCV's specialized uint8 vertical-linear cast. It shifts
+        // horizontal intermediates before multiplying to keep SIMD lanes
+        // narrow; reproducing those operation boundaries is required for
+        // byte-identical RapidOCR tensors.
+        const auto interpolated =
+            (((static_cast<std::int64_t>(vertical_coeff.first) *
+               (top >> 4)) >>
+              16) +
+             ((static_cast<std::int64_t>(vertical_coeff.second) *
+               (bottom >> 4)) >>
+              16) +
+             2) >>
+            2;
+        resized[
+            (y * target_width + x) * 3 + channel] =
+            static_cast<std::uint8_t>(
+                std::clamp<std::int64_t>(interpolated, 0, 255));
+      }
+    }
+  }
+  return resized;
+}
+
+float normalize_pixel(std::uint8_t pixel) {
+  // Preserve NumPy float32 operation boundaries and avoid compiler FMA
+  // contraction changing audited tensors.
+  volatile float value = static_cast<float>(pixel);
+  value = value / 255.0F;
+  value = value - 0.5F;
+  value = value / 0.5F;
+  return value;
+}
+
+const std::array<float, 256>& normalization_lut() {
+  static const std::array<float, 256> values = [] {
+    std::array<float, 256> result{};
+    for (std::size_t index = 0; index < result.size(); ++index) {
+      result[index] = normalize_pixel(static_cast<std::uint8_t>(index));
+    }
+    return result;
+  }();
+  return values;
+}
+
+void prepare_padded_tensor(
+    const CropResult& crop,
+    int target_height,
+    int target_width,
+    float* out_nchw_tensor) {
+  if (out_nchw_tensor == nullptr ||
+      target_height <= 0 || target_width <= 0) {
+    return;
+  }
+  std::memset(
+      out_nchw_tensor,
+      0,
+      static_cast<std::size_t>(3) *
+          static_cast<std::size_t>(target_height) *
+          static_cast<std::size_t>(target_width) * sizeof(float));
+  if (crop.width <= 0 || crop.height <= 0 || crop.rgb_data.empty()) {
+    return;
+  }
+
+  const int valid_width =
+      resized_valid_width(crop, target_height, target_width);
+
+  const auto resized =
+      resize_linear_u8(crop, valid_width, target_height);
+  const auto& normalized = normalization_lut();
+  for (int channel = 0; channel < 3; ++channel) {
+    const int rgb_channel = 2 - channel;
+    for (int y = 0; y < target_height; ++y) {
+      for (int x = 0; x < valid_width; ++x) {
+        out_nchw_tensor[
+            channel * (target_height * target_width) +
+            y * target_width + x] =
+            normalized[resized[
+                (y * valid_width + x) * 3 + rgb_channel]];
+      }
+    }
+  }
+}
+
+}  // namespace
+
+int resized_valid_width(
+    const CropResult& crop,
+    int target_height,
+    int target_width) {
+  if (crop.width <= 0 || crop.height <= 0 ||
+      target_height <= 0 || target_width <= 0) {
+    return 0;
+  }
+  const auto ratio =
+      static_cast<double>(crop.width) / static_cast<double>(crop.height);
+  return std::min(
+      target_width,
+      std::max(
+          1,
+          static_cast<int>(
+              std::ceil(static_cast<double>(target_height) * ratio))));
+}
+
+void prepare_cls_tensor(const CropResult& crop, float* out_nchw_tensor) {
+  prepare_padded_tensor(crop, 48, 192, out_nchw_tensor);
+}
+
+ClsResult apply_cls_result(
+    CropResult& crop,
+    int label,
+    float score,
+    float cls_thresh) {
+  ClsResult result{
+      .label = label,
+      .score = score,
+      .rotated_180 = false,
+  };
+  if (label != 1 || score <= cls_thresh ||
+      crop.width <= 0 || crop.height <= 0 || crop.rgb_data.empty()) {
+    return result;
+  }
 
 #if defined(SUBLIFT_USE_OPENCV_FOR_CROP)
-  // Dummy Cls check wrapper for parity contract
-  if (res.label == 1 && res.score >= cls_thresh) {
-    cv::Mat crop_mat(crop.height, crop.width, CV_8UC3, crop.rgb_data.data());
-    cv::rotate(crop_mat, crop_mat, cv::ROTATE_180);
-    res.rotated_180 = true;
+  cv::Mat image(crop.height, crop.width, CV_8UC3, crop.rgb_data.data());
+  cv::rotate(image, image, cv::ROTATE_180);
+#else
+  std::vector<std::uint8_t> rotated(crop.rgb_data.size());
+  const auto pixel_count =
+      static_cast<std::size_t>(crop.width) * static_cast<std::size_t>(crop.height);
+  for (std::size_t index = 0; index < pixel_count; ++index) {
+    const auto source = (pixel_count - 1 - index) * 3;
+    const auto target = index * 3;
+    std::memcpy(rotated.data() + target, crop.rgb_data.data() + source, 3);
   }
+  crop.rgb_data = std::move(rotated);
 #endif
-  return res;
+  result.rotated_180 = true;
+  return result;
 }
 
 void prepare_rec_tensor(
@@ -107,45 +315,7 @@ void prepare_rec_tensor(
     int rec_h,
     int target_w,
     float* out_nchw_tensor) {
-
-  if (!out_nchw_tensor || rec_h <= 0 || target_w <= 0) return;
-  std::memset(out_nchw_tensor, 0, static_cast<size_t>(3 * rec_h * target_w) * sizeof(float));
-
-  if (crop.width <= 0 || crop.height <= 0 || crop.rgb_data.empty()) return;
-
-  float wh_ratio = static_cast<float>(crop.width) / static_cast<float>(crop.height);
-  int valid_w = std::max(1, static_cast<int>(std::ceil(rec_h * wh_ratio)));
-  valid_w = std::min(valid_w, target_w);
-
-#if defined(SUBLIFT_USE_OPENCV_FOR_CROP)
-  cv::Mat src_mat(crop.height, crop.width, CV_8UC3, const_cast<uint8_t*>(crop.rgb_data.data()));
-  cv::Mat resized;
-  cv::resize(src_mat, resized, cv::Size(valid_w, rec_h), 0, 0, cv::INTER_LINEAR);
-
-  // Convert BGR24 & Normalize float (val / 127.5 - 1.0) into NCHW
-  for (int c = 0; c < 3; ++c) {
-    int src_c = 2 - c; // RGB to BGR
-    for (int y = 0; y < rec_h; ++y) {
-      const uint8_t* ptr = resized.ptr<uint8_t>(y);
-      for (int x = 0; x < valid_w; ++x) {
-        float val = static_cast<float>(ptr[x * 3 + src_c]) / 127.5f - 1.0f;
-        out_nchw_tensor[c * (rec_h * target_w) + y * target_w + x] = val;
-      }
-    }
-  }
-#else
-  // Fallback simple scaling
-  for (int c = 0; c < 3; ++c) {
-    for (int y = 0; y < rec_h; ++y) {
-      for (int x = 0; x < valid_w; ++x) {
-        int sx = x * crop.width / valid_w;
-        int sy = y * crop.height / rec_h;
-        uint8_t val_bgr = crop.rgb_data[(sy * crop.width + sx) * 3 + (2 - c)];
-        out_nchw_tensor[c * (rec_h * target_w) + y * target_w + x] = static_cast<float>(val_bgr) / 127.5f - 1.0f;
-      }
-    }
-  }
-#endif
+  prepare_padded_tensor(crop, rec_h, target_w, out_nchw_tensor);
 }
 
 }  // namespace sublift::paddle

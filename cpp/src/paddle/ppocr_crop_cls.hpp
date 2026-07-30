@@ -24,15 +24,24 @@ struct CropResult {
     const QuadPolygon& quad);
 
 struct ClsResult {
-  int label{0};        // 0: 0 deg, 1: 180 deg
-  float score{0.0f};   // confidence
+  int label{0};        // 0: "0", 1: "180"
+  float score{0.0f};   // argmax probability
   bool rotated_180{false};
 };
 
-/// Perform 180 degree direction classification check and rotation:
-/// Resize to 48x192, normalize NCHW float tensor, softmax check label == 1 and score >= thresh (default 0.9)
-[[nodiscard]] ClsResult process_cls(
+/// RapidOCR-compatible direction-classifier preprocessing. The crop is held
+/// in RGB while the model expects BGR NCHW. The valid resized image is placed
+/// at the left of a zero-filled [3, 48, 192] tensor.
+void prepare_cls_tensor(
+    const CropResult& crop,
+    float* out_nchw_tensor);
+
+/// Apply a classifier result to one crop. Rotation uses the same strict
+/// score > threshold predicate as RapidOCR.
+[[nodiscard]] ClsResult apply_cls_result(
     CropResult& crop,
+    int label,
+    float score,
     float cls_thresh = 0.9f);
 
 /// Rec image preprocessing with right-zero padding:
@@ -42,5 +51,10 @@ void prepare_rec_tensor(
     int rec_h,
     int target_w,
     float* out_nchw_tensor);
+
+[[nodiscard]] int resized_valid_width(
+    const CropResult& crop,
+    int target_height,
+    int target_width);
 
 }  // namespace sublift::paddle

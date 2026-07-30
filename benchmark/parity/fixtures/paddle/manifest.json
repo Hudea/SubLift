@@ -1,40 +1,126 @@
 {
+  "schema_version": 2,
+  "font_family": "Hiragino Sans GB",
+  "font_asset_note": "PNG files and hashes are authoritative; regeneration requires an explicitly supported CJK font.",
   "fixtures": [
     {
       "name": "empty.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 0
+      "width": 960,
+      "height": 256,
+      "expected_text": [],
+      "tags": [
+        "empty"
+      ],
+      "sha256": "sha256:41e78319e8574a84eb591b633cbcb16f0db86ea36a01b7318c624ed8cbfa4799"
     },
     {
       "name": "cjk_single_line.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 1
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "硬字幕提取测试"
+      ],
+      "tags": [
+        "cjk",
+        "single-line"
+      ],
+      "sha256": "sha256:0463cc7fda10d069e3a19fdf01df51e623c8f963ec5aa91280d454ef73bc10a2"
     },
     {
       "name": "latin_single_line.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 1
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "SubLift Hard Subtitle Extractor"
+      ],
+      "tags": [
+        "latin",
+        "single-line"
+      ],
+      "sha256": "sha256:b47fa2b84809e4cfa63c59e289b1ec0c1a0f22fce3967defab576a79aaaa1e1a"
     },
     {
       "name": "mixed_cjk_latin.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 1
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "SubLift 自动提取 100%"
+      ],
+      "tags": [
+        "mixed",
+        "single-line"
+      ],
+      "sha256": "sha256:5b1ad6a4c3fb6e347a9b872481f1f8745ab12aa15ec25fd1dd56369e30ed82db"
     },
     {
       "name": "stroke_outlined.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 1
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "描边字幕质量测试"
+      ],
+      "tags": [
+        "cjk",
+        "outline",
+        "color"
+      ],
+      "sha256": "sha256:c2efd55a8bfbab2953cf36c50f97f4c4726eb6e9229c23275266cc31de99d3b8"
     },
     {
-      "name": "tilted_adjacent.png",
-      "width": 800,
-      "height": 200,
-      "text_count": 2
+      "name": "low_contrast_blur.png",
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "低对比度字幕"
+      ],
+      "tags": [
+        "cjk",
+        "low-contrast",
+        "blur"
+      ],
+      "sha256": "sha256:cad3d1566476186945f0f747a022f4f3288b410cdb6353be2950e31d430754a2"
+    },
+    {
+      "name": "tilted_single_line.png",
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "轻微倾斜字幕"
+      ],
+      "tags": [
+        "cjk",
+        "tilted"
+      ],
+      "sha256": "sha256:8f60b59dfb54bd351a0cda3b10726b4eaa4cd95c79ff054a6d0dfe48c368e6fb"
+    },
+    {
+      "name": "adjacent_two_line.png",
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "第一行相邻字幕",
+        "Second line 第二行"
+      ],
+      "tags": [
+        "mixed",
+        "two-line",
+        "adjacent"
+      ],
+      "sha256": "sha256:3863f49b742b819d116047b7d17eadb39643b224beedbf329a279bd1e9a1b3d2"
+    },
+    {
+      "name": "rotated_180.png",
+      "width": 960,
+      "height": 256,
+      "expected_text": [
+        "方向分类测试"
+      ],
+      "tags": [
+        "cjk",
+        "rotated-180",
+        "cls"
+      ],
+      "sha256": "sha256:dad07c104b1308b58aee0d6547371013792f7146d21968143baf943d12849033"
     }
   ]
 }

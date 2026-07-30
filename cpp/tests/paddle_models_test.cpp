@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 #include "sublift/paddle.hpp"
@@ -48,5 +49,23 @@ TEST_CASE("Paddle Models - Type Parsing and Path Resolution", "[paddle][models]"
     // Custom dir takes precedence
     auto custom = resolve_model_dir("/tmp/custom_models");
     REQUIRE(custom.string() == "/tmp/custom_models");
+  }
+
+  SECTION("model validation fails honestly when Cls model is missing") {
+    using namespace sublift::paddle_detail;
+    const auto root =
+        std::filesystem::temp_directory_path() /
+        "sublift-paddle-model-validation";
+    std::filesystem::create_directories(root);
+    const auto paths = get_expected_model_paths(root, ModelType::Small);
+    std::ofstream(paths.det_path).put('\n');
+    std::ofstream(paths.rec_path).put('\n');
+    std::ofstream(paths.keys_path).put('\n');
+
+    std::string error;
+    CHECK_FALSE(validate_model_paths(paths, &error));
+    CHECK(error.find(paths.cls_path.filename().string()) != std::string::npos);
+
+    std::filesystem::remove_all(root);
   }
 }
