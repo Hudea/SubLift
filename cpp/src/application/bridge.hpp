@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "protocol.hpp"
+#include "sublift/application/detector_factory.hpp"
 #include "sublift/application/ocr_engine_factory.hpp"
 #include "sublift/application/path_media_services.hpp"
 #include "sublift/detector.hpp"
@@ -25,7 +26,8 @@ using PushCallback = std::function<void(const ipc::Message&)>;
 class BridgeHandler {
  public:
   BridgeHandler(std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
-                std::unique_ptr<sublift::application::IPathMediaServices> path_media);
+                std::unique_ptr<sublift::application::IPathMediaServices> path_media,
+                std::unique_ptr<sublift::application::IDetectorFactory> detector_factory);
   ~BridgeHandler();
 
   BridgeHandler(const BridgeHandler&) = delete;
@@ -50,6 +52,7 @@ class BridgeHandler {
 
   std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory_;
   std::unique_ptr<sublift::application::IPathMediaServices> path_media_;
+  std::unique_ptr<sublift::application::IDetectorFactory> detector_factory_;
   std::atomic<bool> is_job_running_{false};
   std::atomic<bool> is_path_mode_{false};
   std::atomic<bool> cancelled_{false};

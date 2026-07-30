@@ -1,2 +1,2 @@
 #pragma once
-#include <sublift/ports/mock_ocr.hpp>
+#include <sublift/adapters/mock_ocr.hpp>

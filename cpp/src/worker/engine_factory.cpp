@@ -1,10 +1,10 @@
 #include "engine_factory.hpp"
 
 #include <stdexcept>
-#include "sublift/mock_ocr.hpp"
+#include "sublift/adapters/mock_ocr.hpp"
 #include "sublift/models/resource_locator.hpp"
-#include "sublift/paddle.hpp"
-#include "sublift/vision.hpp"
+#include "sublift/adapters/paddle.hpp"
+#include "sublift/adapters/vision.hpp"
 
 namespace sublift::worker {
 

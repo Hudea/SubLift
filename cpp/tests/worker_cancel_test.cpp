@@ -13,6 +13,7 @@
 #include "connection.hpp"
 #include "engine_factory.hpp"
 #include "path_media_services.hpp"
+#include "detector_factory.hpp"
 #include "framing.hpp"
 #include "protocol.hpp"
 
@@ -81,7 +82,7 @@ TEST_CASE("Worker Cancel suppresses late push_entry", "[worker][ipc][cancel]") {
   EngineFactory factory("mock");
 
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 
@@ -145,7 +146,7 @@ TEST_CASE("Worker client disconnect mid path job reclaims resources",
   std::atomic<bool> worker_exited{false};
 
   std::thread worker_thread([worker_fd, factory, &worker_exited]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
     worker_exited.store(true);
   });
@@ -190,7 +191,7 @@ TEST_CASE("Worker same-connection restart after cancel has no video_id crosstalk
   EngineFactory factory("mock");
 
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 
@@ -274,7 +275,7 @@ TEST_CASE("Worker Frame Mode lifecycle with real JPEG", "[worker][ipc][frame_mod
   EngineFactory factory("mock");
 
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 
@@ -356,7 +357,7 @@ TEST_CASE("Worker Frame Mode rejects non-image base64 payload", "[worker][ipc][f
   EngineFactory factory("mock");
 
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 
@@ -400,7 +401,7 @@ TEST_CASE("Worker Frame Mode error cases and invalid base64", "[worker][ipc][fra
   EngineFactory factory("mock");
 
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 

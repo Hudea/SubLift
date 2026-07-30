@@ -25,6 +25,8 @@
 | [phase6.8-review-index.md](phase6.8-review-index.md) | **6.8 回顾索引**：问题审计 → 设计 → 逐 feature 修改 → ADR → 验收与复跑入口 |
 | [phase6.9-native-product-architecture.md](phase6.9-native-product-architecture.md) | **6.9 Native 产品目标架构**：CMake/目录边界、Worker、Paddle、模型分发、Python-free 产品门 |
 | [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md) | **6.9 实施计划**：feat-06901–06913 波浪、依赖、验收条件（跟踪：`phase6.json`） |
+| [phase6.9-design-gap-fix.md](phase6.9-design-gap-fix.md) | **6.9 设计差距修复**：P0 composition / ResourceLocator / fail-closed |
+| [phase6.9-ports-adapters-layout.md](phase6.9-ports-adapters-layout.md) | **Ports vs Adapters 分层**：ports 仅接口；adapters 具体实现 + detector 工厂 |
 
 ### 架构与契约
 

@@ -1,2 +1,2 @@
 #pragma once
-#include <sublift/ports/paddle_geometry.hpp>
+#include <sublift/adapters/paddle_geometry.hpp>

@@ -1,9 +1,6 @@
 #include "bridge.hpp"
 
-#include "sublift/bottom_crop_detector.hpp"
-#include "sublift/fixed_detector.hpp"
 #include "sublift/pipeline.hpp"
-#include "sublift/roi_passthrough_detector.hpp"
 
 #include <algorithm>
 #include <array>
@@ -183,8 +180,11 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
 
 BridgeHandler::BridgeHandler(
     std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
-    std::unique_ptr<sublift::application::IPathMediaServices> path_media)
-    : engine_factory_(std::move(engine_factory)), path_media_(std::move(path_media)) {}
+    std::unique_ptr<sublift::application::IPathMediaServices> path_media,
+    std::unique_ptr<sublift::application::IDetectorFactory> detector_factory)
+    : engine_factory_(std::move(engine_factory)),
+      path_media_(std::move(path_media)),
+      detector_factory_(std::move(detector_factory)) {}
 
 BridgeHandler::~BridgeHandler() {
   cancel_job();
@@ -332,6 +332,14 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
           msg.region_box->width, msg.region_box->height, cfg.subtitle_script);
     }
 
+    if (!detector_factory_) {
+      return ipc::DoneMsg{
+          .video_id = msg.video_id,
+          .ok = false,
+          .error = "detector factory not configured",
+      };
+    }
+
     std::unique_ptr<sublift::IDetector> detector;
     if (msg.region_box.has_value() && msg.region_box->width > 0 && msg.region_box->height > 0) {
       sublift::FrameLocalBox box{
@@ -340,9 +348,9 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
           .width = msg.region_box->width,
           .height = msg.region_box->height,
       };
-      detector = std::make_unique<sublift::FixedRegionDetector>(box);
+      detector = detector_factory_->make_fixed(box);
     } else {
-      detector = std::make_unique<sublift::BottomCropDetector>(cfg.region_bottom_ratio);
+      detector = detector_factory_->make_bottom_crop(cfg.region_bottom_ratio);
     }
 
     auto ocr_engine = engine_factory_->create_engine();
@@ -552,12 +560,21 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
     sublift::FrameIOPlan plan =
         path_media_->plan_frame_io(video_path, region_box_src, "auto", cfg.region_bottom_ratio);
 
+    if (!detector_factory_) {
+      push_cb(ipc::DoneMsg{
+          .video_id = video_id,
+          .ok = false,
+          .error = "detector factory not configured",
+      });
+      return;
+    }
+
     std::unique_ptr<sublift::IDetector> detector;
     if (plan.output_crop.has_value()) {
-      detector = std::make_unique<sublift::RoiPassthroughDetector>(plan.output_crop->width,
-                                                                  plan.output_crop->height);
+      detector = detector_factory_->make_roi_passthrough(plan.output_crop->width,
+                                                        plan.output_crop->height);
     } else {
-      detector = std::make_unique<sublift::BottomCropDetector>(cfg.region_bottom_ratio);
+      detector = detector_factory_->make_bottom_crop(cfg.region_bottom_ratio);
     }
 
     auto ocr_engine = engine_factory_->create_engine();

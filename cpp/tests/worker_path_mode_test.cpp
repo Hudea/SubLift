@@ -10,6 +10,7 @@
 #include "connection.hpp"
 #include "engine_factory.hpp"
 #include "path_media_services.hpp"
+#include "detector_factory.hpp"
 #include "framing.hpp"
 #include "protocol.hpp"
 #include "sublift/vision.hpp"
@@ -43,7 +44,7 @@ TEST_CASE("Worker Connection and Path Mode Mock integration test", "[worker][ipc
 
   // Run WorkerConnection in background thread
   std::thread worker_thread([worker_fd, factory]() {
-    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+    WorkerConnection conn(worker_fd, std::make_unique<EngineFactory>(factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   });
 
@@ -283,7 +284,7 @@ TEST_CASE("Worker Connection and Path Mode Mock integration test", "[worker][ipc
 
       EngineFactory vision_factory("vision");
       std::thread v_thread([v_worker, vision_factory]() {
-        WorkerConnection conn(v_worker, std::make_unique<EngineFactory>(vision_factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+        WorkerConnection conn(v_worker, std::make_unique<EngineFactory>(vision_factory.bound_engine()), std::make_unique<sublift::worker::FfmpegPathMediaServices>(), std::make_unique<sublift::worker::DefaultDetectorFactory>());
         conn.run();
       });
 

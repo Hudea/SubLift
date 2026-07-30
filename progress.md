@@ -10,13 +10,13 @@
 
 ## 进行中
 
-- 设计符合性修复：Swift fail-closed、ResourceLocator Helpers、ffmpeg 统一 Locator、path media 注入、worker_runtime 重命名、跟踪诚实化
+- 无；ports/adapters 分层本轮已提交候选
 
 ## 近期完成
 
-- [x] **设计差距 P0/P1 实现批次**（本会话）
+- [x] **Ports/Adapters 分层 + IDetectorFactory**（ports 仅接口；adapters 具体实现）
+- [x] **设计差距 P0/P1**（fail-closed、Locator、composition）
 - [x] 架构审核对照 §5–§19
-- [x] 6.9 实施计划与 069xx 跟踪（文档）
 
 ## 阻塞项 / 风险
 

@@ -1,2 +1,2 @@
 #pragma once
-#include <sublift/ports/roi_passthrough_detector.hpp>
+#include <sublift/adapters/roi_passthrough_detector.hpp>

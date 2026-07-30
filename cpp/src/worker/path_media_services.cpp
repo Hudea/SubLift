@@ -1,6 +1,6 @@
 #include "path_media_services.hpp"
 
-#include "sublift/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg.hpp"
 
 namespace sublift::worker {
 namespace {

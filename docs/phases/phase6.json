@@ -1388,7 +1388,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地机械目录与 include 布局。物理目录收拢为 adapters/{ffmpeg,paddle,vision_macos}、protocol、application、pipeline、diagnostics/paddle_trace；include/sublift 建立 core/ports/pipeline 分层并保留 21 个无缝转发头；更新所有 CMakeLists.txt；ctest 175/175 100% PASS；./init.sh 10/10 PASS；git diff 确认 golden/fixtures 零差异。"
+      "evidence": "2026-07-30: 落地机械目录与 include 布局。物理目录收拢为 adapters/{ffmpeg,paddle,vision_macos}、protocol、application、pipeline、diagnostics/paddle_trace；include/sublift 建立 core/ports/pipeline 分层并保留 21 个无缝转发头；更新所有 CMakeLists.txt；ctest 175/175 100% PASS；./init.sh 10/10 PASS；git diff 确认 golden/fixtures 零差异。 | 2026-07-30: ports/ only IOcrEngine+IDetector+IExtractor; concrete → include/sublift/adapters/; IDetectorFactory inject; docs/cpp/phase6.9-ports-adapters-layout.md"
     },
     {
       "id": "feat-06906",
@@ -1412,8 +1412,8 @@
           "description": "paddle ctest + offline parity 抽测。"
         }
       ],
-      "status": "in-progress",
-      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 并通过 nm / grep 验证 Worker 路径不含任何 PP-OCR stage tensor 头文件泄漏。 | 2026-07-30 design-gap fix: PaddleOptions/Capabilities + diagnostics forward-decl; StageTrace still optional on options for parity tools; concrete engine still under ports/ (deferred full move)."
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 并通过 nm / grep 验证 Worker 路径不含任何 PP-OCR stage tensor 头文件泄漏。 | 2026-07-30 design-gap fix: PaddleOptions/Capabilities + diagnostics forward-decl; StageTrace still optional on options for parity tools; concrete engine still under ports/ (deferred full move). | 2026-07-30: paddle.hpp under adapters/; StageTrace diagnostics; product Options/Capabilities; ports re-export shim only."
     },
     {
       "id": "feat-06907",

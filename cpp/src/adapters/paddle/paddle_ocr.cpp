@@ -1,6 +1,6 @@
 #include "sublift/paddle.hpp"
 #include "sublift/diagnostics/paddle_stage_trace.hpp"
-#include "sublift/ports/paddle_geometry.hpp"
+#include "sublift/adapters/paddle_geometry.hpp"
 
 #include <algorithm>
 #include <chrono>

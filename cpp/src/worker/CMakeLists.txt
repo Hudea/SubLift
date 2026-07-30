@@ -3,6 +3,8 @@ set(_sublift_worker_runtime_sources
   engine_factory.hpp
   path_media_services.cpp
   path_media_services.hpp
+  detector_factory.cpp
+  detector_factory.hpp
   connection.cpp
   connection.hpp
 )

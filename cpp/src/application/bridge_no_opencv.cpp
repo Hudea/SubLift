@@ -14,8 +14,11 @@ constexpr const char* kPipelineUnavailable =
 
 BridgeHandler::BridgeHandler(
     std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
-    std::unique_ptr<sublift::application::IPathMediaServices> path_media)
-    : engine_factory_(std::move(engine_factory)), path_media_(std::move(path_media)) {}
+    std::unique_ptr<sublift::application::IPathMediaServices> path_media,
+    std::unique_ptr<sublift::application::IDetectorFactory> detector_factory)
+    : engine_factory_(std::move(engine_factory)),
+      path_media_(std::move(path_media)),
+      detector_factory_(std::move(detector_factory)) {}
 
 BridgeHandler::~BridgeHandler() { cancel_job(); }
 

@@ -6,7 +6,7 @@
 #include <cmath>
 
 #include "sublift/models.hpp"
-#include "sublift/ports/paddle_geometry.hpp"
+#include "sublift/adapters/paddle_geometry.hpp"
 
 #ifndef SUBLIFT_PARITY_GOLDEN_PADDLE
 #define SUBLIFT_PARITY_GOLDEN_PADDLE ""

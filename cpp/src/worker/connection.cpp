@@ -10,9 +10,11 @@ namespace sublift::worker {
 WorkerConnection::WorkerConnection(
     int client_fd,
     std::unique_ptr<sublift::application::IOcrEngineFactory> engine_factory,
-    std::unique_ptr<sublift::application::IPathMediaServices> path_media)
+    std::unique_ptr<sublift::application::IPathMediaServices> path_media,
+    std::unique_ptr<sublift::application::IDetectorFactory> detector_factory)
     : fd_(client_fd),
-      bridge_handler_(std::move(engine_factory), std::move(path_media)) {}
+      bridge_handler_(std::move(engine_factory), std::move(path_media),
+                      std::move(detector_factory)) {}
 
 WorkerConnection::~WorkerConnection() {
   bridge_handler_.cancel_job();

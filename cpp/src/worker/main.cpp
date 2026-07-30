@@ -9,6 +9,7 @@
 #include <string_view>
 
 #include "connection.hpp"
+#include "detector_factory.hpp"
 #include "engine_factory.hpp"
 #include "path_media_services.hpp"
 
@@ -110,7 +111,8 @@ int main(int argc, char* argv[]) {
     sublift::worker::WorkerConnection conn(
         client_fd,
         std::make_unique<sublift::worker::EngineFactory>(engine),
-        std::make_unique<sublift::worker::FfmpegPathMediaServices>());
+        std::make_unique<sublift::worker::FfmpegPathMediaServices>(),
+        std::make_unique<sublift::worker::DefaultDetectorFactory>());
     conn.run();
   }
 
