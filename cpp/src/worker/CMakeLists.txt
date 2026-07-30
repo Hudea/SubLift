@@ -14,31 +14,20 @@ target_link_libraries(sublift_protocol PUBLIC
   nlohmann_json::nlohmann_json
 )
 
-set(_sublift_ipc_sources
-  engine_factory.cpp
-  engine_factory.hpp
-  bridge.hpp
-  connection.cpp
-  connection.hpp
-)
-
-# The Worker is a product pipeline only when the OpenCV-backed signature
-# stages are present.  Keep a small protocol-only implementation available
-# without it so that build diagnostics (including ASan) do not inherit the
-# OpenCV/TBB runtime merely to execute `--version` or a handshake.
+set(_sublift_app_sources bridge.hpp)
 if(SUBLIFT_ENABLE_OPENCV)
-  list(APPEND _sublift_ipc_sources bridge.cpp)
+  list(APPEND _sublift_app_sources bridge.cpp)
 else()
-  list(APPEND _sublift_ipc_sources bridge_no_opencv.cpp)
+  list(APPEND _sublift_app_sources bridge_no_opencv.cpp)
 endif()
 
-add_library(sublift_ipc STATIC ${_sublift_ipc_sources})
+add_library(sublift_application STATIC ${_sublift_app_sources})
 
-target_include_directories(sublift_ipc PUBLIC
+target_include_directories(sublift_application PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(sublift_ipc PUBLIC
+target_link_libraries(sublift_application PUBLIC
   sublift_protocol
   sublift_core
   sublift_ffmpeg
@@ -48,22 +37,41 @@ target_link_libraries(sublift_ipc PUBLIC
 )
 
 if(SUBLIFT_ENABLE_OPENCV)
-  target_compile_definitions(sublift_ipc PUBLIC SUBLIFT_HAS_OPENCV=1)
+  target_compile_definitions(sublift_application PUBLIC SUBLIFT_HAS_OPENCV=1)
 else()
-  target_compile_definitions(sublift_ipc PUBLIC SUBLIFT_HAS_OPENCV=0)
+  target_compile_definitions(sublift_application PUBLIC SUBLIFT_HAS_OPENCV=0)
 endif()
 
 if(APPLE)
-  target_link_libraries(sublift_ipc PUBLIC
+  target_link_libraries(sublift_application PUBLIC
     "-framework CoreFoundation"
     "-framework CoreGraphics"
     "-framework ImageIO"
   )
 endif()
 
+set(_sublift_ipc_sources
+  engine_factory.cpp
+  engine_factory.hpp
+  connection.cpp
+  connection.hpp
+)
+
+add_library(sublift_ipc STATIC ${_sublift_ipc_sources})
+
+target_include_directories(sublift_ipc PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(sublift_ipc PUBLIC
+  sublift_application
+  sublift_protocol
+)
+
 add_executable(sublift_worker main.cpp)
 
 target_link_libraries(sublift_worker PRIVATE
+  sublift_application
   sublift_ipc
 )
 if(COMMAND sublift_use_bundled_onnxruntime)

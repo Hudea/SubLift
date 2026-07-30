@@ -1309,8 +1309,8 @@
           "description": "cancel/path_mode/IPC E2E + ./init.sh。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 sublift_application STATIC Target 并拆解巨石 sublift_ipc。sublift_application 提取 bridge 模块，PUBLIC 链接 sublift_protocol/core/ffmpeg/vision/paddle/json；sublift_ipc 仅保留 Composition Root 辅助 (engine_factory/connection) 并链接 sublift_application/protocol；sublift_worker 显式链接 sublift_application 与 sublift_ipc；ctest 8/8 worker 测试 PASS；pytest test_cpp_worker 9/9 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06903",

@@ -8,7 +8,7 @@
 - **基线：** 6.8 已合入 `main`（`99e361e`）；Paddle available → C++ stable
 - **计划：** `docs/cpp/phase6.9-implementation-plan.md`（feat-06901–06913）
 - **目标态：** `docs/cpp/phase6.9-native-product-architecture.md`
-- **下一实现：** `feat-06902`（`sublift_application` + 拆解 `sublift_ipc`）
+- **下一实现：** `feat-06903`（`sublift_pipeline` 从 core 拆出）
 
 ## 进行中
 
@@ -16,6 +16,7 @@
 
 ## 近期完成
 
+- [x] **feat-06902**：sublift_application + 拆解 sublift_ipc
 - [x] **feat-06901**：sublift_protocol Target 与协议纯度
 - [x] **6.9 实施计划**：四波浪 13 features、验收条件、非目标、风险与验证包
 - [x] **feat-069xx 登记**：`docs/phases/phase6.json` + `feature-list.json` `phase6.post-cutover`
