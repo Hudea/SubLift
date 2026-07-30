@@ -65,7 +65,7 @@ ModelPaths ResourceLocator::locate_model_bundle(
     const std::string& custom_dir, ModelType type) const {
   auto res = probe_model_bundle(custom_dir, type);
   if (!res.found) {
-    throw std::runtime_error("Failed to locate model bundle: " + res.error_msg);
+    throw std::runtime_error(res.error_msg);
   }
   return res.value;
 }
