@@ -80,10 +80,11 @@ CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相�
 
 ## 使用
 
-### 原生 CLI（推荐 vision/mock；无需 uv）
+### 原生 C++ CLI（支持 vision / paddle / mock 全引擎，无需 uv）
 
 ```bash
 ./build/cpp/bin/sublift extract <video> -o output.srt
+./build/cpp/bin/sublift extract clip.mkv --engine paddle -o out.srt
 ./build/cpp/bin/sublift extract clip.mkv --fps 5 --script cjk -o out.srt
 ./build/cpp/bin/sublift extract clip.mkv --engine mock -o out.srt
 ```

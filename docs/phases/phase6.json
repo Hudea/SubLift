@@ -1488,8 +1488,8 @@
           "description": "产品 CLI=Native；uv run=dev/oracle。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Native CLI 产品 parity。sublift_cli 参数解析支持 --engine mock|vision|paddle；当 --engine paddle 时 fork/exec 启动 Worker 并经 UDS IPC 编排；print_usage 更新，Handshake 提取 bye.engines 并在日志中输出；README.md 与 ARCHITECTURE.md 更新明确 Native CLI 为主产品入口；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06910",

@@ -41,17 +41,16 @@ void print_usage(const char* prog) {
                "  %s --version\n"
                "  %s extract <video> [options]\n"
                "\n"
-               "Native product CLI (Phase 6.6 cutover). Spawns sibling\n"
-               "sublift_worker over UDS for vision/mock. Paddle remains on\n"
-               "the Python path (uv run sublift --engine paddle).\n"
+               "Native product CLI (Phase 6.9). Spawns sibling sublift_worker over UDS.\n"
+               "Supports mock, vision, and paddle OCR engines.\n"
                "\n"
                "extract options:\n"
-               "  -o, --output PATH     Output SRT (default: output.srt)\n"
-               "  --fps N               Sample rate (default: 5.0)\n"
-               "  --confidence N        OCR confidence (default: 0.5)\n"
-               "  --engine mock|vision  OCR engine (default: vision)\n"
+               "  -o, --output PATH         Output SRT (default: output.srt)\n"
+               "  --fps N                   Sample rate (default: 5.0)\n"
+               "  --confidence N            OCR confidence (default: 0.5)\n"
+               "  --engine mock|vision|paddle  OCR engine (default: vision)\n"
                "  --script auto|cjk|latin  Subtitle script (default: auto)\n"
-               "  --worker PATH         Override sublift_worker binary\n",
+               "  --worker PATH             Override sublift_worker binary\n",
                prog, prog, prog);
 }
 
@@ -224,10 +223,8 @@ struct ExtractArgs {
     return 2;
   }
   out.video = *positional;
-  if (out.engine != "mock" && out.engine != "vision") {
-    std::fprintf(stderr,
-                 "Error: native CLI supports --engine mock|vision only.\n"
-                 "Use `uv run sublift extract --engine paddle` for PaddleOCR.\n");
+  if (out.engine != "mock" && out.engine != "vision" && out.engine != "paddle") {
+    std::fprintf(stderr, "Error: --engine must be mock|vision|paddle\n");
     return 2;
   }
   if (out.script != "auto" && out.script != "cjk" && out.script != "latin") {
@@ -328,8 +325,14 @@ struct ExtractArgs {
     if (!std::holds_alternative<ByeMsg>(bye_msg)) {
       throw std::runtime_error("handshake expected bye");
     }
-
-    std::fprintf(stdout, "提取字幕 (native C++ Worker)：%s\n", args.video.c_str());
+    const auto& bye = std::get<ByeMsg>(bye_msg);
+    std::string engines_summary;
+    for (size_t i = 0; i < bye.engines.size(); ++i) {
+      if (i > 0) engines_summary += ", ";
+      engines_summary += bye.engines[i];
+    }
+    std::fprintf(stdout, "提取字幕 (native C++ Worker, engines: [%s])：%s\n",
+                 engines_summary.c_str(), args.video.c_str());
     std::fprintf(stdout, "采样率：%.1ffps  引擎：%s  置信度：%.2f  文字系统：%s\n", args.fps,
                  args.engine.c_str(), args.confidence, args.script.c_str());
 
