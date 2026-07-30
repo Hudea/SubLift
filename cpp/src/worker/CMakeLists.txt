@@ -28,6 +28,7 @@ target_include_directories(sublift_application PUBLIC
 )
 
 target_link_libraries(sublift_application PUBLIC
+  sublift_pipeline
   sublift_protocol
   sublift_core
   sublift_ffmpeg

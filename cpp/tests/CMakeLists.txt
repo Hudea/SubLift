@@ -115,6 +115,7 @@ endif()
 
 target_link_libraries(sublift_tests
   PRIVATE
+    sublift_pipeline
     sublift_test_support
     sublift_ipc
     sublift_ffmpeg

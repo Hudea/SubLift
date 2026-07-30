@@ -1334,8 +1334,8 @@
           "description": "pipeline/signature/changepoint unit+parity + ./init.sh。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 从 sublift_core 独立拆出 sublift_pipeline STATIC Target。sublift_core 保持 100% 纯领域模型与算法，Zero OpenCV 符号依赖；sublift_pipeline 收容 signature/changepoint/pipeline，PUBLIC 链接 sublift_core，PRIVATE 链接 OpenCV；更新 sublift_application/test_support/tests 显式链接 sublift_pipeline；ctest 5/5 pipeline/signature/changepoint 用例 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06904",
