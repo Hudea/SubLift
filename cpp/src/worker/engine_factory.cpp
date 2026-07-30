@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include "sublift/mock_ocr.hpp"
+#include "sublift/models/resource_locator.hpp"
 #include "sublift/paddle.hpp"
 #include "sublift/vision.hpp"
 

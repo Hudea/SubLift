@@ -1,4 +1,4 @@
-add_library(sublift_models STATIC model_bundle.cpp)
+add_library(sublift_models STATIC model_bundle.cpp resource_locator.cpp)
 add_library(sublift::models ALIAS sublift_models)
 
 target_include_directories(sublift_models

@@ -8,7 +8,7 @@
 - **基线：** 6.8 已合入 `main`（`99e361e`）；Paddle available → C++ stable
 - **计划：** `docs/cpp/phase6.9-implementation-plan.md`（feat-06901–06913）
 - **目标态：** `docs/cpp/phase6.9-native-product-architecture.md`
-- **下一实现：** `feat-06908`（C++ Native ModelBundle 与资源加载机制）
+- **下一实现：** `feat-06909`（Native .app / Helper 机械打包与结构对齐）
 
 ## 进行中
 
@@ -16,11 +16,11 @@
 
 ## 近期完成
 
+- [x] **feat-06908**：ResourceLocator 真实资源探查与 Probe=Construct 同一化
 - [x] **feat-06907**：sublift_models Target 与模型布局
 - [x] **feat-06906**：Paddle 产品公共面收缩
 - [x] **feat-06905**：机械目录与 include 布局
 - [x] **feat-06904**：薄 Native CLI 链接面
-- [x] **feat-06903**：sublift_pipeline 从 core 拆出
 
 ## 阻塞项 / 风险
 

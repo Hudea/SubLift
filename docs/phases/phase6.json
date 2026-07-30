@@ -1462,8 +1462,8 @@
           "description": "handshake + IPC E2E。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 ResourceLocator 真实资源探查与 Probe=Construct 同一化。实现 ResourceLocator 支持 3 层查找 (Override/Env -> AppBundle -> UserCache/System)；重构 is_paddle_available 与 PaddleOcrEngine 构造函数，实现 Probe ≡ Construct 零脱节；ctest 15/15 resource_locator 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06909",

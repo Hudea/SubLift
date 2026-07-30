@@ -19,6 +19,7 @@ set(_sublift_test_srcs
   paddle_crop_cls_test.cpp
   paddle_models_test.cpp
   sublift_models_test.cpp
+  resource_locator_test.cpp
   worker_framing_test.cpp
 
   worker_protocol_test.cpp

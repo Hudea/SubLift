@@ -17,6 +17,7 @@
 #include "ppocr_db_postprocess.hpp"
 #include "sublift/hash.hpp"
 #include "sublift/image.hpp"
+#include "sublift/models/resource_locator.hpp"
 
 #if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
 #include <onnxruntime_cxx_api.h>
@@ -116,10 +117,9 @@ bool is_paddle_available() noexcept {
   return false;
 #else
   try {
-    auto dir = paddle_detail::resolve_model_dir("");
-    auto paths =
-        paddle_detail::get_expected_model_paths(dir, paddle_detail::ModelType::Small);
-    return paddle_detail::validate_model_paths(paths, nullptr);
+    models::ResourceLocator locator;
+    auto res = locator.probe_model_bundle("", models::ModelType::Small);
+    return res.found;
   } catch (...) {
     return false;
   }
@@ -151,16 +151,17 @@ struct PaddleOcrEngine::Impl {
   Impl(PaddleOcrOptions opts)
       : options(std::move(opts)),
         model_type(paddle_detail::parse_model_type(options.model_type)),
-        model_dir(paddle_detail::resolve_model_dir(options.model_root_dir)),
-        model_paths(paddle_detail::get_expected_model_paths(model_dir, model_type)),
         env(ORT_LOGGING_LEVEL_WARNING, "sublift_paddle"),
         memory_info(
             Ort::MemoryInfo::CreateCpu(
                 OrtArenaAllocator, OrtMemTypeDefault)) {
-    std::string model_error;
-    if (!paddle_detail::validate_model_paths(model_paths, &model_error)) {
-      throw std::runtime_error(model_error);
+    models::ResourceLocator locator;
+    auto res = locator.locate_model_bundle(options.model_root_dir, model_type);
+    if (!res.found) {
+      throw std::runtime_error(res.error_msg);
     }
+    model_paths = res.value;
+    model_dir = model_paths.det_path.parent_path();
 
     // Match RapidOCR 3.9.2: leave intra/inter thread counts at ORT defaults,
     // disable the CPU arena, and enable all graph optimizations. The former
