@@ -8,7 +8,7 @@
 - **基线：** 6.8 已合入 `main`（`99e361e`）；Paddle available → C++ stable
 - **计划：** `docs/cpp/phase6.9-implementation-plan.md`（feat-06901–06913）
 - **目标态：** `docs/cpp/phase6.9-native-product-architecture.md`
-- **下一实现：** `feat-06904`（薄 Native CLI 链接面）
+- **下一实现：** `feat-06905`（机械目录与 include 布局）
 
 ## 进行中
 
@@ -16,6 +16,7 @@
 
 ## 近期完成
 
+- [x] **feat-06904**：薄 Native CLI 链接面
 - [x] **feat-06903**：sublift_pipeline 从 core 拆出
 - [x] **feat-06902**：sublift_application + 拆解 sublift_ipc
 - [x] **feat-06901**：sublift_protocol Target 与协议纯度

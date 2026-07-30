@@ -1359,8 +1359,8 @@
           "description": "CLI mock/vision smoke + ./init.sh。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地薄 Native CLI 链接面。sublift_cli 仅 PRIVATE 链接 sublift_protocol 与 sublift_core，彻底移除 sublift_ipc 与 ONNXRuntime 绑定；otool -L build/cpp/bin/sublift_cli 验证无 ORT/OpenCV/Vision 动态库依赖（仅 libc++.1.dylib 与 libSystem.B.dylib）；mock extract smoke 验证经 Worker UDS IPC 成功生成 SRT；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06905",
