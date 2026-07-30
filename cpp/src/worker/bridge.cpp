@@ -1,11 +1,13 @@
 #include "bridge.hpp"
 
+#include "sublift/paddle.hpp"
 #include "sublift/pipeline.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -37,6 +39,27 @@ static const std::array<int, 256> kBase64Table = [] {
   }
   return table;
 }();
+
+void emit_paddle_perf_stats(
+    const sublift::Pipeline& pipeline,
+    const sublift::IOcrEngine* engine) {
+  const char* enabled = std::getenv("SUBLIFT_PADDLE_PERF_DIAGNOSTICS");
+  if (enabled == nullptr || std::string_view(enabled) != "1") {
+    return;
+  }
+  const auto* paddle_engine =
+      dynamic_cast<const sublift::PaddleOcrEngine*>(engine);
+  if (paddle_engine == nullptr) {
+    return;
+  }
+  const auto stats = paddle_engine->runtime_stats();
+  std::cerr << "SUBLIFT_PADDLE_PERF_STATS"
+            << " ocr_calls=" << pipeline.ocr_call_count()
+            << " recognize_calls=" << stats.recognize_calls
+            << " det_boxes=" << stats.det_boxes
+            << " cls_batches=" << stats.cls_batches
+            << " rec_batches=" << stats.rec_batches << '\n';
+}
 
 std::vector<std::uint8_t> decode_base64(std::string_view input) {
   if (input.size() > kMaxBase64JpegChars) {
@@ -441,6 +464,7 @@ std::optional<ipc::Message> BridgeHandler::handle_finalize(const ipc::FinalizeMs
 
   try {
     std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
+    emit_paddle_perf_stats(*pipeline, job_ocr_engine_.get());
 
     push_cb(ipc::EntriesMsg{
         .video_id = msg.video_id,
@@ -613,6 +637,7 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
     });
 
     std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
+    emit_paddle_perf_stats(*pipeline, job_ocr_engine_.get());
 
     if (!cancelled_) {
       push_cb(ipc::EntriesMsg{

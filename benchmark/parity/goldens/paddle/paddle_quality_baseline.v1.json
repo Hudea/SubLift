@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "kind": "paddle_quality_oracle_baseline",
+  "oracle_commit": "544426ea5ecbf4934e3b3801c3809cd8171c9dec",
+  "dataset_manifest_sha256": "sha256:fb103b3f9e068cb99936c270dc757b127cfac75ce1735a0fd09ca8a1c182f5fe",
+  "model_fingerprint": {
+    "schema_version": 2,
+    "oracle_commit": "544426ea5ecbf4934e3b3801c3809cd8171c9dec",
+    "dependencies": {
+      "python": "3.12",
+      "rapidocr": "3.9.2",
+      "onnxruntime": "1.28.0",
+      "onnxruntime_library_sha256": "sha256:cadd9517e089d197e5d381bc31813875eb8addce8712bac501645fea8008800c",
+      "opencv": "4.13.0",
+      "numpy": "2.5.0",
+      "pillow": "12.3.0",
+      "provider": "CPUExecutionProvider"
+    },
+    "model": {
+      "root": "~/.cache/sublift/rapidocr-models",
+      "type": "small",
+      "det_file": "PP-OCRv6_det_small.onnx",
+      "det_sha256": "sha256:090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+      "cls_file": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+      "cls_sha256": "sha256:e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+      "rec_file": "PP-OCRv6_rec_small.onnx",
+      "rec_sha256": "sha256:6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+      "dictionary_file": "ppocrv6_dict.txt",
+      "dictionary_sha256": "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d"
+    },
+    "parameters": {
+      "global": {
+        "use_preprocess_img": true,
+        "min_side_len": 30,
+        "max_side_len": 2000,
+        "use_vertical_padding": true,
+        "vertical_min_height": 30,
+        "vertical_width_height_ratio": 8.0,
+        "text_score": 0.5
+      },
+      "det": {
+        "limit_side_len": 736,
+        "limit_type": "min",
+        "mean": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "std": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "threshold": 0.3,
+        "box_threshold": 0.5,
+        "unclip_ratio": 1.6,
+        "use_dilation": true,
+        "score_mode": "fast",
+        "max_candidates": 1000,
+        "min_size": 3
+      },
+      "cls": {
+        "enabled": true,
+        "image_shape": [
+          3,
+          48,
+          192
+        ],
+        "batch_size": 6,
+        "threshold": 0.9,
+        "labels": [
+          "0",
+          "180"
+        ]
+      },
+      "rec": {
+        "image_shape": [
+          3,
+          48,
+          320
+        ],
+        "batch_size": 6,
+        "right_padding": 0.0,
+        "ctc_blank_index": 0
+      },
+      "onnxruntime": {
+        "intra_op_num_threads": -1,
+        "inter_op_num_threads": -1,
+        "enable_cpu_mem_arena": false
+      }
+    }
+  },
+  "oracle": {
+    "timing_f1": 0.6439393939393939,
+    "timing_precision": 0.5414012738853503,
+    "timing_recall": 0.794392523364486,
+    "cer_macro": 0.2360016780605016,
+    "cer_micro": 0.28525641025641024,
+    "usable_recall": 0.4953271028037383,
+    "noise_count": 1,
+    "empty_count": 0,
+    "line_box_mean_iou": 1.0,
+    "line_box_recall_at_05": 1.0
+  },
+  "per_source_oracle": {
+    "zootopia_cjk_real": {
+      "timing_f1": 0.8372093023255814,
+      "timing_precision": 0.8470588235294118,
+      "timing_recall": 0.8275862068965517,
+      "cer_macro": 0.189881068006068,
+      "cer_micro": 0.20279720279720279,
+      "usable_recall": 0.5747126436781609,
+      "noise_count": 1,
+      "empty_count": 0,
+      "line_box_mean_iou": 1.0,
+      "line_box_recall_at_05": 1.0
+    },
+    "synthetic_latin_motion": {
+      "timing_f1": 0.08333333333333333,
+      "timing_precision": 0.04838709677419355,
+      "timing_recall": 0.3,
+      "cer_macro": 0.7068376068376069,
+      "cer_micro": 0.6951219512195121,
+      "usable_recall": 0.0,
+      "noise_count": 0,
+      "empty_count": 0,
+      "line_box_mean_iou": 1.0,
+      "line_box_recall_at_05": 1.0
+    },
+    "synthetic_mixed_multiline": {
+      "timing_f1": 1.0,
+      "timing_precision": 1.0,
+      "timing_recall": 1.0,
+      "cer_macro": 0.4268192918192918,
+      "cer_micro": 0.4676258992805755,
+      "usable_recall": 0.3,
+      "noise_count": 0,
+      "empty_count": 0,
+      "line_box_mean_iou": 1.0,
+      "line_box_recall_at_05": 1.0
+    }
+  }
+}

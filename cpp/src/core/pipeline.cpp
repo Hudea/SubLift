@@ -180,6 +180,7 @@ std::pair<std::string, double> Pipeline::ocr_frame_selected(
   ImageView crop = crop_to_region(*frame, region_->box);
   OcrResult result = ocr_.recognize(crop);
   ++stats.ocr_calls;
+  ++ocr_call_count_;
 
   if (!result.lines.empty()) {
     auto chosen = select_line(result.lines, profile, config_.line_select_min_score,
@@ -204,6 +205,7 @@ std::pair<std::string, double> Pipeline::ocr_frame_raw(const Frame* frame,
   ImageView crop = crop_to_region(*frame, region_->box);
   OcrResult result = ocr_.recognize(crop);
   ++stats.ocr_calls;
+  ++ocr_call_count_;
   if (stats.rep_frames == 0) {
     stats.rep_frames = 1;
   }
@@ -283,6 +285,7 @@ void Pipeline::cancel() {
   closed_entries_.clear();
   open_segment_start_ms_.reset();
   processed_count_ = 0;
+  ocr_call_count_ = 0;
   last_timestamp_ms_ = 0;
   reset_segment_ocr_state();
   subtitle_profile_ = config_.subtitle_profile;

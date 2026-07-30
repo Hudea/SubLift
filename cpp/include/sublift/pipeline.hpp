@@ -103,6 +103,9 @@ class Pipeline {
   [[nodiscard]] std::size_t processed_count() const noexcept {
     return processed_count_;
   }
+  [[nodiscard]] std::size_t ocr_call_count() const noexcept {
+    return ocr_call_count_;
+  }
 
  private:
   /// Per-segment OCR decision stats (6.2 slimmed form of Python seg_stats).
@@ -162,6 +165,7 @@ class Pipeline {
   std::optional<SubtitleProfile> subtitle_profile_{};
   std::vector<SubtitleEntry> closed_entries_{};
   std::size_t processed_count_{0};
+  std::size_t ocr_call_count_{0};
   std::int64_t last_timestamp_ms_{0};
   bool cancelled_{false};
 };

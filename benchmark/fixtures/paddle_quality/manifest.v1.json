@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "dataset_id": "paddle-quality-q2-v1",
+  "description": "One user-local real CJK clip plus two deterministic generated sources covering Latin, mixed CJK/Latin, multiline, outline, low contrast, blank intervals, and motion backgrounds.",
+  "minimum_source_count": 3,
+  "minimum_total_duration_seconds": 600.0,
+  "sources": [
+    {
+      "id": "zootopia_cjk_real",
+      "tier": "Q2",
+      "kind": "external",
+      "video": "debug/Zootopia_clip_1080p.mp4",
+      "video_sha256": "sha256:458ee7d83c196d46564b2fb769e077d0b9940becd02f22d887980140f6e72435",
+      "ground_truth": "benchmark/fixtures/Zootopia_clip_1080p_gt.srt",
+      "ground_truth_sha256": "sha256:939c684642ee17242f1e3648c79665a0b1f7b4b09a6e8f5fb886e18b250257b4",
+      "duration_seconds": 254.272,
+      "q1_window_seconds": 30.0,
+      "fps": 5.0,
+      "script": "cjk",
+      "tags": ["real", "cjk", "bottom", "outline", "motion", "blank-intervals"]
+    },
+    {
+      "id": "synthetic_latin_motion",
+      "tier": "Q2",
+      "kind": "generated",
+      "video": "debug/paddle-quality/latin_motion_180s.mp4",
+      "video_sha256": "sha256:f84d054942ab00da2f49fea47527f4ef51c1b3d2dc0e96a40e5a11d8808531ff",
+      "ground_truth": "benchmark/fixtures/paddle_quality/latin_motion_gt.srt",
+      "ground_truth_sha256": "sha256:022b8e264892b761a145cbc1ec730341c0e84199c84c844a25559c955c60897f",
+      "subtitle_recipe": "benchmark/fixtures/paddle_quality/latin_motion.ass",
+      "subtitle_recipe_sha256": "sha256:32b807bcf71b8a2e9ad4a2d25bc7390d54f581f383662e0379204f2d5f988353",
+      "duration_seconds": 180.0,
+      "q1_window_seconds": 30.0,
+      "fps": 2.0,
+      "script": "latin",
+      "tags": ["generated", "latin", "bottom", "outline", "motion", "blank-intervals"]
+    },
+    {
+      "id": "synthetic_mixed_multiline",
+      "tier": "Q2",
+      "kind": "generated",
+      "video": "debug/paddle-quality/mixed_multiline_180s.mp4",
+      "video_sha256": "sha256:ca326a93194c299f458a38c09faededb40eaef665aad2138277418d1707cb948",
+      "ground_truth": "benchmark/fixtures/paddle_quality/mixed_multiline_gt.srt",
+      "ground_truth_sha256": "sha256:84ad64efc3ca6a6eec63ea9aff7e8aeb97050c8dd661b88ff80aac9a7a292bd4",
+      "subtitle_recipe": "benchmark/fixtures/paddle_quality/mixed_multiline.ass",
+      "subtitle_recipe_sha256": "sha256:c00d2f1ac8e87957fddc734024f6c541c49a7fea73808cbb7a7c1f25e8187de9",
+      "duration_seconds": 180.0,
+      "q1_window_seconds": 30.0,
+      "fps": 2.0,
+      "script": "auto",
+      "tags": ["generated", "mixed", "multiline", "color", "low-contrast", "blank-intervals"]
+    }
+  ],
+  "generator": {
+    "script": "scripts/parity/gen_paddle_quality_assets.py",
+    "script_sha256": "sha256:b97e22e332bededbb77592f7366069f146b6192e71c4f069614da1be8772d479",
+    "ffmpeg_frozen_for_current_baseline": "8.1",
+    "fonts": [
+      {
+        "family": "Arial",
+        "path": "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "sha256": "sha256:525979822591a3447cfc49d943d6f7683508e25543407871c0ed8fed05fd2bd9"
+      },
+      {
+        "family": "Hiragino Sans GB",
+        "path": "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "sha256": "sha256:f887295caf2881cab9554b14c5ab4c9ee624c3895599da152ec37416b5aefae0"
+      }
+    ]
+  }
+}

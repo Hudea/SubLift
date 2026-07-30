@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "kind": "paddle_native_canonical_performance",
+  "source": {
+    "id": "zootopia_cjk_2min",
+    "video": "debug/Zootopia_clip_test_2min.mp4",
+    "video_sha256": "sha256:ea1e01cf46090818a2612a922d7f08a30041e808a15db437e5a2bd687b6de698",
+    "duration_seconds": 120.0,
+    "fps": 5.0,
+    "confidence": 0.5,
+    "script": "cjk",
+    "expected_srt_sha256": "sha256:4c909470227d8dce008c525e8b64e6820288dad380001a695abde07e73750d11"
+  },
+  "protocol": {
+    "warmup_runs_per_runtime": 1,
+    "measured_runs_per_runtime": 3,
+    "order": "alternating_python_cpp",
+    "primary_statistic": "median",
+    "rss_sample_interval_seconds": 0.5
+  },
+  "candidate": {
+    "onnxruntime_version": "1.28.0",
+    "onnxruntime_sha256": "sha256:cadd9517e089d197e5d381bc31813875eb8addce8712bac501645fea8008800c",
+    "intra_op_threads": 4,
+    "cls_batch_size": 6,
+    "rec_batch_size": 6
+  },
+  "gates": {
+    "product_wall_ratio_max": 1.2,
+    "accepted_wall_ratio_max": 1.0,
+    "rss_ratio_max": 1.25,
+    "output_sha256_exact": true
+  }
+}

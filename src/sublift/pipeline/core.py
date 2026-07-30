@@ -154,6 +154,7 @@ class Pipeline:
         self._closed_entries: list[SubtitleEntry] = []
         self._open_segment_start_ms: int | None = None
         self._processed_count = 0
+        self._ocr_call_count = 0
         self._last_timestamp_ms = 0
         self._cancelled = False
         # feat-033b：OCR 锚帧延迟 + 稳定帧/首帧回退
@@ -435,6 +436,7 @@ class Pipeline:
         self._closed_entries.clear()
         self._open_segment_start_ms = None
         self._processed_count = 0
+        self._ocr_call_count = 0
         self._last_timestamp_ms = 0
         self._reset_segment_ocr_state()
         self._subtitle_profile = self._config.subtitle_profile
@@ -696,6 +698,7 @@ class Pipeline:
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
+            self._ocr_call_count += 1
             ocr_wall_ns = (self._perf.now_ns() - t0) if self._perf is not None else 0
             if seg_stats is not None and self._perf is not None:
                 seg_stats["ocr_calls"] += 1
@@ -749,6 +752,7 @@ class Pipeline:
         with self._perf_span("ocr", sample=True):
             t0 = self._perf.now_ns() if self._perf is not None else 0
             result = self._ocr.recognize(crop_image)
+            self._ocr_call_count += 1
             ocr_wall_ns = (self._perf.now_ns() - t0) if self._perf is not None else 0
             if seg_stats is not None and self._perf is not None:
                 seg_stats["ocr_calls"] += 1
@@ -814,6 +818,11 @@ class Pipeline:
     def processed_count(self) -> int:
         """已处理帧数。"""
         return self._processed_count
+
+    @property
+    def ocr_call_count(self) -> int:
+        """本 job 实际调用 OCR 引擎的次数（轻量性能诊断）。"""
+        return self._ocr_call_count
 
     # ------------------------------------------------------------------
     # 批量 API（向后兼容）

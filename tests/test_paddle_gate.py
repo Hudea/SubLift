@@ -14,6 +14,7 @@ from scripts.parity.check_paddle_gate import (
     PaddleGateMetrics,
     compute_box_iou,
     evaluate_paddle_hard_gates,
+    evaluate_source_output_hashes,
     generate_markdown_report,
     run_paddle_gate,
 )
@@ -52,7 +53,7 @@ def test_evaluate_paddle_hard_gates_pass() -> None:
     )
     report = evaluate_paddle_hard_gates(oracle, candidate)
     assert report.overall_passed is True
-    assert len(report.gate_results) == 6
+    assert len(report.gate_results) == 9
     assert all(g.passed for g in report.gate_results)
 
 
@@ -88,6 +89,24 @@ def test_evaluate_paddle_hard_gates_breach() -> None:
     assert "FAIL" in f1_gate.message
 
 
+def test_evaluate_paddle_hard_gates_box_and_noise_breach() -> None:
+    oracle = PaddleGateMetrics(noise_count=1, empty_count=0)
+    candidate = PaddleGateMetrics(
+        noise_count=2,
+        empty_count=1,
+        line_box_mean_iou=0.89,
+        line_box_recall_at_05=0.97,
+    )
+    report = evaluate_paddle_hard_gates(oracle, candidate)
+    failed = {gate.name for gate in report.gate_results if not gate.passed}
+    assert failed == {
+        "noise_count_no_systematic_increase",
+        "empty_count_no_systematic_increase",
+        "line_box_mean_iou",
+        "line_box_recall_at_05",
+    }
+
+
 def test_generate_markdown_report() -> None:
     oracle = PaddleGateMetrics(timing_f1=0.95)
     candidate = PaddleGateMetrics(timing_f1=0.95)
@@ -97,6 +116,24 @@ def test_generate_markdown_report() -> None:
     assert "# SubLift Phase 6.8 — Paddle E2E Quality Gate Report" in md
     assert "PASS ✅" in md
     assert "timing_f1_relative" in md
+
+
+def test_source_output_hash_gate_requires_every_source_exact() -> None:
+    gate = evaluate_source_output_hashes(
+        [
+            {
+                "oracle_output_sha256": "sha256:same",
+                "candidate_output_sha256": "sha256:same",
+            },
+            {
+                "oracle_output_sha256": "sha256:oracle",
+                "candidate_output_sha256": "sha256:candidate",
+            },
+        ]
+    )
+    assert gate.passed is False
+    assert gate.name == "source_output_sha256_exact"
+    assert "1/2" in gate.message
 
 
 def test_run_paddle_gate_script_execution(tmp_path: Path) -> None:
@@ -129,5 +166,6 @@ def test_cli_paddle_gate_execution(tmp_path: Path) -> None:
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     assert proc.returncode == 1
-    assert "C++ Paddle runtime is skipped or unavailable" in proc.stderr
+    assert "cpp_paddle_availability" in proc.stderr
+    assert "explicitly skipped" in proc.stderr
     assert report_file.exists()

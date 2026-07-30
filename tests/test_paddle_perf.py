@@ -21,7 +21,7 @@ from scripts.parity.check_paddle_perf import (
 def test_evaluate_paddle_perf_hard_gates_pass() -> None:
     oracle = PaddlePerfMetrics(wall_time_sec=10.0, peak_rss_mb=200.0)
     candidate = PaddlePerfMetrics(
-        wall_time_sec=8.0, peak_rss_mb=150.0, memory_leaks_count=0
+        wall_time_sec=8.0, peak_rss_mb=150.0
     )
     report = evaluate_paddle_perf_hard_gates(oracle, candidate, quality_passed=True)
     assert report.overall_passed is True
@@ -33,36 +33,48 @@ def test_evaluate_paddle_perf_hard_gates_wall_time_breach() -> None:
     oracle = PaddlePerfMetrics(wall_time_sec=10.0, peak_rss_mb=200.0)
     # Candidate Wall-time is 13.0s (1.30x > 1.20x limit)
     candidate = PaddlePerfMetrics(
-        wall_time_sec=13.0, peak_rss_mb=150.0, memory_leaks_count=0
+        wall_time_sec=13.0, peak_rss_mb=150.0
     )
     report = evaluate_paddle_perf_hard_gates(oracle, candidate, quality_passed=True)
     assert report.overall_passed is False
-    wall_gate = next(g for g in report.gate_results if g.name == "wall_time_ratio")
+    wall_gate = next(
+        g for g in report.gate_results if g.name == "product_wall_time_ratio"
+    )
     assert wall_gate.passed is False
     assert "FAIL" in wall_gate.message
 
 
 def test_evaluate_paddle_perf_hard_gates_rss_breach() -> None:
     oracle = PaddlePerfMetrics(wall_time_sec=10.0, peak_rss_mb=200.0)
-    # Candidate RSS is 190.0MB (0.95x > 0.90x limit)
+    # Candidate RSS is 260.0MB (1.30x > 1.25x limit)
     candidate = PaddlePerfMetrics(
-        wall_time_sec=8.0, peak_rss_mb=190.0, memory_leaks_count=0
+        wall_time_sec=8.0, peak_rss_mb=260.0
     )
     report = evaluate_paddle_perf_hard_gates(oracle, candidate, quality_passed=True)
     assert report.overall_passed is False
-    rss_gate = next(g for g in report.gate_results if g.name == "peak_rss_ratio")
+    rss_gate = next(
+        g
+        for g in report.gate_results
+        if g.name == "peak_process_tree_rss_ratio"
+    )
     assert rss_gate.passed is False
 
 
-def test_evaluate_paddle_perf_hard_gates_memory_leak_breach() -> None:
+def test_evaluate_paddle_perf_requires_cpp_to_beat_python() -> None:
     oracle = PaddlePerfMetrics(wall_time_sec=10.0, peak_rss_mb=200.0)
     candidate = PaddlePerfMetrics(
-        wall_time_sec=8.0, peak_rss_mb=150.0, memory_leaks_count=2
+        wall_time_sec=11.0, peak_rss_mb=150.0
     )
     report = evaluate_paddle_perf_hard_gates(oracle, candidate, quality_passed=True)
     assert report.overall_passed is False
-    leak_gate = next(g for g in report.gate_results if g.name == "zero_memory_leaks")
-    assert leak_gate.passed is False
+    product_gate = next(
+        g for g in report.gate_results if g.name == "product_wall_time_ratio"
+    )
+    accepted_gate = next(
+        g for g in report.gate_results if g.name == "accepted_faster_than_python"
+    )
+    assert product_gate.passed is True
+    assert accepted_gate.passed is False
 
 
 def test_evaluate_paddle_perf_hard_gates_quality_breach() -> None:
@@ -81,10 +93,10 @@ def test_generate_markdown_perf_report() -> None:
 
     md = generate_markdown_perf_report(report)
     assert (
-        "# SubLift Phase 6.8 — Paddle Native Performance Hardening Report" in md
+        "# SubLift Phase 6.8 — Paddle Native Performance Gate" in md
     )
     assert "PASS ✅" in md
-    assert "wall_time_ratio" in md
+    assert "product_wall_time_ratio" in md
 
 
 def test_run_paddle_perf_check_script_execution(tmp_path: Path) -> None:
@@ -117,5 +129,5 @@ def test_cli_paddle_perf_execution(tmp_path: Path) -> None:
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     assert proc.returncode == 1
-    assert "C++ Paddle runtime is skipped or unavailable" in proc.stderr
+    assert "live runtime execution was explicitly skipped" in proc.stderr
     assert report_file.exists()

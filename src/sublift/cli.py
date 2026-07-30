@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -206,7 +207,11 @@ def _run_extract_cpp(
         proc = subprocess.Popen(
             [str(worker_bin), "--socket", str(sock_path), "--engine", choice.engine],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=(
+                None
+                if os.environ.get("SUBLIFT_PADDLE_PERF_DIAGNOSTICS") == "1"
+                else subprocess.DEVNULL
+            ),
         )
 
         client: socket.socket | None = None
@@ -419,6 +424,13 @@ def _run_extract_python(
 
     entries = pipeline.finalize()
     elapsed = time.perf_counter() - start
+
+    if os.environ.get("SUBLIFT_PADDLE_PERF_DIAGNOSTICS") == "1":
+        print(
+            "SUBLIFT_PADDLE_PERF_STATS "
+            f"ocr_calls={pipeline.ocr_call_count}",
+            file=sys.stderr,
+        )
 
     SrtExporter().export(entries, output)
     written = sum(1 for e in entries if e.text and e.text.strip())
