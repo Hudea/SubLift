@@ -1412,8 +1412,8 @@
           "description": "paddle ctest + offline parity 抽测。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06907",

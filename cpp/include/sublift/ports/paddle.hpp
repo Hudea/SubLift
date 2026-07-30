@@ -7,7 +7,7 @@
 
 #include "sublift/models.hpp"
 #include "sublift/ocr.hpp"
-#include "sublift/paddle_geometry.hpp"
+#include "sublift/ports/paddle_geometry.hpp"
 
 namespace sublift {
 

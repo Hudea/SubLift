@@ -1,7 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 
-#include "sublift/paddle_geometry.hpp"
+#include "sublift/ports/paddle_geometry.hpp"
 
 TEST_CASE("Paddle Geometry - quad_to_aabb", "[paddle][geometry]") {
   SECTION("Standard box with fractional coordinates") {
