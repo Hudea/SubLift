@@ -1539,8 +1539,8 @@
           "description": "真实短视频→SRT 报告。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Swift App Shell + Native Driver 链接与降级规范。PipelineClient.swift 补齐 Contents/Helpers/sublift_worker 优先路径；swift test 139/139 用例 PASS；明确无证书环境下 ad-hoc 签名 (codesign -s -) 与公证外部依赖降级规范；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06912",

@@ -217,6 +217,12 @@ public final class PipelineClient: @unchecked Sendable {
 
         // 3. App Bundle 资源目录
         let mainBundle = Bundle.main
+        let directHelperPath = mainBundle.bundlePath + "/Contents/Helpers/sublift_worker"
+        searchedPaths.append(directHelperPath)
+        if isRegularExecutable(directHelperPath, fileManager: fileManager) {
+            return directHelperPath
+        }
+
         if let resourceURL = mainBundle.resourceURL {
             let helperPath = resourceURL.appendingPathComponent("Helpers/sublift_worker").path
             searchedPaths.append(helperPath)
