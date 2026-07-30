@@ -76,7 +76,7 @@ cmake --build build/cpp-rel
 
 CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相对
 `@loader_path/../lib`，开发态运行不依赖虚拟环境内的 ABI 软链。完整 `.app` 内置模型、
-签名、公证仍属于 6.9+ 分发范围。
+签名、公证按 ADR-0030 后置，不属于当前开发构建。
 
 ## 使用
 
@@ -101,8 +101,8 @@ SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回�
 
 Phase 6.8 最终门已通过：120s canonical 上 C++ wall median 为 Python 的
 `0.8956x`、进程树 RSS 为 `0.9152x`；3 来源 614.272s 的质量输出逐源 SHA exact。
-C++ Paddle 不可用时会显示 `paddle_override` 并回到 **Python Paddle**，不会改成
-Vision/Mock。
+C++ Paddle 不可用时返回明确错误，不会静默改成 Python、Vision 或 Mock。需要
+Python Oracle/开发回滚时必须显式指定 `--runtime python` 或 `SUBLIFT_RUNTIME=python`。
 
 ### Runtime 矩阵
 
@@ -110,7 +110,7 @@ Vision/Mock。
 |---|---|---|
 | **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
 | **mock** | **cpp** | CI / 流程验证 |
-| **paddle** | **cpp**（可用时），否则显式 **python fallback** | 完整 DB/Quad/Cls/Rec Native；CLI/GUI 显示 runtime/model/stable/fallback |
+| **paddle** | **cpp**（可用时）；不可用则报错 | 完整 DB/Quad/Cls/Rec Native；显式 runtime=python 仅用于 Oracle/开发回滚 |
 
 解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → 当前产品自动策略。
 

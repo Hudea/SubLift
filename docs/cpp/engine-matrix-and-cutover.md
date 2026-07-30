@@ -1,8 +1,10 @@
 # 引擎矩阵、Cutover 与回滚
 
-> 状态：Phase 6 (Phase 6.7–6.9) 已全面完成 Native C++ 产品架构重构与全量 Feature (feat-06901–06913) 交付。
-> 已通过 12 项 Parity Goldens、10 阶段 Stage Dump、多源 E2E 质量门、进程树 zero-python Python-free 隔离门及 SubLift.app 规范打包。
-> C++ `sublift_paddle` 与 `sublift_cli` / `SubLift.app` 已成为正式全引擎产品默认；Python 逻辑作为 Oracle 比对、benchmark 评估与 `--runtime python` 显式调试/回滚手段留存。
+> 状态：Phase 6.8 全引擎 C++ cutover 与 Phase 6.9 开发架构收口完成。
+>
+> Native CLI / Swift 开发构建默认使用 C++ Worker；Python 仅通过显式 runtime 作为
+> Oracle、benchmark 与开发回滚。`.app` 分发、签名和发布 artifact Python-free 门按
+> ADR-0030 后置，本文不声明已发布独立安装包。
 
 ## 1. 引擎 × Runtime 矩阵（终局策略）
 
@@ -18,8 +20,8 @@
 - **禁止** 用户选 paddle 时静默落到 vision/mock。
 - **禁止** C++ worker 对未知 engine 假装成功。
 - GUI/CLI 只展示 **当前 runtime capability 声明的引擎**；若默认 runtime 是 C++ 且无 paddle，则：
-  - 设置里 paddle 显示「需 Python runtime」或切换到 Python worker 启动；或
-  - 选 paddle 时 **显式** spawn Python worker（双 worker 策略）。
+  - 返回可操作的 Native capability 错误；
+  - 只有用户/开发者显式指定 `runtime=python` 时才启动 Python Worker。
 
 ### 1.2 历史过渡行为（6.6–6.8 hardening）
 
@@ -56,7 +58,7 @@ engine == paddle，显式 runtime=cpp 但 unavailable → 明确错误或显式 
 只有 `feat-06803`–`feat-06806` 的 stage、质量、性能和稳定性门全部通过，
 `feat-06807` 才允许恢复 6.7 的自动 C++ 默认。
 
-**6.8 Final Cutover（当前）：**
+**6.8 Final Cutover（历史切换点）：**
 
 ```text
 engine in {vision, mock} → C++ worker
@@ -68,6 +70,17 @@ explicit/env runtime=python → Python worker（回滚 / Oracle）
 CLI、Worker 与 GUI 均显示最终 runtime；Paddle 同时显示 `PP-OCRv6-small` 和
 `stable|fallback`。Swift availability 直接执行目标 Worker 的
 `--probe-engine paddle`，避免 GUI 与实际 capability 漂移。
+
+**6.9 开发架构终态（当前）：**
+
+```text
+engine in {vision, mock} → C++ worker
+engine == paddle && C++ paddle available → C++ worker (stable)
+engine == paddle && C++ paddle unavailable → 明确错误（fail-closed）
+explicit/env runtime=python → Python worker（Oracle / 开发回滚）
+```
+
+不再存在自动 `paddle_override`；显式 Python 路径不代表未来发布 artifact 包含 Python。
 
 **非 macOS：** 默认引擎候选为 paddle（6.7 native 或 Python）；无 Vision。Linux 至少可 `ENABLE_PADDLE=ON` 构建（见 6.7 设计）。
 
@@ -145,13 +158,13 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 
 | 项 | 倾向 |
 |---|---|
-| `.app` 内 worker | `Contents/MacOS/sublift-worker` 或 `Contents/Helpers/` |
+| `.app` 内 worker | 未来发布设计：`Contents/MacOS/` 或 `Contents/Helpers/` |
 | OpenCV | 动态链接系统或 brew；或静态进 worker（体积/许可评估） |
 | rpath | `@executable_path/../Frameworks` 预留 |
-| 签名 / 公证 | 随 feat-025 / **6.9+**；符号 hidden 减少泄漏 |
+| 签名 / 公证 | ADR-0030 后置到未来发布阶段 |
 | universal2 / 最低 macOS | 与 GUI 一致（当前 macOS 13+） |
 | ffmpeg | 默认系统；随包另 feat |
-| Paddle 模型 / ORT | 6.8 build tree 复制已验收 ORT 并用相对 rpath；用户缓存模型；正式 `.app` 随包/签名仍属 **6.9+** |
+| Paddle 模型 / ORT | 6.8 build tree 复制已验收 ORT并用相对 rpath；开发期使用缓存模型；正式随包后置 |
 
 ## 6. 与子阶段关系
 
@@ -162,7 +175,8 @@ benchmark runner --runtime cpp -- 内部 spawn C++ 与 python 对照
 | 6.6 | vision/mock 默认 C++；paddle 显式 Python；双轨与回滚 |
 | **6.7** | **paddle C++ Native MVP（ONNX）**；当前代码可用则 paddle→C++；见 [phase6.7-paddle.md](phase6.7-paddle.md) |
 | **6.8** | 安全路由 → stage parity → 多源质量门 → 性能 → 重新 cutover；见 [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) |
-| 6.9+ | 去 Python 产品依赖 / 分发打包（**仅当**6.8 全门通过或产品放弃 Paddle） |
+| 6.9 | Target/目录/Ports/Adapters/ResourceLocator/Native CLI 开发架构收口 |
+| 未来发布 | bundle、依赖随包、签名公证、最终 artifact Python-free 门（ADR-0030） |
 
 ## 7. Phase 6.8 最终实测
 

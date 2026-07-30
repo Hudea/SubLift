@@ -14,7 +14,7 @@ SwiftUI 与 UDS/JSON IPC **暂时保留**，先把 Python Worker 换成 C++ Work
 
 | 是 | 不是 |
 |---|---|
-| 原生 `.app` 不再依赖嵌入 Python | 指望 Vision OCR 从 ~50ms 变 ~10ms |
+| 产品执行路径不依赖嵌入 Python | 当前阶段交付已签名 `.app` |
 | CLI / GUI / 未来跨平台共享同一 native core | 边迁移边改打轴/OCR 算法 |
 | 数据结构、线程与内存所有权更清晰 | 第一阶段上 libav / Swift↔C++ 直连 |
 | 后续接 ONNX/Paddle 原生 runtime 更自然 | 大爆炸式「把每个 .py 译成 .cpp」 |
@@ -32,7 +32,7 @@ SwiftUI ──UDS/JSON──► sublift-worker (C++ 或按引擎选 Python)
 CLI ─────────────────────►│  lib targets（见 architecture.md）
                          ▼
                     SubtitleEntry
-Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵）
+Python ── 仅冻结 Oracle / benchmark / 显式开发回滚（见引擎矩阵）
 ```
 
 **可执行依赖图与工具链锁定**见 [architecture.md](architecture.md)（`sublift_core` / `sublift_ffmpeg` / `sublift_vision_macos` / `sublift_worker` / `sublift_cli` / `sublift_test_support`）。
@@ -57,8 +57,8 @@ Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵�
 | **6.6 Cutover** | `feat-066xx` | 按 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 默认化 | vision/mock→C++；paddle→Python |
 | **6.7 Paddle Native MVP** | `feat-067xx` | [phase6.7-paddle.md](phase6.7-paddle.md)：ONNX PP-OCRv6 `IOcrEngine` 可运行、接线与基础 golden | 当前实现可用时自动 C++；真实质量/性能未过产品门 |
 | **6.8 Paddle hardening** | `feat-068xx` | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)：完整 Det/Cls/Rec parity、多源质量、性能、长流与回滚 | **done：available→C++ stable** |
-| **6.9** | `feat-06901`–`06913` | Native 产品架构整理 / ModelBundle / macOS 分发 / Python-free | 计划冻结；见 phase6.9-implementation-plan.md |
-| **6.10+** | TBD | Linux/Windows 分发、Named Pipe、Python 树迁移 | 后置 |
+| **6.9** | `feat-06901`–`06913` | Native 开发架构整理；06910–06912 发布项后置 | **done（开发范围）**；见 phase6.9-implementation-plan.md |
+| **未来发布** | TBD | macOS bundle/签名/公证/Python-free artifact；Linux/Windows 分发 | ADR-0030 后置 |
 
 **进入 6.1 的硬门槛：** `feat-06001`–`feat-06005` 全部 `done`。
 
@@ -100,6 +100,7 @@ Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵�
 - 不上 libav、不做 Swift C++ interop 单进程合并。
 - 不删除仓库内 Python（oracle / benchmark / Paddle fallback）。
 - 不把完整 Phase 4.2 归因树作为 6.0–6.5 必达项。
+- 不在 Phase 6.9 开发收口中实现 `.app`、签名、公证或最终发布 artifact。
 
 ## 8. 契约索引（P1）
 
@@ -121,8 +122,9 @@ Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵�
 - **6.6 Cutover：** **done** — [phase6.6-cutover.md](phase6.6-cutover.md)（feat-06601–06605）
 - **6.7 Paddle C++ Native MVP：** **done** — [phase6.7-paddle.md](phase6.7-paddle.md)（feat-06701–06706）
 - **6.8 Paddle Native hardening：** **done** — [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)（feat-06801–06807）
-- **当前实现：** vision/mock → C++；Paddle available → C++ stable，unavailable → Python Paddle fallback；`SUBLIFT_RUNTIME=python` 可回滚
-- **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 oracle / 回滚 / paddle 无 native 时
+- **6.9 Native 开发架构：** **done** — [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md)；06910–06912 发布项按 ADR-0030 后置
+- **当前实现：** vision/mock → C++；Paddle available → C++ stable，unavailable → fail-closed；显式 `SUBLIFT_RUNTIME=python` 可作 Oracle/开发回滚
+- **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 Oracle / benchmark / 显式开发回滚
 - **残差风险：** Paddle Q2 为 1 个真实 CJK + 2 个确定生成源，仍需扩充真实 Latin/混排；
-  正式 `.app` 内置 ORT/模型、签名公证属于 6.9（feat-06910+）；Release Vision synthetic 用例的既有
-  环境失败不属于 Paddle cutover。
+  正式 `.app` 内置 ORT/模型、签名公证属于后置发布阶段。Apple Vision synthetic live OCR
+  受系统版本影响，不进入确定性默认 CTest；固定视频 GT 仍作为扩展回归门。

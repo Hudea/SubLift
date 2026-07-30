@@ -9,14 +9,14 @@
 ## 1.1 Phase 6 — Native C++ Core（6.8 Paddle cutover 已完成）
 
 > **当前实现路径：vision / mock 使用 C++ Worker；paddle 在 C++ adapter/模型可用时也默认
-> 使用 C++ Worker，不可用时以 `paddle_override` 显式回到 Python Paddle。**
+> 使用 C++ Worker，不可用时 fail-closed。只有显式 `runtime=python` 才进入 Python。**
 > SwiftUI + UDS 边界保留；Python Runtime 继续承担冻结 Oracle、benchmark 与
 > `SUBLIFT_RUNTIME=python` 一键回滚，至少保留一个小版本周期。
 >
 > Paddle Native 已对齐完整 Det DB/unclip、Quad crop、Cls、Rec 与 CTC；3 来源
 > 614.272s 产品质量输出逐源 SHA exact。120s canonical C++ wall/RSS 分别为 Python 的
 > `0.8956x/0.9152x`。开发 Release 构建把已验收 ORT 复制到 build tree 并使用相对 rpath；
-> `.app` 随包模型、签名与公证仍归 6.9+。
+> `.app` 随包模型、签名与公证按 ADR-0030 整体后置，不属于当前开发架构。
 >
 > 产品 C++ Worker 需要 OpenCV 签名流水线；`SUBLIFT_ENABLE_OPENCV=OFF` 仅产出不宣告
 > engine/capability、明确拒绝作业的 sanitizer 诊断 Worker，不能作为 runtime 回退。相关计划见
@@ -29,7 +29,7 @@
 | 任务跟踪 | [`docs/phases/phase6.json`](phases/phase6.json) |
 | 行为 Oracle | **冻结** `oracle_commit` + golden（见 `docs/cpp/parity-contract.md`），不是未钉扎的 main 尖端 |
 | 引擎 cutover | vision/mock/paddle 全引擎 → C++ Native CLI 经过 Worker UDS IPC 编排；Python CLI 保留为 Oracle 比对与回滚工具（见 `docs/cpp/engine-matrix-and-cutover.md`） |
-| Native 产品目标态 | 6.9 CMake/目录边界、Worker、模型分发与 Python-free 产品门（见 `docs/cpp/phase6.9-native-product-architecture.md`） |
+| Native 开发架构 | 6.9 CMake/目录边界、Ports/Adapters、Worker、ResourceLocator 与薄 CLI 已收口；分发后置（见 `docs/cpp/phase6.9-native-product-architecture.md`） |
 | 实现树 | `cpp/`（自 feat-06002 起） |
 
 Python 侧 `docs/design/*` 在 cutover 前仍是算法语义叙述源；与 C++ 冲突时以冻结 golden 为准。

@@ -1,10 +1,13 @@
-# Phase 6.9 — Native C++ 产品目标架构
+# Phase 6.9 — Native C++ 开发架构与未来产品目标
 
-> 状态：**实施中（Wave A 主体 + 设计差距 P0/P1 修复已落地；§19 / 06911 未完成）**  
-> 实施计划：[phase6.9-implementation-plan.md](phase6.9-implementation-plan.md)  
-> 差距修复：[phase6.9-design-gap-fix.md](phase6.9-design-gap-fix.md)  
-> 前置完成：Phase 6.8 Paddle Native hardening / product cutover  
-> 当前基线：vision/mock → C++；paddle available → C++；**不可用时 fail-closed**（仅显式 python 回滚）；打包骨架存在  
+> 状态：**开发架构已收口；发布分发整体后置（ADR-0030）**
+>
+> 实施计划：[phase6.9-implementation-plan.md](phase6.9-implementation-plan.md)
+>
+> 前置完成：Phase 6.8 Paddle Native hardening / product cutover
+>
+> 当前基线：vision/mock → C++；paddle available → C++；不可用时 fail-closed；
+> 仅显式 Python Oracle/开发回滚；不提供 `.app` 发布 artifact
 > 关联契约：
 > [Phase 6 总览](phase6-overview.md) ·
 > [C++ Core 架构](architecture.md) ·
@@ -12,13 +15,13 @@
 > [引擎矩阵与回滚](engine-matrix-and-cutover.md) ·
 > [Phase 6.8](phase6.8-paddle-hardening.md)
 
-## 1. 结论
+## 1. 结论与范围
 
 SubLift 的理想 C++ 架构不是把所有 Python 文件逐一翻译成 C++，也不是把
 SwiftUI、Worker 和 OCR 强行合并成一个进程，而是：
 
-> **产品运行与分发完全 Native C++；SwiftUI 和 Native CLI 是薄客户端；平台能力以
-> Adapter 接入；Python 只保留为开发期 Oracle、benchmark、fixture 与质量门工具。**
+> **开发执行路径以 Native C++ Worker 为核心；SwiftUI 和 Native CLI 是薄客户端；
+> 平台能力以 Adapter 接入；Python 保留为 Oracle、benchmark、fixture 与显式开发回滚。**
 
 目标态继续保留已经验证稳定的 **Swift/CLI → IPC → C++ Worker** 进程边界：
 
@@ -26,11 +29,12 @@ SwiftUI、Worker 和 OCR 强行合并成一个进程，而是：
 - Worker 是产品 Composition Root，负责选择并装配能力模块；
 - Core / Pipeline 不知道 Swift、JSON、UDS、FFmpeg 进程、ORT 或 Apple Vision；
 - Paddle、Vision、FFmpeg 都是实现稳定 Port 的可替换 Adapter；
-- Python 不进入正式安装包，也不参与正常产品进程；
+- 默认 C++ capability 缺失时不静默启动 Python；
 - 冻结 golden、GT 和验收阈值继续保护 C++ 演进。
 
-Phase 6.9 不得以去 Python 或打包为理由降低 Phase 6.8 已冻结的 Paddle 质量、
-性能、长流、取消或重启门。
+`.app`、模型/动态库随包、签名、公证、Gatekeeper 与发布 artifact 的 Python-free
+声明属于未来发布阶段。本文 §13/§19 保留其目标定义，但不构成 Phase 6.9 开发完成条件。
+Phase 6.9 仍不得降低 Phase 6.8 已冻结的质量、性能、长流、取消或重启门。
 
 ## 2. 为什么仓库根目录保留 `cpp/`
 
@@ -94,17 +98,16 @@ SubLift/
 - Swift `PipelineClient`：Worker 进程管理和 IPC；
 - Python：冻结 Oracle、benchmark、fallback 与回滚。
 
-### 3.2 尚未收口的结构
+### 3.2 开发架构完成状态与未来事项
 
-| 差距 | 当前表现 | 目标 |
+| 主题 | 当前状态 | 后续 |
 |---|---|---|
-| IPC 与应用编排耦合 | `sublift_ipc` 同时含 protocol、Bridge 和产品依赖装配 | 拆为 protocol / application / worker |
-| CLI 双路径 | 原生 CLI 已存在，但 `uv run sublift` 仍是主要开发入口之一 | 正式产品只发布 Native CLI |
-| Python fallback | C++ Paddle 不可用时启动 Python Worker | 分发稳定后改为明确的 Native capability 错误 |
-| 模型交付 | C++ 读取 rapidocr 共用缓存，首次准备依赖 Python 命令 | Native `ModelBundle/ModelManager` |
-| Paddle 可见面过大 | 公共 Paddle header 暴露 trace/options 等内部细节 | 产品接口与 diagnostics 分离 |
-| 分发 | build tree 已有 ORT 相对 rpath，但未形成正式 `.app` | 模型/ORT/ffmpeg 随包、签名、公证 |
-| Python 代码位置 | 产品 Runtime、Oracle、benchmark 同处现有 Python 工程 | fallback 到期后收敛为 dev-only tools |
+| Target/依赖 | protocol/application/pipeline/worker 已拆分；无 `sublift_ipc` alias | 持续守护方向 |
+| CLI | Native CLI 经 Worker；Python CLI 为 Oracle/开发回滚 | 发布时只交付 Native CLI |
+| Python fallback | 默认 fail-closed；仅显式 Python | 保留开发工具，不进入未来 artifact |
+| 模型发现 | 开发期 `ModelBundle + ResourceLocator`；probe=construct | 发布期 manifest/SHA/下载/原子安装 |
+| Paddle public API | 产品 API 与 diagnostics 已分离 | 持续守护 |
+| 分发 | 当前无发布 artifact | bundle、rpath、notices、签名、公证后置 |
 | 跨平台 transport | 当前 UDS 面向 macOS/POSIX | transport 抽象，Windows Named Pipe 可替换 |
 
 ## 4. 目标进程架构
@@ -486,7 +489,7 @@ sublift CLI
 不建议让 CLI 直接链接全部 adapters 后另走一套 in-process pipeline，否则会重新产生
 CLI 与 GUI 行为、生命周期和日志差异。
 
-## 13. 产品分发目标
+## 13. 未来产品分发目标（后置）
 
 macOS 目标布局：
 
@@ -622,23 +625,23 @@ Worker/CLI/GUI 至少公开：
 - CMake presets 至少覆盖 macOS product、Linux core+paddle、sanitizer；
 - 平台差异通过 capability 明确表达，不用编译成功假装运行可用。
 
-## 18. 实施顺序
+## 18. 实施与后置边界
 
 正式实施顺序与验收以
 [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md) 与
-`docs/phases/phase6.json` 的 **feat-06901–06913** 为准。摘要：
+`docs/phases/phase6.json` 为准。摘要：
 
 | 波浪 | Features | 主题 |
 |---|---|---|
 | A 结构 | 06901–06906 | protocol/application/pipeline/CLI 链接面、目录、Paddle 公共面 |
 | B 资源 | 06907–06909 | ModelBundle、capability、Native CLI paddle |
-| C 分发 | 06910–06912 | macOS bundle、签名公证、Python-free 门 |
-| D 退役 | 06913 | fallback 退役与终态文档 |
+| C 分发 | 06910–06912 | **用户决定整体后置；不进入开发分支** |
+| D 收口 | 06913 | 默认 fail-closed、显式开发回滚与终态文档 |
 
-Linux/Windows 完整分发与 Named Pipe 属 **6.10+**。  
-若 Target 拆分造成标准门过重，按 `AGENTS.md` 把发布级门留在独立脚本/CI，不塞入默认 `./init.sh`。
+Linux/Windows 完整分发与 Named Pipe 同样后置。开发阶段不新增 bundle、签名、公证或
+最终 artifact Python-free 脚本；恢复时必须另立发布计划。
 
-## 19. Python-free 产品完成定义
+## 19. 未来 Python-free 产品完成定义（不属于 Phase 6.9）
 
 只有同时满足以下条件，才能声明产品已去除 Python 依赖：
 
@@ -666,6 +669,7 @@ Linux/Windows 完整分发与 Named Pipe 属 **6.10+**。
 - 不用无界 producer/consumer 队列换取表面吞吐；
 - 不在 fallback 观察期结束前删除 Python 回滚；
 - 不因打包困难放宽模型/ORT SHA、质量或性能门。
+- 不在当前开发阶段实现 `.app`、随包依赖、签名、公证或 Gatekeeper。
 
 ## 21. 待正式 feature 决策的问题
 
@@ -681,11 +685,10 @@ Linux/Windows 完整分发与 Named Pipe 属 **6.10+**。
 
 ## 22. 文档维护
 
-- 本文描述 **6.8 cutover 后的 Native 产品目标态**；
+- 本文同时描述已完成的开发架构与明确后置的产品分发目标；
 - [architecture.md](architecture.md) 继续保留 6.0 迁移时冻结的 Core 数据/接口契约；
 - [worker-ipc-contract.md](worker-ipc-contract.md) 继续作为时序与取消契约；
 - [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 继续记录双轨、回滚和 cutover 门；
-- 正式 6.9 feature、状态和验证证据必须写入 `docs/phases/phase6.json`；
+- 6.9 开发 feature、后置发布项及验证证据必须写入 `docs/phases/phase6.json`；
 - 发生架构决策时写入 `docs/DECISIONS.md`，本文只同步最终结果；
 - 目录或 target 变化后必须更新本文映射，但不得删除历史迁移文档。
-

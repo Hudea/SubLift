@@ -473,9 +473,9 @@
         },
         {
           "id": "phase6.post-cutover",
-          "name": "6.9 Native 产品架构整理 / 去 Python 分发",
-          "description": "6.9 Native 产品架构整理：Wave A 主体+设计差距修复进行中；06911 blocked；§19 未全勾。见 phase6.9-design-gap-fix.md",
-          "status": "in-progress",
+          "name": "6.9 Native 开发架构收口",
+          "description": "完成 Target/目录/Ports-Adapters、Composition Root、ResourceLocator、薄 Native CLI 与默认 fail-closed；显式 Python Oracle/开发回滚保留。发布分发由 ADR-0030 单独后置。",
+          "status": "done",
           "covers": [
             "feat-06901",
             "feat-06902",
@@ -486,10 +486,18 @@
             "feat-06907",
             "feat-06908",
             "feat-06909",
+            "feat-06913"
+          ]
+        },
+        {
+          "id": "phase6.distribution-deferred",
+          "name": "Native 产品分发（后置）",
+          "description": "macOS bundle、依赖/模型随包、签名、公证、Gatekeeper 与最终 artifact Python-free 门由用户决定全部后置；开发阶段不引入半成品发布脚手架。",
+          "status": "blocked",
+          "covers": [
             "feat-06910",
             "feat-06911",
-            "feat-06912",
-            "feat-06913"
+            "feat-06912"
           ]
         }
       ]

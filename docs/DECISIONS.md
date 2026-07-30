@@ -5,6 +5,30 @@
 
 ---
 
+## ADR-0030 Phase 6.9 止于开发架构收口；产品分发整体后置（2026-07-30）
+
+- **状态**：已确认并用于 Phase 6.9 收尾。
+- **背景**：06901–06909 已完成 C++ Target、目录、Ports/Adapters、Composition Root、
+  ResourceLocator 与 Native CLI 收口；06910–06912 尝试加入 `.app`、签名与 Python-free
+  发布门，但现有脚手架没有解决 OpenCV/ORT/模型/ffmpeg 自包含、manifest/SHA、许可证与
+  Gatekeeper，不能作为可信发布实现。
+- **决策**：
+  1. Phase 6.9 的完成范围改为**开发期 Native 架构**：06901–06909 + 06913。
+  2. 06910（bundle）、06911（签名公证）、06912（发布 artifact Python-free 门）整体
+     后置并保持 blocked；未来发布阶段重新立项。
+  3. 当前开发分支删除 bundle/signing/Python-free 发布脚本、Info.plist 模板、CMake
+     bundle target 与专用 Swift bundle 路径接线，避免半成品进入 main。
+  4. C++ Paddle capability 缺失时默认 fail-closed；显式
+     `--runtime python` / `SUBLIFT_RUNTIME=python` 长期保留为 Oracle、benchmark 和开发回滚。
+  5. 产品 manifest/SHA/下载/原子安装属于发布交付；06907 只声明开发期
+     ModelBundle/ResourceLocator 与 `probe == construct`。
+- **理由**：开发架构与可分发 artifact 是两套不同验收。把证书、随包依赖和干净机门混入
+  日常开发会制造错误完成声明，也会让 main 长期携带未经验证的发布路径。
+- **结果**：Phase 6.9 可在完整开发回归门通过后独立合入；任何“可分发、已签名、
+  Python-free 产品”声明仍必须等待后置发布阶段的真实 artifact 证据。
+
+---
+
 ## ADR-0029 Paddle 全门通过后默认 C++；build tree 自带已验收 ORT（2026-07-30）
 
 - **状态**：已确认并由 feat-06807 实施。

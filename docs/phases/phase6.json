@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker。6.7 已交付 PaddleOCR C++ Native MVP（ONNX/PP-OCRv6，feat-06701–06706），但不代表真实推理质量/性能达到产品默认门；6.8 负责 Paddle Native 质量、性能与重新 cutover（feat-06801–06807），见 docs/cpp/phase6.8-paddle-hardening.md。 6.9 Native 产品架构整理：feat-06901–06913 见 docs/cpp/phase6.9-implementation-plan.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将产品执行路径迁移到 C++ Worker，行为以冻结 Oracle（oracle_commit+环境+golden）为准。6.0–6.8 已完成 C++ Core、Vision/Mock/Paddle cutover 与质量性能加固。6.9 收口开发期 Target、目录、Ports/Adapters、ResourceLocator、Native CLI 与 fail-closed 默认；macOS bundle、签名、公证和发布 artifact Python-free 门由 ADR-0030 明确后置，不属于开发架构完成条件。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -1285,7 +1285,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 sublift_protocol Target 与协议纯度。sublift_protocol STATIC 仅包含 framing+protocol，PUBLIC 链接 sublift_core 与 nlohmann_json，零 Vision/OpenCV/Paddle/ORT/FFmpeg 依赖；protocol.cpp 删除 vision.hpp 与 is_vision_available()，build_bye_message 改为依赖注入模式；worker_protocol_test 移除 vision.hpp；ctest 6/6 protocol 用例 PASS；nm -u libsublift_protocol.a 验证无外部 adapter 动态符号；./init.sh 10/10 PASS；无 golden 变更。"
+      "evidence": "2026-07-30: 落地 sublift_protocol Target 与协议纯度。sublift_protocol STATIC 仅包含 framing+protocol，PUBLIC 仅传递 sublift_core，nlohmann_json 为 PRIVATE 实现依赖；public protocol/framing headers 位于 include/sublift/protocol 且不暴露 JSON 类型；协议层不探查具体 Adapter，bye capabilities 由 Composition Root 注入。定向 protocol CTest、全量门与 nm 依赖检查通过；无 golden 变更。"
     },
     {
       "id": "feat-06902",
@@ -1310,7 +1310,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 sublift_application STATIC Target 并拆解巨石 sublift_ipc。sublift_application 提取 bridge 模块，PUBLIC 链接 sublift_protocol/core/ffmpeg/vision/paddle/json；sublift_ipc 仅保留 Composition Root 辅助 (engine_factory/connection) 并链接 sublift_application/protocol；sublift_worker 显式链接 sublift_application 与 sublift_ipc；ctest 8/8 worker 测试 PASS；pytest test_cpp_worker 9/9 PASS；./init.sh 10/10 PASS；无 golden 变更。 | 2026-07-30 gap-fix: sublift_ipc renamed sublift_worker_runtime (alias kept); path media + OCR factories injected; application no longer links ffmpeg PUBLIC frameworks."
+      "evidence": "2026-07-30: 落地 sublift_application STATIC Target 与 Worker Composition Root。application 通过 IOcrEngineFactory、IDetectorFactory、IPathMediaServices 注入能力，不直接构造或链接具体 FFmpeg/Vision/Paddle Adapter；engine_factory/connection 留在 sublift_worker_runtime，旧 sublift_ipc Target alias 已删除。worker 定向 CTest、Python IPC E2E 与全量门通过；无 golden 变更。"
     },
     {
       "id": "feat-06903",
@@ -1388,7 +1388,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地机械目录与 include 布局。物理目录收拢为 adapters/{ffmpeg,paddle,vision_macos}、protocol、application、pipeline、diagnostics/paddle_trace；include/sublift 建立 core/ports/pipeline 分层并保留 21 个无缝转发头；更新所有 CMakeLists.txt；ctest 175/175 100% PASS；./init.sh 10/10 PASS；git diff 确认 golden/fixtures 零差异。 | 2026-07-30: ports/ only IOcrEngine+IDetector+IExtractor; concrete → include/sublift/adapters/; IDetectorFactory inject; docs/cpp/phase6.9-ports-adapters-layout.md"
+      "evidence": "2026-07-30: 完成物理目录与 public include 分层。源码收拢为 adapters/{ffmpeg,paddle,vision_macos}、protocol、application、pipeline、diagnostics/paddle_trace；ports/ 最终只保留 IOcrEngine、IDetector、IExtractor 等抽象契约，具体类型从 include/sublift/adapters 暴露；protocol/framing public headers 进入 include/sublift/protocol。全量 CTest、init 与 include 边界检查通过；golden/fixtures 零差异。"
     },
     {
       "id": "feat-06906",
@@ -1413,20 +1413,20 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 Paddle 产品公共面收缩。paddle_geometry.hpp 归位至 ports/paddle_geometry.hpp 并建立根 include 转发头；ports/paddle.hpp 仅暴露 PaddleOcrEngine/Options/Stats/Trace，内部 5 个 PP-OCR 阶段头文件紧锁在 src/adapters/paddle/；ctest 13/13 paddle 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 并通过 nm / grep 验证 Worker 路径不含任何 PP-OCR stage tensor 头文件泄漏。 | 2026-07-30 design-gap fix: PaddleOptions/Capabilities + diagnostics forward-decl; StageTrace still optional on options for parity tools; concrete engine still under ports/ (deferred full move). | 2026-07-30: paddle.hpp under adapters/; StageTrace diagnostics; product Options/Capabilities; ports re-export shim only."
+      "evidence": "2026-07-30: 完成 Paddle 产品公共面收缩。产品头仅暴露 PaddleOcrEngine/Options/Stats/Capabilities；StageTrace 位于 diagnostics，PP-OCR 阶段 tensor 头保持 adapters/paddle 私有；paddle 与 paddle_geometry 具体 API 位于 include/sublift/adapters，不再由 ports/ re-export。Paddle 定向 CTest、nm/grep 边界检查与全量门通过；无 golden 变更。"
     },
     {
       "id": "feat-06907",
       "name": "ModelBundle + ResourceLocator",
-      "description": "统一模型/ORT/ffmpeg 查找与 SHA：override→安装资源→校验缓存→可选下载→明确错误；probe 与 construct 同一解析器。兼容 rapidocr cache 过渡。",
+      "description": "建立开发期 ModelBundle Target 与模型路径对象；ResourceLocator 统一 override/env/cache/system 查找，probe 与 construct 使用同一解析器。AppBundle、产品 manifest/SHA/下载/原子安装属于后置发布范围。",
       "module": "cpp ResourceLocator/ModelBundle; paddle_models; worker probe; docs",
       "dependencies": [
         "feat-06906"
       ],
       "subtasks": [
         {
-          "name": "解析器与 manifest",
-          "description": "schema、SHA、原子安装语义。"
+          "name": "ModelBundle 与路径模型",
+          "description": "从 Paddle Adapter 抽出模型类型、预期路径与完整文件集合校验。"
         },
         {
           "name": "probe≡construct",
@@ -1438,12 +1438,12 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 sublift_models STATIC Target 与 C++ ModelBundle 布局。创建 sublift_models 静态库与 include/sublift/models/model_bundle.hpp；sublift_paddle 链接 sublift_models 并通过 sublift::paddle_detail 无缝 using 转发；ctest 2/2 models 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 (说明: probe≡construct 边界逻辑由于其探查特性，实际于 feat-06908 中统一完成对接)。"
+      "evidence": "2026-07-30: 落地 sublift_models STATIC Target、ModelBundle 路径模型与 ResourceLocator 开发期资源发现；Paddle probe/construct 共用解析器，缺文件 fail-closed，rapidocr cache 保持兼容。产品 manifest/SHA/下载器未实现且按 ADR-0030 明确后置，不纳入本 feature 完成声明。models/resource_locator 定向 CTest 与 ./init.sh 通过；无 golden 变更。"
     },
     {
       "id": "feat-06908",
-      "name": "Capability 单一事实来源",
-      "description": "hello/bye/capabilities 仅由 Composition Root 根据真实 Adapter+资源计算；协议层无猜引擎。",
+      "name": "ResourceLocator 与 Capability 单一事实来源",
+      "description": "开发期资源按 override/env/cache/system 解析；hello/bye/capabilities 仅由 Composition Root 根据真实 Adapter+资源计算，协议层无猜引擎。",
       "module": "worker main; engine_factory; protocol mapper; Swift/Python handshake tests",
       "dependencies": [
         "feat-06907"
@@ -1463,7 +1463,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30: 落地 ResourceLocator 真实资源探查与 Probe=Construct 同一化。实现 ResourceLocator 支持 3 层查找 (Override/Env -> AppBundle -> UserCache/System)；重构 is_paddle_available 与 PaddleOcrEngine 构造函数，实现 Probe ≡ Construct 零脱节；ctest 15/15 resource_locator 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。 | 2026-07-30: ResourceLocator supports Helpers+MacOS; ffmpeg/ffprobe resolve via Locator."
+      "evidence": "2026-07-30: ResourceLocator 统一开发期 Override/Env → UserCache/System 资源解析；显式资源缺失或不可执行时 fail-closed。is_paddle_available 与 PaddleOcrEngine 共用模型校验，实现 Probe ≡ Construct；FFmpeg/ffprobe 统一经 Locator 解析。AppBundle 查找按 ADR-0030 从开发态代码移除。resource_locator/capability 定向 CTest与全量门通过；无 golden 变更。"
     },
     {
       "id": "feat-06909",
@@ -1514,8 +1514,8 @@
           "description": "随包资源可完成提取 smoke。"
         }
       ],
-      "status": "in-progress",
-      "evidence": "2026-07-30: 落地 macOS Product Bundle 布局。建立 SubLift.app 规范 6 大目录树 (Contents/{MacOS,Helpers,Resources/models,Resources/bin,Frameworks,Info.plist})；scripts/build_app_bundle.sh 支持 --no-build 与 relative RPATH 注入；cpp/CMakeLists.txt 增加 bundle target；scripts/check_app_bundle.py 机械校验 PASS；./init.sh 10/10 PASS；无 golden 变更。 断网与隔离 smoke 已由 feat-06912 的 Python-free standalone 验证提供等价证明。 | Bundle skeleton exists; Helpers discovery fixed in ResourceLocator; full SHA/manifest/notices still open."
+      "status": "blocked",
+      "evidence": "2026-07-30 ADR-0030：用户明确要求所有发布工作整体后置，开发阶段不引入。未达到自包含 bundle 门的脚本、Info.plist 模板与 CMake bundle target 已从当前分支移除；未来发布阶段重新立项，不阻塞 6.9 开发架构合入。"
     },
     {
       "id": "feat-06911",
@@ -1540,7 +1540,7 @@
         }
       ],
       "status": "blocked",
-      "evidence": "2026-07-30: 落地 Swift App Shell + Native Driver 链接与降级规范。PipelineClient.swift 补齐 Contents/Helpers/sublift_worker 优先路径；swift test 139/139 用例 PASS；明确无证书环境下 ad-hoc 签名 (codesign -s -) 与公证外部依赖降级规范；./init.sh 10/10 PASS；无 golden 变更。"
+      "evidence": "2026-07-30 ADR-0030：用户明确要求签名、公证、Gatekeeper 全部后置。开发阶段不以 ad-hoc 签名或缺证书降级冒充发布验收；未来在具备账号、证书和干净机时重新立项。"
     },
     {
       "id": "feat-06912",
@@ -1564,21 +1564,21 @@
           "description": "引用/抽测 6.8 paddle 门。"
         }
       ],
-      "status": "in-progress",
-      "evidence": "2026-07-30: 落地 Python-free Standalone Native 运行验证门。创建 scripts/check_python_free.py 支持 env -i 干净隔离环境运行 sublift_cli，包含实时进程树零 Python/uv 子进程监控断言；check_app_bundle.py --strict 校验零外部 venv/brew 硬绑定 PASS；./init.sh 10/10 PASS；无 golden 变更。 (注: 与 feat-06911 的因果链在于，此门确保了 App Shell 在剥离 Python 后的绝对隔离可用性)。 | Mock python-free script exists; not full §19."
+      "status": "blocked",
+      "evidence": "2026-07-30 ADR-0030：发布 artifact 的 Python-free 干净机验收随 bundle/签名整体后置。开发期 Native CLI/C++ Worker 与 fail-closed 行为由 06909/06913 覆盖，但不再保留或声称未针对最终 artifact 验证的发布脚本。"
     },
     {
       "id": "feat-06913",
-      "name": "Fallback 退役与终态文档",
-      "description": "观察期后产品不再静默 Python paddle_override；不可用→可操作 Native 错误；更新矩阵/ADR/phase 状态。保留 Oracle 与 dev 回滚说明。",
-      "module": "runtime.py; RuntimePolicy.swift; PipelineClient; engine-matrix; DECISIONS; feature-list",
+      "name": "开发架构终态与显式回滚边界",
+      "description": "C++ Paddle 不可用时默认 fail-closed；只保留显式 Python Oracle/开发回滚。清理 protocol/public include/Ports 兼容债务，移除发布脚手架并同步终态文档。",
+      "module": "runtime.py; RuntimePolicy.swift; cpp protocol/ports/CMake; docs; feature-list",
       "dependencies": [
-        "feat-06912"
+        "feat-06909"
       ],
       "subtasks": [
         {
-          "name": "产品矩阵",
-          "description": "Release 产品配置 fail-closed。"
+          "name": "默认矩阵",
+          "description": "cpp unavailable → 可操作错误；仅显式 runtime=python 进入 Oracle/开发回滚。"
         },
         {
           "name": "dev 回滚文档",
@@ -1586,11 +1586,11 @@
         },
         {
           "name": "收口",
-          "description": "§19 清单 evidence；post-cutover=done。"
+          "description": "协议/Ports 边界、Vision 稳定测试、ADR/phase/feature-list/progress 收口。"
         }
       ],
-      "status": "in-progress",
-      "evidence": "2026-07-30: 落地 Fallback 退役准备与 Phase 6 终态清理。§19 清单逐项验证通过：1. 仅启动 C++ Worker (06909); 2. Bundle 隔离无 Python (06910); 3. C++ 探查独立 (06908); 4. 无模型提示明确 (06908); 5. C++ fallback 已去静默 (06913); 6. probe=construct (06908); 7. 干净机验证 (06912); 8. parity 不退化; 9. 稳定性 PASS; 10. .app 证书暂 blocked (06911); 11. 依赖完整; 12. Oracle 隔离; 13. 终态文档更新。 | 2026-07-30: Swift+Python fail-closed when cpp paddle unavailable (no silent paddle_override). Explicit runtime=python remains. Not full §19 product packaging."
+      "status": "done",
+      "evidence": "2026-07-30: Phase 6.9 开发架构终态通过最终验证。默认 C++ capability 缺失 fail-closed，Python 仅保留显式 Oracle/开发回滚；protocol public headers 不暴露 nlohmann/json，旧 sublift_ipc alias 删除，ports/ 仅保留抽象接口，具体类型归 adapters/；开发态 ResourceLocator 不含 AppBundle 分发探测；未完成的 bundle/signing/artifact Python-free 脚手架已移除。C++ CTest 178/178 PASS；Swift XCTest 37（1 个按 Release Paddle 条件跳过、0 failure）且 Swift Testing 139/139 PASS；标准 ./init.sh 10/10 PASS；扩展 runtime+GT init 10/10 PASS，12 parity goldens、wall/cancel/restart/RSS 与固定视频 GT L3 全绿（timing_f1=0.9767、precision=0.9882、usable_recall=0.9195、CER=0.0320）；Native CLI otool 仅 libc++/libSystem；git diff --check PASS，golden/fixtures 零变化。06910–06912 按 ADR-0030 保持后置，不纳入开发架构完成声明。"
     }
   ]
 }

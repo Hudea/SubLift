@@ -55,8 +55,8 @@ Phase 1–4 旧编号 `feat-001` ~ `feat-043` **保持不动**，两套规则并
 | **6.6** | Cutover（默认路径切换 + benchmark 门） | `feat-066xx` |
 | **6.7** | PaddleOCR C++ Native MVP（ONNX / PP-OCRv6） | `feat-067xx` |
 | **6.8** | Paddle Native 质量 / 性能加固与产品 cutover | `feat-068xx` |
-| **6.9** | Native 产品架构整理：target/目录、ModelBundle、macOS 分发、Python-free、fallback 退役 | `feat-069xx`（06901–06913） |
-| **6.10+** | Linux/Windows 分发、Named Pipe、Python 树物理迁移等 | `feat-06Axx` 或另定 |
+| **6.9** | Native 开发架构整理；06910–06912 发布任务保留为后置记录 | `feat-069xx`（06901–06913） |
+| **未来发布** | macOS 分发/签名/Python-free artifact、Linux/Windows、Named Pipe | 重新立项时另定 |
 
 > 子阶段划分以 `docs/cpp/phase6-overview.md` 为准；上表为路线图，可在不改 `PP`/`S` 语义的前提下微调范围。
 

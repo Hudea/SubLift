@@ -28,7 +28,8 @@ include/sublift/
 └── *.hpp                    # 兼容 re-export（→ adapters 或 ports）
 ```
 
-`ports/<concrete>.hpp` 暂保留 **一行 re-export** 到 adapters，避免一次性改光历史 include；新代码应直接 `#include "sublift/adapters/…"`。
+`ports/` 不再保留任何具体实现 re-export。根目录 `include/sublift/*.hpp` 的少量历史
+转发头暂作源码兼容，新产品代码直接包含 `sublift/adapters/…`。
 
 ## Detector 工厂
 
@@ -40,7 +41,6 @@ IDetectorFactory（application）
 
 Bridge 只依赖 `IDetector` + `IDetectorFactory`，不再 `make_unique` 具体 detector。
 
-## 非本轮
+## 后续兼容清理
 
-- nlohmann 从 protocol public 头移除（PIMPL，另开）
-- 删除全部兼容 re-export
+- 可在独立机械 feature 中删除根目录历史 re-export；不影响当前 Ports 边界。

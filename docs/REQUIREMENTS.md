@@ -4,9 +4,10 @@
 
 为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Python CLI 与 macOS SwiftUI 开发者版本；PaddleOCR 已作为可选 CLI/GUI 引擎接入，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
 
-**Phase 6.0–6.8 已完成：** 产品 Runtime 已迁移到 C++ Core，并与冻结 Python Oracle
-对齐；vision/mock/Paddle 均已完成 C++ cutover。Paddle C++ 不可用时显式 fallback 到
-Python Paddle，且保留 `SUBLIFT_RUNTIME=python` 回滚。迁移契约见 [`docs/cpp/`](cpp/README.md)。
+**Phase 6.0–6.9 开发范围已完成：** 产品执行路径已迁移到 C++ Core，并与冻结 Python
+Oracle 对齐；vision/mock/Paddle 均已完成 C++ cutover。Paddle C++ 不可用时
+fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.app` 分发、签名、
+公证按 ADR-0030 后置。迁移契约见 [`docs/cpp/`](cpp/README.md)。
 
 ## 2. 用户与使用场景
 

@@ -23,8 +23,8 @@
 | [phase6.7-paddle.md](phase6.7-paddle.md) | **6.7 PaddleOCR C++ Native MVP**（ONNX / PP-OCRv6；**done**） |
 | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md) | **6.8 Paddle Native 质量、性能与产品 Cutover**（feat-06801–06807；**done**） |
 | [phase6.8-review-index.md](phase6.8-review-index.md) | **6.8 回顾索引**：问题审计 → 设计 → 逐 feature 修改 → ADR → 验收与复跑入口 |
-| [phase6.9-native-product-architecture.md](phase6.9-native-product-architecture.md) | **6.9 Native 产品目标架构**：CMake/目录边界、Worker、Paddle、模型分发、Python-free 产品门 |
-| [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md) | **6.9 实施计划**：feat-06901–06913 波浪、依赖、验收条件（跟踪：`phase6.json`） |
+| [phase6.9-native-product-architecture.md](phase6.9-native-product-architecture.md) | **6.9 Native 开发架构 + 未来分发目标**：已完成边界与明确后置范围 |
+| [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md) | **6.9 收口计划**：开发验收与 ADR-0030 发布后置边界 |
 | [phase6.9-design-gap-fix.md](phase6.9-design-gap-fix.md) | **6.9 设计差距修复**：P0 composition / ResourceLocator / fail-closed |
 | [phase6.9-ports-adapters-layout.md](phase6.9-ports-adapters-layout.md) | **Ports vs Adapters 分层**：ports 仅接口；adapters 具体实现 + detector 工厂 |
 
@@ -59,7 +59,6 @@
 8. **6.8 已完成**：完整 Det/Cls/Rec、E2E GT、性能、720s 长流和回滚全部过门；
    Paddle available 时默认 C++ stable，Python 保留 fallback；见
    [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)。
-9. **6.9 目标态 + 实施计划已冻结**：保留根目录唯一 `cpp/`，先收紧 CMake target 再移动
-   目录；产品最终不依赖 Python，Python Oracle/benchmark 保留为开发工具；见
-   [phase6.9-native-product-architecture.md](phase6.9-native-product-architecture.md) 与
-   [phase6.9-implementation-plan.md](phase6.9-implementation-plan.md)（feat-06901–06913）。
+9. **6.9 开发架构已收口**：CMake target、目录、Ports/Adapters、Composition Root、
+   ResourceLocator 与 Native CLI 已完成；默认 fail-closed，显式 Python 保留为开发工具。
+   `.app`、签名、公证和最终 artifact Python-free 门按 ADR-0030 后置。
