@@ -144,8 +144,12 @@ feat-06305 + feat-06201 (IOcrEngine)
 | 默认语言 | `{"zh-Hans","en-US"}` 常量与 Python `DEFAULT_RECOGNITION_LANGUAGES` 一致 |
 | 覆盖 | 构造参数传入自定义列表 |
 | 不可用 | 无 framework / 编译 OFF 时：构造 throw 或 `expected` + 明确信息（对齐 Python `RuntimeError` 提示语义） |
-| 集成 | macOS + VISION=ON：英文合成图、中文合成图（可 `CATCH` skip）；空白/近空白 → 空或低信息结果 |
-| 标签 | `[vision][integration]`；CI 无 GUI/权限时 skip 策略写入 cpp/README |
+| 集成 | macOS + VISION=ON：确定性的空白图/语言配置进入默认门；英文/中文合成图为显式 live smoke |
+| 标签 | 默认 `[vision][ocr]`；OS Vision live synthetic smoke 使用隐藏标签 `[.vision-live]` |
+
+Apple Vision 对 CoreText 合成图的识别结果会随 macOS/Vision revision 改变，部分版本
+可合法返回零 observations。因此 synthetic live OCR 不作为默认 CTest 的确定性硬门；
+固定真实视频 GT、坐标契约与空结果/语言配置仍保留在标准或扩展合入门中。
 
 **不做：** 全量 GT benchmark（6.6）。
 

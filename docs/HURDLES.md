@@ -18,6 +18,25 @@
 
 ---
 
+### Apple Vision 对 CoreText 合成图返回零 observations
+- **日期**：2026-07-30
+- **状态**：已解决（默认开发门稳定；live smoke 保留为显式诊断）。
+- **现象**：相同 `VisionOcrEngine` 在当前 macOS/Vision revision 上可正常通过固定视频
+  GT，但对测试内 CoreText 绘制的 “SUBLIFT” 合成图稳定返回空 observations，导致全量
+  CTest 出现单个环境相关失败。
+- **排查路径**：
+  1. 单独重复运行失败用例，确认不是并发或偶发内存问题。
+  2. 对照固定视频 GT 与几何契约，确认真实输入质量门和确定性转换逻辑仍通过。
+  3. 检查测试契约，发现它把 OS 框架对合成图的启发式结果当成了 L0 硬断言。
+- **根本原因**：Apple Vision 的 live OCR 是 OS 版本相关的外部能力；合成字体图是否产生
+  observations 不属于项目可控制的确定性契约。
+- **解决方案**：将空白输入、语言配置等确定性契约保留在默认 `[vision][ocr]` 测试，
+  将英文/中文/像素格式/重复调用的 live synthetic smoke 移至隐藏
+  `[.vision-live]` 标签；固定视频 live GT 继续作为扩展正确性门。
+- **相关文件**：`cpp/tests/vision_ocr_test.mm`、`docs/cpp/phase6.4-vision.md`。
+
+---
+
 ### Paddle Det 仅 1px quad 漂移却触发错误 180° 分类
 - **日期**：2026-07-30
 - **状态**：已解决（feat-06805 / ADR-0027）。
