@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "phase6-native-cpp-core",
-  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker。6.7 已交付 PaddleOCR C++ Native MVP（ONNX/PP-OCRv6，feat-06701–06706），但不代表真实推理质量/性能达到产品默认门；6.8 负责 Paddle Native 质量、性能与重新 cutover（feat-06801–06807），见 docs/cpp/phase6.8-paddle-hardening.md。",
+  "description": "Phase 6 Native C++ Core Migration：保留模块边界与 UDS/JSON IPC，将 Python Runtime 逐步替换为 C++ Core（Worker 优先）。行为以冻结 Oracle（oracle_commit+环境+golden）为准。编号 feat-06SFF（docs/cpp/NAMING.md）。6.0–6.6 与 feat-06606/06607 standard hardening done：vision/mock 产品默认 C++ worker。6.7 已交付 PaddleOCR C++ Native MVP（ONNX/PP-OCRv6，feat-06701–06706），但不代表真实推理质量/性能达到产品默认门；6.8 负责 Paddle Native 质量、性能与重新 cutover（feat-06801–06807），见 docs/cpp/phase6.8-paddle-hardening.md。 6.9 Native 产品架构整理：feat-06901–06913 见 docs/cpp/phase6.9-implementation-plan.md。",
   "plan_file": "docs/cpp/phase6-overview.md",
   "features": [
     {
@@ -1261,6 +1261,336 @@
       ],
       "status": "done",
       "evidence": "2026-07-30：完成 Paddle C++ 产品 Cutover。Python resolve_runtime 与 Swift RuntimePolicy 统一最终矩阵：product default cpp + Paddle capability→C++ stable；capability 缺失→Python Paddle paddle_override；显式 flag/env runtime=python 始终为回滚，绝不改写 Vision/Mock。Swift probe 改为执行目标 Worker `--probe-engine paddle`，避免仅检查文件名造成 capability 漂移；PipelineClient/SubtitleExtractor/GUI 与 Python CLI/C++ Worker 公开 engine=paddle、runtime、PP-OCRv6-small、stable/fallback。CMake 新增 SUBLIFT_BUNDLE_ONNXRUNTIME，复制已验收 ORT 到 build/lib 并给 Worker/CLI/trace/tests 写相对 @loader_path/../lib；删除 venv ABI 软链后 probe、22 个 Paddle cases 与最终 gate 仍通过。新增 fail-closed check_paddle_cutover.py：验证 Worker/ORT/source hash、默认路由、产品 marker、C++→Python→C++ SRT exact、≥10min 连续流和真实 Paddle cancel/restart。最终 bundled Worker SHA=2446b1d7…，ORT SHA=cadd9517…；默认 C++ 4.615s→强制 Python 5.097s→默认 C++ restart 4.491s，均 10 entries 且 SRT SHA=44a8b520… exact；720s 连续 C++ 流 15.522s/40 entries；in-flight cancel=2.8ms，same-Worker restart readiness=0.1ms。Post-cutover GUI 实跑发现 `start_job` / `frame_path` 仍硬编码为 Python；现已依据 `PipelineClient.lastWorkerChoice` 显示实际 C++ / Python runtime、resolved_via 与对应 FfmpegExtractor，身份缺失时显示 unknown，不再误报 Python。Swift 37 XCTest + 139 Swift Testing 全绿（含 3 个 runtime-aware path log tests、live 默认 C++ Paddle 握手及 disabled fallback）；Python 路由/CLI 51 tests；标准 ./init.sh 10/10；Release [paddle] 22 cases/409 assertions。Release 全量 CTest 174/175，唯一失败为既有 Apple Vision synthetic OCR 环境用例，与 Paddle target/路由无关。最终报告 docs/reports/phase6.8-paddle-cutover.md；历史问题归档 docs/reports/phase6.7-paddle-quality-audit-2026-07-29.md；统一回顾入口 docs/cpp/phase6.8-review-index.md；Python Paddle 至少保留一个小版本周期。"
+    },
+    {
+      "id": "feat-06901",
+      "name": "sublift_protocol Target 与协议纯度",
+      "description": "将 framing + protocol DTO/JSON 收成独立 sublift_protocol；协议层不再探测 Vision/OCR/adapters。零产品行为：同一构建选项下 bye/hello 引擎列表与 capability 与拆分前一致（由 Composition Root/factory 注入，禁止空列表）。完整验收见 docs/cpp/phase6.9-implementation-plan.md。",
+      "module": "cpp/src/worker/framing.*; cpp/src/worker/protocol.*; cpp/src/worker/CMakeLists.txt; cpp/tests/",
+      "dependencies": [
+        "feat-06807"
+      ],
+      "subtasks": [
+        {
+          "name": "CMake target",
+          "description": "声明 sublift_protocol STATIC，仅 framing+protocol；不链接 paddle/vision/ffmpeg/OpenCV/ORT。"
+        },
+        {
+          "name": "协议纯度 + 行为快照",
+          "description": "移除 protocol 内 adapter probe；引擎/capability 由 factory 注入且与拆分前 snapshot 一致。"
+        },
+        {
+          "name": "回归",
+          "description": "worker framing/protocol + handshake 对照 + ./init.sh；无 golden 变更。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06902",
+      "name": "sublift_application + 拆解 sublift_ipc",
+      "description": "Bridge/Job 生命周期进入 sublift_application；Worker 为 Composition Root；消除 PUBLIC 全量 fan-out 的巨石 sublift_ipc。不改 IPC 语义。",
+      "module": "cpp/src/worker/bridge.*; connection.*; engine_factory.*; main.cpp; CMake",
+      "dependencies": [
+        "feat-06901"
+      ],
+      "subtasks": [
+        {
+          "name": "application target",
+          "description": "ExtractJob/Bridge 进入 sublift_application，依赖 protocol 与 Ports。"
+        },
+        {
+          "name": "composition root",
+          "description": "engine_factory 仅 Worker main 装配；adapters 不依赖 worker。"
+        },
+        {
+          "name": "回归",
+          "description": "cancel/path_mode/IPC E2E + ./init.sh。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06903",
+      "name": "sublift_pipeline 从 core 拆出",
+      "description": "models/config/image 等留在 core；signature/changepoint/pipeline 进入 sublift_pipeline。不改算法与 golden。",
+      "module": "cpp/src/core/; cpp/include/sublift/; CMake; cpp/tests/",
+      "dependencies": [
+        "feat-06902"
+      ],
+      "subtasks": [
+        {
+          "name": "pipeline target",
+          "description": "新建 sublift_pipeline 与正确链接方向。"
+        },
+        {
+          "name": "OpenCV 边界",
+          "description": "OpenCV PRIVATE 仅挂需要它的 target。"
+        },
+        {
+          "name": "回归",
+          "description": "pipeline/signature/changepoint unit+parity + ./init.sh。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06904",
+      "name": "薄 Native CLI 链接面",
+      "description": "sublift_cli 只链接 protocol + launcher/UDS client，不链接 paddle/vision/ffmpeg/OpenCV/ORT；仍 spawn Worker。",
+      "module": "cpp/src/cli/; CMake",
+      "dependencies": [
+        "feat-06902"
+      ],
+      "subtasks": [
+        {
+          "name": "client 拆分",
+          "description": "抽出 CLI 所需 client 辅助，去掉对巨石 ipc 的依赖。"
+        },
+        {
+          "name": "链接证明",
+          "description": "otool -L 验证 CLI 无 ORT/OpenCV 产品 dylib。"
+        },
+        {
+          "name": "回归",
+          "description": "CLI mock/vision smoke + ./init.sh。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06905",
+      "name": "机械目录与 include 布局",
+      "description": "物理目录对齐 adapters/protocol/application/diagnostics；include 分层（可 re-export）。仅机械移动，不改行为与 golden。",
+      "module": "cpp/src/; cpp/include/; cpp/diagnostics/; CMake; tests includes",
+      "dependencies": [
+        "feat-06901",
+        "feat-06902",
+        "feat-06903",
+        "feat-06904"
+      ],
+      "subtasks": [
+        {
+          "name": "src 映射",
+          "description": "git mv 到目标树；CMake 路径更新。"
+        },
+        {
+          "name": "include 分层",
+          "description": "core/ports/pipeline/protocol；兼容转发头可选。"
+        },
+        {
+          "name": "回归",
+          "description": "全量相关 ctest + ./init.sh；golden diff 空。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06906",
+      "name": "Paddle 产品公共面收缩",
+      "description": "产品 paddle.hpp 仅 options/capabilities/engine；stage trace/test override 进入 diagnostics/private。不改 recognize 默认与 golden。",
+      "module": "cpp/include/sublift/paddle.hpp; adapters/paddle; diagnostics/; parity/trace",
+      "dependencies": [
+        "feat-06905"
+      ],
+      "subtasks": [
+        {
+          "name": "头文件拆分",
+          "description": "产品头瘦身；diagnostics API 给 trace/parity。"
+        },
+        {
+          "name": "消费者迁移",
+          "description": "Worker 产品路径不包含 stage 类型；trace 工具更新 include。"
+        },
+        {
+          "name": "回归",
+          "description": "paddle ctest + offline parity 抽测。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06907",
+      "name": "ModelBundle + ResourceLocator",
+      "description": "统一模型/ORT/ffmpeg 查找与 SHA：override→安装资源→校验缓存→可选下载→明确错误；probe 与 construct 同一解析器。兼容 rapidocr cache 过渡。",
+      "module": "cpp ResourceLocator/ModelBundle; paddle_models; worker probe; docs",
+      "dependencies": [
+        "feat-06906"
+      ],
+      "subtasks": [
+        {
+          "name": "解析器与 manifest",
+          "description": "schema、SHA、原子安装语义。"
+        },
+        {
+          "name": "probe≡construct",
+          "description": "availability 与真实构造共用路径。"
+        },
+        {
+          "name": "兼容与单测",
+          "description": "rapidocr cache 仍可用；半成品 fail-closed。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06908",
+      "name": "Capability 单一事实来源",
+      "description": "hello/bye/capabilities 仅由 Composition Root 根据真实 Adapter+资源计算；协议层无猜引擎。",
+      "module": "worker main; engine_factory; protocol mapper; Swift/Python handshake tests",
+      "dependencies": [
+        "feat-06907"
+      ],
+      "subtasks": [
+        {
+          "name": "Root 计算",
+          "description": "capability 与 start_job 资源路径一致。"
+        },
+        {
+          "name": "客户端兼容",
+          "description": "Swift/Python 解析不破坏。"
+        },
+        {
+          "name": "回归",
+          "description": "handshake + IPC E2E。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06909",
+      "name": "Native CLI 产品 parity",
+      "description": "正式 CLI 支持 paddle（经 Worker）；身份日志与 GUI 一致；文档标明 Python CLI 为 dev/oracle。",
+      "module": "cpp/src/cli/; README; ARCHITECTURE; docs",
+      "dependencies": [
+        "feat-06904",
+        "feat-06908"
+      ],
+      "subtasks": [
+        {
+          "name": "paddle 引擎",
+          "description": "CLI --engine paddle 走 Worker。"
+        },
+        {
+          "name": "身份日志",
+          "description": "runtime/engine/model/stable 与 Worker 一致。"
+        },
+        {
+          "name": "文档",
+          "description": "产品 CLI=Native；uv run=dev/oracle。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06910",
+      "name": "macOS Product Bundle 布局",
+      "description": "可重复构建安装布局：Worker、ORT、模型 manifest、ffmpeg、NOTICE、相对 rpath。不放宽 SHA/质量门。",
+      "module": "cpp/packaging/macos/; CMake install; ResourceLocator; THIRD_PARTY_NOTICES.md",
+      "dependencies": [
+        "feat-06907",
+        "feat-06909"
+      ],
+      "subtasks": [
+        {
+          "name": "bundle 布局",
+          "description": "Helpers/Frameworks/Resources 符合架构 §13。"
+        },
+        {
+          "name": "rpath 与 notices",
+          "description": "otool 无 brew/venv；许可证归档。"
+        },
+        {
+          "name": "断网 smoke",
+          "description": "随包资源可完成提取 smoke。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06911",
+      "name": "签名、公证与干净机 Gatekeeper",
+      "description": "Developer ID 签名、notarization、staple；干净环境 Gatekeeper 启动并完成短视频提取。缺证书时 blocked 并写明步骤。",
+      "module": "cpp/packaging/macos/; docs/reports/",
+      "dependencies": [
+        "feat-06910"
+      ],
+      "subtasks": [
+        {
+          "name": "codesign 脚本",
+          "description": "deep/strict verify。"
+        },
+        {
+          "name": "notarize/staple",
+          "description": "成功或 blocked 证据。"
+        },
+        {
+          "name": "干净机验收",
+          "description": "真实短视频→SRT 报告。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06912",
+      "name": "Python-free 产品门",
+      "description": "fail-closed 门：产品路径零 Python/uv 子进程；对齐 6.8 cancel/restart/长流与质量不退化。",
+      "module": "scripts/parity/; packaging; docs",
+      "dependencies": [
+        "feat-06910"
+      ],
+      "subtasks": [
+        {
+          "name": "门脚本",
+          "description": "PATH 隔离、进程树断言、短片 SRT。"
+        },
+        {
+          "name": "稳定性",
+          "description": "cancel≤1s、restart≤5s；长流 env 触发。"
+        },
+        {
+          "name": "不退化",
+          "description": "引用/抽测 6.8 paddle 门。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "feat-06913",
+      "name": "Fallback 退役与终态文档",
+      "description": "观察期后产品不再静默 Python paddle_override；不可用→可操作 Native 错误；更新矩阵/ADR/phase 状态。保留 Oracle 与 dev 回滚说明。",
+      "module": "runtime.py; RuntimePolicy.swift; PipelineClient; engine-matrix; DECISIONS; feature-list",
+      "dependencies": [
+        "feat-06912"
+      ],
+      "subtasks": [
+        {
+          "name": "产品矩阵",
+          "description": "Release 产品配置 fail-closed。"
+        },
+        {
+          "name": "dev 回滚文档",
+          "description": "与产品默认分离并有测试。"
+        },
+        {
+          "name": "收口",
+          "description": "§19 清单 evidence；post-cutover=done。"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
     }
   ]
 }

@@ -3,34 +3,34 @@
 ## 当前状态
 
 - **最后更新：** 2026-07-30
-- **当前 Phase：** Phase 6.8 Paddle Native hardening 已完成；6.9+ 尚未开始
-- **已完成：** feat-06801–feat-06807（安全路由、算子 parity、多源质量、性能、产品 cutover）
-- **产品默认 Runtime：** `engine=paddle` available → C++ stable；unavailable → Python Paddle `paddle_override`
-- **回滚：** `SUBLIFT_RUNTIME=python` / `SUBLIFT_CPP_PADDLE=0`
-- **回顾入口：** `docs/cpp/phase6.8-review-index.md`
+- **当前 Phase：** Phase 6.9 Native 产品架构整理
+- **分支 / worktree：** `refactor/native-product-architecture` @ `/Volumes/lab/pp/SubLift_CPP`
+- **基线：** 6.8 已合入 `main`（`99e361e`）；Paddle available → C++ stable
+- **计划：** `docs/cpp/phase6.9-implementation-plan.md`（feat-06901–06913）
+- **目标态：** `docs/cpp/phase6.9-native-product-architecture.md`
+- **下一实现：** `feat-06901`（`sublift_protocol` Target 与协议纯度）
 
 ## 进行中
 
-- 无；下一步需从 6.9+ 新建独立 feature，不能把打包范围混入已完成的 6.8。
+- 无代码实现；计划与跟踪已落盘，等待从 06901 开工。
 
 ## 近期完成
 
-- [x] **feat-06807**：Paddle available 默认 C++ stable；720s 长流、2.8ms cancel、0.1ms restart 与 C++→Python→C++ exact 回滚通过；GUI path-mode 日志已按实际 runtime/extractor 显示
-- [x] **feat-06806**：真实 120s canonical 产品门 C++/Python wall=`0.8956x`、RSS=`0.9152x`；性能后 3 来源质量仍逐源 SHA exact
-- [x] **feat-06805**：真实 3 来源/614.272s Q2 产品门；pyclipper round-unclip 修复后逐源 SRT hash、全部质量指标与 Q0 boxes 均 Python/C++ exact
-- [x] **feat-06804**：真实 Cls/180°、动态 Rec batch、metadata 字典、CTC rounding；固定 quad 后 crop/Cls/Rec tensor exact，9/9 最终文本与顺序 exact
-- [x] **feat-06803**：Det tensor exact；同 ORT probability exact；跨构建误差有 SHA 指纹；box P/R=1.0、≤1px；完整 DB/empty 门通过
+- [x] **6.9 实施计划**：四波浪 13 features、验收条件、非目标、风险与验证包
+- [x] **feat-069xx 登记**：`docs/phases/phase6.json` + `feature-list.json` `phase6.post-cutover`
+- [x] **6.8 → main FF 合入** + `./init.sh` 10/10（主仓会话）
+- [x] **6.9 目标架构草案** 与 6.8 cutover
 
 ## 阻塞项 / 风险
 
-- Q2 当前只有 1 个真实外置片源 + 2 个可确定生成源；足以冻结本轮多样式相对门，但不代表广泛真实片源覆盖。
-- canonical Candidate 固定官方 ORT SHA `cadd9517…`；build tree 已相对 rpath 自带该 dylib，但正式 `.app` 模型/签名/公证仍属 6.9+。
-- Release 全量 CTest 174/175；唯一失败为既有 Apple Vision synthetic OCR 用例，标准 Debug `./init.sh` 10/10，Paddle Release 22/22。
+- 正式 `.app` 签名/公证依赖证书（feat-06911 可能 blocked，不阻塞 06910 布局完成）。
+- Fallback 退役（06913）须满足观察期，不可提前删除 Python 回滚。
+- Release 全量 CTest 仍有既有 Vision synthetic 环境用例失败（与 6.9 结构工作无关）。
 
 ## 近期决策
 
-- **ADR-0029**：Paddle 全门通过后默认 C++ stable；ORT 自带相对 rpath，Python 保留回滚
-- **ADR-0028**：性能门固定 ORT 二进制；拒绝导致 SRT hash 漂移的 batch=1 微优化
-- **ADR-0027**：Paddle E2E 门必须真实运行、多源指纹化；1px Det 几何不得以 Cls 阈值掩盖
+- **6.9 执行顺序**：先 CMake target 边界 → 机械目录 → ModelBundle → 打包 → Python-free → fallback 退役
+- **CLI 必须走 Worker**；不新增 in-process OCR 产品路径
+- **ADR-0029**（仍有效）：Paddle 默认 C++ stable；Python 回滚保留至 06913
 
-> 完整完成证据见 `docs/phases/phase6.json`；长期决策见 `docs/DECISIONS.md`。
+> 完成证据只写 `docs/phases/phase6.json`；长期决策见 `docs/DECISIONS.md`。

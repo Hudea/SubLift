@@ -57,7 +57,8 @@ Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵�
 | **6.6 Cutover** | `feat-066xx` | 按 [engine-matrix-and-cutover.md](engine-matrix-and-cutover.md) 默认化 | vision/mock→C++；paddle→Python |
 | **6.7 Paddle Native MVP** | `feat-067xx` | [phase6.7-paddle.md](phase6.7-paddle.md)：ONNX PP-OCRv6 `IOcrEngine` 可运行、接线与基础 golden | 当前实现可用时自动 C++；真实质量/性能未过产品门 |
 | **6.8 Paddle hardening** | `feat-068xx` | [phase6.8-paddle-hardening.md](phase6.8-paddle-hardening.md)：完整 Det/Cls/Rec parity、多源质量、性能、长流与回滚 | **done：available→C++ stable** |
-| **6.9+** | `feat-069xx`… | 去 Python 产品依赖 / 打包分发等 | 后置 |
+| **6.9** | `feat-06901`–`06913` | Native 产品架构整理 / ModelBundle / macOS 分发 / Python-free | 计划冻结；见 phase6.9-implementation-plan.md |
+| **6.10+** | TBD | Linux/Windows 分发、Named Pipe、Python 树迁移 | 后置 |
 
 **进入 6.1 的硬门槛：** `feat-06001`–`feat-06005` 全部 `done`。
 
@@ -123,5 +124,5 @@ Python ── 仅冻结 Oracle / benchmark / Paddle fallback（见引擎矩阵�
 - **当前实现：** vision/mock → C++；Paddle available → C++ stable，unavailable → Python Paddle fallback；`SUBLIFT_RUNTIME=python` 可回滚
 - **原生 CLI：** `build/cpp/bin/sublift`（或 `sublift_cli`）`extract`；`uv run sublift` 保留为 oracle / 回滚 / paddle 无 native 时
 - **残差风险：** Paddle Q2 为 1 个真实 CJK + 2 个确定生成源，仍需扩充真实 Latin/混排；
-  正式 `.app` 内置 ORT/模型、签名公证属于 6.9+；Release Vision synthetic 用例的既有
+  正式 `.app` 内置 ORT/模型、签名公证属于 6.9（feat-06910+）；Release Vision synthetic 用例的既有
   环境失败不属于 Paddle cutover。

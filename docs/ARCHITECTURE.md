@@ -29,6 +29,7 @@
 | 任务跟踪 | [`docs/phases/phase6.json`](phases/phase6.json) |
 | 行为 Oracle | **冻结** `oracle_commit` + golden（见 `docs/cpp/parity-contract.md`），不是未钉扎的 main 尖端 |
 | 引擎 cutover | vision/mock → C++；Paddle available → C++ stable，unavailable → Python Paddle fallback（见 `docs/cpp/engine-matrix-and-cutover.md`） |
+| Native 产品目标态 | 6.9 CMake/目录边界、Worker、模型分发与 Python-free 产品门（见 `docs/cpp/phase6.9-native-product-architecture.md`） |
 | 实现树 | `cpp/`（自 feat-06002 起） |
 
 Python 侧 `docs/design/*` 在 cutover 前仍是算法语义叙述源；与 C++ 冲突时以冻结 golden 为准。

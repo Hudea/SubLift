@@ -473,10 +473,24 @@
       },
       {
         "id": "phase6.post-cutover",
-        "name": "6.9+ 去 Python 产品依赖 / 打包",
-        "description": "仅在 6.8 Paddle Native 通过质量、性能与回滚门后，才评估去嵌入 Python、随包 ORT/模型/ffmpeg、universal2、签名公证与跨平台产品分发。开干前另拆 feat-069xx 起。",
-        "status": "not-started",
-        "covers": []
+        "name": "6.9 Native 产品架构整理 / 去 Python 分发",
+        "description": "Target/目录/公共面整理、ModelBundle、Native CLI parity、macOS bundle、Python-free 门与 fallback 退役。目标态 docs/cpp/phase6.9-native-product-architecture.md；实施计划 docs/cpp/phase6.9-implementation-plan.md。覆盖 feat-06901–06913。",
+        "status": "in-progress",
+        "covers": [
+          "feat-06901",
+          "feat-06902",
+          "feat-06903",
+          "feat-06904",
+          "feat-06905",
+          "feat-06906",
+          "feat-06907",
+          "feat-06908",
+          "feat-06909",
+          "feat-06910",
+          "feat-06911",
+          "feat-06912",
+          "feat-06913"
+        ]
       }
       ]
     }
