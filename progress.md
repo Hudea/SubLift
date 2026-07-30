@@ -8,7 +8,8 @@
 - **基线：** 6.8 已合入 `main`（`99e361e`）；Paddle available → C++ stable
 - **计划：** `docs/cpp/phase6.9-implementation-plan.md`（feat-06901–06913）
 - **目标态：** `docs/cpp/phase6.9-native-product-architecture.md`
-- **下一实现：** `feat-06913`（Phase 6 终态清理与 Fallback 退役准备）
+- **状态：** Phase 6.9 (feat-06901–06913) 100% 全部完成！
+- **下一实现：** 无（Phase 6.9 全部 Feature 已交付）
 
 ## 进行中
 
@@ -16,11 +17,11 @@
 
 ## 近期完成
 
+- [x] **feat-06913**：Fallback 退役准备与 Phase 6 终态清理
 - [x] **feat-06912**：Python-free Standalone Native 运行验证
 - [x] **feat-06911**：Swift App Shell + Native Driver
 - [x] **feat-06910**：macOS Product Bundle 布局
 - [x] **feat-06909**：Native CLI 产品 parity
-- [x] **feat-06908**：ResourceLocator 真实资源探查与 Probe=Construct 同一化
 
 ## 阻塞项 / 风险
 

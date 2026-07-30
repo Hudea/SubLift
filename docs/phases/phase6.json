@@ -1589,8 +1589,8 @@
           "description": "§19 清单 evidence；post-cutover=done。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 Fallback 退役准备与 Phase 6 终态清理。更新 Phase 6 终态文档 (engine-matrix-and-cutover.md, phase6.9-native-product-architecture.md, ARCHITECTURE.md) 明确 Paddle Native 为 macOS 生产 stable 引擎、Python rapidocr 为 Oracle/Benchmark；更新 feature-list.json 将 Phase 6.9 状态设为 done；check_cutover_gate.py PASS；./init.sh 10/10 PASS；Phase 6.9 全部 13 个 feature 完整交付。"
     }
   ]
 }

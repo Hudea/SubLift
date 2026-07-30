@@ -1,9 +1,8 @@
 # 引擎矩阵、Cutover 与回滚
 
-> 状态：Phase 6 (Phase 6.7 & Phase 6.8) 已全面完成 Paddle C++ Native 加固与 Cutover。
-> 已过 12 项 Parity Goldens、10 阶段 Stage Dump、多源 E2E 质量门、严格快于 Python
-> 的性能门、720s 长流与真实 cancel/restart/rollback 门。
-> C++ `sublift_paddle` 已成为 `engine=paddle` 的正式产品默认 Runtime；不可用时显式 `paddle_override` 降级 Python。
+> 状态：Phase 6 (Phase 6.7–6.9) 已全面完成 Native C++ 产品架构重构与全量 Feature (feat-06901–06913) 交付。
+> 已通过 12 项 Parity Goldens、10 阶段 Stage Dump、多源 E2E 质量门、进程树 zero-python Python-free 隔离门及 SubLift.app 规范打包。
+> C++ `sublift_paddle` 与 `sublift_cli` / `SubLift.app` 已成为正式全引擎产品默认；Python 逻辑作为 Oracle 比对、benchmark 评估与 `--runtime python` 显式调试/回滚手段留存。
 
 ## 1. 引擎 × Runtime 矩阵（终局策略）
 

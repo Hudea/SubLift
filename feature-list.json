@@ -475,7 +475,7 @@
         "id": "phase6.post-cutover",
         "name": "6.9 Native 产品架构整理 / 去 Python 分发",
         "description": "Target/目录/公共面整理、ModelBundle、Native CLI parity、macOS bundle、Python-free 门与 fallback 退役。目标态 docs/cpp/phase6.9-native-product-architecture.md；实施计划 docs/cpp/phase6.9-implementation-plan.md。覆盖 feat-06901–06913。",
-        "status": "in-progress",
+        "status": "done",
         "covers": [
           "feat-06901",
           "feat-06902",

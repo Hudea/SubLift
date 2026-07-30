@@ -1,10 +1,9 @@
 # Phase 6.9 — Native C++ 产品目标架构
 
-> 状态：**目标态架构已冻结；实施按 feat-06901–06913 进行**  
-> 实施计划：[phase6.9-implementation-plan.md](phase6.9-implementation-plan.md)  
+> 状态：**100% 交付完成（feat-06901–06913 全部落地）**  
+> 实施计划：[phase6.9-implementation-plan.md](phase6.9-implementation-plan.md) (全部 DONE)  
 > 前置完成：Phase 6.8 Paddle Native hardening / product cutover  
-> 当前基线：vision/mock → C++；Paddle available → C++ stable；Python 保留
-> fallback / rollback / Oracle  
+> 当前基线：vision/mock/paddle 全引擎 → Native C++；SubLift.app 标准打包；Python 保留为 Oracle / benchmark / 显式回滚  
 > 关联契约：
 > [Phase 6 总览](phase6-overview.md) ·
 > [C++ Core 架构](architecture.md) ·
