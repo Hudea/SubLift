@@ -1437,8 +1437,8 @@
           "description": "rapidocr cache 仍可用；半成品 fail-closed。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 sublift_models STATIC Target 与 C++ ModelBundle 布局。创建 sublift_models 静态库与 include/sublift/models/model_bundle.hpp；sublift_paddle 链接 sublift_models 并通过 sublift::paddle_detail 无缝 using 转发；ctest 2/2 models 测试 PASS；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06908",

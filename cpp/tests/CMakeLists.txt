@@ -18,6 +18,7 @@ set(_sublift_test_srcs
   paddle_ctc_test.cpp
   paddle_crop_cls_test.cpp
   paddle_models_test.cpp
+  sublift_models_test.cpp
   worker_framing_test.cpp
 
   worker_protocol_test.cpp
@@ -115,6 +116,7 @@ endif()
 
 target_link_libraries(sublift_tests
   PRIVATE
+    sublift_models
     sublift_pipeline
     sublift_test_support
     sublift_ipc

@@ -1,4 +1,4 @@
-#include "paddle_models.hpp"
+#include "sublift/models/model_bundle.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -6,7 +6,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace sublift::paddle_detail {
+namespace sublift::models {
 
 ModelType parse_model_type(std::string_view name) {
   std::string lower_name;
@@ -73,10 +73,6 @@ std::filesystem::path resolve_model_dir(const std::string& custom_dir) {
 }
 
 ModelPaths get_expected_model_paths(const std::filesystem::path& model_dir, ModelType model_type) {
-  // Align with rapidocr 3.x PP-OCRv6 cache layout under Global.model_root_dir:
-  //   PP-OCRv6_det_{tiny|small|medium}.onnx
-  //   PP-OCRv6_rec_{tiny|small|medium}.onnx
-  //   ppocrv6_dict.txt  (or tiny: ppocrv6_tiny_dict.txt — we accept both)
   const std::string suffix = model_type_to_string(model_type);
   ModelPaths paths;
   paths.det_path = model_dir / ("PP-OCRv6_det_" + suffix + ".onnx");
@@ -101,7 +97,6 @@ bool validate_model_paths(const ModelPaths& paths, std::string* error_msg) {
   if (!std::filesystem::exists(paths.rec_path)) {
     missing.push_back(paths.rec_path.filename().string());
   }
-  // keys: allow fallback name ppocrv6_dict.txt for tiny if tiny dict missing
   bool keys_ok = std::filesystem::exists(paths.keys_path);
   if (!keys_ok) {
     auto alt = paths.keys_path.parent_path() / "ppocrv6_dict.txt";
@@ -125,4 +120,4 @@ bool validate_model_paths(const ModelPaths& paths, std::string* error_msg) {
   return false;
 }
 
-}  // namespace sublift::paddle_detail
+}  // namespace sublift::models

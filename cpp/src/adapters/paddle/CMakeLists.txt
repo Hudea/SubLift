@@ -11,7 +11,6 @@ target_link_libraries(sublift_paddle_geometry PUBLIC sublift_core)
 
 add_library(sublift_paddle STATIC
   paddle_ocr.cpp
-  paddle_models.cpp
   ppocr_det_preprocess.cpp
   ppocr_db_postprocess.cpp
   ppocr_crop_cls.cpp
@@ -27,6 +26,7 @@ target_include_directories(sublift_paddle
 
 target_link_libraries(sublift_paddle
   PUBLIC
+    sublift_models
     sublift_core
     sublift_paddle_geometry
 )
