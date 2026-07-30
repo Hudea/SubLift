@@ -114,17 +114,42 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertEqual(e.videoId, "VID-CPP-001")
     }
 
-    func testPaddleEngineForcesPythonServerWithCppRequested() throws {
+    func testPaddleEngineFallsBackToPythonWhenCppDisabled() throws {
         let client = PipelineClient()
         defer { client.stop() }
 
-        // 请求 paddle + requestedRuntime: "cpp"，RuntimePolicy 会强覆盖路由至 python
+        // 显式关闭 C++ Paddle 时，产品默认/显式 cpp 都必须可观测地 fallback。
         let success = try client.start(
             requestedRuntime: "cpp",
             engine: "paddle",
-            pythonExecutable: pythonPath
+            pythonExecutable: pythonPath,
+            envOverride: ["SUBLIFT_CPP_PADDLE": "0"]
         )
-        XCTAssertTrue(success, "paddle 强覆盖至 Python Worker 启动并成功握手")
+        XCTAssertTrue(success, "Paddle fallback 至 Python Worker 后应成功握手")
+        XCTAssertEqual(
+            client.lastWorkerChoice,
+            WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
+        )
+    }
+
+    func testPaddleProductDefaultStartsCppWhenAvailable() throws {
+        let workerPath = try PipelineClient.findWorkerExecutable()
+        try XCTSkipUnless(
+            PipelineClient.probeCppPaddleAvailable(workerExecutable: workerPath),
+            "当前 Release Worker/模型不具备 C++ Paddle，跳过 live cutover 握手"
+        )
+
+        let client = PipelineClient()
+        defer { client.stop() }
+        let success = try client.start(
+            engine: "paddle",
+            workerExecutable: workerPath
+        )
+        XCTAssertTrue(success, "Paddle 产品默认应以 C++ Worker 完成握手")
+        XCTAssertEqual(
+            client.lastWorkerChoice,
+            WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: .productDefault)
+        )
     }
 
     // MARK: - feat-016: 完整 Pipeline 跨进程测试

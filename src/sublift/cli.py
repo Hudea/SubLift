@@ -69,7 +69,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--runtime",
         choices=["python", "cpp"],
         default=None,
-        help="执行运行时（默认自动解析：SUBLIFT_RUNTIME 环境变量或产品默认；paddle 强路由 Python）",
+        help="执行运行时（默认 cpp；Paddle C++ 不可用时显式回退 Python）",
     )
     extract_parser.add_argument(
         "--script",
@@ -122,16 +122,18 @@ def _run_extract(
 
     if choice.resolved_via == ResolutionSource.PADDLE_OVERRIDE:
         print(
-            "[提示] C++ Paddle 不可用（未构建/无模型），已切回 Python runtime；"
+            "[SubLift] engine=paddle runtime=python model=PP-OCRv6-small "
+            "status=fallback via=paddle_override；C++ Paddle 不可用（未构建/无模型），"
             "可设置 SUBLIFT_PADDLE_MODEL_DIR 或启用 SUBLIFT_ENABLE_PADDLE 构建。",
             file=sys.stderr,
         )
-    elif choice.engine == "paddle" and choice.runtime == "cpp":
+    elif choice.engine == "paddle":
         print(
-            "[提示] 已开启 C++ Paddle Native OCR [experimental] (Phase 6.8 加固中)。",
+            f"[SubLift] engine=paddle runtime={choice.runtime} "
+            "model=PP-OCRv6-small status=stable "
+            f"via={choice.resolved_via.value}",
             file=sys.stderr,
         )
-
 
     if choice.runtime == "cpp":
         _run_extract_cpp(

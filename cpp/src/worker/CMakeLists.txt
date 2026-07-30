@@ -53,3 +53,6 @@ add_executable(sublift_worker main.cpp)
 target_link_libraries(sublift_worker PRIVATE
   sublift_ipc
 )
+if(COMMAND sublift_use_bundled_onnxruntime)
+  sublift_use_bundled_onnxruntime(sublift_worker)
+endif()

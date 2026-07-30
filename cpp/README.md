@@ -9,6 +9,8 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 - C++20 compiler (AppleClang / Clang / GCC)
 - Network on first configure (FetchContent downloads nlohmann/json; Catch2 only if tests ON)
 - Optional: OpenCV 4.x (`core`+`imgproc`) for signature parity (feat-06101). Soft-discover: missing OpenCV disables signature, configure still succeeds. macOS: `brew install opencv@4` then reconfigure. Hard-require: `-DSUBLIFT_REQUIRE_OPENCV=ON`
+- Optional: ONNX Runtime headers/library for Paddle Native. Product acceptance fixes the official
+  ORT 1.28.0 dylib SHA rather than accepting an arbitrary same-version build.
 - Optional: system `ffmpeg`/`ffprobe` on `PATH` (extractor integration + extract parity). Not required to build; pure/golden offline tests still run without them.
 
 ## Target graph
@@ -42,6 +44,7 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (needs system ONNX Runtime; macOS: `brew install onnxruntime`) |
 | `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/rapidocr-models` | PP-OCRv6 ONNX + `ppocrv6_dict.txt` (same cache as Python rapidocr) |
 | `SUBLIFT_REQUIRE_PADDLE` | OFF | Fail configure if ONNX Runtime missing |
+| `SUBLIFT_BUNDLE_ONNXRUNTIME` | ON | Copy the selected ORT shared library to build `lib/` and use a relative executable rpath |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |
 | `SUBLIFT_BUILD_TESTS` | ON | Catch2 + CTest |
 | `SUBLIFT_ENABLE_OPENCV` | ON | Prefer signature pipeline when OpenCV is found |
@@ -54,6 +57,7 @@ sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
 | Catch2 | FetchContent, pin `v3.7.1` (only test framework) |
 | nlohmann/json | FetchContent, pin `v3.11.3` |
 | OpenCV | System `find_package` soft-optional (`core`/`imgproc`); PRIVATE to `sublift_core` when found. Prefer **opencv@4** (parity with Python `cv2` 4.x) |
+| ONNX Runtime | `find_package`; PRIVATE to `sublift_paddle`. Paddle-enabled build copies the selected dylib/so beside build products; `sublift_core` remains ORT-free |
 | ffmpeg / ffprobe | System executables (subprocess only; no libav). Not vendored |
 
 ## Build & test
@@ -118,16 +122,19 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 
 - **Default Product Runtime**: C++ Native Core (`sublift_worker`) is the **default runtime** for SubLift products (Phase 6.6 Cutover Default).
 - **Rollback Path**: Host CLI / Swift GUI can fallback to Python worker by setting environment variable `SUBLIFT_RUNTIME=python` or passing `--runtime python`.
-- **Paddle OCR**: PaddleOCR is **not** supported in C++ worker and remains on Python worker (`engine: "paddle"` requests automatically route to Python worker via `paddle_override`).
+- **Paddle OCR**: Paddle available → C++ Worker stable product path; unavailable → explicit
+  Python Paddle `paddle_override`. It never changes the requested engine.
 
 ## Runtime Resolution Policy & Toggles (Phase 6.6)
 
 SubLift provides unified runtime resolution (`src/sublift/runtime.py` and `RuntimePolicy.swift`):
 
-- **Default**: C++ Native Core (`sublift_worker`) for `vision` and `mock` engines.
+- **Default**: C++ Native Core (`sublift_worker`) for `vision`, `mock`, and available `paddle`.
 - **Priority**: Explicit `--runtime python|cpp` Flag > Environment Variable `SUBLIFT_RUNTIME=python|cpp` > Product Default (`cpp`).
 - **Engine Matrix Cross-Rules**:
-  - `engine="paddle"` ALWAYS routes to Python Worker (`resolved_via="paddle_override"` if C++ requested).
+  - `engine="paddle"` + C++ capability → C++ Worker; missing capability → Python Paddle
+    with `resolved_via="paddle_override"`.
+  - Explicit/env `runtime=python` remains the Paddle rollback/Oracle path.
   - `engine="vision"` or `"mock"` routes according to resolved runtime (`cpp` by default).
 
 ## Related docs

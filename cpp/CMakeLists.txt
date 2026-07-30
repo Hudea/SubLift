@@ -32,6 +32,8 @@ option(SUBLIFT_ENABLE_PADDLE
   "Build sublift_paddle (ONNX Runtime PaddleOCR adapter)" OFF)
 option(SUBLIFT_REQUIRE_PADDLE
   "Fail configure if ONNX Runtime is missing (implies enabling paddle)" OFF)
+option(SUBLIFT_BUNDLE_ONNXRUNTIME
+  "Copy the selected ONNX Runtime shared library beside build products" ON)
 
 if(SUBLIFT_REQUIRE_PADDLE)
   set(SUBLIFT_ENABLE_PADDLE ON)
@@ -93,6 +95,44 @@ if(SUBLIFT_ENABLE_PADDLE)
   endif()
   if(ONNXRuntime_FOUND)
     message(STATUS "ONNX Runtime ${ONNXRuntime_VERSION} enabled (sublift_paddle)")
+    if(SUBLIFT_BUNDLE_ONNXRUNTIME AND UNIX)
+      get_filename_component(
+        _sublift_ort_realpath "${ONNXRuntime_LIBRARY}" REALPATH)
+      get_filename_component(
+        _sublift_ort_realname "${_sublift_ort_realpath}" NAME)
+      set(
+        SUBLIFT_ONNXRUNTIME_BUNDLE_DIR
+        "${CMAKE_BINARY_DIR}/lib"
+        CACHE INTERNAL "Build-tree ONNX Runtime bundle directory")
+      file(MAKE_DIRECTORY "${SUBLIFT_ONNXRUNTIME_BUNDLE_DIR}")
+      configure_file(
+        "${_sublift_ort_realpath}"
+        "${SUBLIFT_ONNXRUNTIME_BUNDLE_DIR}/${_sublift_ort_realname}"
+        COPYONLY)
+      if(APPLE)
+        set(_sublift_ort_abi_name "libonnxruntime.1.dylib")
+      else()
+        set(_sublift_ort_abi_name "libonnxruntime.so.1")
+      endif()
+      file(CREATE_LINK
+        "${_sublift_ort_realname}"
+        "${SUBLIFT_ONNXRUNTIME_BUNDLE_DIR}/${_sublift_ort_abi_name}"
+        SYMBOLIC COPY_ON_ERROR)
+
+      function(sublift_use_bundled_onnxruntime target_name)
+        if(APPLE)
+          set(_sublift_ort_loader_rpath "@loader_path/../lib")
+        else()
+          set(_sublift_ort_loader_rpath "\$ORIGIN/../lib")
+        endif()
+        set_target_properties("${target_name}" PROPERTIES
+          BUILD_WITH_INSTALL_RPATH TRUE
+          INSTALL_RPATH "${_sublift_ort_loader_rpath}")
+      endfunction()
+      message(STATUS
+        "Bundled ONNX Runtime ${_sublift_ort_realname} in "
+        "${SUBLIFT_ONNXRUNTIME_BUNDLE_DIR}")
+    endif()
   else()
     set(SUBLIFT_ENABLE_PADDLE OFF)
     message(WARNING "ONNX Runtime not found; sublift_paddle built in stub mode.")

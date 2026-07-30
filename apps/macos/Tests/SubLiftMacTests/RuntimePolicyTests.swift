@@ -31,7 +31,7 @@ final class RuntimePolicyTests: XCTestCase {
         XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .vision, resolvedVia: .explicitFlag))
     }
 
-    func testPaddleEngineForcesPythonRuntime() throws {
+    func testPaddleEngineFallsBackWhenCppUnavailable() throws {
         let choice = try RuntimePolicy.resolve(
             requestedRuntime: "cpp",
             requestedEngine: "paddle",
@@ -39,6 +39,39 @@ final class RuntimePolicyTests: XCTestCase {
             defaultRuntime: .python
         )
         XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride))
+    }
+
+    func testPaddleProductDefaultUsesCppWhenAvailable() throws {
+        let choice = try RuntimePolicy.resolve(
+            requestedRuntime: nil,
+            requestedEngine: "paddle",
+            envOverride: [:],
+            defaultRuntime: .cpp,
+            isCppPaddleAvailable: true
+        )
+        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: .productDefault))
+    }
+
+    func testPaddleProductDefaultFallsBackWhenUnavailable() throws {
+        let choice = try RuntimePolicy.resolve(
+            requestedRuntime: nil,
+            requestedEngine: "paddle",
+            envOverride: [:],
+            defaultRuntime: .cpp,
+            isCppPaddleAvailable: false
+        )
+        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride))
+    }
+
+    func testPaddleExplicitPythonRemainsRollback() throws {
+        let choice = try RuntimePolicy.resolve(
+            requestedRuntime: "python",
+            requestedEngine: "paddle",
+            envOverride: [:],
+            defaultRuntime: .cpp,
+            isCppPaddleAvailable: true
+        )
+        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .explicitFlag))
     }
 
     func testMockEngineEnvCpp() throws {

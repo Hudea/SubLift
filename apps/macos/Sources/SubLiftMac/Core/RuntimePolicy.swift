@@ -78,11 +78,10 @@ public enum RuntimePolicy {
         }
 
         if engine == .paddle {
-            let isExplicitCpp = (source == .explicitFlag || source == .envVar) && candidateRuntime == .cpp
-            if isExplicitCpp && isCppPaddleAvailable {
+            if candidateRuntime == .cpp && isCppPaddleAvailable {
                 return WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: source)
             }
-            if isExplicitCpp && !isCppPaddleAvailable {
+            if candidateRuntime == .cpp {
                 return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .paddleOverride)
             }
             return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: source)

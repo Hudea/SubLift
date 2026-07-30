@@ -7,7 +7,8 @@
 ## 特性
 
 - **Apple Vision OCR**：默认中英双语识别（zh-Hans + en-US），通过 PyObjC 桥接
-- **PaddleOCR 跨平台引擎**：rapidocr PP-OCRv6，onnxruntime 后端，可选安装
+- **PaddleOCR 跨平台引擎**：PP-OCRv6 + ONNX Runtime；C++ Native 为产品默认，
+  Python rapidocr 保留为 Oracle 与一键回滚
 - **像素差异打轴**：双信号帧签名（前景占比 + dHash）+ 三态状态机，时间轴稳定
 - **OCR 后置与段内共识**：每段最多识别 4 个代表帧，按字幕画像选行并用跨帧共识抑制背景文字
 - **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
@@ -26,7 +27,8 @@
 
 - [架构](docs/ARCHITECTURE.md)
 - [需求规格](docs/REQUIREMENTS.md)
-- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.7 Native MVP done；6.8 Paddle hardening 待开始）
+- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.8 已完成；Paddle Native 已正式 cutover）
+- **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
 
 ## 安装
@@ -56,6 +58,26 @@ uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; Paddle
 
 > 若 PaddleOCR 初始化失败，CLI 会显示失败原因、网络重试提示和上述预下载命令，不会输出 Python traceback。
 
+### Paddle Native Release 构建
+
+Paddle 产品 Candidate 必须使用与 Python Oracle 相同、已通过性能门的官方 ORT
+二进制，不能只凭相同版本号替换成 Homebrew dylib：
+
+```bash
+ORT_CAPI="$PWD/.venv/lib/python3.12/site-packages/onnxruntime/capi"
+cmake -S cpp -B build/cpp-rel -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSUBLIFT_ENABLE_OPENCV=ON -DSUBLIFT_REQUIRE_OPENCV=ON \
+  -DSUBLIFT_ENABLE_PADDLE=ON -DSUBLIFT_REQUIRE_PADDLE=ON \
+  -DONNXRuntime_INCLUDE_DIR="$(brew --prefix onnxruntime)/include/onnxruntime" \
+  -DONNXRuntime_LIBRARY="$ORT_CAPI/libonnxruntime.1.28.0.dylib"
+cmake --build build/cpp-rel
+```
+
+CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相对
+`@loader_path/../lib`，开发态运行不依赖虚拟环境内的 ABI 软链。完整 `.app` 内置模型、
+签名、公证仍属于 6.9+ 分发范围。
+
 ## 使用
 
 ### 原生 CLI（推荐 vision/mock；无需 uv）
@@ -66,19 +88,20 @@ uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; Paddle
 ./build/cpp/bin/sublift extract clip.mkv --engine mock -o out.srt
 ```
 
-### Python CLI（oracle / paddle / 回滚）
+### 产品 CLI / Oracle / 回滚
 
 ```bash
 uv run sublift extract <video> -o output.srt                 # 默认 runtime=cpp → spawn C++ worker
 uv run sublift extract clip.mkv --runtime python -o out.srt  # 强制 Python worker
-uv run sublift extract clip.mkv --engine paddle --runtime python -o out.srt  # 当前推荐的 Paddle 稳定路径
-uv run sublift extract clip.mkv --engine paddle --runtime cpp -o out.srt     # C++ Paddle Native MVP（experimental）
+uv run sublift extract clip.mkv --engine paddle -o out.srt                   # C++ Paddle（可用时的产品默认）
+uv run sublift extract clip.mkv --engine paddle --runtime python -o out.srt  # Python Paddle 回滚 / Oracle
 SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回滚
 ```
 
-> 6.7 当前自动路由在 C++ Paddle 可用时会选择 C++，但 2026-07-29 审计确认其真实
-> Det/Cls/Rec parity 与性能尚未达到产品门。6.8 的第一项会把自动默认恢复为 Python；
-> 在此之前使用 Paddle 时建议显式 `--runtime python`。
+Phase 6.8 最终门已通过：120s canonical 上 C++ wall median 为 Python 的
+`0.8956x`、进程树 RSS 为 `0.9152x`；3 来源 614.272s 的质量输出逐源 SHA exact。
+C++ Paddle 不可用时会显示 `paddle_override` 并回到 **Python Paddle**，不会改成
+Vision/Mock。
 
 ### Runtime 矩阵
 
@@ -86,7 +109,7 @@ SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回�
 |---|---|---|
 | **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
 | **mock** | **cpp** | CI / 流程验证 |
-| **paddle** | 当前实现：C++ 可用时自动 **cpp**，否则 **python** | C++ 为 6.7 Native MVP；hardening 期间的安全路由与重新 cutover 见 `docs/cpp/phase6.8-paddle-hardening.md` |
+| **paddle** | **cpp**（可用时），否则显式 **python fallback** | 完整 DB/Quad/Cls/Rec Native；CLI/GUI 显示 runtime/model/stable/fallback |
 
 解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → 当前产品自动策略。
 
@@ -106,7 +129,7 @@ export SUBLIFT_RUNTIME=python
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
 | `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 首次运行需下载模型 |
-| `--runtime` | 自动 | `python` \| `cpp`；覆盖 env 与自动策略；Paddle 在 6.8 完成前推荐显式 `python` |
+| `--runtime` | 自动（cpp） | `python` \| `cpp`；覆盖 env 与自动策略；`python` 是 Paddle 的保留回滚路径 |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）

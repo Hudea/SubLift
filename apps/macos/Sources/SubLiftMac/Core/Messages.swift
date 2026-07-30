@@ -113,7 +113,8 @@ public struct SubtitleProfilePayload: Codable, Equatable {
     }
 }
 
-/// - 若 `videoPath` 非空：path mode，Python 用 `FfmpegExtractor` 自抽帧（与 CLI/benchmark 同源）。
+/// - 若 `videoPath` 非空：path mode，由选中的 C++ / Python Worker 使用各自
+///   `FfmpegExtractor` 自抽帧。
 /// - 若 `videoPath` 为空：frame mode，Swift 推 JPEG frame 流（兼容/调试）。
 public struct StartJobMessage: Codable {
     public let type: MessageType

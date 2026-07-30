@@ -58,6 +58,24 @@ def test_resolve_runtime_paddle_cpp_available() -> None:
     assert choice.resolved_via == FLAG
 
 
+def test_resolve_runtime_paddle_product_default_cpp_available() -> None:
+    choice = resolve_runtime(
+        requested_engine="paddle",
+        default_runtime="cpp",
+        cpp_paddle_available=True,
+    )
+    assert choice == WorkerChoice("cpp", "paddle", P_DEF)
+
+
+def test_resolve_runtime_paddle_product_default_cpp_unavailable() -> None:
+    choice = resolve_runtime(
+        requested_engine="paddle",
+        default_runtime="cpp",
+        cpp_paddle_available=False,
+    )
+    assert choice == WorkerChoice("python", "paddle", PADDLE_OVR)
+
+
 def test_probe_cpp_paddle_respects_env_off() -> None:
     from sublift.runtime import probe_cpp_paddle_available
 
@@ -93,10 +111,10 @@ def test_resolve_runtime_whitespace_and_case_trimmed() -> None:
         (None, None, "vision", "python", WorkerChoice("python", "vision", P_DEF)),
         (None, None, "mock", "python", WorkerChoice("python", "mock", P_DEF)),
         (None, None, "paddle", "python", WorkerChoice("python", "paddle", P_DEF)),
-        # Default cpp (Phase 6.6 cutover default for vision/mock; paddle defaults to python in 6.8)
+        # Default cpp; unavailable Paddle falls back explicitly.
         (None, None, "vision", "cpp", WorkerChoice("cpp", "vision", P_DEF)),
         (None, None, "mock", "cpp", WorkerChoice("cpp", "mock", P_DEF)),
-        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", P_DEF)),
+        (None, None, "paddle", "cpp", WorkerChoice("python", "paddle", PADDLE_OVR)),
         # Env variable override
         (None, "cpp", "vision", "python", WorkerChoice("cpp", "vision", ENV_VAR)),
         (None, "python", "vision", "cpp", WorkerChoice("python", "vision", ENV_VAR)),

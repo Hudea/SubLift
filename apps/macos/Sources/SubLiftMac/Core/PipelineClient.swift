@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Pipeline IPC 客户端：负责启动 Worker 子进程（C++ sublift_worker 或 Python server）并经 UDS 通信。
 ///
@@ -16,6 +17,8 @@ public final class PipelineClient: @unchecked Sendable {
     private(set) var socketPath: String = ""
     /// 已连接的 socket 文件描述符。
     private var socketFD: Int32 = -1
+    /// 最近一次成功握手的最终路由；供 GUI 显示真实 runtime / fallback 状态。
+    public private(set) var lastWorkerChoice: WorkerChoice?
 
     public init() {}
 
@@ -113,9 +116,11 @@ public final class PipelineClient: @unchecked Sendable {
         return fileManager.isExecutableFile(atPath: path)
     }
 
-    /// Align with Python `probe_cpp_paddle_available`: worker present + PP-OCRv6 small models.
+    /// Align with Python `probe_cpp_paddle_available`: ask the exact worker whether
+    /// its compiled Paddle target and complete model set are product-usable.
     public static func probeCppPaddleAvailable(
         env: [String: String]? = nil,
+        workerExecutable: String? = nil,
         fileManager: FileManager = .default
     ) -> Bool {
         let envMap = env ?? ProcessInfo.processInfo.environment
@@ -125,24 +130,51 @@ public final class PipelineClient: @unchecked Sendable {
         if ["0", "false", "no", "off"].contains(flag) {
             return false
         }
-        guard (try? findWorkerExecutable(envOverride: envMap, fileManager: fileManager)) != nil else {
+        let workerPath: String
+        if let workerExecutable {
+            guard isRegularExecutable(workerExecutable, fileManager: fileManager) else {
+                return false
+            }
+            workerPath = workerExecutable
+        } else {
+            guard let found = try? findWorkerExecutable(
+                envOverride: envMap,
+                fileManager: fileManager
+            ) else {
+                return false
+            }
+            workerPath = found
+        }
+
+        let probe = Process()
+        probe.executableURL = URL(fileURLWithPath: workerPath)
+        probe.arguments = ["--probe-engine", "paddle"]
+        probe.environment = envMap
+        probe.standardOutput = Pipe()
+        probe.standardError = Pipe()
+        do {
+            try probe.run()
+        } catch {
             return false
         }
-        let modelDir: String
-        if let custom = envMap["SUBLIFT_PADDLE_MODEL_DIR"]?
-            .trimmingCharacters(in: .whitespacesAndNewlines), !custom.isEmpty {
-            modelDir = (custom as NSString).expandingTildeInPath
-        } else {
-            modelDir = (NSHomeDirectory() as NSString)
-                .appendingPathComponent(".cache/sublift/rapidocr-models")
+
+        let deadline = Date().addingTimeInterval(2.0)
+        while probe.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
         }
-        let det = (modelDir as NSString).appendingPathComponent("PP-OCRv6_det_small.onnx")
-        let rec = (modelDir as NSString).appendingPathComponent("PP-OCRv6_rec_small.onnx")
-        let keys = (modelDir as NSString).appendingPathComponent("ppocrv6_dict.txt")
-        let keysAlt = (modelDir as NSString).appendingPathComponent("ppocrv6_tiny_dict.txt")
-        return fileManager.isReadableFile(atPath: det)
-            && fileManager.isReadableFile(atPath: rec)
-            && (fileManager.isReadableFile(atPath: keys) || fileManager.isReadableFile(atPath: keysAlt))
+        if probe.isRunning {
+            probe.terminate()
+            let terminateDeadline = Date().addingTimeInterval(0.5)
+            while probe.isRunning && Date() < terminateDeadline {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+            if probe.isRunning {
+                kill(probe.processIdentifier, SIGKILL)
+            }
+            probe.waitUntilExit()
+            return false
+        }
+        return probe.terminationStatus == 0
     }
 
     /// 查找 C++ sublift_worker 可执行文件路径。
@@ -242,13 +274,17 @@ public final class PipelineClient: @unchecked Sendable {
     ) throws -> Bool {
         // 先确保清理掉之前的进程和资源
         stop()
+        lastWorkerChoice = nil
 
         let envForPolicy = envOverride ?? ProcessInfo.processInfo.environment
         let choice = try RuntimePolicy.resolve(
             requestedRuntime: requestedRuntime,
             requestedEngine: engine,
             envOverride: envForPolicy,
-            isCppPaddleAvailable: Self.probeCppPaddleAvailable(env: envForPolicy)
+            isCppPaddleAvailable: Self.probeCppPaddleAvailable(
+                env: envForPolicy,
+                workerExecutable: workerExecutable
+            )
         )
 
         let socketPath = makeSocketPath()
@@ -287,7 +323,11 @@ public final class PipelineClient: @unchecked Sendable {
                 "--socket", socketPath,
                 "--engine", choice.engine.rawValue
             ]
-            print("[SubLift] IPC C++ worker start bin=\(execPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            if choice.engine == .paddle {
+                print("[SubLift] IPC worker start bin=\(execPath) engine=paddle runtime=cpp model=PP-OCRv6-small status=stable socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            } else {
+                print("[SubLift] IPC C++ worker start bin=\(execPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            }
         } else {
             let resolvedPath = pythonExecutable ?? Self.defaultPythonPath
             process.executableURL = URL(fileURLWithPath: resolvedPath)
@@ -297,7 +337,12 @@ public final class PipelineClient: @unchecked Sendable {
                 "--engine", choice.engine.rawValue,
                 "--log-level", "INFO"
             ]
-            print("[SubLift] IPC Python server start python=\(resolvedPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            if choice.engine == .paddle {
+                let status = choice.resolvedVia == .paddleOverride ? "fallback" : "stable"
+                print("[SubLift] IPC worker start python=\(resolvedPath) engine=paddle runtime=python model=PP-OCRv6-small status=\(status) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            } else {
+                print("[SubLift] IPC Python server start python=\(resolvedPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
+            }
         }
 
         do {
@@ -312,6 +357,8 @@ public final class PipelineClient: @unchecked Sendable {
             let success = try handshake(requestedEngine: choice.engine.rawValue)
             if !success {
                 stop()
+            } else {
+                lastWorkerChoice = choice
             }
             return success
         } catch {

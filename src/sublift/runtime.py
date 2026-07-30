@@ -96,10 +96,11 @@ def resolve_runtime(
     3. Product default (default_runtime)
 
     Cross-matrix rules:
-    - engine == 'paddle' routes to runtime='cpp' if cpp_paddle_available=True and
-      runtime='cpp' requested/default.
-    - engine == 'paddle' routes to runtime='python' (via PADDLE_OVERRIDE if cpp requested)
-      when C++ paddle is unavailable.
+    - engine == 'paddle' routes to runtime='cpp' when the resolved runtime is
+      'cpp' and C++ paddle is available.
+    - engine == 'paddle' routes to runtime='python' via PADDLE_OVERRIDE whenever
+      the resolved runtime is 'cpp' but C++ paddle is unavailable.
+    - Explicit/env runtime='python' remains the rollback path.
     - engine in ('vision', 'mock') routes to resolved runtime.
     - Unsupported engines or invalid runtimes raise RuntimePolicyError.
     """
@@ -132,13 +133,9 @@ def resolve_runtime(
     resolved_engine = cast(Literal["vision", "mock", "paddle"], engine_norm)
 
     if resolved_engine == "paddle":
-        is_explicit_cpp = (
-            source in (ResolutionSource.EXPLICIT_FLAG, ResolutionSource.ENV_VAR)
-            and raw_runtime == "cpp"
-        )
-        if is_explicit_cpp and cpp_paddle_available:
+        if raw_runtime == "cpp" and cpp_paddle_available:
             return WorkerChoice(runtime="cpp", engine="paddle", resolved_via=source)
-        if is_explicit_cpp and not cpp_paddle_available:
+        if raw_runtime == "cpp":
             return WorkerChoice(
                 runtime="python",
                 engine="paddle",
@@ -148,4 +145,3 @@ def resolve_runtime(
 
     resolved_runtime = cast(Literal["python", "cpp"], raw_runtime)
     return WorkerChoice(runtime=resolved_runtime, engine=resolved_engine, resolved_via=source)
-

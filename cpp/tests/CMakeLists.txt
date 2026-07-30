@@ -123,6 +123,9 @@ target_link_libraries(sublift_tests
     sublift_paddle
     Catch2::Catch2WithMain
 )
+if(COMMAND sublift_use_bundled_onnxruntime)
+  sublift_use_bundled_onnxruntime(sublift_tests)
+endif()
 
 if(SUBLIFT_ENABLE_VISION)
   target_link_libraries(sublift_tests PRIVATE "-framework CoreText")

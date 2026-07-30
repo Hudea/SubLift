@@ -4,8 +4,8 @@ import Foundation
 
 /// 协调 PipelineClient（IPC）的端到端字幕提取。
 ///
-/// **统一抽帧（path mode）**：Swift 只传 `video_path` + 参数，Python 用
-/// `FfmpegExtractor` 抽帧（与 CLI / benchmark 同源），不再 AVF+JPEG 推帧。
+/// **统一抽帧（path mode）**：Swift 只传 `video_path` + 参数，由实际选中的
+/// C++ / Python Worker 使用各自 `FfmpegExtractor` 抽帧，不再 AVF+JPEG 推帧。
 ///
 /// **生命周期**：每次 `extract` 独占一个 `PipelineClient` + `jobToken`。
 /// 取消/完成后丢弃 token，迟到的 progress / push_entry 不会污染 UI 状态。
@@ -25,6 +25,8 @@ final class SubtitleExtractor: ObservableObject {
     @Published private(set) var entries: [SubtitleEntryData] = []
     /// 已处理视频时长 / 实际处理时间；仅在 processing 阶段有有效值。
     @Published private(set) var processingRate: Double?
+    /// 实际运行时身份，避免 UI 把默认路由或 fallback 隐藏起来。
+    @Published private(set) var runtimeIdentity: String?
 
     /// 当前运行任务的 token；`nil` 表示无活跃任务（含已取消/已完成）。
     private var jobToken: UUID?
@@ -57,6 +59,7 @@ final class SubtitleExtractor: ObservableObject {
         acceptingLiveUpdates = true
         entries = []
         processingRate = nil
+        runtimeIdentity = nil
 
         // 每任务独占客户端，避免取消 teardown 关掉新任务的 socket/进程。
         let client = PipelineClient()
@@ -131,6 +134,10 @@ final class SubtitleExtractor: ObservableObject {
             }
 
             guard isCurrentJob(token) else { return }
+            let workerChoice = client.lastWorkerChoice
+            if let choice = workerChoice {
+                runtimeIdentity = Self.formatRuntimeIdentity(choice)
+            }
 
             let durationMs = await estimateDurationMs(url: videoURL)
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
@@ -139,8 +146,8 @@ final class SubtitleExtractor: ObservableObject {
             let confidenceThreshold = 0.5
             let videoPath = videoURL.standardizedFileURL.path
 
-            // SSIM patrol 是后端内部默认机制（Config.enable_ssim_patrol=True）。
-            // GUI 不传 enable_ssim_patrol，统一走 Python 默认；IPC 字段仍保留
+            // SSIM patrol 是 Worker 内部默认机制（Config.enable_ssim_patrol=True）。
+            // GUI 不传 enable_ssim_patrol，统一走所选 runtime 的默认；IPC 字段仍保留
             // 供 benchmark / 回归 / 内部诊断显式关闭。
             let startMsg = StartJobMessage(
                 videoId: videoId,
@@ -162,7 +169,8 @@ final class SubtitleExtractor: ObservableObject {
                 regionBox: regionBox,
                 subtitleProfile: subtitleProfile,
                 durationMs: durationMs,
-                estimatedFrames: totalFramesSafe
+                estimatedFrames: totalFramesSafe,
+                workerChoice: workerChoice
             )
 
             guard isCurrentJob(token) else { return }
@@ -220,10 +228,15 @@ final class SubtitleExtractor: ObservableObject {
             let emptyCount = resultEntries.filter {
                 $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             }.count
+            let pathFields = Self.pathModeLogFields(for: workerChoice)
+            let runtime = workerChoice?.runtime.rawValue ?? "unknown"
+            let resolvedVia = workerChoice?.resolvedVia.rawValue ?? "unknown"
             print(
                 """
-                [SubLift] extract done (path mode / FfmpegExtractor)
+                [SubLift] extract done (Swift → \(pathFields.backend) worker path mode)
                   elapsed_s=\(String(format: "%.2f", elapsed))
+                  runtime=\(runtime) engine=\(engine.rawValue) resolved_via=\(resolvedVia)
+                  frame_path=\(pathFields.extractor)
                   estimated_frames=\(totalFramesSafe)
                   entries=\(resultEntries.count) empty_text=\(emptyCount)
                   region_box=\(Self.formatRegionBox(regionBox))
@@ -279,9 +292,13 @@ final class SubtitleExtractor: ObservableObject {
         regionBox: RegionBox?,
         subtitleProfile: SubtitleProfilePayload?,
         durationMs: Int,
-        estimatedFrames: Int
+        estimatedFrames: Int,
+        workerChoice: WorkerChoice?
     ) {
         let regionStr = formatRegionBox(regionBox)
+        let pathFields = pathModeLogFields(for: workerChoice)
+        let runtime = workerChoice?.runtime.rawValue ?? "unknown"
+        let resolvedVia = workerChoice?.resolvedVia.rawValue ?? "unknown"
         let matchesFeat033: String
         if let regionBox, regionBox.count == 4 {
             let same = regionBox[0] == 0 && regionBox[1] == 848
@@ -300,24 +317,46 @@ final class SubtitleExtractor: ObservableObject {
         }
         print(
             """
-            [SubLift] start_job (Swift → Python path mode)
+            [SubLift] start_job (Swift → \(pathFields.backend) worker path mode)
               video=\(videoURL.lastPathComponent)
               video_path=\(videoPath)
               video_id=\(videoId)
-              fps=\(fps) engine=\(engine.rawValue) confidence_threshold=\(confidenceThreshold)
+              fps=\(fps) engine=\(engine.rawValue) runtime=\(runtime) resolved_via=\(resolvedVia)
+              confidence_threshold=\(confidenceThreshold)
               duration_ms=\(durationMs) estimated_frames=\(estimatedFrames)
               region_box=\(regionStr)
               region_matches_feat033_[0,848,1920,87]=\(matchesFeat033)
               subtitle_profile=\(profileStr)
               enable_ssim_patrol=omitted (backend default True)
-              frame_path=Python FfmpegExtractor (same as CLI/benchmark)
+              frame_path=\(pathFields.extractor) (worker-owned path mode)
             """
         )
+    }
+
+    nonisolated static func pathModeLogFields(
+        for choice: WorkerChoice?
+    ) -> (backend: String, extractor: String) {
+        switch choice?.runtime {
+        case .cpp:
+            return ("C++", "C++ FfmpegExtractor")
+        case .python:
+            return ("Python", "Python FfmpegExtractor")
+        case nil:
+            return ("unknown", "unknown extractor")
+        }
     }
 
     private static func formatRegionBox(_ box: RegionBox?) -> String {
         guard let box else { return "nil" }
         return "[\(box.map(String.init).joined(separator: ", "))]"
+    }
+
+    private static func formatRuntimeIdentity(_ choice: WorkerChoice) -> String {
+        guard choice.engine == .paddle else {
+            return "\(choice.engine.rawValue) · \(choice.runtime.rawValue)"
+        }
+        let state = choice.resolvedVia == .paddleOverride ? "fallback" : "stable"
+        return "PaddleOCR · \(choice.runtime.rawValue) · PP-OCRv6 small · \(state)"
     }
 
     private func estimateDurationMs(url: URL) async -> Int {

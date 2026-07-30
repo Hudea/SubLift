@@ -89,8 +89,14 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  std::string engine_tag = (engine == "paddle") ? "paddle [experimental]" : engine;
-  std::cout << "sublift_worker listening on " << socket_path << " (engine: " << engine_tag << ")\n";
+  if (engine == "paddle") {
+    std::cout << "sublift_worker listening on " << socket_path
+              << " (engine: paddle, runtime: cpp, model: PP-OCRv6-small, status: stable)"
+              << std::endl;
+  } else {
+    std::cout << "sublift_worker listening on " << socket_path << " (engine: " << engine << ")"
+              << std::endl;
+  }
 
   while (true) {
     int client_fd = ::accept(server_fd, nullptr, nullptr);

@@ -285,6 +285,14 @@ struct ContentView: View {
                     .frame(minWidth: 100, maxWidth: .infinity, alignment: .trailing)
             }
 
+            if let runtimeIdentity = extractor.runtimeIdentity {
+                Text(runtimeIdentity)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .accessibilityLabel("OCR 运行时：\(runtimeIdentity)")
+            }
+
             switch extractor.status {
             case .processing(let progress, _, _):
                 ProgressView(value: progress)
