@@ -121,7 +121,9 @@ using Message = std::variant<
 [[nodiscard]] Message parse_message(std::string_view json_str);
 
 /// Build canonical ByeMsg capability response.
-[[nodiscard]] ByeMsg build_bye_message();
+[[nodiscard]] ByeMsg build_bye_message(
+    std::vector<std::string> engines = {"mock"},
+    std::vector<std::string> capabilities = {"path_mode", "frame_mode", "push_entry", "cancel"});
 
 /// Serialize any typed Message to JSON string.
 [[nodiscard]] std::string serialize_message(const Message& msg);

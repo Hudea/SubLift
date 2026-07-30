@@ -1,8 +1,20 @@
-set(_sublift_ipc_sources
+add_library(sublift_protocol STATIC
   framing.cpp
   framing.hpp
   protocol.cpp
   protocol.hpp
+)
+
+target_include_directories(sublift_protocol PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(sublift_protocol PUBLIC
+  sublift_core
+  nlohmann_json::nlohmann_json
+)
+
+set(_sublift_ipc_sources
   engine_factory.cpp
   engine_factory.hpp
   bridge.hpp
@@ -27,6 +39,7 @@ target_include_directories(sublift_ipc PUBLIC
 )
 
 target_link_libraries(sublift_ipc PUBLIC
+  sublift_protocol
   sublift_core
   sublift_ffmpeg
   sublift_vision_macos

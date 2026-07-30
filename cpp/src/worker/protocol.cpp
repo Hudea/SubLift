@@ -2,8 +2,6 @@
 
 #include <cmath>
 
-#include <sublift/vision.hpp>
-
 namespace sublift::ipc {
 
 namespace {
@@ -191,16 +189,13 @@ MessageType parse_message_type(std::string_view type_str) noexcept {
   return MessageType::Unknown;
 }
 
-ByeMsg build_bye_message() {
+ByeMsg build_bye_message(std::vector<std::string> engines,
+                       std::vector<std::string> capabilities) {
   ByeMsg bye;
   bye.protocol_version = 1;
   bye.runtime = "cpp";
-  bye.engines.clear();
-  if (sublift::is_vision_available()) {
-    bye.engines.push_back("vision");
-  }
-  bye.engines.push_back("mock");
-  bye.capabilities = {"path_mode", "frame_mode", "push_entry", "cancel"};
+  bye.engines = std::move(engines);
+  bye.capabilities = std::move(capabilities);
   return bye;
 }
 

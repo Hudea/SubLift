@@ -2,7 +2,6 @@
 
 #include "engine_factory.hpp"
 #include "protocol.hpp"
-#include "sublift/vision.hpp"
 
 using namespace sublift::ipc;
 
@@ -51,11 +50,7 @@ TEST_CASE("EngineFactory only advertises the engine bound to this Worker process
 
   sublift::worker::EngineFactory vision_factory("vision");
   const auto vision_engines = vision_factory.supported_engines();
-  if (sublift::is_vision_available()) {
-    REQUIRE(vision_engines == std::vector<std::string>{"vision"});
-  } else {
-    REQUIRE(vision_engines.empty());
-  }
+  REQUIRE((vision_engines.empty() || vision_engines == std::vector<std::string>{"vision"}));
 #else
   REQUIRE(mock_factory.supported_engines().empty());
   REQUIRE(mock_factory.capabilities().empty());

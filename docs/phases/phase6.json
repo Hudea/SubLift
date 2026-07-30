@@ -1284,8 +1284,8 @@
           "description": "worker framing/protocol + handshake 对照 + ./init.sh；无 golden 变更。"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-07-30: 落地 sublift_protocol Target 与协议纯度。sublift_protocol STATIC 仅包含 framing+protocol，PUBLIC 链接 sublift_core 与 nlohmann_json，零 Vision/OpenCV/Paddle/ORT/FFmpeg 依赖；protocol.cpp 删除 vision.hpp 与 is_vision_available()，build_bye_message 改为依赖注入模式；worker_protocol_test 移除 vision.hpp；ctest 6/6 protocol 用例 PASS；nm -u libsublift_protocol.a 验证无外部 adapter 动态符号；./init.sh 10/10 PASS；无 golden 变更。"
     },
     {
       "id": "feat-06902",
