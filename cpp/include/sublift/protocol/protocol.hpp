@@ -8,8 +8,6 @@
 #include <variant>
 #include <vector>
 
-#include <nlohmann/json.hpp>
-
 #include "sublift/models.hpp"
 
 namespace sublift::ipc {

@@ -1,4 +1,4 @@
-#include "sublift/paddle.hpp"
+#include "sublift/adapters/paddle.hpp"
 #include "sublift/diagnostics/paddle_stage_trace.hpp"
 #include "sublift/adapters/paddle_geometry.hpp"
 

@@ -1,4 +1,6 @@
-#include "protocol.hpp"
+#include "sublift/protocol/protocol.hpp"
+
+#include <nlohmann/json.hpp>
 
 #include <cmath>
 

@@ -1,12 +1,12 @@
-#include "sublift/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg.hpp"
 
 #include <memory>
 #include <stdexcept>
 #include <string>
 
-#include "sublift/bottom_crop_detector.hpp"
-#include "sublift/fixed_detector.hpp"
-#include "sublift/roi_passthrough_detector.hpp"
+#include "sublift/adapters/bottom_crop_detector.hpp"
+#include "sublift/adapters/fixed_detector.hpp"
+#include "sublift/adapters/roi_passthrough_detector.hpp"
 
 namespace sublift::ffmpeg {
 

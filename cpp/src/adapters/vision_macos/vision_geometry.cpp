@@ -1,4 +1,4 @@
-#include "sublift/vision.hpp"
+#include "sublift/adapters/vision.hpp"
 
 #include <algorithm>
 #include <cmath>

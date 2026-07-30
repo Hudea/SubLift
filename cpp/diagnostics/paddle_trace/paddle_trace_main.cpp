@@ -15,7 +15,7 @@
 #include "paddle_models.hpp"
 #include "sublift/image.hpp"
 #include "sublift/diagnostics/paddle_stage_trace.hpp"
-#include "sublift/paddle.hpp"
+#include "sublift/adapters/paddle.hpp"
 #include "sublift/test_support.hpp"
 
 namespace {

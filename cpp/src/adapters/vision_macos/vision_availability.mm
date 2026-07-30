@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import <Vision/Vision.h>
 
-#include "sublift/vision.hpp"
+#include "sublift/adapters/vision.hpp"
 
 namespace sublift {
 

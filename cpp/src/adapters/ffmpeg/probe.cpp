@@ -5,7 +5,7 @@
 #include <nlohmann/json.hpp>
 
 #include "process_utils.hpp"
-#include "sublift/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg.hpp"
 
 namespace sublift::ffmpeg {
 

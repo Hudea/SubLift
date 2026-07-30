@@ -1,5 +1,5 @@
 #include <stdexcept>
-#include "sublift/vision.hpp"
+#include "sublift/adapters/vision.hpp"
 
 namespace sublift {
 

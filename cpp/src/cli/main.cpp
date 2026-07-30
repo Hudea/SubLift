@@ -20,8 +20,8 @@
 #include <variant>
 #include <vector>
 
-#include "framing.hpp"
-#include "protocol.hpp"
+#include "sublift/protocol/framing.hpp"
+#include "sublift/protocol/protocol.hpp"
 #include "sublift/version.hpp"
 
 namespace fs = std::filesystem;

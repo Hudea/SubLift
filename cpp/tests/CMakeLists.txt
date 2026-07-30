@@ -117,13 +117,10 @@ endif()
 
 target_link_libraries(sublift_tests
   PRIVATE
-    sublift_models
-    sublift_pipeline
     sublift_test_support
-    sublift_ipc
+    sublift_worker_runtime
     sublift_ffmpeg
     sublift_vision_macos
-    sublift_paddle_geometry
     sublift_paddle
     Catch2::Catch2WithMain
 )

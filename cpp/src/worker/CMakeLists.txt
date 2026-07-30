@@ -10,10 +10,8 @@ set(_sublift_worker_runtime_sources
 )
 
 # Composition-root helpers for sublift_worker (OCR factory + path media + UDS session).
-# Historically named sublift_ipc; kept as an alias for tests/docs during migration.
 add_library(sublift_worker_runtime STATIC ${_sublift_worker_runtime_sources})
 add_library(sublift::worker_runtime ALIAS sublift_worker_runtime)
-add_library(sublift_ipc ALIAS sublift_worker_runtime)
 
 target_include_directories(sublift_worker_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -35,7 +33,6 @@ target_link_libraries(sublift_worker_runtime PRIVATE
 add_executable(sublift_worker main.cpp)
 
 target_link_libraries(sublift_worker PRIVATE
-  sublift_application
   sublift_worker_runtime
 )
 if(COMMAND sublift_use_bundled_onnxruntime)

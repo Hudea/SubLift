@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <vector>
 
-#include "framing.hpp"
+#include "sublift/protocol/framing.hpp"
 
 using namespace sublift::ipc;
 

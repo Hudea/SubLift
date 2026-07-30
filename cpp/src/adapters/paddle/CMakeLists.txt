@@ -45,5 +45,3 @@ if(SUBLIFT_ENABLE_PADDLE AND ONNXRuntime_FOUND)
   target_compile_definitions(sublift_paddle PUBLIC SUBLIFT_HAS_PADDLE=1)
   target_link_libraries(sublift_paddle PRIVATE ONNXRuntime::ONNXRuntime)
 endif()
-
-

@@ -10,7 +10,6 @@ namespace sublift::models {
 
 enum class ResourceSource {
   ExplicitOverride,
-  AppBundle,
   UserCache,
   SystemPath
 };
@@ -34,11 +33,11 @@ class ResourceLocator {
   [[nodiscard]] ModelPaths locate_model_bundle(
       const std::string& custom_dir = "", ModelType type = ModelType::Small) const;
 
-  /// Locate FFmpeg executable (override → env → app bundle → PATH → system).
+  /// Locate FFmpeg executable (override → env → PATH → system).
   [[nodiscard]] ResourceResult<std::filesystem::path> locate_ffmpeg_executable(
       const std::string& custom_path = "") const;
 
-  /// Locate ffprobe executable (same order as ffmpeg; may share bundle bin/).
+  /// Locate ffprobe executable (same order as ffmpeg; may share its bin directory).
   [[nodiscard]] ResourceResult<std::filesystem::path> locate_ffprobe_executable(
       const std::string& custom_path = "") const;
 

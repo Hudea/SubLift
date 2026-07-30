@@ -11,8 +11,8 @@
 #include "engine_factory.hpp"
 #include "path_media_services.hpp"
 #include "detector_factory.hpp"
-#include "framing.hpp"
-#include "protocol.hpp"
+#include "sublift/protocol/framing.hpp"
+#include "sublift/protocol/protocol.hpp"
 #include "sublift/vision.hpp"
 
 using namespace sublift::ipc;

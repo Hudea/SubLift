@@ -2,7 +2,7 @@
 #import <Vision/Vision.h>
 #import <CoreGraphics/CoreGraphics.h>
 
-#include "sublift/vision.hpp"
+#include "sublift/adapters/vision.hpp"
 #include <cstring>
 #include <memory>
 #include <vector>

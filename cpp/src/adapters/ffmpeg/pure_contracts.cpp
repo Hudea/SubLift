@@ -1,4 +1,4 @@
-#include "sublift/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg.hpp"
 
 #include <algorithm>
 #include <cmath>

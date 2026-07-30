@@ -1,4 +1,4 @@
-#include "sublift/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg.hpp"
 
 #include <fcntl.h>
 #include <signal.h>

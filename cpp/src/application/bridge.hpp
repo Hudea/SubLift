@@ -8,12 +8,12 @@
 #include <string>
 #include <thread>
 
-#include "protocol.hpp"
 #include "sublift/application/detector_factory.hpp"
 #include "sublift/application/ocr_engine_factory.hpp"
 #include "sublift/application/path_media_services.hpp"
 #include "sublift/detector.hpp"
 #include "sublift/ocr.hpp"
+#include "sublift/protocol/protocol.hpp"
 
 namespace sublift {
 class Pipeline;

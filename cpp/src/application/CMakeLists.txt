@@ -20,7 +20,6 @@ target_link_libraries(sublift_application PUBLIC
   sublift_pipeline
   sublift_protocol
   sublift_core
-  nlohmann_json::nlohmann_json
 )
 
 if(SUBLIFT_ENABLE_OPENCV)
