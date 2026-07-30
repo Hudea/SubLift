@@ -39,6 +39,7 @@ paddle = [
 
 [project.scripts]
 sublift = "sublift.cli:main"
+sublift-benchmark = "sublift.benchmark.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/anomalyco/SubLift"
@@ -86,10 +87,6 @@ files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["Vision.*", "Quartz.*", "CoreGraphics.*", "Foundation.*", "objc.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["benchmark.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

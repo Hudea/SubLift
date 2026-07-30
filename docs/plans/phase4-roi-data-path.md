@@ -30,7 +30,7 @@ feat-037 的 canonical baseline 是本阶段唯一的性能比较起点：
 | 项 | 固定值 |
 |---|---:|
 | 视频 | debug/Zootopia_clip_1080p.mp4，约 254.27 秒 |
-| GT | benchmark/fixtures/Zootopia_clip_1080p_gt.srt，87 条 |
+| GT | benchmark/datasets/Zootopia_clip_1080p_gt.srt，87 条 |
 | 源尺寸 / fps | 1920 × 1080 / 5 |
 | 固定 region | [0, 848, 1920, 87] |
 | OCR / 文字系统 | Vision / cjk |
@@ -147,7 +147,7 @@ region 建立 crop-before-Python 通路。
   roi ：frame_output_mode=roi ，warmup=1，measured=3
 
 video=debug/Zootopia_clip_1080p.mp4
-GT=benchmark/fixtures/Zootopia_clip_1080p_gt.srt
+GT=benchmark/datasets/Zootopia_clip_1080p_gt.srt
 region=[0,848,1920,87]，fps=5，Vision，cjk，performance=summary
 每次 measured 均为独立进程，主统计量为 median。
 ~~~
@@ -162,7 +162,7 @@ region=[0,848,1920,87]，fps=5，Vision，cjk，performance=summary
 | 固定 GT 质量 | 三次 ROI measured 均满足 F1 ≥ 95.2%、precision ≥ 98.8%、usable ≥ 85.1%、CER macro ≤ 6.6%、noise ≤ 2、empty ≤ 1。 |
 | 构造成本 | ROI 的 frame_materialize.total_ms 中位数 ≤ 同次 full 对照的 25%。 |
 | 端到端非回退 | ROI core_wall_ms 中位数 ≤ 同次 full 对照的 105%；peak RSS 中位数 ≤ full 的 105%；stage_coverage_pct ≥ 99%。 |
-| 报告完整 | A/B agent JSON、summary、质量 gates 与环境元数据归档到 debug/benchmark-reports/feat039_roi_ab/；报告明确 full / roi 不是跨机器比较。 |
+| 报告完整 | A/B agent JSON、summary、质量 gates 与环境元数据归档到 debug/benchmark/archive/legacy-runs/feat039_roi_ab/；报告明确 full / roi 不是跨机器比较。 |
 
 **期望但非阻断目标**：ROI core_wall 中位数 ≤ full 的 90%，realtime_factor ≥ full 的
 1.10 倍。若未达到，仍可在硬门通过后完成 feat-039，但必须在证据中解释 OCR / codec

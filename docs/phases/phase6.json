@@ -1210,7 +1210,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-30：建立 fail-closed 的真实 Paddle Q0/Q1/Q2 产品质量门，彻底替换原 check_paddle_gate.py 的硬编码示例指标。Q0 复用 9 个 committed stage fixtures；Q1 在 manifest 中显式冻结 CJK/Latin/混排各 30s 窗口；Q2 使用 1 个外置真实 CJK 源与 2 个由 committed ASS/SRT recipe 确定生成的 Latin/mixed 源，共 3 来源、614.272s，覆盖无字幕间隔、单/双行、描边、低对比和运动背景。manifest 固定视频/GT/recipe/generator/font SHA256；缺素材、hash、模型、worker 或 baseline 均 FAIL。真实 `sublift extract --engine paddle --runtime python|cpp` 逐源运行后统一交给 benchmark.diagnostics；冻结 `paddle_quality_baseline.v1.json` Python 绝对水位，并同时执行当前 Oracle 相对门、冻结绝对门、逐 clip noise/empty 门和 Q0 live box 门。首轮真实门只在 Zootopia 一条字幕上 CER macro 超限：定位到近似矩形 unclip 造成 1px quad 漂移，把 Cls 180° score 从 0.6868 放大到 0.9383；C++ 改为精确复刻 pyclipper/Clipper 6 的整数 round offset（0.25 arc tolerance），新增 rotated-contour 黑盒回归。修复后 Det 9/9 quad 坐标 max_abs=0，Q0 box recall/mean IoU=1.0；三来源 Python/C++ SRT SHA256 逐源完全相同，timing F1/precision/recall、CER macro/micro、usable、noise/empty 聚合 delta 全为 0，18 个相对+绝对门全 PASS。实测报告：`/tmp/sublift_paddle_quality_gate_after_unclip.{json,md}`；质量脚本单测 8/8，C++ `[paddle]` 22 cases/406 assertions，Det/Rec live gate PASS，v2 stage golden 已重建并 live check PASS。当前性能观察仍为 CJK 132.382/116.068=1.141x、Latin 76.605/66.889=1.145x，明确留给 feat-06806，不影响本 feature 只冻结正确性的完成定义。"
+      "evidence": "2026-07-30：建立 fail-closed 的真实 Paddle Q0/Q1/Q2 产品质量门，彻底替换原 check_paddle_gate.py 的硬编码示例指标。Q0 复用 9 个 committed stage fixtures；Q1 在 manifest 中显式冻结 CJK/Latin/混排各 30s 窗口；Q2 使用 1 个外置真实 CJK 源与 2 个由 committed ASS/SRT recipe 确定生成的 Latin/mixed 源，共 3 来源、614.272s，覆盖无字幕间隔、单/双行、描边、低对比和运动背景。manifest 固定视频/GT/recipe/generator/font SHA256；缺素材、hash、模型、worker 或 baseline 均 FAIL。真实 `sublift extract --engine paddle --runtime python|cpp` 逐源运行后统一交给 sublift.benchmark.diagnostics；冻结 `paddle_quality_baseline.v1.json` Python 绝对水位，并同时执行当前 Oracle 相对门、冻结绝对门、逐 clip noise/empty 门和 Q0 live box 门。首轮真实门只在 Zootopia 一条字幕上 CER macro 超限：定位到近似矩形 unclip 造成 1px quad 漂移，把 Cls 180° score 从 0.6868 放大到 0.9383；C++ 改为精确复刻 pyclipper/Clipper 6 的整数 round offset（0.25 arc tolerance），新增 rotated-contour 黑盒回归。修复后 Det 9/9 quad 坐标 max_abs=0，Q0 box recall/mean IoU=1.0；三来源 Python/C++ SRT SHA256 逐源完全相同，timing F1/precision/recall、CER macro/micro、usable、noise/empty 聚合 delta 全为 0，18 个相对+绝对门全 PASS。实测报告：`/tmp/sublift_paddle_quality_gate_after_unclip.{json,md}`；质量脚本单测 8/8，C++ `[paddle]` 22 cases/406 assertions，Det/Rec live gate PASS，v2 stage golden 已重建并 live check PASS。当前性能观察仍为 CJK 132.382/116.068=1.141x、Latin 76.605/66.889=1.145x，明确留给 feat-06806，不影响本 feature 只冻结正确性的完成定义。"
     },
     {
       "id": "feat-06806",
@@ -1591,6 +1591,35 @@
       ],
       "status": "done",
       "evidence": "2026-07-30: Phase 6.9 开发架构终态通过最终验证。默认 C++ capability 缺失 fail-closed，Python 仅保留显式 Oracle/开发回滚；protocol public headers 不暴露 nlohmann/json，旧 sublift_ipc alias 删除，ports/ 仅保留抽象接口，具体类型归 adapters/；开发态 ResourceLocator 不含 AppBundle 分发探测；未完成的 bundle/signing/artifact Python-free 脚手架已移除。C++ CTest 178/178 PASS；Swift XCTest 37（1 个按 Release Paddle 条件跳过、0 failure）且 Swift Testing 139/139 PASS；标准 ./init.sh 10/10 PASS；扩展 runtime+GT init 10/10 PASS，12 parity goldens、wall/cancel/restart/RSS 与固定视频 GT L3 全绿（timing_f1=0.9767、precision=0.9882、usable_recall=0.9195、CER=0.0320）；Native CLI otool 仅 libc++/libSystem；git diff --check PASS，golden/fixtures 零变化。06910–06912 按 ADR-0030 保持后置，不纳入开发架构完成声明。"
+    },
+    {
+      "id": "feat-06914",
+      "name": "Benchmark 工具链与资产边界重构",
+      "description": "将 benchmark 可执行代码迁入正式 Python 包，分离 configs/datasets/baselines/parity 与 debug 本机产物；统一 run/matrix/score/show/overhead/compare-roi 入口，以通用 override 和参数矩阵替代新增一次性脚本。",
+      "module": "src/sublift/benchmark/; benchmark/; scripts/diagnostics/; pyproject.toml; docs",
+      "dependencies": [
+        "feat-06913"
+      ],
+      "subtasks": [
+        {
+          "name": "包与资产分层",
+          "description": "代码进入 src；配置、数据、冻结基线、parity 和 debug 产物分离。"
+        },
+        {
+          "name": "统一入口与矩阵",
+          "description": "run/matrix/score/show + 通用 --set/--vary、dry-run、组合上限和矩阵聚合。"
+        },
+        {
+          "name": "专项与兼容",
+          "description": "overhead/compare-roi 纳入统一入口；旧脚本薄转发；诊断脚本归档。"
+        },
+        {
+          "name": "文档与验证",
+          "description": "ADR、设计、README、严格类型/单测/init 与本机历史产物迁移。"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-07-30：完成 Benchmark v2 工具链与资产边界重构。可执行代码从仓库根 benchmark/ 迁入 src/sublift/benchmark/ 并纳入 strict mypy；根 benchmark/ 只保留 configs/datasets/baselines/parity，临时输入、运行、性能与历史报告统一进入 debug/benchmark/{imports,runs,perf,archive}。新增统一 sublift-benchmark 入口，覆盖 run/matrix/score/show/overhead/compare-roi；v2 config 支持通用 dotted --set/--vary、Pipeline/Signature/ChangePoint 嵌套参数、类型/范围/组合预校验、笛卡尔积、64 组默认上限、dry-run、keep-going 和 JSON/CSV/Markdown 聚合，Vision/Paddle/Mock 共用执行层，任意 runtime 的 SRT 共用评分口径。旧三入口保留薄兼容包装器，四个算法定位脚本迁入 scripts/diagnostics。8 份 SRT + 2 份日志迁入 debug/benchmark/imports/2026-07-30，历史产物原样归档；标准离线评分确认 Vision/Paddle 8fps 的 C++/Python SRT 分别 SHA exact，并保留单源候选分析而未改产品默认。验证：benchmark/diagnostics 相关 pytest 153 passed、9 deselected；嵌套 Pipeline 3×2×3=18 cell dry-run 通过且零写入；已有 C++ Vision 8fps SRT 的 score smoke 得 timing F1=0.988372、CER macro=0.020668、usable=0.954023、speed=23.563x；三个兼容包装器 --help 通过；ruff 全仓 0 error、mypy src tests 91 source files 无问题、C++ CTest 178/178；标准 ./init.sh 10/10 PASS（含非集成 pytest 与 12 parity goldens）。同时修复启动基线中 ResourceLocator locate/probe 错误文案不一致，focused CTest 与完整启动门均通过；git diff --check 与全部 JSON 解析通过。"
     }
   ]
 }

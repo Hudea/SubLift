@@ -1,15 +1,14 @@
 {
   "video": "debug/Zootopia_clip_1080p.mp4",
-  "ground_truth": "benchmark/fixtures/Zootopia_clip_1080p_gt.srt",
+  "ground_truth": "benchmark/datasets/Zootopia_clip_1080p_gt.srt",
   "fps": 5.0,
   "engine": "vision",
   "confidence": 0.5,
   "subtitle_script": "cjk",
   "match_threshold": 0.5,
   "region_box": [0, 848, 1920, 87],
-  "frame_output_mode": "full",
-  "label": "feat039_full",
-  "output_dir": "debug/benchmark-reports/feat039_roi_ab",
+  "label": "feat037_perf_baseline",
+  "output_dir": "debug/benchmark/perf",
   "performance": {
     "mode": "summary",
     "warmup_runs": 1,

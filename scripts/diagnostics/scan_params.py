@@ -5,9 +5,9 @@
 对短字幕（< 1.5s）的影响。
 
 用法：
-    uv run python scripts/scan_params.py \\
+    uv run python scripts/diagnostics/scan_params.py \\
         --video debug/Zootopia_clip_1080p.mp4 \\
-        --ground-truth benchmark/fixtures/Zootopia_clip_1080p_gt.srt \\
+        --ground-truth benchmark/datasets/Zootopia_clip_1080p_gt.srt \\
         --region-box 0 860 1920 220
 """
 
@@ -18,13 +18,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from benchmark.diagnostics import analyze_entries  # noqa: E402
-from benchmark.srt_loader import SrtEntry, load_srt  # noqa: E402
-
+from sublift.benchmark.diagnostics import analyze_entries  # noqa: E402
+from sublift.benchmark.srt import SrtEntry, load_srt  # noqa: E402
 from sublift.config import ChangePointConfig, Config  # noqa: E402
 from sublift.detector import FixedRegionDetector  # noqa: E402
 from sublift.diagnostics.fn_analysis import DetectedSegment  # noqa: E402

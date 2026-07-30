@@ -17,10 +17,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from benchmark.srt_loader import SrtEntry
+from sublift.benchmark.srt import SrtEntry
 
 if TYPE_CHECKING:
-    from benchmark.runner import RunResult
+    from sublift.benchmark.runner import RunResult
 
 
 DEFAULT_USABLE_CER_THRESHOLD = 0.20
@@ -233,6 +233,7 @@ def format_agent_json(
             "temporal_iou_threshold": result.config.match_threshold,
             "region_box": list(result.config.region_box) if result.config.region_box else None,
             "frame_output_mode": result.config.frame_output_mode,
+            "pipeline": result.config.pipeline_overrides,
             "detector": (
                 "roi_passthrough"
                 if result.config.region_box and result.config.frame_output_mode == "roi"
@@ -260,7 +261,7 @@ def format_agent_json(
             "gt_cases": [asdict(case) for case in analysis.gt_cases],
             "det_cases": [asdict(case) for case in analysis.det_cases],
         },
-        "repro_command": "uv run python scripts/run_benchmark_manifest.py <manifest.json>",
+        "repro_command": "uv run sublift-benchmark run <config.json>",
         "artifacts": _artifact_payload(artifacts or {}),
     }
     if result.performance is not None:

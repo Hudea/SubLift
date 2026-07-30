@@ -30,7 +30,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 DEFAULT_MANIFEST = (
-    REPO_ROOT / "benchmark/fixtures/paddle_performance/manifest.v1.json"
+    REPO_ROOT / "benchmark/datasets/paddle_performance/manifest.v1.json"
 )
 
 
@@ -370,7 +370,7 @@ def _timed_product_run(
     candidate_ort: Path,
     rss_interval_seconds: float,
 ) -> TimedProductRun:
-    from benchmark.srt_loader import load_srt
+    from sublift.benchmark.srt import load_srt
 
     with tempfile.TemporaryDirectory(
         prefix=f"sublift-paddle-perf-{runtime}-"

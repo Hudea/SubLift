@@ -26,8 +26,7 @@ _REPO = Path(__file__).resolve().parents[1]
 if str(_REPO) not in sys.path:
     sys.path.insert(0, str(_REPO))
 
-from benchmark.srt_loader import load_srt  # noqa: E402
-
+from sublift.benchmark.srt import load_srt  # noqa: E402
 from sublift.export.srt import SrtExporter  # noqa: E402
 from sublift.extractor.ffmpeg_extractor import (  # noqa: E402
     probe_duration_ms,

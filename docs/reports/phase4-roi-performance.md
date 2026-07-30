@@ -3,7 +3,7 @@
 > **状态**：已验收<br>
 > **日期**：2026-07-17<br>
 > **验证提交**：`1b4612b0a41c0804218e25cfd79d7a7724b2ee96`（clean tree）<br>
-> **正式证据**：`debug/benchmark-reports/phase4-history-rewrite-ab/ab_summary.json`
+> **正式证据**：`debug/benchmark/archive/legacy-runs/phase4-history-rewrite-ab/ab_summary.json`
 
 ## 1. 结论
 
@@ -91,10 +91,10 @@ Swift GUI 选区 / benchmark manifest（source-frame region）
 
 | 优化路径 / 目标 | 代码落点 | 达成结果 | 自动测试与实测证据 |
 |---|---|---|---|
-| 只在有效固定 region 时启用 ROI；其他路径安全回退 | [frame_io.py](../../src/sublift/extractor/frame_io.py) 的 `plan_frame_io`；[bridge.py](../../src/sublift/ipc/bridge.py) path mode；[runner.py](../../benchmark/runner.py) A/B 路由 | GUI path mode 默认受益；无 region 仍为 Full + BottomCrop，旋转未验证时不冒险裁剪 | [ROI 路由测试](../../tests/test_roi_output_path.py) 覆盖 `test_plan_auto_with_region_uses_roi`、`test_plan_no_region_uses_bottom_crop`、`test_path_mode_without_region_full_bottom_crop`；正式 A/B 的 `output_mode` 检查通过 |
+| 只在有效固定 region 时启用 ROI；其他路径安全回退 | [frame_io.py](../../src/sublift/extractor/frame_io.py) 的 `plan_frame_io`；[bridge.py](../../src/sublift/ipc/bridge.py) path mode；[runner.py](../../src/sublift/benchmark/runner.py) A/B 路由 | GUI path mode 默认受益；无 region 仍为 Full + BottomCrop，旋转未验证时不冒险裁剪 | [ROI 路由测试](../../tests/test_roi_output_path.py) 覆盖 `test_plan_auto_with_region_uses_roi`、`test_plan_no_region_uses_bottom_crop`、`test_path_mode_without_region_full_bottom_crop`；正式 A/B 的 `output_mode` 检查通过 |
 | 在 Python 前减少 RGB 输出与 pipe 传输 | [ffmpeg_extractor.py](../../src/sublift/extractor/ffmpeg_extractor.py) 的 `output_crop`、校验与 raw RGB 读取；[frame_io.py](../../src/sublift/extractor/frame_io.py) 的 `build_output_vf` | 输出从 7,906,636,800 B 降至 636,923,520 B，严格为 Full 的 8.06% | `test_roi_frame_size_and_bytes`、`test_roi_pixels_match_full_then_crop`、`test_roi_frame_count_and_timestamps_match_full`；clean A/B `raw_output_bytes_ratio` 通过 |
 | 消除 source / local 坐标混用与二次 PIL crop | [roi_passthrough.py](../../src/sublift/detector/roi_passthrough.py)；[core.py](../../src/sublift/pipeline/core.py) 的 `_crop_to_region` | ROI Region 恒为局部全幅，Pipeline 不再复制同尺寸图像；三次 measured `pipeline_crop_count=0` | `test_fixed_region_source_box_on_roi_image_not_passthrough`、`test_roi_passthrough_preserves_pixels`、`test_roi_path_pipeline_crop_count_zero`；Full/ROI hash 一致 |
-| 保持固定 GT 质量，而非以速度换质量 | [runner.py](../../benchmark/runner.py) 多进程 measured run；[compare_roi_ab.py](../../scripts/compare_roi_ab.py) | 三次 ROI 都得到相同 hash，F1 97.7%、precision 98.8%、usable 92.0%、CER 3.2%、noise/empty 0 | [A/B 硬门测试](../../tests/test_compare_roi_ab.py) 覆盖 hash、raw bytes、quality、crop 和 clean-commit 失败条件；正式 `compare_roi_ab` 全部硬门通过 |
+| 保持固定 GT 质量，而非以速度换质量 | [runner.py](../../src/sublift/benchmark/runner.py) 多进程 measured run；[roi_compare.py](../../src/sublift/benchmark/roi_compare.py) | 三次 ROI 都得到相同 hash，F1 97.7%、precision 98.8%、usable 92.0%、CER 3.2%、noise/empty 0 | [A/B 硬门测试](../../tests/test_compare_roi_ab.py) 覆盖 hash、raw bytes、quality、crop 和 clean-commit 失败条件；正式 `compare-roi` 全部硬门通过 |
 | 让 core wall 可解释，避免把未归因时间错归 ROI 或 Vision | [performance.py](../../src/sublift/diagnostics/performance.py) 的 `exclusive_span`；[core.py](../../src/sublift/pipeline/core.py) 的 `pipeline_overhead` | ROI 三轮 coverage 为 99.999778% / 99.999784% / 99.999730%，unattributed 仅为 0.021 / 0.020 / 0.025 ms 的计时精度级残差 | [性能记录器测试](../../tests/test_performance_recorder.py) 的 `test_exclusive_span_records_only_uncovered_pipeline_time`；正式 A/B `stage_coverage` 通过 |
 
 该映射说明：每项结果都有对应的实现位置和至少一类自动或真实负载证据；不把单次 wall
@@ -120,7 +120,7 @@ stage，内部 `ocr` / `dedupe` 不会被重复计入。fake-clock 回归测试�
 | 项目 | 固定值 |
 |---|---|
 | 素材 | `debug/Zootopia_clip_1080p.mp4`，1920×1080，约 254.3 秒 |
-| GT | `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`，87 条 |
+| GT | `benchmark/datasets/Zootopia_clip_1080p_gt.srt`，87 条 |
 | 选区 | source-frame `[0, 848, 1920, 87]` |
 | 采样与 OCR | 5fps、Apple Vision、`subtitle_script=cjk` |
 | 对照 | `frame_output_mode=full` 对 `frame_output_mode=roi` |
@@ -129,7 +129,7 @@ stage，内部 `ocr` / `dedupe` 不会被重复计入。fake-clock 回归测试�
 | 可比性 | 两组均来自同一 clean commit `1b4612b`，`git_dirty=false` |
 
 所有数字均取三次 measured run 的中位数，除非表中另有说明。原始 agent JSON、CSV 与
-summary 位于 `debug/benchmark-reports/phase4-history-rewrite-ab/`（本地归档，不入版本库）。
+summary 位于 `debug/benchmark/archive/legacy-runs/phase4-history-rewrite-ab/`（本地归档，不入版本库）。
 
 ## 5. 验收结果
 
@@ -204,13 +204,13 @@ ROI 的 raw RGB 路径缩小约 12.4 倍，并不意味着端到端 wall 也应�
 在同一台机器、clean working tree 中使用以下标准 manifest 复跑：
 
 ```bash
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_full.json --label <full-label>
+uv run --extra vision sublift-benchmark run \
+  benchmark/configs/zootopia_feat039_full.json --label <full-label>
 
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_roi.json --label <roi-label>
+uv run --extra vision sublift-benchmark run \
+  benchmark/configs/zootopia_feat039_roi.json --label <roi-label>
 
-uv run python scripts/compare_roi_ab.py \
+uv run sublift-benchmark compare-roi \
   <full-agent.json> <roi-agent.json> --out <ab-summary.json>
 ```
 

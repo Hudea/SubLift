@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from benchmark.diagnostics import (
+from sublift.benchmark.diagnostics import (
     analyze_result,
     format_agent_json,
     format_det_cases_csv,
     format_gt_cases_csv,
     format_summary_markdown,
 )
-from benchmark.runner import RunResult
+from sublift.benchmark.runner import RunResult
 
 
 def write_reports(

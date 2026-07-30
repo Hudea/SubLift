@@ -5,6 +5,34 @@
 
 ---
 
+## ADR-0031 Benchmark 代码入正式包；配置、数据、基线与本机产物分层（2026-07-30）
+
+- **状态**：已确认并实施。
+- **背景**：原 `benchmark/` 同时是 Python 包、manifest/GT 容器和版本化报告目录；
+  `scripts/` 又散落运行、扫描、扰动和 ROI 对照入口。代码未进入 `src` 安装包，依赖仓库根
+  `sys.path`；单 manifest 入口只能运行一组，扩参数时不断增加一次性脚本。GUI/C++ 导出
+  评分还需要手写 Python API。
+- **决策**：
+  1. 可执行代码迁入 `src/sublift/benchmark/`，随 `sublift` 包安装并进入 strict mypy；
+     `RunConfig` 归配置层，配置解析不再反向依赖 runner。
+  2. 仓库根 `benchmark/` 只保留 `configs / datasets / baselines / parity` 四类入库资产；
+     本机 imports、runs、perf 与历史归档统一放 `debug/benchmark/`。
+  3. 唯一新入口为 `sublift-benchmark`，提供 `run / matrix / score / show / overhead /
+     compare-roi`；历史三个脚本只保留转发窗口。
+  4. v2 config 分离 `run` 与 `matrix`；通用 dotted `--set` 和 `--vary` 扩参数，未知字段
+     fail-fast，矩阵默认限制 64 个组合并支持 dry-run；算法参数集中为 `pipeline.*`，
+     嵌套 `signature.* / change_point.*` 直接从产品 Config dataclass 派生白名单。
+  5. Python `run/matrix` 负责同源 Pipeline 与阶段埋点；任何 runtime 的已有 SRT 都通过
+     `score` 复用统一质量口径。C++ 未提供同构 recorder 前，不伪造阶段级性能对比。
+- **理由**：目录边界、依赖方向和入口身份必须先稳定，参数扩展才不会继续制造脚本和
+  manifest 分支。把外部 SRT 评分与执行解耦，也能在 C++/Python cutover 后保持一个质量
+  真源。
+- **结果**：支持 Vision/Paddle/Mock 单组与矩阵、已有 SRT 标准四件套、矩阵聚合报告、
+  recorder 交错扰动和 ROI 硬门；新增普通 Pipeline 参数无需再写 CLI 开关或扫描脚本；
+  旧 `debug/benchmark-reports` / `debug/perf_reports` 原样归档，不删除历史证据。
+
+---
+
 ## ADR-0030 Phase 6.9 止于开发架构收口；产品分发整体后置（2026-07-30）
 
 - **状态**：已确认并用于 Phase 6.9 收尾。
@@ -89,7 +117,7 @@
   Cls 180° score 会从 Python 的 0.6868 放大为 C++ 的 0.9383，跨过 0.9 阈值并造成错误旋转。
 - **决策**：
   1. Paddle E2E 门必须分别以 `runtime=python|cpp` 运行真实 `sublift extract`，统一交给
-     `benchmark.diagnostics`，并同时过当前 Oracle 相对门与冻结 Python 绝对门。
+     `sublift.benchmark.diagnostics`，并同时过当前 Oracle 相对门与冻结 Python 绝对门。
   2. Manifest 必须固定来源、视频/GT/recipe/generator/font hash；缺素材、模型、worker、
      baseline 或 hash 不符一律 fail-closed。
   3. DB unclip 精确复刻 pyclipper/Clipper 6 的整数 offset、round join 与 arc tolerance，
@@ -202,10 +230,10 @@
 - **背景**：engine-matrix §3.1/§3.4 与 phase6.6-cutover §4 要求固定素材 GT L3
   （F1/precision/CER/usable/noise/empty ≥ 冻结水位）或书面 waiver 后方可默认翻转。
   固定 clip `debug/Zootopia_clip_1080p.mp4` **不入库**（体积/版权），CI/多数开发机无该资产；
-  水位本体已冻结于 `benchmark/reports/quality-baseline.md`（feat-034）。
+  水位本体已冻结于 `benchmark/baselines/quality-baseline.md`（feat-034）。
 - **决策**：
   1. `scripts/parity/check_cutover_gate.py` **接线** GT L3：资产存在时用 C++ worker（vision）
-     path-mode 抽帧 + 现有 `benchmark.diagnostics` 打分，硬门对齐冻结水位；跌破 → 门禁 FAIL。
+     path-mode 抽帧 + 现有 `sublift.benchmark.diagnostics` 打分，硬门对齐冻结水位；跌破 → 门禁 FAIL。
   2. 资产缺失时默认 **WAIVED**（`gt_l3_waived`），报告必须显式标注豁免与
      「非完整发布契约」；**禁止**把豁免写成「全量发布契约 PASS」。
   3. 发布/合并若要求 live L3：使用 `--require-gt`（无资产即 FAIL）。

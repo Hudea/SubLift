@@ -13,5 +13,5 @@
 `[0,848,1920,87]`、`subtitle_script=cjk`。该数据集是回归锚，不代表英文、中英混排、不同
 字幕位置或其它片源的泛化能力。
 
-重跑请使用 `benchmark/manifests/`，输出仍默认写入 `debug/`；只有经过相同协议验收并明确
-取代现有基线时，才更新本目录的报告。
+重跑请使用 `uv run sublift-benchmark` 和 `benchmark/configs/`，输出默认写入
+`debug/benchmark/`；只有经过相同协议验收并明确取代现有基线时，才更新本目录的报告。

@@ -101,7 +101,7 @@ video
 - [benchmark 设计](design/benchmark.md) — 质量诊断、manifest 编排、性能模式；用法见 [benchmark/README.md](../benchmark/README.md)
 - [ROI 数据通路设计（Phase 4 计划）](design/roi-data-path.md) — 固定区域 crop-before-Python、坐标契约与 A/B 验收边界
 - [Phase 4 ROI 性能优化报告](reports/phase4-roi-performance.md) — 正式 clean-commit A/B 结果、性能结论与适用边界
-- [版本化 benchmark 基线](../benchmark/reports/README.md) — 固定 GT 质量锚与当前 ROI 性能归因快照
+- [版本化 benchmark 基线](../benchmark/baselines/README.md) — 固定 GT 质量锚与当前 ROI 性能归因快照
 - [Path-mode 有界重叠设计（Phase 4.1 已归档）](design/path-mode-overlap.md) — producer / consumer 所有权、取消、进度与并发性能口径；真实 Vision 未达吞吐门，未采纳
 - [OCR 内部性能归因（Phase 4.2）](reports/phase4.2-ocr-attribution-baseline.md) — 已完成的 Vision 调用内部树、段级 trace 与下一步优化分流
 
@@ -166,7 +166,7 @@ video
 
 ## 9. 当前质量水位与已知限制
 
-固定 GT（Zootopia clip、1080p、5fps、统一 diagnostic 口径）的 Phase 3 最终结果：timing recall **96.6%**、precision **98.8%**、F1 **97.7%**；CER macro **3.2%**、micro **2.4%**、字符准确率 **97.6%**；usable subtitle recall **92.0%**；noise/empty 均为 **0**；处理速度 **21.0×** 实时。版本化报告见 [质量基线](../benchmark/reports/quality-baseline.md)；本地原始产物位于 `debug/benchmark-reports/feat034_p1_fix2/`。
+固定 GT（Zootopia clip、1080p、5fps、统一 diagnostic 口径）的 Phase 3 最终结果：timing recall **96.6%**、precision **98.8%**、F1 **97.7%**；CER macro **3.2%**、micro **2.4%**、字符准确率 **97.6%**；usable subtitle recall **92.0%**；noise/empty 均为 **0**；处理速度 **21.0×** 实时。版本化报告见 [质量基线](../benchmark/baselines/quality-baseline.md)；本地原始产物位于 `debug/benchmark/archive/legacy-runs/feat034_p1_fix2/`。
 
 上述结果是固定回归锚点，不是跨片源泛化承诺。当前限制：
 
@@ -253,7 +253,17 @@ SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 
 ### 11.1 Benchmark 驱动
 
-`scripts/run_benchmark_manifest.py` 以 manifest 固定视频、GT、区域与配置，输出 summary、agent JSON、GT CSV 和 detection CSV。质量诊断为一对一 temporal IoU + case 分类；可选 `performance` 模式（off/summary/trace）在同源 Pipeline 上聚合阶段耗时，并与同次质量门联合报告。设计见 [design/benchmark.md](design/benchmark.md)；命令、manifest 字段与回归锚点见 [benchmark/README.md](../benchmark/README.md)。
+Benchmark 可执行代码位于正式包 `src/sublift/benchmark/`，配置、GT、冻结基线与
+parity 资产分别位于仓库根 `benchmark/configs|datasets|baselines|parity`，本机产物统一
+写入 `debug/benchmark/`。入口 `sublift-benchmark` 提供 `run / matrix / score / show`
+以及 recorder 扰动、ROI 对照专项命令；历史脚本仅保留兼容转发。
+
+`run/matrix` 使用同源 Python `Pipeline + FfmpegExtractor + OCR` 以保留阶段性能埋点；
+`score` 对任意 C++/Python/GUI 已有 SRT 使用同一套一对一 temporal IoU、CER、usable、
+case 分类与 JSON/CSV/Markdown 报告。v2 config 将单次 run 与参数矩阵分离，通用
+`--set / --vary` 负责未来参数扩展并拒绝未知字段。设计见
+[design/benchmark.md](design/benchmark.md)，命令与回归锚点见
+[benchmark/README.md](../benchmark/README.md)。
 
 ### 11.2 增量处理与取消
 

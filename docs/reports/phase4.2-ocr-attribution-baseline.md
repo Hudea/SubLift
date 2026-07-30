@@ -4,7 +4,7 @@
 > **日期：** 2026-07-24
 > **验证提交：** `abafab2e209a523522d74ef09a30f2264805fa0b`（`git_dirty=false`）
 > **协议：** 同机、同负载、Apple Vision、warmup=1 + measured=3、独立进程、median 为主统计
-> **原始产物：** `debug/perf_reports/phase4.2_ocr_attribution/`（不入库）
+> **原始产物：** `debug/benchmark/archive/legacy-perf/phase4.2_ocr_attribution/`（不入库）
 
 ## 1. 结论（先读）
 
@@ -36,7 +36,7 @@ OCR 内部结论。
 
 | 项 | 固定值 |
 |---|---|
-| 视频 / GT | `debug/Zootopia_clip_1080p.mp4`（254.272 s，不入库）+ `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`（87 条） |
+| 视频 / GT | `debug/Zootopia_clip_1080p.mp4`（254.272 s，不入库）+ `benchmark/datasets/Zootopia_clip_1080p_gt.srt`（87 条） |
 | 采样 / OCR | 5fps、Apple Vision、`subtitle_script=cjk`、confidence=0.5 |
 | 区域 | source-frame `[0,848,1920,87]`，`frame_output_mode=roi`（1920×87 RGB） |
 | 协议 | warmup=1 + measured=3，off / summary / trace 各一轮独立 manifest |
@@ -44,12 +44,12 @@ OCR 内部结论。
 | Commit | `abafab2` clean |
 
 ```bash
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  debug/perf_reports/phase4.2_ocr_attribution/manifest_off.json --label manifest
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  debug/perf_reports/phase4.2_ocr_attribution/manifest_summary.json --label manifest
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  debug/perf_reports/phase4.2_ocr_attribution/manifest_trace.json --label manifest
+uv run --extra vision sublift-benchmark run \
+  debug/benchmark/archive/legacy-perf/phase4.2_ocr_attribution/manifest_off.json --label manifest
+uv run --extra vision sublift-benchmark run \
+  debug/benchmark/archive/legacy-perf/phase4.2_ocr_attribution/manifest_summary.json --label manifest
+uv run --extra vision sublift-benchmark run \
+  debug/benchmark/archive/legacy-perf/phase4.2_ocr_attribution/manifest_trace.json --label manifest
 ```
 
 产物目录：
@@ -205,5 +205,5 @@ uv run --extra vision python scripts/run_benchmark_manifest.py \
 
 ## 9. 与既有 ROI 基线的关系
 
-[ROI 通路归因基线](../../benchmark/reports/performance-attribution-baseline.md) 已证明：ROI 后 OCR 是最大叶子。
+[ROI 通路归因基线](../../benchmark/baselines/performance-attribution-baseline.md) 已证明：ROI 后 OCR 是最大叶子。
 本报告在 **同一 ROI 路径** 上把该叶子拆开，证明成本在 **`performRequests`**，不在 Python 桥接。两条报告结论衔接：Phase 4 做完搬运；Phase 4.2 看清 Vision 本体。

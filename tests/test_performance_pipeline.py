@@ -9,10 +9,11 @@ from typing import Any
 
 import numpy as np
 import pytest
-from benchmark.report import write_reports
-from benchmark.runner import RunConfig, _validate_ocr_breakdown, run_benchmark
 from PIL import Image
 
+from sublift.benchmark.config import RunConfig
+from sublift.benchmark.report import write_reports
+from sublift.benchmark.runner import _validate_ocr_breakdown, run_benchmark
 from sublift.config import Config
 from sublift.detector import FixedRegionDetector
 from sublift.diagnostics.performance import (

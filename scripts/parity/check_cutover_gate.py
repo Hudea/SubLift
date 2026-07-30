@@ -58,7 +58,7 @@ GT_SCRIPT = "cjk"
 GT_REGION_BOX = [0, 848, 1920, 87]  # source-frame band from quality-baseline
 GT_WAIVER_ADR = "ADR-0022"
 
-# Frozen waterline (benchmark/reports/quality-baseline.md / feat-034)
+# Frozen waterline (benchmark/baselines/quality-baseline.md / feat-034)
 _QUALITY_TIMING_F1 = 0.952
 _QUALITY_TIMING_PRECISION = 0.988
 _QUALITY_USABLE = 0.851
@@ -418,9 +418,10 @@ def _score_entries_against_gt(
     entries: list[dict[str, Any]], gt_path: Path
 ) -> list[GtL3MetricRow]:
     """Score detected entries against frozen GT SRT using benchmark diagnostics."""
-    from benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
-    from benchmark.runner import RunConfig, RunResult
-    from benchmark.srt_loader import SrtEntry, load_srt
+    from sublift.benchmark.config import RunConfig
+    from sublift.benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
+    from sublift.benchmark.runner import RunResult
+    from sublift.benchmark.srt import SrtEntry, load_srt
 
     detected = [
         SrtEntry(

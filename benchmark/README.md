@@ -1,238 +1,270 @@
-# SubLift Benchmark 用法
+# SubLift Benchmark
 
-端到端质量诊断与开发者性能剖析。  
-**设计**见 [docs/design/benchmark.md](../docs/design/benchmark.md)；**架构**见 [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) §11。
+端到端字幕质量诊断、参数矩阵、已有 SRT 评分与 Python Pipeline 性能归因。
 
-## 前置
-
-| 依赖 | 说明 |
-|---|---|
-| Python 3.12+ / uv | `./init.sh` 或 `uv sync --extra vision` |
-| ffmpeg / ffprobe | PATH 可用 |
-| 视频 | 默认固定片段：`debug/Zootopia_clip_1080p.mp4`（**不入版本控制**，约 78MB） |
-| GT | `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`（入库） |
-
-无视频时无法本地复现固定 GT / 性能 baseline。
-
-## 一键运行
+统一入口：
 
 ```bash
-# 质量路径示例（下部裁剪，无性能块）
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_cli_bottomcrop_5fps.json \
-  --label manifest
-
-# 固定区域 + 性能 summary（1 预热 + 3 次测量）
-uv run --extra vision python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_fixed_region_5fps_perf.json \
-  --label feat037_perf_baseline
+uv run sublift-benchmark --help
 ```
 
-| `--label` | 行为 |
-|---|---|
-| `auto`（默认） | 按最近 commit 主题生成递增子目录 |
-| `manifest` | 使用 manifest 内 `label`，并写入 `output_dir/<label>/` |
-| 其它字符串 | 固定 label，输出到 `output_dir/<label>/` |
+设计见 [`docs/design/benchmark.md`](../docs/design/benchmark.md)。
 
-## Manifest 字段
+## 目录边界
 
-相对路径相对于**仓库根**。
+```text
+src/sublift/benchmark/       # 可执行代码（随 sublift 包安装）
+benchmark/
+  configs/                   # 可复现 run / matrix JSON
+  datasets/                  # GT、确定性生成 recipe 与数据 manifest
+  baselines/                 # 已验收、进入版本控制的冻结结论
+  parity/                    # C++ cutover fixtures / goldens
+debug/benchmark/             # 本机输入、运行产物与历史归档（不入库）
+scripts/
+  run_benchmark_manifest.py  # 旧入口兼容包装器
+  diagnostics/               # 非标准算法定位脚本
+```
 
-| 字段 | 类型 | 默认 | 说明 |
-|---|---|---|---|
-| `video` / `video_path` | string | 必填 | 输入视频 |
-| `ground_truth` / `ground_truth_path` | string | 必填 | GT SRT |
-| `fps` | number | 5.0 | 采样率 |
-| `engine` | string | `"vision"` | `vision` / `mock` |
-| `confidence` | number | 0.5 | OCR 置信门 |
-| `subtitle_script` | string | `"auto"` | `auto` / `cjk` / `latin` |
-| `match_threshold` | number | 0.5 | temporal IoU 匹配阈值 |
-| `region_box` | `[x,y,w,h]` 或 null | null | 固定区；null → 下部裁剪 |
-| `label` | string | null | 报告后缀 |
-| `output_dir` | string | `debug/benchmark-reports` | 报告根目录（perf manifest 现为 `debug/perf_reports`） |
-| `video_duration_seconds` | number | null | 覆盖探测时长 |
-| `performance` | object | 省略=off | 见下表 |
+原则：
 
-### `performance` 对象
+- 代码不放在仓库根 `benchmark/`，避免“Python 包、数据、报告”同层混放；
+- 临时运行一律进入 `debug/benchmark/`；
+- `benchmark/baselines/` 只保存经过协议验收的版本化结论；
+- 产品 C++/GUI/Python 导出均通过同一个 `score` 口径比较。
 
-| 字段 | 默认 | 说明 |
-|---|---|---|
-| `mode` | `"off"` | `off` / `summary` / `trace` |
-| `warmup_runs` | 0 | 预热次数（丢弃） |
-| `measured_runs` | 1 | 计入中位数的次数 |
+## 四个日常命令
 
-示例（性能 baseline 配方）：
+### 1. 执行单组配置
+
+```bash
+uv run sublift-benchmark run \
+  benchmark/configs/zootopia_fixed_region_5fps_perf.json
+```
+
+临时覆盖参数，不需要复制 JSON：
+
+```bash
+uv run sublift-benchmark run \
+  benchmark/configs/zootopia_fixed_region_5fps_perf.json \
+  --set fps=8 \
+  --set engine=paddle \
+  --set performance.mode=off \
+  --label paddle_8fps
+```
+
+`run` 使用 Python in-process Pipeline，以保留阶段性能埋点；支持
+`vision / paddle / mock`。C++ Worker 或 GUI 已有导出使用 `score`。
+
+### 2. 参数矩阵
+
+配置内可声明 matrix，也可在命令行追加/替换参数轴：
+
+```bash
+uv run sublift-benchmark matrix \
+  benchmark/configs/zootopia_fps_engine_matrix.json \
+  --dry-run
+
+uv run sublift-benchmark matrix \
+  benchmark/configs/zootopia_fixed_region_5fps_perf.json \
+  --set performance.mode=off \
+  --set performance.warmup_runs=0 \
+  --set performance.measured_runs=1 \
+  --vary 'fps=[5,8,12]' \
+  --vary 'engine=["vision","paddle"]'
+```
+
+矩阵规则：
+
+- 多个轴取笛卡尔积；
+- `--set` 是所有 cell 的固定覆盖；
+- `--vary` 覆盖 config 中同名 matrix 轴；
+- 默认最多 64 组，可用 `--max-cases` 显式提高；
+- 默认 fail-fast；需要收集全部失败时使用 `--keep-going`；
+- `--dry-run` 只打印最终配置，不写文件、不跑视频。
+
+每次矩阵额外生成：
+
+- `matrix.plan.json`
+- `matrix.results.json`
+- `matrix.results.csv`
+- `matrix.summary.md`
+
+### 3. 评分已有 SRT
+
+适用于 GUI、C++ Worker、Python Worker 或外部工具的导出：
+
+```bash
+uv run sublift-benchmark score \
+  benchmark/configs/zootopia_fps_engine_matrix.json \
+  debug/benchmark/imports/2026-07-30/cpp/export.srt \
+  --set fps=8 \
+  --set engine=vision \
+  --elapsed 10.79 \
+  --duration 254.25 \
+  --label vision_cpp_8fps
+```
+
+`score` 不重新提取视频，只执行 GT 对齐、指标、failure clusters 和标准报告。
+
+### 4. 查看最终配置
+
+```bash
+uv run sublift-benchmark show \
+  benchmark/configs/zootopia_fps_engine_matrix.json \
+  --set fps=12
+```
+
+适合在长跑前确认路径、ROI、performance 和 CLI override 是否生效。
+
+## 专项命令
+
+### Performance recorder 扰动
+
+交错运行 off/summary 配对，并同时验证输出 hash：
+
+```bash
+uv run sublift-benchmark overhead \
+  benchmark/configs/zootopia_fixed_region_5fps_perf.json \
+  --runs 3 \
+  --target-pct 5 \
+  --label recorder_overhead
+```
+
+### Full / ROI 硬门比较
+
+```bash
+uv run sublift-benchmark compare-roi \
+  path/to/full.agent.json \
+  path/to/roi.agent.json \
+  --out debug/benchmark/runs/roi_ab/ab_summary.json
+```
+
+## Config v2
+
+推荐结构：
 
 ```json
 {
-  "video": "debug/Zootopia_clip_1080p.mp4",
-  "ground_truth": "benchmark/fixtures/Zootopia_clip_1080p_gt.srt",
-  "fps": 5.0,
-  "engine": "vision",
-  "confidence": 0.5,
-  "subtitle_script": "cjk",
-  "match_threshold": 0.5,
-  "region_box": [0, 848, 1920, 87],
-  "label": "feat037_perf_baseline",
-  "output_dir": "debug/perf_reports",
-  "performance": {
-    "mode": "summary",
-    "warmup_runs": 1,
-    "measured_runs": 3
+  "schema_version": 2,
+  "run": {
+    "video": "debug/Zootopia_clip_1080p.mp4",
+    "ground_truth": "benchmark/datasets/Zootopia_clip_1080p_gt.srt",
+    "fps": 5.0,
+    "engine": "vision",
+    "confidence": 0.5,
+    "subtitle_script": "cjk",
+    "match_threshold": 0.5,
+    "region_box": [0, 848, 1920, 87],
+    "frame_output_mode": "roi",
+    "pipeline": {
+      "min_duration_ms": 300,
+      "change_point": {
+        "hysteresis_frames": 1
+      }
+    },
+    "label": "zootopia",
+    "output_dir": "debug/benchmark/runs",
+    "performance": {
+      "mode": "off",
+      "warmup_runs": 0,
+      "measured_runs": 1
+    }
+  },
+  "matrix": {
+    "fps": [5, 8, 12],
+    "engine": ["vision", "paddle"],
+    "pipeline.change_point.presence_threshold": [0.01, 0.02]
   }
 }
 ```
 
-## 产物
+历史 flat manifest 继续兼容。新配置会拒绝未知字段，避免把 `fps` 拼成 `fpps`
+后静默使用默认值。
 
-每次成功运行在输出目录生成：
+### 可覆盖字段
+
+| 字段 | 说明 |
+|---|---|
+| `video` / `ground_truth` | 视频与 GT 路径；相对仓库根 |
+| `fps` | 采样率，必须 >0 |
+| `engine` | `vision / paddle / mock` |
+| `confidence` | OCR 置信门，0–1 |
+| `subtitle_script` | `auto / cjk / latin` |
+| `match_threshold` | temporal IoU 门，0–1 |
+| `region_box` | `[x,y,width,height]` 或 null |
+| `frame_output_mode` | `full / roi`；roi 需要 region |
+| `pipeline.*` | Pipeline 算法参数；支持嵌套 `signature.* / change_point.*` |
+| `label` / `output_dir` | 报告身份与输出根 |
+| `video_duration_seconds` | 覆盖探测到的视频时长 |
+| `isolate_processes` | 多次测量是否 spawn 隔离 |
+| `performance.mode` | `off / summary / trace` |
+| `performance.warmup_runs` | 丢弃的预热次数 |
+| `performance.measured_runs` | 计入聚合的次数 |
+
+CLI 值优先按 JSON 解析，因此 boolean 要写 `true/false`，数组写 `[1,2,3]`。
+例如可直接扫描变化点迟滞，不需要新增脚本：
+
+```bash
+uv run sublift-benchmark matrix benchmark/configs/zootopia_fps_engine_matrix.json \
+  --vary 'pipeline.change_point.hysteresis_frames=[1,2,3]' \
+  --set pipeline.min_duration_ms=300 \
+  --dry-run
+```
+
+`fps / confidence / subtitle_script` 仍由 run 顶层统一管理，不能在
+`pipeline` 中重复覆盖。未知或类型不匹配的 Pipeline 字段会在长跑前失败。
+
+## 标准报告
+
+每个 run/score cell 输出：
 
 | 文件 | 内容 |
 |---|---|
-| `*.agent.json` | 完整诊断 + 可选 `performance` |
+| `*.agent.json` | 完整配置、gates、指标、cases、failure clusters |
 | `*.summary.md` | 人读摘要 |
-| `*.gt_cases.csv` | 每条 GT |
-| `*.det_cases.csv` | 每条 detection |
-| `*.perf-segments/runN.jsonl` | 仅 `trace`：逐段耗时（无字幕原文） |
+| `*.gt_cases.csv` | 每条 GT 的匹配、CER 和失败类型 |
+| `*.det_cases.csv` | 每条 detection 的匹配结果 |
+| `*.perf-segments/*.jsonl` | 仅 trace；逐段耗时，无字幕原文 |
 
-建议阅读顺序：`summary.md` → failure clusters → CSV →（可选）`performance.stages`。
+建议阅读顺序：summary → matrix summary → failure clusters → GT/det CSV → trace。
 
-## Python API
+## 指标
 
-```python
-from pathlib import Path
-from benchmark import RunConfig, run_benchmark, align_existing_srt
-from benchmark.report import write_reports
+- timing：recall / precision / F1、start/end MAE、boundary P95；
+- recognition：CER macro/micro、char accuracy、exact match；
+- e2e：usable subtitle recall（时间命中且 CER≤20%）；
+- speed：wall 与 realtime factor；
+- performance：阶段 wall、首帧/首条、帧数、raw bytes、OCR calls、RSS、CPU。
 
-cfg = RunConfig(
-    video_path=Path("debug/Zootopia_clip_1080p.mp4"),
-    ground_truth_path=Path("benchmark/fixtures/Zootopia_clip_1080p_gt.srt"),
-    fps=5.0,
-    engine="vision",
-    subtitle_script="cjk",
-    region_box=(0, 848, 1920, 87),
-    label="my_run",
-    output_dir=Path("debug/perf_reports/my_run"),
-    performance_mode="summary",  # off | summary | trace
-    warmup_runs=0,
-    measured_runs=1,
-)
-write_reports(run_benchmark(cfg))
+统一匹配是一对一 temporal IoU，默认阈值 0.5。
 
-# 仅对齐已有 SRT（不跑提取）
-# write_reports(align_existing_srt(cfg, Path("debug/some_export.srt")))
-```
+## 固定回归锚
 
-## 性能模式速查
-
-| 模式 | 何时用 |
-|---|---|
-| `off` | 日常质量回归、对比算法（默认） |
-| `summary` | 正式性能 baseline、优化前后对比 |
-| `trace` | 定位最慢字幕段 / OCR 次数 |
-
-阶段名与口径（`extract_wait` **含** decode+filter+RGB+pipe，**不是**纯解码）见设计文档 §6。
-
-summary 扰动自测：
-
-```bash
-uv run --extra vision python scripts/measure_perf_overhead.py
-# 默认写 debug/perf_reports/feat037_overhead/overhead.json
-```
-
-对比优化时同环境同负载，读 `.agent.json` 的：
-
-- `performance.aggregate.core_wall_ms` / `realtime_factor`
-- `performance.throughput.raw_output_bytes` / `unattributed_ms` / `stage_coverage_pct`
-- `performance.stages.*.total_ms`
-- `performance.quality`（三次 hash 与 gates）
-
-## 当前回归锚点
-
-> 固定 Zootopia 片段；**不**代表跨片源泛化。已验收的质量与当前 ROI 性能结论见
-> [版本化基线报告](reports/README.md)。`debug/` 只保存本地重跑原始产物，不能自动取代
-> 已提交的基线快照。
-
-### 素材
-
-| 项 | 值 |
-|---|---|
-| 视频 | `debug/Zootopia_clip_1080p.mp4`（1080p，~254.27s） |
-| GT | `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`（87 条） |
-
-### 质量（feat-034 P1 fix2）
-
-配置要点：5fps、Vision、region 精准对齐、`subtitle_script=cjk`、行级选择开启。
+Zootopia 1080p / 5fps / Vision / ROI `[0,848,1920,87]`：
 
 | 指标 | 锚点 |
 |---|---:|
-| timing_recall | 96.6% |
-| timing_precision | 98.8% |
-| timing_f1 | **97.7%** |
-| cer_macro | **3.2%** |
-| usable_subtitle_recall | **92.0%** |
-| text.noise / text.empty | **0 / 0** |
+| timing F1 | 97.7% |
+| timing precision | 98.8% |
+| CER macro | 3.2% |
+| usable recall | 92.0% |
+| noise / empty | 0 / 0 |
 
-版本化结论：[固定 GT 质量基线](reports/quality-baseline.md)。原始历史产物仍在本地
-`debug/benchmark-reports/feat034_p1_fix2/`。
+详见：
 
-### 性能协议与量级（feat-037）
+- [`baselines/quality-baseline.md`](baselines/quality-baseline.md)
+- [`baselines/performance-attribution-baseline.md`](baselines/performance-attribution-baseline.md)
 
-| 项 | 值 |
-|---|---|
-| 配置 | 5fps、Vision、region `[0,848,1920,87]`、cjk |
-| 运行 | warmup=1 + measured=3（独立进程） |
-| 主统计 | median（附 min/max） |
-| manifest | `benchmark/manifests/zootopia_fixed_region_5fps_perf.json` |
-| 默认输出 | `debug/perf_reports/` |
+该单一片源只用于回归，不代表跨片源泛化。
 
-干净树一次归档量级（commit 期实测，供对照）：core 中位约 **11.2 s**（~**22.8×** 实时）；OCR ~41%、`extract_wait` ~24%、`frame_materialize` ~15%；`raw_output_bytes` ≈ **7.91 GB（7.36 GiB）**/ 次；阶段 coverage ~99%。  
-上述 feat-037 数字是 ROI 前的历史性能模式基线。当前默认 ROI 路径的 clean-commit A/B、
-完整 coverage 与阶段归因见[性能归因基线](reports/performance-attribution-baseline.md)；本地
-重跑仍输出到 `debug/`。
+## 兼容入口
 
-### 历史备注（非现行验收主口径）
-
-| 阶段 | timing F1 | 说明 |
-|---|---:|---|
-| baseline-no-filter | 91.2% | patrol on，hyst=2 |
-| feat-033 final | 95.2% | 过 95% 门 |
-| feat-034 P1 fix2 | **97.7%** | 当前质量锚点 |
-
-早期 CLI bottom-crop vs GUI 固定区 CER 反差说明：**区域宽度是 OCR 问题**，不是打轴主矛盾。
-
-## feat-039：同提交 full / roi A/B
-
-在同一 clean commit、同机器上对照内部 `frame_output_mode`：
+以下旧脚本仍可运行，但只负责转发并打印迁移提示：
 
 ```bash
-uv run python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_full.json --label manifest
-uv run python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_roi.json --label manifest
-uv run python scripts/compare_roi_ab.py \
-  debug/benchmark-reports/feat039_roi_ab/feat039_full/Zootopia_clip_1080p_feat039_full.agent.json \
-  debug/benchmark-reports/feat039_roi_ab/feat039_roi/Zootopia_clip_1080p_feat039_roi.agent.json \
-  --out debug/benchmark-reports/feat039_roi_ab/ab_summary.json
+uv run python scripts/run_benchmark_manifest.py <config>
+uv run python scripts/measure_perf_overhead.py
+uv run python scripts/compare_roi_ab.py <full> <roi>
 ```
 
-| 项 | 固定值 |
-|---|---|
-| 负载 | 与 feat-037 canonical 相同（Zootopia 1080p / 5fps / region `[0,848,1920,87]` / Vision / cjk） |
-| 协议 | 每组 warmup=1 + measured=3，主统计 median |
-| 硬门 | hash 等价、raw bytes 比例 87/1080、materialize ≤25% full、wall/RSS ≤105% full、coverage ≥99%、固定 GT 质量门 |
-| 输出 | `debug/benchmark-reports/feat039_roi_ab/`（不入库；证据写入 `docs/phases/phase4.json`） |
-
-`frame_output_mode` 默认 `full`；`roi` 需要 `region_box`。结论只能同提交同机比较，不能与跨机器历史数字混比。
-
-## 相关路径
-
-| 路径 | 说明 |
-|---|---|
-| [docs/design/benchmark.md](../docs/design/benchmark.md) | 模块、匹配、指标、性能模式设计 |
-| `benchmark/manifests/` | 可复现 JSON 配方 |
-| `benchmark/fixtures/` | GT SRT |
-| `scripts/run_benchmark_manifest.py` | CLI 入口 |
-| `scripts/compare_roi_ab.py` | feat-039 full/roi 硬门对照 |
-| `debug/perf_reports/` | 当前性能报告默认根 |
-| `debug/benchmark-reports/` | 历史质量/混合报告根 |
+新自动化和文档应只使用 `sublift-benchmark`。

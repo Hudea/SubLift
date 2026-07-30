@@ -21,7 +21,7 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class GtEntry(Protocol):
-    """ground truth 条目协议（与 benchmark.srt_loader.SrtEntry 结构兼容）。
+    """ground truth 条目协议（与 sublift.benchmark.srt.SrtEntry 结构兼容）。
 
     使用 Protocol 避免反向依赖 benchmark 包，保持 src/sublift 自包含。
     成员声明为 ``@property`` 以兼容 frozen dataclass 的只读属性。

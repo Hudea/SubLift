@@ -188,7 +188,7 @@
 ### dHash 对中文文本内容变化判别力不足，导致 timeline 漏分段
 - **日期**：2026-07-03
 - **状态**：部分缓解（feat-031b SSIM patrol 已实现，merged_into_neighbor FN 减少约 70%）
-- **现象**：用 `scripts/run_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
+- **现象**：用 `scripts/diagnostics/run_timeline.py` 对 `debug/Zootopia_clip_hardsub1.mkv`（00:01:00~00:02:00 窗口）实测，段 33（00:01:47→00:01:59, 11600ms）合并了实际 4 个独立字幕段：
   - "能不顾他们惊人的差异"
   - "彻底化解偏见和刻板印象"
   - "那也许我们都能接受彼此的差异"
@@ -210,7 +210,7 @@
   - precision 不下降（+2.7pp），patrol 未引入新误检
 - **参数落定**：F1 提升 +15.6pp ≥ 3pp 且 precision 不下降，但未达 95% 目标。patrol 记为推荐配置（`enable_ssim_patrol=True, interval=3, threshold=0.92`），默认保持关闭。
 - **残留问题**：短字幕（<1.5s）召回率仍偏低（24%→60%），主要属于 IN/OUT 或采样不足，SSIM patrol 不能完全解决。
-- **相关文件**：`src/sublift/pipeline/signature.py`（`compute_foreground_ssim`）、`src/sublift/pipeline/changepoint.py`（`_handle_patrol_path`）、`src/sublift/config.py`（patrol 配置）、`scripts/run_trace.py --compare-baseline`、`debug/reports/feat031_comparison.md`
+- **相关文件**：`src/sublift/pipeline/signature.py`（`compute_foreground_ssim`）、`src/sublift/pipeline/changepoint.py`（`_handle_patrol_path`）、`src/sublift/config.py`（patrol 配置）、`scripts/diagnostics/run_trace.py --compare-baseline`、`debug/reports/feat031_comparison.md`
 
 ---
 
@@ -236,7 +236,7 @@
   - 2 段 OCR 空文本（段 5、11）：锚帧落在过渡画面（见上条 HURDLE）
   - 1 段合并 4 段（段 22）：dHash 对相似中文文本判别力不足（见首条 HURDLE）
 - **结论**：Pipeline 端到端在 5fps 下表现扎实，打轴状态机很干净（0 误检）。主要瓶颈在 OCR 精度（空文本、英文水印干扰）和长段合并（dHash 对相似内容的区分度不够）。对 Phase 1 MVP 是不错的起点。
-- **相关文件**：`scripts/run_timeline.py`、`debug/timeline_compare_result.txt`
+- **相关文件**：`scripts/diagnostics/run_timeline.py`、`debug/timeline_compare_result.txt`
 
 ---
 
@@ -354,8 +354,8 @@
 
   根因：`hysteresis_frames=2`（400ms@5fps）的迟滞吃掉了短字幕大部分时长；单字字幕（"砰"）前景占比低，难以达到 `presence_threshold`。
 - **排查路径**：
-  1. 用 `scripts/run_trace.py --compare-baseline` 对比确认 patrol 将 merged_into_neighbor 从 47 降到 14，但引入了 7 组过切分
-  2. 用 `scripts/scan_params.py` 扫描确认 `min_duration_ms` 对打轴无影响（只影响 dedupe），`hysteresis=1` 略提升短字幕（+4pp）但会引入 FP
+  1. 用 `scripts/diagnostics/run_trace.py --compare-baseline` 对比确认 patrol 将 merged_into_neighbor 从 47 降到 14，但引入了 7 组过切分
+  2. 用 `scripts/diagnostics/scan_params.py` 扫描确认 `min_duration_ms` 对打轴无影响（只影响 dedupe），`hysteresis=1` 略提升短字幕（+4pp）但会引入 FP
   3. 7 组过切分中归一化文本全部不等（OCR 噪声/标点差异），dedupe 无法合并
 - **根本原因**：
   - 过切分：patrol 阈值 `0.92` 对同一句字幕内部的二值化 mask 局部波动过于敏感；CHANGE 候选确认后产生两段，OCR 文本因噪声不等导致 dedupe 失效
@@ -366,8 +366,8 @@
   3. **`hysteresis_frames=1`** 补短字幕。
   4. 验收：`baseline-no-filter` F1 91.2% → **95.2%**（R 83.9%→92.0%，P 100%→98.8%）。
 - **仍开放**：merged residual（新闻簇 / 哈啰 等）、单字「砰」。
-- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。版本化报告见 `benchmark/reports/quality-baseline.md`；原始历史产物见 `debug/benchmark-reports/feat034_p1_fix2/`。
-- **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark-reports/feat033_final/`
+- **feat-034 已收敛 OCR 噪声**：P1 修复后固定 GT 达 usable 92.0%、CER macro 3.2%、noise 0、empty 0；timing F1 97.7%、precision 98.8%。版本化报告见 `benchmark/baselines/quality-baseline.md`；原始历史产物见 `debug/benchmark/archive/legacy-runs/feat034_p1_fix2/`。
+- **相关文件**：`src/sublift/pipeline/core.py`、`dedupe.py`、`config.py`、`debug/reports/feat033_diagnosis.md`、`debug/benchmark/archive/legacy-runs/feat033_final/`
 
 ---
 

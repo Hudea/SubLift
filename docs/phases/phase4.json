@@ -8,7 +8,7 @@
       "id": "feat-038",
       "name": "固定区域 FFmpeg ROI 输出通路",
       "description": "对 GUI path mode 与 benchmark 的有效固定 region，ffmpeg 在 rgb24 stdout 前执行 fps 后 exact crop；Pipeline 以 ROI 局部全幅 Region 消费图像，避免把 source region 二次裁剪。保留无 region、legacy frame mode、BottomCrop 和未验证旋转路径的全帧行为。",
-      "module": "src/sublift/extractor/; src/sublift/detector/; src/sublift/pipeline/; src/sublift/ipc/bridge.py; benchmark/",
+      "module": "src/sublift/extractor/; src/sublift/detector/; src/sublift/pipeline/; src/sublift/ipc/bridge.py; src/sublift/benchmark/",
       "dependencies": [
         "feat-037"
       ],
@@ -41,7 +41,7 @@
       "id": "feat-039",
       "name": "ROI A/B 性能与固定 GT 回归",
       "description": "在同一 clean commit、同机器、同 canonical manifest 下，以 warmup=1 + measured=3 对照 full 与 roi 输出。ROI 与 full 的 detection_hash 必须一致；ROI 的 raw RGB 传输、构造成本、总耗时、RSS、stage coverage 与固定 GT 质量均按计划硬门验收。",
-      "module": "benchmark/; scripts/run_benchmark_manifest.py; src/sublift/diagnostics/; benchmark/README.md",
+      "module": "src/sublift/benchmark/; benchmark/configs/; src/sublift/diagnostics/; benchmark/README.md",
       "dependencies": [
         "feat-038"
       ],
@@ -60,7 +60,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-17 clean commit 1b4612b0a41c0804218e25cfd79d7a7724b2ee96（git_dirty=false），同机 macOS arm64 / Vision / ffmpeg 8.1。协议：warmup=1 + measured=3 独立进程。manifests: zootopia_feat039_full/roi。HARD GATES PASSED（scripts/compare_roi_ab.py）。关键结果：detection_hash full=roi=b2d35c1e25f156e1（与历史锚一致）；frame_count=1271；raw_bytes_per_frame ROI=501120；raw_output_bytes full=7906636800 / roi=636923520（比例 87/1080）；frame_materialize median full=1912ms roi=233ms ratio=0.122≤0.25；core_wall median full=12314ms roi=9342ms ratio=0.759≤1.05；peak RSS ratio=0.836≤1.05；三次 ROI stage_coverage=99.999778% / 99.999784% / 99.999730%；三次 ROI measured 均过固定 GT 门（F1/precision/usable/CER/noise/empty）。软目标也达成：wall ratio 0.759≤0.90，realtime_factor 1.318× full。归档：debug/benchmark-reports/phase4-history-rewrite-ab/{feat039_full,feat039_roi,ab_summary.json}（不入库）。rgb24-before-crop 与路由收口均纳入 feat-038 的重组提交 4b5eea3。"
+      "evidence": "2026-07-17 clean commit 1b4612b0a41c0804218e25cfd79d7a7724b2ee96（git_dirty=false），同机 macOS arm64 / Vision / ffmpeg 8.1。协议：warmup=1 + measured=3 独立进程。manifests: zootopia_feat039_full/roi。HARD GATES PASSED（scripts/compare_roi_ab.py）。关键结果：detection_hash full=roi=b2d35c1e25f156e1（与历史锚一致）；frame_count=1271；raw_bytes_per_frame ROI=501120；raw_output_bytes full=7906636800 / roi=636923520（比例 87/1080）；frame_materialize median full=1912ms roi=233ms ratio=0.122≤0.25；core_wall median full=12314ms roi=9342ms ratio=0.759≤1.05；peak RSS ratio=0.836≤1.05；三次 ROI stage_coverage=99.999778% / 99.999784% / 99.999730%；三次 ROI measured 均过固定 GT 门（F1/precision/usable/CER/noise/empty）。软目标也达成：wall ratio 0.759≤0.90，realtime_factor 1.318× full。归档：debug/benchmark/archive/legacy-runs/phase4-history-rewrite-ab/{feat039_full,feat039_roi,ab_summary.json}（不入库）。rgb24-before-crop 与路由收口均纳入 feat-038 的重组提交 4b5eea3。"
     },
     {
       "id": "feat-040",
@@ -110,7 +110,7 @@
         }
       ],
       "status": "done",
-      "evidence": "2026-07-17 完成；重组后提交 1b4612b。实现：PerformanceRecorder.exclusive_span + pipeline_overhead，Pipeline.run_frames 外层 wall 扣除互不重叠的 coverage leaf stages；报告保留 definition。确定性：fake-clock 测试证明 pipeline_overhead=10ms、ocr+dedupe+overhead=core 22ms、unattributed=0，finalize 不双计；off/summary 字幕结果一致。正式证据：clean commit 1b4612b0a41c0804218e25cfd79d7a7724b2ee96（git_dirty=false），canonical Vision full/roi 各 warmup=1 + measured=3，归档 debug/benchmark-reports/phase4-history-rewrite-ab/。compare_roi_ab HARD GATES PASSED：hash full=roi=b2d35c1e25f156e1；ROI coverage=99.999778% / 99.999784% / 99.999730%；raw ratio=87/1080；materialize ratio=0.122；wall ratio=0.759；RSS ratio=0.836；pipeline_crop_count=0；ROI 三次固定 GT 门全过；两个软目标（wall≤90%、realtime≥1.10×）均过。正式说明：docs/reports/phase4-roi-performance.md。验证：./init.sh（8/8）与 swift test（15 XCTest + 139 Swift Testing）全绿。"
+      "evidence": "2026-07-17 完成；重组后提交 1b4612b。实现：PerformanceRecorder.exclusive_span + pipeline_overhead，Pipeline.run_frames 外层 wall 扣除互不重叠的 coverage leaf stages；报告保留 definition。确定性：fake-clock 测试证明 pipeline_overhead=10ms、ocr+dedupe+overhead=core 22ms、unattributed=0，finalize 不双计；off/summary 字幕结果一致。正式证据：clean commit 1b4612b0a41c0804218e25cfd79d7a7724b2ee96（git_dirty=false），canonical Vision full/roi 各 warmup=1 + measured=3，归档 debug/benchmark/archive/legacy-runs/phase4-history-rewrite-ab/。compare_roi_ab HARD GATES PASSED：hash full=roi=b2d35c1e25f156e1；ROI coverage=99.999778% / 99.999784% / 99.999730%；raw ratio=87/1080；materialize ratio=0.122；wall ratio=0.759；RSS ratio=0.836；pipeline_crop_count=0；ROI 三次固定 GT 门全过；两个软目标（wall≤90%、realtime≥1.10×）均过。正式说明：docs/reports/phase4-roi-performance.md。验证：./init.sh（8/8）与 swift test（15 XCTest + 139 Swift Testing）全绿。"
     }
   ]
 }

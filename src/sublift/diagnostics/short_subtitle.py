@@ -5,7 +5,7 @@
 短字幕的影响。
 
 短字幕漏检主要属于 IN/OUT 或采样/迟滞不足，SSIM patrol 只补强 CHANGE，
-不作为短字幕主解法。本模块为参数扫描（``scripts/scan_params.py``）提供
+不作为短字幕主解法。本模块为参数扫描（``scripts/diagnostics/scan_params.py``）提供
 量化指标。
 """
 

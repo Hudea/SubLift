@@ -21,7 +21,7 @@
 | C++ 配置 | `Debug` + `SUBLIFT_REQUIRE_OPENCV=ON` + **`SUBLIFT_ENABLE_VISION=ON`** |
 | GT 视频 | `debug/Zootopia_clip_1080p.mp4` → 主仓 1080p / ~254s |
 | 冒烟视频 | `debug/Zootopia_clip_test_2min.mp4` → 主仓 2min / 1080p |
-| GT SRT | `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`（87 条） |
+| GT SRT | `benchmark/datasets/Zootopia_clip_1080p_gt.srt`（87 条） |
 
 ---
 
@@ -103,10 +103,13 @@ PYTHONPATH=. uv run --extra vision --extra paddle \
 
 **原因**
 
-- 以脚本方式执行时 `sys.path[0]` = `scripts/parity/`，**不含仓库根**
-- `run_gt_l3_check()` 内 `from benchmark.diagnostics import ...` 依赖仓库根在 path 上
-- `pyproject.toml` 的 `pythonpath = ["src", "."]` **只作用于 pytest**，不作用于 `python scripts/...`
-- 无 GT 视频时走 ADR-0022 waiver，**从不 import benchmark → 缺陷被隐藏**
+- 当时以脚本方式执行时 `sys.path[0]` = `scripts/parity/`，**不含仓库根**
+- 当时 `run_gt_l3_check()` 的 root `benchmark` import 依赖仓库根在 path 上；ADR-0031
+  已将实现迁入正式 `sublift.benchmark` 包，消除此隐式前提
+- `pyproject.toml` 的 `pythonpath = ["src", "."]` **只作用于 pytest**，不作用于当时的
+  `python scripts/...`
+- 无 GT 视频时走 ADR-0022 waiver，**从不 import 当时的 root benchmark package →
+  缺陷被隐藏**
 
 **影响**
 

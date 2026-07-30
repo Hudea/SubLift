@@ -9,9 +9,8 @@ from pathlib import Path
 
 import pytest
 
-pytest.importorskip("benchmark.srt_loader")
-from benchmark.srt_loader import SrtEntry
-
+pytest.importorskip("sublift.benchmark.srt")
+from sublift.benchmark.srt import SrtEntry
 from sublift.diagnostics.fn_analysis import (
     DetectedSegment,
     classify_fn,

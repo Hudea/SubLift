@@ -735,7 +735,7 @@ class TestBridgeRoiRouting:
 
 class TestBenchmarkFrameOutputMode:
     def test_manifest_frame_output_mode_roi(self, tmp_path: Path) -> None:
-        from benchmark.manifest import load_run_config
+        from sublift.benchmark.config import load_run_config
 
         repo = tmp_path / "repo"
         manifest_dir = repo / "benchmark" / "manifests"
@@ -747,7 +747,7 @@ class TestBenchmarkFrameOutputMode:
             json.dumps(
                 {
                     "video": "debug/movie.mp4",
-                    "ground_truth": "benchmark/fixtures/movie.srt",
+                    "ground_truth": "benchmark/datasets/movie.srt",
                     "region_box": [0, 848, 1920, 87],
                     "frame_output_mode": "roi",
                 }
@@ -759,7 +759,7 @@ class TestBenchmarkFrameOutputMode:
         assert config.region_box == (0, 848, 1920, 87)
 
     def test_manifest_frame_output_mode_default_full(self, tmp_path: Path) -> None:
-        from benchmark.manifest import load_run_config
+        from sublift.benchmark.config import load_run_config
 
         repo = tmp_path / "repo"
         manifest_dir = repo / "benchmark" / "manifests"
@@ -771,7 +771,7 @@ class TestBenchmarkFrameOutputMode:
             json.dumps(
                 {
                     "video": "debug/movie.mp4",
-                    "ground_truth": "benchmark/fixtures/movie.srt",
+                    "ground_truth": "benchmark/datasets/movie.srt",
                     "region_box": [0, 848, 1920, 87],
                 }
             ),
@@ -781,14 +781,14 @@ class TestBenchmarkFrameOutputMode:
         assert config.frame_output_mode == "full"
 
     def test_manifest_roi_without_region_rejected(self, tmp_path: Path) -> None:
-        from benchmark.manifest import ManifestError, load_run_config
+        from sublift.benchmark.config import ManifestError, load_run_config
 
         manifest = tmp_path / "run.json"
         manifest.write_text(
             json.dumps(
                 {
                     "video": "debug/movie.mp4",
-                    "ground_truth": "benchmark/fixtures/movie.srt",
+                    "ground_truth": "benchmark/datasets/movie.srt",
                     "frame_output_mode": "roi",
                 }
             ),
@@ -798,7 +798,8 @@ class TestBenchmarkFrameOutputMode:
             load_run_config(manifest)
 
     def test_run_once_roi_records_output_metadata(self, tmp_path: Path) -> None:
-        from benchmark.runner import RunConfig, run_benchmark
+        from sublift.benchmark.config import RunConfig
+        from sublift.benchmark.runner import run_benchmark
 
         video = tmp_path / "v.mp4"
         _generate_solid_video(video, duration=1.0)

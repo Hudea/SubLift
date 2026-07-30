@@ -6,24 +6,34 @@
 
 用法：`benchmark/README.md`
 设计：`docs/design/benchmark.md`
-脚本入口：``uv run python scripts/run_benchmark_manifest.py <manifest.json>``
+统一入口：``uv run sublift-benchmark``
 
 模块：
-- ``srt_loader``：SRT 解析（统一 ground truth 与 pipeline 输出的加载）。
+- ``srt``：SRT 解析（统一 ground truth 与 pipeline 输出的加载）。
 - ``diagnostics``：一对一匹配、case 分类、诊断指标与报告 payload。
 - ``runner``：编排「视频 + GT → pipeline → 报告」，以及 ``align_existing_srt`` 复现历史产物。
-- ``manifest``：JSON 配方 → ``RunConfig``。
+- ``config``：v1/v2 配方、矩阵与 CLI override → ``RunConfig``。
 - ``report``：agent JSON / GT CSV / detection CSV / summary Markdown 输出。
 """
 
-from benchmark.manifest import ManifestError, load_run_config
-from benchmark.runner import RunConfig, RunResult, align_existing_srt, run_benchmark
+from sublift.benchmark.config import (
+    ManifestDocument,
+    ManifestError,
+    RunConfig,
+    load_manifest,
+    load_run_config,
+    resolve_run_config,
+)
+from sublift.benchmark.runner import RunResult, align_existing_srt, run_benchmark
 
 __all__ = [
+    "ManifestDocument",
     "ManifestError",
     "RunConfig",
     "RunResult",
     "align_existing_srt",
+    "load_manifest",
     "load_run_config",
+    "resolve_run_config",
     "run_benchmark",
 ]

@@ -46,9 +46,13 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 
 ### 3.2 Benchmark 与可观察性
 
-- **F15 Benchmark 框架** ✅：支持固定 GT 加载、一对一对齐、timing/CER/usable/速度指标和 JSON/CSV/Markdown 诊断产物。
-- **F16 时间轴诊断** ✅：`scripts/run_timeline.py` 与 benchmark failure clusters 可定位漏检、合并和误检。
-- **F17 参数扫描** ✅：现有脚本可扫描打轴参数并以统一 diagnostic 口径比较。
+- **F15 Benchmark 框架** ✅：`sublift-benchmark` 统一提供单组运行、通用参数矩阵、
+  已有 SRT 评分和配置检查；支持固定 GT、一对一对齐、timing/CER/usable/速度指标及
+  JSON/CSV/Markdown 诊断产物。
+- **F16 时间轴诊断** ✅：`scripts/diagnostics/run_timeline.py` 与 benchmark failure clusters 可定位漏检、合并和误检。
+- **F17 参数扫描** ✅：通用 `--set / --vary` 与 v2 config matrix 可组合 fps、engine、
+  performance 等已注册参数，自动输出 matrix plan 和聚合 JSON/CSV/Markdown；历史算法
+  专项脚本归入 `scripts/diagnostics/`。
 - **F18 文字行诊断** ✅：Vision 保留逐行文字、置信度和位置，benchmark 可追踪行选择与共识结果。
 - **F19 引擎列表命令** ❌：尚无 `sublift list-engines` 产品命令。
 

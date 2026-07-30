@@ -1,0 +1,25 @@
+{
+  "schema_version": 2,
+  "run": {
+    "video": "debug/Zootopia_clip_1080p.mp4",
+    "ground_truth": "benchmark/datasets/Zootopia_clip_1080p_gt.srt",
+    "fps": 5.0,
+    "engine": "vision",
+    "confidence": 0.5,
+    "subtitle_script": "cjk",
+    "match_threshold": 0.5,
+    "region_box": [0, 848, 1920, 87],
+    "frame_output_mode": "roi",
+    "label": "zootopia_fps_engine",
+    "output_dir": "debug/benchmark/runs",
+    "performance": {
+      "mode": "off",
+      "warmup_runs": 0,
+      "measured_runs": 1
+    }
+  },
+  "matrix": {
+    "fps": [5, 8, 12],
+    "engine": ["vision", "paddle"]
+  }
+}

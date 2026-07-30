@@ -24,18 +24,18 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from benchmark.diagnostics import (  # noqa: E402
-    TEXT_EMPTY,
-    TEXT_NOISE,
-    BenchmarkDiagnostics,
-    analyze_entries,
-)
-from benchmark.srt_loader import SrtEntry, load_srt  # noqa: E402
 from scripts.parity.dump_paddle_stages import build_live_report  # noqa: E402
 from scripts.parity.gen_paddle_quality_assets import (  # noqa: E402
     generate_assets,
 )
 
+from sublift.benchmark.diagnostics import (  # noqa: E402
+    TEXT_EMPTY,
+    TEXT_NOISE,
+    BenchmarkDiagnostics,
+    analyze_entries,
+)
+from sublift.benchmark.srt import SrtEntry, load_srt  # noqa: E402
 from sublift.models import BoundingBox  # noqa: E402
 from sublift.runtime import probe_cpp_paddle_available  # noqa: E402
 

@@ -32,16 +32,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from benchmark.srt_loader import load_srt  # noqa: E402
-
+from sublift.benchmark.srt import load_srt  # noqa: E402
 from sublift.runtime import (  # noqa: E402
     probe_cpp_paddle_available,
     resolve_runtime,
 )
 from sublift.worker_bin import resolve_worker_bin  # noqa: E402
 
-QUALITY_MANIFEST = REPO_ROOT / "benchmark/fixtures/paddle_quality/manifest.v1.json"
-PERF_MANIFEST = REPO_ROOT / "benchmark/fixtures/paddle_performance/manifest.v1.json"
+QUALITY_MANIFEST = REPO_ROOT / "benchmark/datasets/paddle_quality/manifest.v1.json"
+PERF_MANIFEST = REPO_ROOT / "benchmark/datasets/paddle_performance/manifest.v1.json"
 DEFAULT_REPORT = Path("/tmp/sublift_paddle_cutover.md")
 ROLLBACK_SOURCE_ID = "synthetic_mixed_multiline"
 LONG_FLOW_SECONDS_MIN = 600.0

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from benchmark.git_utils import (
+from sublift.benchmark.git_utils import (
     clean_commit_message,
     get_latest_commit_message,
     resolve_auto_increment_label,

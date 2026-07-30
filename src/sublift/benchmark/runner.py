@@ -1,7 +1,7 @@
 """Benchmark 编排：视频 + ground truth → pipeline → 报告。
 
 ``run_benchmark`` 是一键入口：用现有 ``sublift`` 包跑端到端提取，与 ground
-truth 一起交给诊断报告层分析。报告输出由 ``benchmark.report`` 负责。
+truth 一起交给诊断报告层分析。报告输出由 ``sublift.benchmark.report`` 负责。
 """
 
 from __future__ import annotations
@@ -10,13 +10,15 @@ import hashlib
 import multiprocessing as mp
 import time
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from queue import Empty
 from typing import Any, Literal
 
-from benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
-from benchmark.srt_loader import SrtEntry, load_srt
+from sublift.benchmark.config import RunConfig
+from sublift.benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
+from sublift.benchmark.pipeline_config import apply_pipeline_overrides
+from sublift.benchmark.srt import SrtEntry, load_srt
 from sublift.config import Config
 from sublift.detector.base import Detector
 from sublift.diagnostics.performance import (
@@ -29,7 +31,14 @@ from sublift.diagnostics.performance import (
 from sublift.extractor import FfmpegExtractor
 from sublift.extractor.frame_io import plan_frame_io
 from sublift.models import BoundingBox, SubtitleEntry
-from sublift.ocr import MockOcrEngine, VisionOcrEngine, is_vision_available
+from sublift.ocr import (
+    MockOcrEngine,
+    OcrEngine,
+    PaddleOcrEngine,
+    VisionOcrEngine,
+    is_paddle_available,
+    is_vision_available,
+)
 from sublift.pipeline import Pipeline
 
 # feat-037 固定 GT 质量门（与 phase3-opt-perf / feat-034 锚点对齐）
@@ -48,41 +57,6 @@ _OCR_COMPONENTS_NON_ZERO_MIN = 2  # Vision 至少 input_prepare 和 vision_perfo
 _WORKER_BASE_TIMEOUT_S = 120.0
 _WORKER_TIMEOUT_PER_VIDEO_S = 10.0
 _WORKER_JOIN_TIMEOUT_S = 30.0
-
-
-@dataclass(frozen=True)
-class RunConfig:
-    """单次 benchmark 运行配置。
-
-    与 ``sublift.cli`` 的 CLI 参数对齐，但作为 benchmark 的显式输入。
-    """
-
-    video_path: Path
-    ground_truth_path: Path
-    fps: float = 5.0
-    engine: str = "vision"
-    confidence: float = 0.5
-    subtitle_script: str = "auto"
-    match_threshold: float = 0.5
-    region_box: tuple[int, int, int, int] | None = None
-    label: str | None = None
-    video_duration_seconds: float | None = None
-    output_dir: Path = field(default_factory=lambda: Path("debug/benchmark-reports"))
-    # feat-037：开发者性能模式（默认 off，不改变旧行为）
-    performance_mode: str = "off"
-    warmup_runs: int = 0
-    measured_runs: int = 1
-    # 多 run 时默认独立进程隔离 peak RSS；单测可关以加速
-    isolate_processes: bool = True
-    # feat-038：内部 full/roi 输出对照；默认 full 保持历史路径可比
-    # "full" = 全帧 RGB + FixedRegion(source)；"roi" = ffmpeg crop + RoiPassthrough
-    frame_output_mode: str = "full"
-
-    @property
-    def output_prefix(self) -> str:
-        """生成的报告文件名前缀（视频名 stem + 可选 label 后缀）。"""
-        base = self.video_path.stem
-        return f"{base}_{self.label}" if self.label else base
 
 
 @dataclass(frozen=True)
@@ -394,6 +368,7 @@ def _run_once(
                 "frame_output_mode": config.frame_output_mode,
                 "video_duration_seconds": video_duration,
                 "match_threshold": config.match_threshold,
+                "pipeline": config.pipeline_overrides,
             }
         )
 
@@ -410,11 +385,14 @@ def _run_once(
                 rh,
                 script=config.subtitle_script,
             )
-        pipeline_config = Config(
-            sample_fps=config.fps,
-            confidence_threshold=config.confidence,
-            subtitle_profile=subtitle_profile,
-            subtitle_script=config.subtitle_script,
+        pipeline_config = apply_pipeline_overrides(
+            Config(
+                sample_fps=config.fps,
+                confidence_threshold=config.confidence,
+                subtitle_profile=subtitle_profile,
+                subtitle_script=config.subtitle_script,
+            ),
+            config.pipeline_overrides,
         )
         pipeline = Pipeline(
             detector=detector,
@@ -586,14 +564,20 @@ def _validate_ocr_breakdown(
             )
 
 
-def _build_ocr_engine(engine: str) -> VisionOcrEngine | MockOcrEngine:
-    """构造 OCR 引擎（与 cli._build_ocr_engine 对齐，独立实现避免循环依赖）。"""
+def _build_ocr_engine(engine: str) -> OcrEngine:
+    """Construct a Python benchmark OCR engine."""
     if engine == "vision":
         if not is_vision_available():
             raise RuntimeError(
                 "Apple Vision 不可用，请执行 `uv sync --extra vision` 或改用 --engine mock"
             )
         return VisionOcrEngine()
+    if engine == "paddle":
+        if not is_paddle_available():
+            raise RuntimeError(
+                "PaddleOCR 不可用，请执行 `uv sync --extra paddle` 或改用 --engine mock"
+            )
+        return PaddleOcrEngine()
     if engine == "mock":
         return MockOcrEngine(text="[mock subtitle]", confidence=1.0)
     raise ValueError(f"未知引擎: {engine}")

@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 
 import pytest
-from benchmark.diagnostics import (
+
+from sublift.benchmark.config import RunConfig
+from sublift.benchmark.diagnostics import (
     FN_BOUNDARY,
     FN_MERGED,
     FP_FALSE_ALARM,
@@ -16,9 +18,9 @@ from benchmark.diagnostics import (
     TEXT_EMPTY,
     analyze_entries,
 )
-from benchmark.report import write_reports
-from benchmark.runner import RunConfig, RunResult
-from benchmark.srt_loader import SrtEntry
+from sublift.benchmark.report import write_reports
+from sublift.benchmark.runner import RunResult
+from sublift.benchmark.srt import SrtEntry
 
 
 def _gt(index: int, start: int, end: int, text: str = "text") -> SrtEntry:
@@ -108,7 +110,7 @@ def test_diagnostics_exact_match_uses_normalized_text() -> None:
 def test_agent_reports_have_stable_schema_and_files(tmp_path: Path) -> None:
     config = RunConfig(
         video_path=Path("debug/movie.mp4"),
-        ground_truth_path=Path("benchmark/fixtures/movie.srt"),
+        ground_truth_path=Path("benchmark/datasets/movie.srt"),
         label="unit",
         output_dir=tmp_path,
     )
@@ -126,6 +128,7 @@ def test_agent_reports_have_stable_schema_and_files(tmp_path: Path) -> None:
     assert set(["run", "summary", "gates", "failure_clusters", "cases", "artifacts"]).issubset(
         payload
     )
+    assert payload["run"]["pipeline"] == {}
 
     gt_rows = list(csv.reader(paths["gt_cases_csv"].read_text(encoding="utf-8").splitlines()))
     det_rows = list(csv.reader(paths["det_cases_csv"].read_text(encoding="utf-8").splitlines()))

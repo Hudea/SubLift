@@ -64,11 +64,11 @@ usable 92.0%、CER macro 3.2%、text.noise 0、text.empty 0。性能结论不以
 ## 复现与更新规则
 
 ```bash
-uv run python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_full.json --label manifest
-uv run python scripts/run_benchmark_manifest.py \
-  benchmark/manifests/zootopia_feat039_roi.json --label manifest
-uv run python scripts/compare_roi_ab.py \
+uv run sublift-benchmark run \
+  benchmark/configs/zootopia_feat039_full.json --label manifest
+uv run sublift-benchmark run \
+  benchmark/configs/zootopia_feat039_roi.json --label manifest
+uv run sublift-benchmark compare-roi \
   <full.agent.json> <roi.agent.json> --out <ab_summary.json>
 ```
 

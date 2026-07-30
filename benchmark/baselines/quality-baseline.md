@@ -9,7 +9,7 @@
 | 项 | 固定值 |
 |---|---|
 | 视频 | Zootopia hard-subtitle clip，1920×1080，254.272 s（视频本体不入库） |
-| Ground truth | `benchmark/fixtures/Zootopia_clip_1080p_gt.srt`，87 条 |
+| Ground truth | `benchmark/datasets/Zootopia_clip_1080p_gt.srt`，87 条 |
 | 采样 | 5 fps |
 | 区域 | source-frame `[0,848,1920,87]` |
 | OCR | Apple Vision，`zh-Hans` + `en-US` |

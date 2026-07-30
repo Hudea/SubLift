@@ -295,7 +295,7 @@ failure clusters 不改名。trace 模式额外生成 `.perf-segments.jsonl`。�
 
 ```text
 video: Zootopia_clip_1080p.mkv
-ground truth: benchmark/fixtures/Zootopia_clip_1080p_gt.srt
+ground truth: benchmark/datasets/Zootopia_clip_1080p_gt.srt
 resolution: 1920×1080
 fps: 5
 engine: Vision

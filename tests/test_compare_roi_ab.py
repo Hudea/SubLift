@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from scripts.compare_roi_ab import evaluate
+from sublift.benchmark.roi_compare import evaluate
 
 _HASH = "b2d35c1e25f156e1"
 _COMMIT = "fb4a27a8c81316878701e2f2ea8222910d2b1021"

@@ -5,15 +5,15 @@
 
 Usage:
     # 基础用法：跑 trace + FN 归因
-    uv run python scripts/run_trace.py \\
+    uv run python scripts/diagnostics/run_trace.py \\
         --video debug/Zootopia_clip_1080p.mp4 \\
-        --ground-truth benchmark/fixtures/Zootopia_clip_1080p_gt.srt \\
+        --ground-truth benchmark/datasets/Zootopia_clip_1080p_gt.srt \\
         --fps 5
 
     # 指定输出前缀与区域
-    uv run python scripts/run_trace.py \\
+    uv run python scripts/diagnostics/run_trace.py \\
         --video debug/Zootopia_clip_1080p.mp4 \\
-        --ground-truth benchmark/fixtures/Zootopia_clip_1080p_gt.srt \\
+        --ground-truth benchmark/datasets/Zootopia_clip_1080p_gt.srt \\
         --region-box 0 860 1920 220 \\
         --output-prefix debug/reports/feat031_region
 
@@ -28,13 +28,12 @@ import argparse
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from benchmark.diagnostics import TimingMetrics, analyze_entries  # noqa: E402
-from benchmark.srt_loader import SrtEntry, load_srt  # noqa: E402
-
+from sublift.benchmark.diagnostics import TimingMetrics, analyze_entries  # noqa: E402
+from sublift.benchmark.srt import SrtEntry, load_srt  # noqa: E402
 from sublift.config import DEFAULT_CONFIG, ChangePointConfig, Config  # noqa: E402
 from sublift.detector import BottomCropDetector, FixedRegionDetector  # noqa: E402
 from sublift.diagnostics.fn_analysis import (  # noqa: E402
@@ -334,7 +333,7 @@ def _compute_segment_metrics(
     ground_truth: list[SrtEntry],
     match_threshold: float,
 ) -> TimingMetrics:
-    """计算 timing F1（复用 benchmark.diagnostics 一对一匹配）。"""
+    """计算 timing F1（复用 sublift.benchmark.diagnostics 一对一匹配）。"""
     detected_srt = [
         SrtEntry(index=i + 1, start_ms=d.start_ms, end_ms=d.end_ms, text=d.text)
         for i, d in enumerate(detected)

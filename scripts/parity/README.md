@@ -82,7 +82,7 @@ uv run python scripts/parity/check_paddle_gate.py --check \
 uv run python scripts/parity/check_paddle_gate.py --freeze-oracle
 ```
 
-Manifest 位于 `benchmark/fixtures/paddle_quality/manifest.v1.json`，冻结 3 个来源共
+Manifest 位于 `benchmark/datasets/paddle_quality/manifest.v1.json`，冻结 3 个来源共
 614.272s 的输入/GT/生成 recipe 与 font hash。门会真实执行 Python/C++ 产品 CLI，
 同时检查当前 Oracle 相对门、冻结 Python 绝对门、逐 clip noise/empty 与 Q0 live box；
 不接受硬编码指标或缺依赖 skip。
@@ -97,7 +97,7 @@ uv run python scripts/parity/check_paddle_perf.py --check \
   --json-out /tmp/sublift_paddle_perf_gate.json
 ```
 
-Manifest 位于 `benchmark/fixtures/paddle_performance/manifest.v1.json`，冻结 120s 输入、
+Manifest 位于 `benchmark/datasets/paddle_performance/manifest.v1.json`，冻结 120s 输入、
 预期 SRT、模型、官方 ORT dylib SHA 与 thread/batch 配置。门会先预热，再交错执行
 Python/C++ 各 3 轮产品 CLI，取 wall median 并采样完整进程树 RSS，同时记录
 OCR/Det box/Cls/Rec batch 计数。输入、模型、worker、ORT 指纹、统计或输出 hash
