@@ -20,7 +20,7 @@ def _write_config(tmp_path: Path, *, output_dir: Path | None = None) -> Path:
     config_dir = repo / "benchmark" / "configs"
     config_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     payload = {
         "schema_version": 2,
         "run": {

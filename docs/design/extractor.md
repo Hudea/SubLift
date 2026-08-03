@@ -72,7 +72,7 @@ FfmpegExtractor(fps: float = 1.0)
 - `ffprobe` 必须在 PATH（通常与 ffmpeg 一起安装）
 - 支持主流容器与编码（mp4 / mkv / mov，H.264 / H.265），取决于系统 ffmpeg 编译选项
 
-`init.sh` 会检出 ffmpeg 是否可用。
+`./scripts/verify-standard.sh` 会检出 `ffmpeg` 是否可用；Harness L0 `./init.sh` 只检查协作文件与 Phase 索引，不检查主机工具链。
 
 ## 错误处理
 

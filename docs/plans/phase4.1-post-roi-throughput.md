@@ -1,12 +1,13 @@
 # phase4.1-post-roi-throughput 设计与执行计划
 
 > 本文件是 Phase 4.1 的设计源头。任务状态与实际验证证据以
-> [phase4.1.json](../phases/phase4.1.json) 为准；项目级功能块以
-> [feature-list.json](../../feature-list.json) 为准。
+> [phase41.json](../phases/phase41.json) 为准；当前操作性索引为
+> [phases.json](../../phases.json) → `detail_file`，
+> [feature-list.json](../../feature-list.json) 仅保留历史功能组兼容视图。
 >
 > **状态：已归档，未采纳。** 2026-07-23 的实验实现证明结果、质量、队列边界与取消
 > 均可成立，但两轮真实 Vision A/B 未达到吞吐最低门；代码未合入 main，path mode 保持
-> 串行。完整事实见 [phase4.1.json](../phases/phase4.1.json)。下文保留原目标与验收，供
+> 串行。完整事实见 [phase41.json](../phases/phase41.json)。下文保留原目标与验收，供
 > 后续重新评估时使用，不得把它当作现有 path-mode 行为说明。
 
 ## 1. 主题与目标
@@ -152,7 +153,7 @@ measured=3 独立进程下进行。以 median 为主统计量，并归档 min/ma
 3. 覆盖 deterministic queue、error/EOF、三取消点、重启隔离、progress/finalizing、ROI/full
    fallback 和报告 schema 的自动测试；
 4. 收口提交实际运行 `uv run ruff check .`、`uv run mypy src tests`、`uv run pytest`、
-   `./init.sh` 和 `cd apps/macos && swift test`，并将真实命令/结果写入 `phase4.1.json`。
+   `./init.sh` 和 `cd apps/macos && swift test`，并将真实命令/结果写入 `phase41.json`。
 
 ## 7. 完成定义与后续分流
 

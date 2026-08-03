@@ -1,7 +1,7 @@
 # Phase 2 设计与执行计划
 
-> 本文件是 Phase 2 的设计源头与执行手册。任务跟踪见 `docs/phases/phase2.json`,
-> 项目级功能块见 `feature-list.json` 的 `phases[phase2]` 块。
+> 本文件是 Phase 2 的设计源头与执行手册。任务跟踪见 `docs/phases/phase2.json`；当前
+> 操作性 Phase 索引为 `phases.json → detail_file`，`feature-list.json` 的 `phases[phase2]` 仅保留历史兼容。
 
 ## 1. 目标与范围
 

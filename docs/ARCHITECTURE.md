@@ -309,7 +309,7 @@ producer、consumer 全部退出后才可以发送 `done`。性能报告将区�
 consumer lane；这些 lane 可以重叠，禁止相加为 coverage。
 
 完整不变量、取消状态机与口径见 [Path-mode 有界重叠设计](design/path-mode-overlap.md)，实验
-数据与归档决定见 [phase4.1.json](phases/phase4.1.json)。
+数据与归档决定见 [phase41.json](phases/phase41.json)。
 
 ## 14. Phase 4.2 OCR 内部性能归因（已完成）
 
@@ -350,3 +350,17 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 - **ADR-0018**：PaddleOCR 采用 rapidocr PP-OCRv6 + onnxruntime，模型缓存放在用户缓存目录；作为可选第二 OCR 引擎接入
 - **ADR-0024**：在去 Python/打包前插入 Phase 6.8，先完成 Paddle Native stage parity、多源质量门、性能与安全 cutover
 - **ADR-0029**：Paddle Native 全门通过后正式默认 C++；ORT 以已验收 SHA 和相对 rpath 固化，Python 保留回滚
+
+## 16. Harness 协作与验证边界
+
+项目的操作性进度索引为 `phases.json`，每个 `detail_file` 指向
+`docs/phases/phase*.json` 的唯一 feature 记录。`.agent/` 提供 session bootstrap、
+Feature/Phase 编排、Plan/Test/Review/Verify 及可恢复 state；state 只保存运行态，
+不进入版本库。历史 `feature-list.json` 和 `feat-*` 任务记录保留为文档/旧工具兼容面，
+不再用于选择当前任务。
+
+`./init.sh` 是秒级 Harness L0，只检查必需文件、JSON 与 Phase 索引链；完整的产品日常门
+迁入 `scripts/verify-standard.sh`，仍覆盖依赖同步、ruff、mypy、C++ build/ctest、单次非集成
+pytest 和 cutover parity。此 Agent Harness 与 C++ parity/golden harness 是不同概念，后者仍是
+产品正确性测试契约。迁移设计与兼容边界见
+[Harness 迁移架构](plans/architecture/harness-migration.md)。

@@ -1,0 +1,580 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Testing Result v5",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "feature_state_ref",
+    "feature_id",
+    "feature_plan",
+    "test_stage",
+    "test_mode",
+    "mode_authorization",
+    "stage_status",
+    "outcome",
+    "test_gate",
+    "tested_change_fingerprint",
+    "tested_evidence_fingerprint",
+    "scope",
+    "test_targets",
+    "test_artifacts",
+    "commands",
+    "acceptance_coverage",
+    "failures",
+    "run_evidence",
+    "phase_evidence",
+    "known_gaps",
+    "next_actions"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 5
+    },
+    "feature_state_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feature_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "feature_plan": {
+      "type": "string",
+      "minLength": 1
+    },
+    "test_stage": {
+      "enum": [
+        "prepare",
+        "verify",
+        "diagnose"
+      ]
+    },
+    "test_mode": {
+      "enum": [
+        "required",
+        "characterization",
+        "posthoc",
+        "verification-only"
+      ]
+    },
+    "mode_authorization": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reason",
+            "authority",
+            "evidence"
+          ],
+          "properties": {
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "authority": {
+              "enum": [
+                "user",
+                "plan",
+                "phase-development",
+                "feature-development"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stage_status": {
+      "enum": [
+        "passed",
+        "failed",
+        "blocked"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "RED_CONFIRMED",
+        "CHARACTERIZATION_CONFIRMED",
+        "BEHAVIOR_ALREADY_PRESENT",
+        "TEST_DEFECT_CONFIRMED",
+        "TEST_DEFECT_FIXED",
+        "TEST_ARTIFACT_CHANGED",
+        "TEST_ARTIFACT_REAUTHORIZED",
+        "TEST_GATE_PASSED",
+        "PRODUCT_FAILURE_CONFIRMED",
+        "PREEXISTING_FAILURE_RECORDED",
+        "ENVIRONMENT_BLOCKED",
+        "FLAKY_OR_INCONCLUSIVE",
+        "VERIFICATION_REQUIRED",
+        "PLANNING_REQUIRED",
+        "INPUT_BLOCKED"
+      ]
+    },
+    "test_gate": {
+      "enum": [
+        "passed",
+        "failed",
+        "blocked",
+        "not-evaluated"
+      ]
+    },
+    "tested_change_fingerprint": {
+      "oneOf": [
+        {
+          "$ref": "../../../schemas/change-snapshot.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "tested_evidence_fingerprint": {
+      "oneOf": [
+        {
+          "$ref": "../../../schemas/test-evidence-snapshot.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "scope": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "test_targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "cases"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "cases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "test_artifacts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "role",
+          "fingerprint"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "test",
+              "fixture",
+              "fake",
+              "mock",
+              "test-config"
+            ]
+          },
+          "fingerprint": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "algorithm",
+              "value"
+            ],
+            "properties": {
+              "algorithm": {
+                "const": "sha256"
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "acceptance_coverage": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "impact",
+          "summary",
+          "affected_targets",
+          "action"
+        ],
+        "properties": {
+          "kind": {
+            "enum": [
+              "PRODUCT_FAILURE",
+              "TEST_DEFECT",
+              "TEST_ARTIFACT_CHANGED",
+              "PREEXISTING_FAILURE",
+              "ENVIRONMENT_FAILURE",
+              "FLAKY_OR_INCONCLUSIVE"
+            ]
+          },
+          "impact": {
+            "enum": [
+              "blocking",
+              "non-blocking"
+            ]
+          },
+          "summary": {
+            "type": "string"
+          },
+          "affected_targets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "action": {
+            "enum": [
+              "implement",
+              "verify",
+              "diagnose",
+              "fix-product",
+              "fix-test",
+              "resolve-preexisting",
+              "resolve-environment",
+              "investigate",
+              "return-to-planning",
+              "run-verification",
+              "request-decision"
+            ]
+          }
+        }
+      }
+    },
+    "run_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "phase_evidence": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "known_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_actions": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "implement",
+          "verify",
+          "diagnose",
+          "fix-product",
+          "fix-test",
+          "resolve-preexisting",
+          "resolve-environment",
+          "investigate",
+          "provide-input",
+          "return-to-planning",
+          "run-verification",
+          "request-decision",
+          "ready-for-review"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "RED_CONFIRMED"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "prepare"
+          },
+          "test_mode": {
+            "const": "required"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "not-evaluated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "CHARACTERIZATION_CONFIRMED"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "prepare"
+          },
+          "test_mode": {
+            "const": "characterization"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "not-evaluated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "TEST_GATE_PASSED",
+              "VERIFICATION_REQUIRED"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "verify"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "tested_change_fingerprint": {
+            "$ref": "../../../schemas/change-snapshot.schema.json"
+          },
+          "tested_evidence_fingerprint": {
+            "$ref": "../../../schemas/test-evidence-snapshot.schema.json"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "tested_change_fingerprint": {
+            "type": "null"
+          },
+          "tested_evidence_fingerprint": {
+            "type": "null"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "TEST_GATE_PASSED"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "verify"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "passed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "VERIFICATION_REQUIRED"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "verify"
+          },
+          "test_mode": {
+            "const": "verification-only"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "not-evaluated"
+          },
+          "tested_change_fingerprint": {
+            "$ref": "../../../schemas/change-snapshot.schema.json"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "TEST_ARTIFACT_CHANGED"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "verify"
+          },
+          "stage_status": {
+            "const": "failed"
+          },
+          "test_gate": {
+            "const": "failed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "enum": [
+              "TEST_DEFECT_FIXED",
+              "TEST_ARTIFACT_REAUTHORIZED"
+            ]
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "diagnose"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "not-evaluated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "BEHAVIOR_ALREADY_PRESENT"
+          }
+        },
+        "required": [
+          "outcome"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_stage": {
+            "const": "prepare"
+          },
+          "stage_status": {
+            "const": "passed"
+          },
+          "test_gate": {
+            "const": "not-evaluated"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "stage_status": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "stage_status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "test_gate": {
+            "const": "blocked"
+          }
+        }
+      }
+    }
+  ]
+}

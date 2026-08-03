@@ -1,6 +1,6 @@
 {
   "project": "SubLift",
-  "description": "项目级功能总览。按 Phase 分组的大功能块，每个功能块覆盖的 Phase 级细粒度任务 ID 见 covers 字段。状态枚举：not-started / in-progress / blocked / done。",
+  "description": "历史兼容功能索引（非当前开发真源）。按 Phase 分组的大功能块与 feat-* 覆盖关系保留给历史文档和旧工具；当前任务与 Phase 状态以 phases.json → detail_file → features[] 为准。状态枚举：not-started / in-progress / blocked / done。",
   "phases": [
     {
       "id": "phase1",
@@ -268,8 +268,8 @@
     {
       "id": "phase4.1",
       "name": "Phase 4.1 - ROI 后可重叠流式吞吐",
-      "description": "实验性验证 ROI 后 GUI path mode 的有界 extractor producer 与单消费者 Pipeline/OCR 重叠。真实 Vision 下机制、质量和取消正确，但两轮 A/B 均未通过 end-to-end wall≤串行95%的保留门，因此不作为默认架构保留；main 维持串行 path mode。负向证据见 docs/phases/phase4.1.json；原计划保留作历史上下文。",
-      "detail_file": "docs/phases/phase4.1.json",
+      "description": "实验性验证 ROI 后 GUI path mode 的有界 extractor producer 与单消费者 Pipeline/OCR 重叠。真实 Vision 下机制、质量和取消正确，但两轮 A/B 均未通过 end-to-end wall≤串行95%的保留门，因此不作为默认架构保留；main 维持串行 path mode。负向证据见 docs/phases/phase41.json；原计划保留作历史上下文。",
+      "detail_file": "docs/phases/phase41.json",
       "features": [
         {
           "id": "phase4.1.path-mode-overlap",
@@ -285,8 +285,8 @@
     {
       "id": "phase4.2",
       "name": "Phase 4.2 - OCR 内部性能归因",
-      "description": "在保持串行 path mode 与既有 OCR/质量算法不变的前提下，补齐 Vision OCR 调用内部、段内代表帧策略与行级后处理的可解释计时。先形成可信基线和下一项优化的决策证据，不预设或混入速度优化。计划见 docs/plans/phase4.2-ocr-performance-attribution.md，细粒度任务见 docs/phases/phase4.2.json。",
-      "detail_file": "docs/phases/phase4.2.json",
+      "description": "在保持串行 path mode 与既有 OCR/质量算法不变的前提下，补齐 Vision OCR 调用内部、段内代表帧策略与行级后处理的可解释计时。先形成可信基线和下一项优化的决策证据，不预设或混入速度优化。计划见 docs/plans/phase4.2-ocr-performance-attribution.md，细粒度任务见 docs/phases/phase42.json。",
+      "detail_file": "docs/phases/phase42.json",
       "features": [
         {
           "id": "phase4.2.ocr-attribution",

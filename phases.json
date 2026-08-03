@@ -1,0 +1,69 @@
+{
+  "project": "SubLift",
+  "description": "SubLift 的操作性 Phase 索引。每个 Phase 通过 detail_file 指向唯一的 Phase 细节；feature-list.json 仅保留为历史兼容索引。",
+  "phases": [
+    {
+      "id": "phase1",
+      "name": "Phase 1 - CLI MVP",
+      "description": "Python CLI MVP 与基础字幕提取能力；历史记录已完成。",
+      "detail_file": "docs/phases/phase1.json",
+      "status": "done"
+    },
+    {
+      "id": "phase2",
+      "name": "Phase 2 - macOS GUI",
+      "description": "SwiftUI 开发者 GUI；独立分发仍按既有用户决策后置。",
+      "detail_file": "docs/phases/phase2.json",
+      "status": "blocked"
+    },
+    {
+      "id": "phase3",
+      "name": "Phase 3 - Optimization and usability",
+      "description": "Benchmark、增量处理与质量优化；独立 baseline 历史任务保持 blocked。",
+      "detail_file": "docs/phases/phase3.json",
+      "status": "blocked"
+    },
+    {
+      "id": "phase4",
+      "name": "Phase 4 - ROI data path and long-stream validation",
+      "description": "ROI 输出通路与真实长流验收；已完成。",
+      "detail_file": "docs/phases/phase4.json",
+      "status": "done"
+    },
+    {
+      "id": "phase4.1",
+      "name": "Phase 4.1 - Post-ROI overlap experiment (archived)",
+      "description": "实验已作为负向性能证据归档；detail_file 使用 Harness 兼容的 phase41 命名。",
+      "detail_file": "docs/phases/phase41.json",
+      "status": "done"
+    },
+    {
+      "id": "phase4.2",
+      "name": "Phase 4.2 - OCR attribution",
+      "description": "OCR 内部性能归因与优化分流；已完成。",
+      "detail_file": "docs/phases/phase42.json",
+      "status": "done"
+    },
+    {
+      "id": "phase5",
+      "name": "Phase 5 - PaddleOCR integration",
+      "description": "PaddleOCR 第二引擎接入；已完成。",
+      "detail_file": "docs/phases/phase5.json",
+      "status": "done"
+    },
+    {
+      "id": "phase6",
+      "name": "Phase 6 - Native C++ Core Migration",
+      "description": "C++ Core 与 Paddle cutover 已完成；产品分发相关任务按 ADR-0030 后置。",
+      "detail_file": "docs/phases/phase6.json",
+      "status": "blocked"
+    },
+    {
+      "id": "phase7",
+      "name": "Phase 7 - Harness Migration",
+      "description": "将项目协作、Phase 索引和会话基线迁移到新 Harness；不改变产品运行时。",
+      "detail_file": "docs/phases/phase7.json",
+      "status": "done"
+    }
+  ]
+}

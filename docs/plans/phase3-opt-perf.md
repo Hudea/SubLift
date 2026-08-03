@@ -1,7 +1,7 @@
 # phase3-opt-perf 设计与执行计划
 
-> 本文件是 Phase 3 的设计源头与范围边界。任务跟踪见 `docs/phases/phase3.json`，
-> 项目级功能块见 `feature-list.json` 的 `phases[phase3]` 块。
+> 本文件是 Phase 3 的设计源头与范围边界。任务跟踪见 `docs/phases/phase3.json`；当前
+> 操作性 Phase 索引为 `phases.json → detail_file`，`feature-list.json` 的 `phases[phase3]` 仅保留历史兼容。
 >
 > Phase 3 聚焦「opt/perf」：既有质量优化先建立可量化 benchmark、增量处理、
 > 打轴与 OCR 可用性水位；当前继续建立开发者性能模式和固定负载性能 baseline。

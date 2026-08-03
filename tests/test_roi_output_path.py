@@ -741,7 +741,7 @@ class TestBenchmarkFrameOutputMode:
         manifest_dir = repo / "benchmark" / "manifests"
         manifest_dir.mkdir(parents=True)
         (repo / "pyproject.toml").write_text("", encoding="utf-8")
-        (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+        (repo / "phases.json").write_text("{}", encoding="utf-8")
         manifest = manifest_dir / "run.json"
         manifest.write_text(
             json.dumps(
@@ -765,7 +765,7 @@ class TestBenchmarkFrameOutputMode:
         manifest_dir = repo / "benchmark" / "manifests"
         manifest_dir.mkdir(parents=True)
         (repo / "pyproject.toml").write_text("", encoding="utf-8")
-        (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+        (repo / "phases.json").write_text("{}", encoding="utf-8")
         manifest = manifest_dir / "run.json"
         manifest.write_text(
             json.dumps(

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-template.local/schemas/phases.schema.json",
+  "title": "Agent Project Phase Index Schema",
+  "description": "项目级 Phase 索引 Schema。列出所有 Phase 及其 detail_file 路径，提供状态总览。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "description", "phases"],
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "项目名称。"
+    },
+    "description": {
+      "type": "string",
+      "description": "文件用途说明。"
+    },
+    "phases": {
+      "type": "array",
+      "description": "按开发阶段组织的 Phase 列表。",
+      "items": {
+        "$ref": "#/$defs/phase"
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "description": "Phase 的开发状态。",
+      "enum": ["not-started", "in-progress", "blocked", "done"]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "detail_file", "status"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier",
+          "description": "Phase 的稳定标识。"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Phase 的显示名称。"
+        },
+        "description": {
+          "type": "string",
+          "description": "Phase 的范围或目标说明。"
+        },
+        "detail_file": {
+          "type": "string",
+          "pattern": "^docs/phases/phase[0-9]+\\.json$",
+          "description": "该 Phase 对应的细粒度任务文件路径。"
+        },
+        "status": {
+          "$ref": "#/$defs/status"
+        }
+      }
+    }
+  }
+}

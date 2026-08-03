@@ -239,10 +239,16 @@ def config_to_dict(config: RunConfig) -> dict[str, Any]:
 
 
 def discover_repo_root(manifest_path: Path) -> Path:
-    """Find the repository root by walking upward from the config."""
+    """Find the repository root by walking upward from the config.
+
+    ``phases.json`` is the Harness-era project marker. ``feature-list.json``
+    remains a compatibility fallback for historical checkouts and manifests.
+    """
     current = manifest_path.resolve().parent
     for candidate in (current, *current.parents):
-        if (candidate / "pyproject.toml").exists() and (candidate / "feature-list.json").exists():
+        has_harness_index = (candidate / "phases.json").exists()
+        has_legacy_index = (candidate / "feature-list.json").exists()
+        if (candidate / "pyproject.toml").exists() and (has_harness_index or has_legacy_index):
             return candidate
     return Path.cwd()
 

@@ -1,7 +1,7 @@
 # Phase 5.0 - PaddleOCR 引擎接入
 
-> 本文件是 Phase 5.0 的设计源头与执行手册。任务跟踪见 `docs/phases/phase5.json`，
-> 项目级功能块见 `feature-list.json` 的 `phases[phase5]` 块。
+> 本文件是 Phase 5.0 的设计源头与执行手册。任务跟踪见 `docs/phases/phase5.json`；当前
+> 操作性 Phase 索引为 `phases.json → detail_file`，`feature-list.json` 的 `phases[phase5]` 仅保留历史兼容。
 >
 > 编号规则变更：自 Phase 5 起采用「阶段 + 序号」编码——`05`（Phase 5）+ `0`（小阶段 5.0）
 > + `001`（feature 序号）= `feat-05001`。Phase 1-4 的旧编号 `feat-001~043` 保持不动，两套并存。

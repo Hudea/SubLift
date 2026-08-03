@@ -1,0 +1,245 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://harness.local/schemas/capability-run.schema.json",
+  "title": "Capability Run Receipt v3",
+  "description": "可审计的能力实际执行凭证；结果对象本身不能替代此凭证。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "capability",
+    "stage",
+    "entrypoint",
+    "delegation_policy",
+    "executor",
+    "input",
+    "output",
+    "started_at",
+    "completed_at"
+  ],
+  "properties": {
+    "schema_version": {"const": 3},
+    "run_id": {"type": "string", "minLength": 1},
+    "capability": {"enum": ["feature-development", "phase-development", "plan", "test", "review", "verify", "commit", "commit-message"]},
+    "stage": {"type": ["string", "null"], "enum": ["prepare", "verify", "diagnose", "feature", "phase", null]},
+    "entrypoint": {"type": "string", "minLength": 1},
+    "delegation_policy": {"enum": ["required", "preferred", "unavailable"]},
+    "executor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "platform", "agent_name", "invocation_ref", "attestation_ref", "conversation_id", "parent_session_id", "call_id", "transcript_path"],
+      "properties": {
+        "kind": {"enum": ["main-agent", "subagent", "workflow", "inline-fallback"]},
+        "platform": {"type": "string", "minLength": 1},
+        "agent_name": {"type": ["string", "null"]},
+        "invocation_ref": {"type": ["string", "null"]},
+        "attestation_ref": {"type": ["string", "null"]},
+        "conversation_id": {"type": ["string", "null"]},
+        "parent_session_id": {"type": ["string", "null"]},
+        "call_id": {"type": ["string", "null"]},
+        "transcript_path": {"type": ["string", "null"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "subagent"}}, "required": ["kind"]},
+          "then": {
+            "properties": {
+              "agent_name": {"type": "string", "minLength": 1},
+              "invocation_ref": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "workflow"}}, "required": ["kind"]},
+          "then": {"properties": {"invocation_ref": {"type": "string", "minLength": 1}}}
+        }
+      ]
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_ref", "fingerprint"],
+      "properties": {
+        "state_ref": {"type": ["string", "null"]},
+        "fingerprint": {"type": ["object", "null"]}
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["result_ref", "status"],
+      "properties": {
+        "result_ref": {"type": ["string", "null"]},
+        "status": {"enum": ["running", "prepared", "completed", "failed", "blocked"]},
+        "result_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"enum": ["completed", "prepared"]}}, "required": ["status"]},
+          "then": {"properties": {"result_ref": {"type": "string", "minLength": 1}}}
+        },
+        {
+          "if": {"properties": {"status": {"const": "prepared"}}, "required": ["status"]},
+          "then": {
+            "properties": {
+              "result_ref": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ]
+    },
+    "started_at": {"type": "string", "format": "date-time", "minLength": 1},
+    "completed_at": {"type": ["string", "null"], "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "capability": {"const": "feature-development"},
+          "executor": {"properties": {"kind": {"const": "workflow"}}}
+        },
+        "required": ["capability", "executor"]
+      },
+      "then": {"properties": {"stage": {"const": "feature"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"const": "phase-development"},
+          "executor": {"properties": {"kind": {"const": "workflow"}}}
+        },
+        "required": ["capability", "executor"]
+      },
+      "then": {"properties": {"stage": {"const": "phase"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"enum": ["feature-development", "phase-development"]},
+          "output": {"properties": {"status": {"enum": ["running", "prepared"]}}}
+        },
+        "required": ["capability", "output"]
+      },
+      "then": {"properties": {"completed_at": {"const": null}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "output": {"properties": {"status": {"enum": ["running", "prepared"]}}}
+        },
+        "required": ["output"]
+      },
+      "then": {"properties": {"completed_at": {"const": null}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "output": {"properties": {"status": {"enum": ["completed", "failed", "blocked"]}}}
+        },
+        "required": ["output"]
+      },
+      "then": {"properties": {"completed_at": {"type": "string", "format": "date-time", "minLength": 1}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "output": {"properties": {"status": {"const": "prepared"}}}
+        },
+        "required": ["output"]
+      },
+      "then": {"properties": {"capability": {"const": "commit"}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"enum": ["plan", "review"]},
+          "delegation_policy": {"const": "required"},
+          "output": {"properties": {"status": {"enum": ["running", "completed"]}}}
+        },
+        "required": ["capability", "delegation_policy", "output"]
+      },
+      "then": {
+        "properties": {
+          "executor": {
+            "properties": {
+              "kind": {"const": "subagent"},
+              "invocation_ref": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"executor": {"properties": {"kind": {"const": "inline-fallback"}}}}, "required": ["executor"]},
+      "then": {"properties": {"delegation_policy": {"enum": ["preferred", "unavailable"]}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"const": "plan"},
+          "delegation_policy": {"const": "required"},
+          "executor": {"properties": {"platform": {"const": "antigravity"}}},
+          "output": {"properties": {"status": {"const": "completed"}}}
+        },
+        "required": ["capability", "delegation_policy", "executor", "output"]
+      },
+      "then": {"properties": {"executor": {"properties": {"agent_name": {"const": "planner"}}}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"const": "review"},
+          "delegation_policy": {"const": "required"},
+          "executor": {"properties": {"platform": {"const": "antigravity"}}},
+          "output": {"properties": {"status": {"const": "completed"}}}
+        },
+        "required": ["capability", "delegation_policy", "executor", "output"]
+      },
+      "then": {"properties": {"executor": {"properties": {"agent_name": {"const": "reviewer"}}}}}
+    },
+    {
+      "if": {
+        "properties": {
+          "executor": {
+            "properties": {
+              "platform": {"const": "antigravity"},
+              "kind": {"const": "subagent"}
+            }
+          },
+          "output": {"properties": {"status": {"enum": ["running", "completed"]}}}
+        },
+        "required": ["executor", "output"]
+      },
+      "then": {
+        "properties": {
+          "executor": {
+            "properties": {
+              "conversation_id": {"type": "string", "minLength": 1},
+              "transcript_path": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "capability": {"enum": ["feature-development", "phase-development"]},
+          "output": {"properties": {"status": {"enum": ["completed", "failed", "blocked"]}}}
+        },
+        "required": ["capability", "output"]
+      },
+      "then": {
+        "properties": {
+          "executor": {
+            "properties": {
+              "kind": {"const": "workflow"},
+              "invocation_ref": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

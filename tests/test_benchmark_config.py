@@ -22,7 +22,7 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
     manifest_dir = repo / "benchmark" / "manifests"
     manifest_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
 
     manifest = manifest_dir / "run.json"
     manifest.write_text(
@@ -56,6 +56,29 @@ def test_load_run_config_resolves_paths_from_repo_root(tmp_path: Path) -> None:
     assert config.label == "gui_region_8fps"
     assert config.video_duration_seconds == 254.272
     assert config.output_dir == repo / "debug/benchmark/archive/legacy-runs"
+
+
+def test_load_run_config_keeps_feature_list_marker_as_legacy_fallback(tmp_path: Path) -> None:
+    repo = tmp_path / "legacy-repo"
+    manifest_dir = repo / "benchmark" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("", encoding="utf-8")
+    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    manifest = manifest_dir / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/datasets/movie.srt",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_run_config(manifest)
+
+    assert config.video_path == repo / "debug/movie.mp4"
+    assert config.ground_truth_path == repo / "benchmark/datasets/movie.srt"
 
 
 def test_load_run_config_rejects_invalid_region_box(tmp_path: Path) -> None:
@@ -98,7 +121,7 @@ def test_load_run_config_default_performance_off(tmp_path: Path) -> None:
     manifest_dir = repo / "benchmark" / "manifests"
     manifest_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     manifest = manifest_dir / "run.json"
     manifest.write_text(
         json.dumps(
@@ -120,7 +143,7 @@ def test_load_run_config_performance_block(tmp_path: Path) -> None:
     manifest_dir = repo / "benchmark" / "manifests"
     manifest_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     manifest = manifest_dir / "run.json"
     manifest.write_text(
         json.dumps(
@@ -179,7 +202,7 @@ def test_v2_document_supports_matrix_and_dotted_overrides(tmp_path: Path) -> Non
     config_dir = repo / "benchmark" / "configs"
     config_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     manifest = config_dir / "matrix.json"
     manifest.write_text(
         json.dumps(
@@ -225,7 +248,7 @@ def test_pipeline_overrides_are_validated_and_applied(tmp_path: Path) -> None:
     config_dir = repo / "benchmark" / "configs"
     config_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     manifest = config_dir / "pipeline.json"
     manifest.write_text(
         json.dumps(
@@ -324,7 +347,7 @@ def test_default_output_uses_unified_debug_tree(tmp_path: Path) -> None:
     config_dir = repo / "benchmark" / "configs"
     config_dir.mkdir(parents=True)
     (repo / "pyproject.toml").write_text("", encoding="utf-8")
-    (repo / "feature-list.json").write_text("{}", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
     manifest = config_dir / "run.json"
     manifest.write_text(
         json.dumps(

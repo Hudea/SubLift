@@ -115,7 +115,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 ### Phase 1 — CLI MVP
 
 - [x] CLI、ffmpeg 抽帧、Vision / PaddleOCR（可选）与 Mock、时间轴、去重和 SRT 导出闭环
-- [x] Python lint、strict mypy、单元测试与 `./init.sh` 全绿
+- [x] Python lint、strict mypy、单元测试与 `./scripts/verify-standard.sh` 全绿（Harness L0 `./init.sh` 另行通过）
 - [x] 真实视频端到端产出可加载 SRT
 
 ### Phase 2 — macOS GUI
@@ -146,7 +146,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 
 - [x] 实验实现的结果 hash、固定 GT、队列上限与取消/重启均通过
 - [x] 两轮真实 Vision A/B 均未满足 end-to-end wall median ≤串行 95%（0.9559、1.0587），代码未合入 main
-- [x] 保留串行 path mode；完整负向证据见 `docs/phases/phase4.1.json`
+- [x] 保留串行 path mode；完整负向证据见 `docs/phases/phase41.json`
 
 ### Phase 4.2 — OCR 内部性能归因（已完成）
 

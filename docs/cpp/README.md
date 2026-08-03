@@ -1,7 +1,7 @@
 # C++ 迁移文档（`docs/cpp/`）
 
 本目录是 **Phase 6 — Native C++ Core Migration** 的计划与设计文档落点。  
-**任务状态与验证证据** 仍以 `docs/phases/phase6.json` 为唯一事实来源；项目级功能块见根目录 `feature-list.json`。
+**任务状态与验证证据** 仍以 `docs/phases/phase6.json` 为唯一事实来源；当前项目 Phase 索引见根目录 `phases.json`，`feature-list.json` 仅保留历史兼容功能组。
 
 ## 文档索引
 

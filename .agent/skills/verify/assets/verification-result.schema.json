@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verification Result v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "verification_level", "state_ref", "target_id", "status", "verification_target", "evidence_refs", "verified_change_fingerprint", "checks", "acceptance_coverage", "failures", "delivery_evidence", "known_gaps", "next_action"],
+  "properties": {
+    "schema_version": {"const": 2},
+    "verification_level": {"enum": ["feature", "phase"]},
+    "state_ref": {"type": "string", "minLength": 1},
+    "target_id": {"type": "string", "minLength": 1},
+    "status": {"enum": ["VERIFICATION_PASSED", "VERIFICATION_FAILED", "VERIFICATION_BLOCKED"]},
+    "verification_target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "base_ref", "head_ref", "fingerprint"],
+          "properties": {
+            "kind": {"enum": ["working-tree", "commit", "range"]},
+            "base_ref": {"type": ["string", "null"]},
+            "head_ref": {"type": ["string", "null"]},
+            "fingerprint": {"$ref": "../../../schemas/change-snapshot.schema.json"}
+          },
+          "allOf": [
+            {"if": {"properties": {"kind": {"const": "working-tree"}}, "required": ["kind"]}, "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "null"}}}},
+            {"if": {"properties": {"kind": {"const": "commit"}}, "required": ["kind"]}, "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "string", "minLength": 1}}}},
+            {"if": {"properties": {"kind": {"const": "range"}}, "required": ["kind"]}, "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "string", "minLength": 1}}}}
+          ]
+        },
+        {"type": "null"}
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref", "fingerprint"],
+        "properties": {
+          "kind": {"enum": ["testing", "review", "feature-verification", "commit"]},
+          "ref": {"type": "string", "minLength": 1},
+          "fingerprint": {"oneOf": [{"$ref": "../../../schemas/change-snapshot.schema.json"}, {"type": "null"}]}
+        }
+      }
+    },
+    "verified_change_fingerprint": {"oneOf": [{"$ref": "../../../schemas/change-snapshot.schema.json"}, {"type": "null"}]},
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["category", "required", "status", "command", "summary", "evidence"],
+        "properties": {
+          "category": {"enum": ["build", "lint", "typecheck", "automated-test", "runtime-smoke", "migration", "manual", "visual", "security", "benchmark", "custom"]},
+          "required": {"type": "boolean"},
+          "status": {"enum": ["pass", "fail", "blocked", "not-applicable"]},
+          "command": {"type": ["string", "null"]},
+          "summary": {"type": "string", "minLength": 1},
+          "evidence": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "acceptance_coverage": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion", "status", "evidence_refs"],
+        "properties": {
+          "criterion": {"type": "string", "minLength": 1},
+          "status": {"enum": ["proven", "failed", "blocked"]},
+          "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "impact", "check_category", "summary", "action"],
+        "properties": {
+          "kind": {"enum": ["PRODUCT_FAILURE", "TOOLING_FAILURE", "ENVIRONMENT_FAILURE", "EVIDENCE_INCOMPLETE", "SNAPSHOT_MISMATCH", "FLAKY_OR_INCONCLUSIVE", "PREEXISTING_FAILURE"]},
+          "impact": {"enum": ["blocking", "non-blocking"]},
+          "check_category": {"enum": ["build", "lint", "typecheck", "automated-test", "runtime-smoke", "migration", "manual", "visual", "security", "benchmark", "custom"]},
+          "summary": {"type": "string", "minLength": 1},
+          "action": {"enum": ["resume-development", "return-to-planning", "resolve-tooling", "resolve-environment", "provide-evidence", "stabilize-target", "investigate", "accept-known-gap", "request-decision"]}
+        }
+      }
+    },
+    "delivery_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "known_gaps": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "next_action": {"enum": ["ready-for-commit", "ready-for-phase-delivery", "resume-development", "return-to-planning", "resolve-tooling", "resolve-environment", "provide-evidence", "stabilize-target", "investigate", "request-decision"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "VERIFICATION_PASSED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "verification_target": {"type": "object"},
+          "evidence_refs": {"minItems": 1},
+          "verified_change_fingerprint": {"$ref": "../../../schemas/change-snapshot.schema.json"},
+          "checks": {"minItems": 1, "items": {"if": {"properties": {"required": {"const": true}}, "required": ["required"]}, "then": {"properties": {"status": {"const": "pass"}}}}},
+          "acceptance_coverage": {"minItems": 1, "items": {"properties": {"status": {"const": "proven"}}}},
+          "failures": {"items": {"properties": {"impact": {"const": "non-blocking"}}}},
+          "delivery_evidence": {"minItems": 1}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "VERIFICATION_FAILED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "failures": {"contains": {"properties": {"impact": {"const": "blocking"}}, "required": ["impact"]}, "minContains": 1},
+          "next_action": {"enum": ["resume-development", "return-to-planning"]}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "VERIFICATION_BLOCKED"}}, "required": ["status"]},
+      "then": {"properties": {"next_action": {"enum": ["resolve-tooling", "resolve-environment", "provide-evidence", "stabilize-target", "investigate", "request-decision"]}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "VERIFICATION_PASSED"}, "verification_level": {"const": "feature"}}, "required": ["status", "verification_level"]},
+      "then": {"properties": {"evidence_refs": {"minItems": 2}, "next_action": {"const": "ready-for-commit"}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "VERIFICATION_PASSED"}, "verification_level": {"const": "phase"}}, "required": ["status", "verification_level"]},
+      "then": {"properties": {"verification_target": {"properties": {"kind": {"const": "range"}}}, "next_action": {"const": "ready-for-phase-delivery"}}}
+    }
+  ]
+}

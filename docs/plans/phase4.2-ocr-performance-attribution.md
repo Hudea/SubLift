@@ -1,7 +1,7 @@
 # Phase 4.2 — OCR 内部性能归因与决策基线
 
 > 设计源头：[OCR 内部性能归因设计](../design/ocr-performance-attribution.md)。任务状态与
-> 验证证据以 [phase4.2.json](../phases/phase4.2.json) 为准。
+> 验证证据以 [phase42.json](../phases/phase42.json) 为准。
 
 ## 1. 主题、目标与为什么现在做
 
@@ -96,7 +96,7 @@ cd apps/macos && swift test
 ```
 
 真实 Vision benchmark 命令、报告位置、输出 commit/dirty 状态和每个硬门结果必须写入
-`docs/phases/phase4.2.json`。行为、质量、对账或隐私硬门失败时，`feat-043` 保持
+`docs/phases/phase42.json`。行为、质量、对账或隐私硬门失败时，`feat-043` 保持
 `in-progress`。summary 扰动失败必须限制报告用途，但不否定已经完成的归因分流；不得把它
 隐去或写成已证明的系统方差。
 

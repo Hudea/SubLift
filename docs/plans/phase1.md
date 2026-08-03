@@ -1,7 +1,7 @@
 # Phase 1 设计与执行计划
 
-> 本文件是 Phase 1 的设计源头与执行手册。任务跟踪见 `docs/phases/phase1.json`，
-> 项目级功能块见 `feature-list.json`。架构细节待 `foundation.architecture` 任务
+> 本文件是 Phase 1 的设计源头与执行手册。任务跟踪见 `docs/phases/phase1.json`；当前
+> 操作性 Phase 索引为 `phases.json → detail_file`，`feature-list.json` 只保留历史功能组兼容视图。架构细节待 `foundation.architecture` 任务
 > 落入 `docs/ARCHITECTURE.md`，本文档在落地前为唯一设计参考。
 
 ## 1. 目标与范围

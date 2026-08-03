@@ -101,8 +101,8 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | Catch2 Filter Tag | Use Catch tag `[vision][integration]` or `ctest -R vision` to filter Vision integration tests |
 | Threading | `VisionOcrEngine::recognize` is **not thread-safe**; callers must serialize (no concurrent recognize) |
 | Pixel path | Product/parity path is **RGB24**. BGR24/Gray8 are best-effort conversions only |
-| L0 vs L4 | **L0** (init hard gate): box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`. **L4**: live Vision text/conf — optional report only; not an init hard gate. `dump_vision --live` is reserved (no-op beyond note) |
-| Dual-matrix | `./init.sh` builds **VISION=OFF** (core+ffmpeg+mock + L0 vision geometry/parity). For recognize smoke, run a second configure with `-DSUBLIFT_ENABLE_VISION=ON` and `ctest -R 'vision|parity.*vision'`. Optional: `SUBLIFT_CPP_VISION=ON` manual job — not default init |
+| C++ parity L0 vs L4 | C++ parity **L0** covers box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`; it runs from `./scripts/verify-standard.sh`, not Harness `./init.sh`. **L4** is live Vision text/conf 的可选报告；`dump_vision --live` 只保留说明性入口。 |
+| Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_INIT_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
 
 ## sublift_worker CLI & Dual-Track Opt-in Guide (Phase 6.5)
 

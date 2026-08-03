@@ -1,8 +1,9 @@
 # phase4-roi-data-path 设计与执行计划
 
 > 本文件是 Phase 4 的设计源头。任务状态与实际验证证据以
-> [phase4.json](../phases/phase4.json) 为准；项目级功能块以
-> [feature-list.json](../../feature-list.json) 为准。
+> [phase4.json](../phases/phase4.json) 为准；当前操作性索引为
+> [phases.json](../../phases.json) → `detail_file`，
+> [feature-list.json](../../feature-list.json) 仅保留历史功能组兼容视图。
 >
 > **状态：已开工，尚未实施 ROI 代码。** 本文描述目标架构与验收，不得把它当成现有行为说明。
 

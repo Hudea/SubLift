@@ -1,0 +1,71 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 7 - Harness Migration",
+  "features": [
+    {
+      "id": "07001",
+      "name": "新 Harness 体系迁移",
+      "description": "引入新的 .agent 编排协议、phases.json 操作索引和秒级 L0 会话入口；保留历史 feature-list/feat-* 记录与完整产品验证门，并让 benchmark 根目录识别新旧索引。",
+      "module": [
+        ".agent/",
+        "AGENTS.md",
+        "phases.json",
+        "phases.schema.json",
+        "docs/phases/",
+        "init.sh",
+        "scripts/verify-standard.sh",
+        "src/sublift/benchmark/config.py",
+        "tests/"
+      ],
+      "dependencies": [],
+      "acceptance_criteria": [
+        "phases.json 能索引所有历史 Phase 与 Phase 7，且 ./init.sh 验证 index/detail 链。",
+        "历史 feat-* 记录和新 07001 记录均由 phaseN.schema.json 的对应分支接受，phase41/phase42 引用无断链。",
+        "默认 ./init.sh 是秒级 L0，scripts/verify-standard.sh 保留原 ruff、mypy、C++、pytest 和 cutover parity 日常门。",
+        "benchmark 根目录发现优先支持 phases.json，并保留 feature-list.json fallback 覆盖。",
+        "Harness 自测、相关 Python 测试与标准验证门均实际通过。"
+      ],
+      "non_goals": [
+        "不重写或重编号历史 feat-* 记录与历史 evidence。",
+        "不改变产品 CLI、UDS IPC、OCR/算法、C++/Swift 运行时或发布范围。",
+        "不删除 feature-list.json、.grok 工作流或既有 adapter。",
+        "不提交或推送 Git 改动。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/harness-migration.md"
+      ],
+      "subtasks": [
+        {
+          "id": "07001.01",
+          "name": "引入并实例化 Harness 协议",
+          "description": "复制 canonical .agent 内容，实例化项目 AGENTS、Phase 索引与兼容 schema。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "07001.02",
+          "name": "迁移 L0 与标准验证入口",
+          "description": "将旧重型 init 门迁入独立脚本，并提供新的 Harness L0 init 与兼容转发。",
+          "dependencies": ["07001.01"],
+          "status": "done"
+        },
+        {
+          "id": "07001.03",
+          "name": "接线旧新索引兼容",
+          "description": "更新 benchmark 根发现及测试，并迁移小数 Phase 文件名与文档引用。",
+          "dependencies": ["07001.01"],
+          "status": "done"
+        },
+        {
+          "id": "07001.04",
+          "name": "验证与迁移收口",
+          "description": "执行 Harness、聚焦和标准验证，更新 evidence、progress 与决策记录。",
+          "dependencies": ["07001.02", "07001.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-03 完成。已引入并项目化新 Harness、phases.json 索引、冻结 legacy/canonical schema、L0/标准门分层、benchmark 新旧 marker 兼容及 phase41/phase42 路径迁移。验证实际通过：./init.sh → OK；python3 -m unittest discover -s .agent/tests -v → 6 passed；uv run pytest tests/test_benchmark_config.py tests/test_benchmark_matrix.py tests/test_roi_output_path.py → 63 passed、6 deselected；uv run ruff check . → All checks passed；uv run mypy src tests → Success（91 source files）；./scripts/verify-standard.sh → 10/10 passed（含 C++/ctest、pytest 与 parity）；jq JSON 解析、索引完整性检查（9 Phase / 111 legacy feature / 1 canonical feature）和 git diff --check 均通过。Harness bootstrap 例外：新体系在本 Feature 内才首次可用，未追溯伪造 .agent state / receipt；用户未授权，因此未提交或推送。"
+    }
+  ]
+}

@@ -5,6 +5,36 @@
 
 ---
 
+## ADR-0032 采用新 Harness；以兼容层保留历史追踪与完整产品门（2026-08-03）
+
+- **状态**：已确认并实施。
+- **背景**：项目原先以 `feature-list.json` 和重型 `init.sh` 作为协作入口；新的
+  `/Volumes/lab/pp/my_Harness` 提供 `.agent/` 编排协议、`phases.json → detail_file` 索引和
+  秒级 L0。SubLift 已有 111 条 `feat-*` 历史记录、非模板字段/状态、两个小数 Phase 文件名，
+  且 benchmark root discovery 和历史文档仍依赖 `feature-list.json`。
+- **决策**：
+  1. 引入 canonical `.agent/`，将 `phases.json` 设为唯一操作性 Phase 索引；新 Feature 使用
+     五位 ID、`module[]`、`acceptance_criteria` 与规范 subtasks。
+  2. 保留根 `feature-list.json` 为历史兼容索引，不再用它选择当前任务；benchmark root
+     discovery 先接受 `phases.json`，同时保留它的 fallback。
+  3. `docs/phases/phaseN.schema.json` 使用不重叠的 legacy/canonical 分支：legacy 仅承接
+     既有 `feat-*` evidence、string module、旧 subtasks 和 archived/completed 状态，不能成为
+     新任务的逃逸口。
+  4. `phase4.1.json` / `phase4.2.json` 更名为 `phase41.json` / `phase42.json`，Phase index
+     保留 `phase4.1` / `phase4.2` 显示 ID，避免复制一份可编辑历史正文。
+  5. 默认 `./init.sh` 仅做 Harness L0；原依赖同步、ruff、mypy、C++/ctest、pytest 与 parity
+     日常门整体迁入 `scripts/verify-standard.sh`。`./init.sh --standard` 和旧
+     `SUBLIFT_INIT_*` 环境变量显式转发以减少调用方断裂。
+  6. Codex receipt 只能记录实际 `platform: codex` 委派，不伪造 OpenCode/Claude Code adapter
+     或为本次 bootstrap 回填历史 Feature state、review/commit receipt。
+- **理由**：机械重写全部历史 ID/evidence 会制造不可审计的大规模变更，且会破坏历史链接和
+  benchmark marker；双真源又会让后续 Harness 无法可靠恢复。兼容层把一次性历史差异限定在
+  schema 中，让新工作从 Phase 7 起遵循严格协议。
+- **影响**：后续会话从 `session-bootstrap` 进入，以 `phases.json` 定位工作；完整产品验证须
+  显式运行标准脚本；本项目继续要求用户明确同意后才能 commit/push。
+
+---
+
 ## ADR-0031 Benchmark 代码入正式包；配置、数据、基线与本机产物分层（2026-07-30）
 
 - **状态**：已确认并实施。
@@ -362,7 +392,7 @@
   原始数据，在 OCR 内部归因完成前不重新打开该优化方向。
 - **理由**：ROI 后 producer 已能快速领先并反压，单消费者 Vision 主导；未验证的用户可见
   吞吐收益不足以抵消并发带来的资源所有权、取消与观测复杂度。
-- **结果**：实验结论和限制记录在 `docs/phases/phase4.1.json`；后续 feat-043 已完成 Vision
+- **结果**：实验结论和限制记录在 `docs/phases/phase41.json`；后续 feat-043 已完成 Vision
   内部归因，下一步是多源 GT 后的代表帧排序与有效调用实验，不是第二轮并发重构。
 
 ---

@@ -1,148 +1,115 @@
 # AGENTS.md
 
-SubLift 是一个硬字幕（烧录字幕）提取工具，从视频画面中自动识别字幕，生成可编辑的 SRT / ASS / VTT 文件。初步目标是实现从 cli 到 macos 平台，将使用 Python+Swift 来完成，最终目标是实现跨平台。
+> SubLift 的项目级 Agent 契约：这里只放稳定事实、命令与边界；可恢复的执行流程由 `.agent/` 提供。
 
-## 启动流程
+## 项目概述
 
-在编写代码之前：
+- **项目名**：`SubLift`
+- **目标**：本地提取视频中烧录的硬字幕，输出可编辑的 SRT（ASS/VTT 后续扩展）。
+- **技术栈**：Python 3.12+（`uv`）、C++20 / ObjC++（CMake + Ninja）、Swift 5.9+（SwiftPM）、ffmpeg；macOS 13+ 的 Vision 可选，Paddle 使用 ONNX Runtime / OpenCV。
+- **进度真源**：`phases.json` + `progress.md`。根 `feature-list.json` 是历史兼容索引，不能作为当前任务选择或状态更新的真源。
 
-1. **确认当前工作目录**：运行 `pwd`（应为 SubLift 项目根目录）
-2. **完整阅读本文档**
-3. **阅读项目文档**：
-   - `docs/ARCHITECTURE.md` — 架构设计（模块职责、数据流、技术栈；feat-004 填充前见 `docs/plans/`）
-   - `docs/REQUIREMENTS.md` — 项目依赖和项目规格
-   - `README.md` — 快速上手与 CLI 用法（feat-004 填充前为占位）
-4. **运行 `./init.sh`**，确认环境状态正常
-5. **阅读 `feature-list.json`**，了解项目级功能总览以及当前的开发状态；如需查看当前 Phase 的开发细节，打开对应的 `docs/phases/phaseN.json`；如需查看设计源头，打开 `docs/plans/`
-6. **查看最近提交**：运行 `git log --oneline -5`
+## 权威信息源
 
-如果基线验证失败，请先修复它，再添加新的工作范围。
+不确定时先查下表；仍不确定则问用户，不要猜。
 
-## 项目技术栈
-
-- **语言**：Python 3.12+
-- **包管理**：uv
-- **OCR 引擎**：Apple Vision（macOS 可选依赖）、PaddleOCR（通用可选依赖）
-
-## 关键架构约束
-
-- 采用模块化的架构设计，功能都应该可替换，可插拔，功能模块低耦合高内聚，设计恰当的接口。
-
-## 工作规则
-
-- **一次只做一个功能**：从当前 Phase 的 `docs/phases/phaseN.json` 中只选择一个未完成的功能
-- **任务粒度**：一个任务 = 一个可独立验收的功能块；任务内部细节通过 `subtasks` 字段承载，不拆成独立任务。粒度以「能否独立验收」为准
-- **必须验证**：未运行验证命令前，不要声称任务已完成
-- **更新产物**：结束会话前，更新 `progress.md` 和对应的 Phase 细节文件（`docs/phases/phaseN.json`）；如大功能块状态变化，同步更新 `feature-list.json`
-- **保持范围聚焦**：不要修改与当前功能无关的文件
-- **保持干净状态**：下一次会话必须能够立即运行 `./init.sh`
-- **提交规则**：未经用户同意，严禁提交工作区改动
-
-## 必需产物
-
-- `feature-list.json` — 项目级功能总览（按 Phase 分组的大功能块）
-- `docs/phases/phaseN.json` — Phase 级功能跟踪（开发细节与验证证据的唯一事实来源）
-- `docs/plans/` — Phase 设计源头（模块布局、数据流、任务拆分与执行顺序）
-- `progress.md` — 会话连续性**导航**日志（保持精简，见下方防膨胀规则）
-- `docs/DECISIONS.md` — 架构决策归档（长期累积，按时间倒序）
-- `docs/HURDLES.md` — 阻塞开发的任务总结，解决流程，失败原因，最终解决方案和原理。
-- `init.sh` — 标准启动与验证路径
-- `session-handoff.md` — 可选，适用于较大的会话
-
-## 完成定义
-
-只有同时满足以下所有条件，功能才算完成：
-
-- [ ] 目标行为已经实现
-- [ ] 必需的验证已经实际运行（测试 / lint / 类型检查）
-- [ ] 验证证据已记录在 `docs/phases/phaseN.json`（`progress.md` 不作为证据主存储）
-- [ ] 仓库仍可通过标准启动路径重新启动
-
-## 会话结束
-
-结束会话前：
-
-1. 在 `progress.md` 中更新当前状态，并**清理**本次会话的临时内容（见防膨胀规则）
-2. 在对应的 `docs/phases/phaseN.json` 中更新功能状态；如大功能块状态变化，同步更新 `feature-list.json`
-3. 记录所有尚未解决的风险或阻塞项
-4. 保持仓库足够干净，使下一次会话能够立即运行 `./init.sh`
-
-## `progress.md` 防膨胀规则
-
-`progress.md` 是**导航文件**，不是历史档案。目标：下次打开项目 5 秒内知道在哪里。
-
-| 节 | 保留策略 |
+| 问题 | 先查 |
 |---|---|
-| 当前状态 | 始终保持，每次更新 |
-| 进行中 | 仅当前任务，完成即移出 |
-| 近期完成 | 最多保留 5 条，超出的压缩为「见 phase2.json」 |
-| 阻塞项/风险 | 长期保留，但已解决的立即删除 |
-| 近期决策 | 最多 3 条；超出的迁移到 `docs/DECISIONS.md` |
-| 本次会话修改的文件 | **会话结束时删除该节** |
-| 完成证据 | **不写入 progress.md**，只写入 `phaseN.json` |
+| 架构 / 模块设计 | `docs/ARCHITECTURE.md`、`docs/design/*.md`、`docs/cpp/` |
+| 需求 / 范围 / 验收 | `docs/REQUIREMENTS.md` |
+| 历史技术决策 | `docs/DECISIONS.md` |
+| 踩过的坑 | `docs/HURDLES.md` |
+| 当前该做什么 | `phases.json` → 对应 Phase 的 `detail_file` |
+| 历史功能组或旧链接 | `feature-list.json`（仅兼容查询） |
 
-## 验证命令
+## 项目结构地图
 
-日常启动门（`./init.sh` 默认）：
+- `src/sublift/`：Python Oracle、CLI、benchmark 与 IPC 兼容运行时。
+- `cpp/`：Native C++ Core、Worker、Vision/Paddle adapters 与 CTest。
+- `apps/macos/`：SwiftUI 开发者 GUI 与 Swift 测试。
+- `benchmark/`：版本化 configs、datasets、baselines 与 parity fixtures；本机产物写 `debug/benchmark/`。
+- `docs/`：架构、需求、Phase 细节、计划、决策与障碍记录。
+- `.agent/`：Harness rules、skills、schemas、validators 与可恢复 state（state 不入库）。
 
-```bash
-uv sync --extra vision --extra paddle
-uv run ruff check .
-uv run mypy src tests
-# C++: cmake + build + ctest（build/cpp Debug；macOS 默认 VISION=ON）
-uv run pytest -m "not integration" --no-cov   # 单次；须在 C++ 构建之后以便 IPC e2e 不 skip
-uv run python scripts/parity/check_cutover_gate.py --check --skip-runtime --skip-gt \
-  --report-out /tmp/sublift_cutover_gate.md
-```
+## 环境与标准命令
 
-必需检查：
+**安装 / 运行 / 构建**：
 
-- `uv run ruff check .` — lint，必须 0 error
-- `uv run mypy src tests` — 类型检查（strict），必须 no issues
-- `uv run pytest -m "not integration"` — 单元/IPC 测试全绿（init 默认加 `--no-cov`）
-- C++ `ctest` + cutover **parity goldens**（init 默认）
+- 安装产品 extras：`uv sync --extra vision --extra paddle`
+- 会话 L0：`./init.sh`（只检查 Harness 文件、JSON 与 Phase index，不安装/构建/测试）
+- 标准开发验证：`./scripts/verify-standard.sh`
+- Native Debug 构建：`cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON && cmake --build build/cpp`
+- macOS GUI：`cd apps/macos && swift build && swift run SubLiftMac`
 
-发布 / 完整 cutover 门（**不在**默认 init 内，需显式）：
+**测试与验证**：
 
-```bash
-SUBLIFT_INIT_RUNTIME=1 SUBLIFT_INIT_REQUIRE_GT=1 ./init.sh
-# 或
-uv run python scripts/parity/check_cutover_gate.py --check --require-gt
-```
+- Python lint：`uv run ruff check .`
+- Python 类型检查：`uv run mypy src tests`
+- Python 日常测试：`uv run pytest -m "not integration" --no-cov`
+- C++：`ctest --test-dir build/cpp --output-on-failure`
+- cutover parity：`uv run python scripts/parity/check_cutover_gate.py --check --skip-runtime --skip-gt --report-out /tmp/sublift_cutover_gate.md`
+- Swift（macOS）：`cd apps/macos && swift test`
+- 发布 / 完整 cutover（外部资源齐备时）：`SUBLIFT_INIT_RUNTIME=1 SUBLIFT_INIT_REQUIRE_GT=1 ./scripts/verify-standard.sh`
 
-集成测试（需外部资源）：
+`scripts/verify-standard.sh` 继承旧日常门：一次依赖同步、ruff、mypy、C++ configure/build/ctest、单次非集成 pytest 与 parity。默认 `init.sh` 不得再增加这些慢门；可用 `./init.sh --standard` 或旧 `SUBLIFT_INIT_*` 环境变量显式转发以兼容历史用法。
 
-```bash
-uv run pytest -m integration
-```
+## 代码 / 架构约束
 
-## `init.sh` 范围与防膨胀
+- Formatting：Python 由 Ruff 管理，严格 mypy；C++ / Swift 遵循各自现有 target 与目录边界。
+- Naming：产品模块保持 `extractor / detector / ocr / pipeline / export` 的 Protocol 分层；Native target 依赖方向以 `docs/cpp/` 契约为准。
+- Error handling：产品默认 C++ runtime 必须 fail-closed；Python 仅在显式 `--runtime python` / `SUBLIFT_RUNTIME=python` 下作为 Oracle 或回滚。
 
-`init.sh` 是**日常可重复启动门**，不是完整发布 CI 的无限堆积处。目标：干净仓库上数分钟内可绿，且不写入应入库的报告垃圾。
+  ```python
+  if runtime == "python":
+      return run_python_oracle(...)
+  return run_cpp_worker_or_raise(...)
+  ```
 
-| 允许进入默认 init | 禁止默认塞入（须 env / 独立脚本 / 发布 job） |
+- 活样本：`src/sublift/benchmark/config.py`（显式错误、路径解析和严格类型的 Python 约定）；`cpp/src/application/`（Native composition root）。
+
+**Git**：
+
+- 分支：遵循仓库现有分支策略，不擅自切换或重写历史。
+- Commit message：Conventional Commits；需要提交时使用 `.agent/skills/commit/`。
+- **提交 / 推送必须先获得用户明确同意**；本项目不采用 Harness 的自动提交默认值。
+
+## Always / Ask First / Never
+
+- **Always**
+  - 修改已登记的一个当前 Feature；历史 Phase 记录只做明确的兼容迁移。
+  - 先运行 `./init.sh`，再按改动范围运行上述真实验证命令。
+  - 将最终验证证据写到对应 Phase feature 的 `evidence`，保持 `progress.md` 为简短导航。
+  - 对新 Feature 使用五位 ID 与 `docs/phases/phaseN.schema.json` 的 canonical 分支。
+- **Ask first**
+  - 新增第三方依赖、数据库/破坏性 schema 变更、CI/CD、发布/签名/公证。
+  - 修改本文件或 `.agent/` 下的规则与 skill（本次用户明确要求 Harness 迁移是例外）。
+  - commit、push、删除历史 evidence 或既有 adapter。
+- **Never**
+  - 绕过 `.agent/skills/commit/` 直接提交或推送。
+  - 将 `feature-list.json` 重新当作进度真源，或伪造旧 feature 的 Harness state / review / commit receipt。
+  - 将 C++ parity harness/golden harness 改称或混同为 Agent Harness。
+
+## Definition of Done
+
+同时满足才算完成：
+
+- [ ] 目标行为已实现
+- [ ] 与改动范围匹配的验证已实际运行（见标准命令）
+- [ ] 验证证据已写入对应 Phase feature 的 `evidence`（格式见 `.agent/rules/project-continuity.md`）
+- [ ] `./init.sh` 可通过
+
+## Harness 导航
+
+到时机就读/执行入口，不凭记忆。本表不是能力全表；plan / test / review / verify 由顶层编排按需激活。
+
+| 时机 | 入口 |
 |---|---|
-| 工具链存在性、`uv sync` 产品 extras | 无文档的「顺手再跑一遍」重复门 |
-| ruff / mypy | 默认 coverage 报告（用 pytest 配置显式开） |
-| **一次** pytest（`not integration`，构建 C++ 后） | 同一测试集拆成多次 pytest 调用 |
-| C++ configure/build/**全量 ctest**（Debug 树） | 无理由的第二套 build 目录全量编测 |
-| cutover **正确性 parity**（golden 列表） | 默认 runtime 微基准、默认 live GT L3 |
-| 报告写 `/tmp` 或 `debug/` | 每次 init 改写 `docs/reports/*` 污染 git |
+| 开始任何工作前 | `.agent/skills/session-bootstrap/SKILL.md` |
+| 结束会话前 | `.agent/skills/session-handoff/SKILL.md` |
+| 需要提交或推送时 | `.agent/skills/commit/SKILL.md`（仍须先获用户同意） |
+| 进度 / Phase 文件约定 | `.agent/rules/project-continuity.md` |
+| 完整开发已登记 Feature | `.agent/skills/develop-feature/SKILL.md` |
+| 执行 / 接续 / 完成已登记 Phase | `.agent/skills/develop-phase/SKILL.md` |
+| 存在活动 Feature / Phase state | 先恢复对应顶层编排，再改产品代码 |
 
-**新增步骤前必须自问（写入 PR / 会话说明）：**
-
-1. 是否已被 ruff/mypy/pytest/ctest/parity 之一覆盖？是则 **禁止**再加平行门。  
-2. 是否每次会话启动都需要？否 → 环境变量默认关，或独立 `scripts/` / CI job。  
-3. 是否会把产物写进版本库？默认否；需要归档时显式路径。  
-4. 是否改变「下一次会话能立刻 `./init.sh`」的假设？若变慢一个数量级，必须同步改本文与 README。
-
-**反模式：** 为单个 feat 在 init 末尾永久追加「再跑某某慢脚本」；应用 `SUBLIFT_INIT_*=1` 或 phase 专用验证命令代替。
-
-## 升级处理
-
-如果遇到以下情况：
-- **架构决策**：先查阅 `docs/ARCHITECTURE.md`；不确定则询问用户
-- **需求不明确**：先查阅 `docs/REQUIREMENTS.md`；不确定则询问用户
-- **模块设计问题**：查阅 `docs/design/` 下对应模块设计文档
-- **测试反复失败**：更新进度，并标记为需要人工审查
-- **范围不明确**：先阅读 `feature-list.json` 确定当前 Phase，再阅读 `docs/phases/phaseN.json` 中的完成定义
+Codex 委派须使用实际子代理调用，并在 receipt 中诚实写 `platform: codex` 与可追溯的 task / invocation reference；当前模板没有 Codex runtime adapter，不得伪造 OpenCode、Claude Code 或其他平台的 attestation。

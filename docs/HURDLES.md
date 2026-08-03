@@ -162,7 +162,7 @@
   时机抖动吞没了剩余收益。
 - **解决方案**：回退到串行 path mode，不继续为阈值微调并发。feat-043 已确认 Vision 请求
   执行主导；下一步先扩充多源 GT，再以质量门评估代表帧排序与有效 OCR 调用，而非重开并发优化。
-- **相关文件**：`docs/phases/phase4.1.json`、`debug/feat042/ab/`、`debug/feat042/ab_clean/`、
+- **相关文件**：`docs/phases/phase41.json`、`debug/feat042/ab/`、`debug/feat042/ab_clean/`、
   `docs/plans/phase4.2-ocr-performance-attribution.md`。
 
 ---

@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Review Result v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "feature_state_ref",
+    "feature_id",
+    "feature_plan",
+    "review_round",
+    "status",
+    "review_target",
+    "testing_result_ref",
+    "tested_change_fingerprint",
+    "reviewed_change_fingerprint",
+    "reviewed_dimensions",
+    "findings",
+    "uncertainties",
+    "review_summary",
+    "review_evidence",
+    "next_action",
+    "execution_mode",
+    "delegation_policy",
+    "capability_run_ref",
+    "tested_evidence_fingerprint",
+    "reviewed_evidence_fingerprint"
+  ],
+  "properties": {
+    "schema_version": {"const": 3},
+    "feature_state_ref": {"type": "string", "minLength": 1},
+    "feature_id": {"type": "string", "minLength": 1},
+    "feature_plan": {"type": "string", "minLength": 1},
+    "review_round": {"type": ["integer", "null"], "minimum": 1},
+    "status": {"enum": ["REVIEW_PASSED", "CHANGES_REQUIRED", "REVIEW_BLOCKED"]},
+    "review_target": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "base_ref", "head_ref", "fingerprint"],
+          "properties": {
+            "kind": {"enum": ["working-tree", "staged", "commit", "range"]},
+            "base_ref": {"type": ["string", "null"]},
+            "head_ref": {"type": ["string", "null"]},
+            "fingerprint": {"$ref": "../../../schemas/change-snapshot.schema.json"}
+          },
+          "allOf": [
+            {
+              "if": {"properties": {"kind": {"enum": ["working-tree", "staged"]}}, "required": ["kind"]},
+              "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "null"}}}
+            },
+            {
+              "if": {"properties": {"kind": {"const": "commit"}}, "required": ["kind"]},
+              "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "string", "minLength": 1}}}
+            },
+            {
+              "if": {"properties": {"kind": {"const": "range"}}, "required": ["kind"]},
+              "then": {"properties": {"base_ref": {"type": "string", "minLength": 1}, "head_ref": {"type": "string", "minLength": 1}}}
+            }
+          ]
+        },
+        {"type": "null"}
+      ]
+    },
+    "testing_result_ref": {"type": ["string", "null"], "minLength": 1},
+    "tested_change_fingerprint": {
+      "oneOf": [
+        {"$ref": "../../../schemas/change-snapshot.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "tested_evidence_fingerprint": {
+      "oneOf": [
+        {"$ref": "../../../schemas/test-evidence-snapshot.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "reviewed_change_fingerprint": {
+      "oneOf": [
+        {"$ref": "../../../schemas/change-snapshot.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "reviewed_evidence_fingerprint": {
+      "oneOf": [
+        {"$ref": "../../../schemas/test-evidence-snapshot.schema.json"},
+        {"type": "null"}
+      ]
+    },
+    "execution_mode": {
+      "type": ["string", "null"],
+      "enum": ["reviewer-agent", "inline-fallback", null]
+    },
+    "delegation_policy": {
+      "type": ["string", "null"],
+      "enum": ["required", "preferred", "unavailable", null]
+    },
+    "capability_run_ref": {"type": ["string", "null"]},
+    "reviewed_dimensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["correctness", "requirements", "architecture-drift", "security", "reliability", "compatibility", "testing-gap"]}
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["finding_key", "priority", "blocking", "origin", "change_relation", "category", "confidence", "location", "summary", "trigger", "impact", "evidence", "protection_gap", "required_action", "lifecycle", "prior_finding_ref", "lifecycle_evidence", "lifecycle_reason"],
+        "properties": {
+          "finding_key": {"type": "string", "minLength": 1},
+          "priority": {"enum": ["P0", "P1", "P2", "P3"]},
+          "blocking": {"type": "boolean"},
+          "origin": {"enum": ["introduced", "pre-existing"]},
+          "change_relation": {"enum": ["caused-by-change", "worsened-by-change", "exposed-by-change", "required-by-change"]},
+          "category": {"enum": ["correctness", "requirements", "architecture-drift", "security", "reliability", "compatibility", "testing-gap"]},
+          "confidence": {"type": "number", "minimum": 0.8, "maximum": 1},
+          "location": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "line"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "line": {"type": "integer", "minimum": 1},
+              "symbol": {"type": ["string", "null"]}
+            }
+          },
+          "summary": {"type": "string", "minLength": 1},
+          "trigger": {"type": "string", "minLength": 1},
+          "impact": {"type": "string", "minLength": 1},
+          "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+          "protection_gap": {"type": "string", "minLength": 1},
+          "required_action": {"type": "string", "minLength": 1},
+          "lifecycle": {"enum": ["new", "unchanged", "worsened", "resolved", "not-reproduced"]},
+          "prior_finding_ref": {
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {"type": "null"}
+            ]
+          },
+          "lifecycle_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+          "lifecycle_reason": {"type": ["string", "null"]}
+        },
+        "allOf": [
+          {
+            "if": {"properties": {"lifecycle": {"enum": ["resolved", "not-reproduced"]}}, "required": ["lifecycle"]},
+            "then": {"properties": {"blocking": {"const": false}}}
+          },
+          {
+            "if": {"properties": {"lifecycle": {"const": "new"}}, "required": ["lifecycle"]},
+            "then": {
+              "properties": {
+                "prior_finding_ref": {"type": "null"},
+                "lifecycle_evidence": {"maxItems": 0},
+                "lifecycle_reason": {"type": "null"}
+              }
+            },
+            "else": {
+              "properties": {
+                "prior_finding_ref": {"type": "string", "minLength": 1},
+                "lifecycle_evidence": {"minItems": 1},
+                "lifecycle_reason": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          {
+            "if": {"properties": {"origin": {"const": "introduced"}}, "required": ["origin"]},
+            "then": {"properties": {"change_relation": {"const": "caused-by-change"}}}
+          },
+          {
+            "if": {"properties": {"origin": {"const": "pre-existing"}}, "required": ["origin"]},
+            "then": {"properties": {"change_relation": {"enum": ["worsened-by-change", "exposed-by-change", "required-by-change"]}}}
+          }
+        ]
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["blocking", "question", "reason", "required_input", "related_finding_ref"],
+        "properties": {
+          "blocking": {"type": "boolean"},
+          "question": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "minLength": 1},
+          "required_input": {"type": "string", "minLength": 1},
+          "related_finding_ref": {
+            "oneOf": [
+              {"type": "string", "minLength": 1},
+              {"type": "null"}
+            ]
+          }
+        }
+      }
+    },
+    "review_summary": {"type": "string", "minLength": 1},
+    "review_evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
+    "next_action": {"enum": ["ready-for-verification", "fix-and-retest", "provide-input", "stabilize-target", "stop-review-loop"]}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["REVIEW_PASSED", "CHANGES_REQUIRED"]}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "delegation_policy": {"enum": ["required", "preferred", "unavailable"]},
+          "capability_run_ref": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {"enum": ["REVIEW_PASSED", "CHANGES_REQUIRED"]},
+          "delegation_policy": {"const": "required"}
+        },
+        "required": ["status", "delegation_policy"]
+      },
+      "then": {"properties": {"execution_mode": {"const": "reviewer-agent"}}}
+    },
+    {
+      "if": {"properties": {"status": {"enum": ["REVIEW_PASSED", "CHANGES_REQUIRED"]}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "review_target": {"type": "object"},
+          "review_round": {"type": "integer", "minimum": 1},
+          "testing_result_ref": {"type": "string", "minLength": 1},
+          "tested_change_fingerprint": {"$ref": "../../../schemas/change-snapshot.schema.json"},
+          "reviewed_change_fingerprint": {"$ref": "../../../schemas/change-snapshot.schema.json"},
+          "tested_evidence_fingerprint": {"$ref": "../../../schemas/test-evidence-snapshot.schema.json"},
+          "reviewed_evidence_fingerprint": {"$ref": "../../../schemas/test-evidence-snapshot.schema.json"},
+          "reviewed_dimensions": {"minItems": 7, "maxItems": 7},
+          "uncertainties": {"items": {"properties": {"blocking": {"const": false}}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "REVIEW_PASSED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "next_action": {"const": "ready-for-verification"},
+          "execution_mode": {"enum": ["reviewer-agent", "inline-fallback"]},
+          "findings": {"items": {"properties": {"blocking": {"const": false}}}},
+          "uncertainties": {"items": {"properties": {"blocking": {"const": false}}}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "CHANGES_REQUIRED"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "next_action": {"const": "fix-and-retest"},
+          "execution_mode": {"enum": ["reviewer-agent", "inline-fallback"]},
+          "findings": {
+            "contains": {
+              "properties": {
+                "blocking": {"const": true},
+                "lifecycle": {"enum": ["new", "unchanged", "worsened"]}
+              },
+              "required": ["blocking", "lifecycle"]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "REVIEW_BLOCKED"}}, "required": ["status"]},
+      "then": {"properties": {"next_action": {"enum": ["provide-input", "stabilize-target", "stop-review-loop"]}}}
+    }
+  ]
+}

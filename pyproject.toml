@@ -63,6 +63,9 @@ dev = [
 target-version = "py312"
 line-length = 100
 src = ["src", "tests"]
+# Harness validators are imported protocol assets with their own unittest
+# contract; they are not part of SubLift's product Python source tree.
+extend-exclude = [".agent"]
 
 [tool.ruff.lint]
 # E/W: pycodestyle, F: pyflakes, I: isort, UP: pyupgrade,

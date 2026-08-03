@@ -30,13 +30,15 @@
 - **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.8 已完成；Paddle Native 已正式 cutover）
 - **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
+- [Harness 迁移架构](docs/plans/architecture/harness-migration.md) — Phase 索引、会话流程与验证分层
 
 ## 安装
 
 ```bash
 git clone <repo>
 cd SubLift
-./init.sh                  # 日常启动门（lint/测试/C++/parity；发布门见 AGENTS）
+./init.sh                  # Harness L0：文件、JSON、Phase index（秒级）
+./scripts/verify-standard.sh  # 完整日常验证：lint/测试/C++/parity
 uv sync --extra vision     # 仅需单独补装 Vision 依赖时使用
 uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
 ```
@@ -159,12 +161,20 @@ swift run SubLiftMac
 ## 开发
 
 ```bash
-./init.sh                     # 环境检查 + 验证基线
+./init.sh                     # Harness L0，会话开始时运行
+./scripts/verify-standard.sh  # 标准产品验证（原 init.sh 完整门）
 uv run pytest                 # Python 单元测试
 uv run pytest -m integration  # 集成测试（需外部视频、ffmpeg、Vision 或 Paddle 模型）
 uv run ruff check .           # lint
 uv run mypy src tests         # 类型检查（strict）
 ```
+
+### Harness 与进度
+
+`phases.json → docs/phases/phase*.json` 是当前开发 Phase 和 feature 的操作真源；
+`.agent/` 提供可恢复的 Plan / Test / Review / Verify 流程。根
+`feature-list.json` 仍保留给历史文档和旧工具兼容，不能用于选择新任务。详见
+[AGENTS.md](AGENTS.md) 与 [Harness 迁移架构](docs/plans/architecture/harness-migration.md)。
 
 ### 架构与设计
 
