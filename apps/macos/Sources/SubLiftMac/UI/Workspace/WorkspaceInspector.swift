@@ -12,6 +12,8 @@ struct WorkspaceInspector: View {
     let metadataLoader: VideoMetadataLoader
     let playerModel: PlayerModel
     let videoURL: URL?
+    let regionModel: RegionSelectionModel
+    let onRedetectRegion: () -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -58,7 +60,12 @@ struct WorkspaceInspector: View {
             } else {
                 placeholder
             }
-        case .region, .extraction, .subtitle:
+        case .region:
+            RegionInspector(
+                regionModel: regionModel,
+                onRedetectAtPlayhead: onRedetectRegion
+            )
+        case .extraction, .subtitle:
             placeholder
         }
     }

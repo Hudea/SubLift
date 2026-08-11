@@ -39,6 +39,17 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_REGION=1，启动后进入 Region Editing（V04 截图 fixture）。
+    @MainActor
+    static func regionFixtureIfRequested(workspace: WorkspaceModel) {
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_REGION"] == "1" {
+            // 等 metadata 加载完成（state → ready）后再进入区域编辑。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                workspace.enterRegionEditing()
+            }
+        }
+    }
+
     static func save(window: NSWindow, to path: String) {
         guard let view = window.contentView else { return }
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }

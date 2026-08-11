@@ -85,6 +85,7 @@ struct WorkspaceRootView: View {
                 #if DEBUG
                 EvidenceShot.autoOpenIfRequested(workspace: workspace)
                 EvidenceShot.inspectorFixtureIfRequested(workspace: workspace)
+                EvidenceShot.regionFixtureIfRequested(workspace: workspace)
                 EvidenceShot.scheduleIfRequested()
                 #endif
             }
@@ -123,14 +124,16 @@ struct WorkspaceRootView: View {
                     )
                 }
 
-                // Inspector 容器骨架：先回收其预留位（内容按模式分发）。
+                // Inspector 容器：先回收其预留位（内容按模式分发）。
                 if workspace.isInspectorPresented {
                     Divider()
                     WorkspaceInspector(
                         mode: workspace.inspectorMode,
                         metadataLoader: workspace.metadataLoader,
                         playerModel: workspace.playerModel,
-                        videoURL: workspace.currentVideoURL
+                        videoURL: workspace.currentVideoURL,
+                        regionModel: workspace.regionModel,
+                        onRedetectRegion: redetectRegionAtPlayhead
                     ) {
                         workspace.setInspectorPresented(false)
                     }
@@ -224,11 +227,7 @@ struct WorkspaceRootView: View {
                 Divider()
                 VideoControlsView(model: workspace.playerModel)
                 Divider()
-                RegionCandidateList(model: workspace.regionModel) {
-                    redetectRegionAtPlayhead()
-                }
-                Divider()
-                extractionBar(url: url)
+                extractionBar
                 Spacer(minLength: 0)
             }
         }
@@ -242,7 +241,8 @@ struct WorkspaceRootView: View {
         PreviewRegionContainer(
             regionModel: workspace.regionModel,
             videoWidth: width,
-            videoHeight: videoHeight
+            videoHeight: videoHeight,
+            isRegionEditing: workspace.state == .regionEditing
         ) {
             if workspace.playerModel.loadFailed {
                 unsupportedPreview
@@ -257,7 +257,7 @@ struct WorkspaceRootView: View {
 
     // MARK: - 提取栏（Extract/Stop 已移入 Toolbar；此处保留参数与真实状态投影）
 
-    private func extractionBar(url: URL) -> some View {
+    private var extractionBar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Picker("", selection: $defaultEngine) {
