@@ -81,6 +81,12 @@ struct WorkspaceRootView: View {
             .onReceive(NotificationCenter.default.publisher(for: .subliftRequestExportSRT)) { _ in
                 exportSRT()
             }
+            .onExitCommand {
+                // A01：Esc 退出区域编辑（KeyboardShortcutCatalog）。
+                if workspace.state == .regionEditing {
+                    workspace.exitRegionEditing()
+                }
+            }
             .onAppear {
                 #if DEBUG
                 EvidenceShot.settingsFixtureIfRequested()
