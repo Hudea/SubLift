@@ -79,6 +79,23 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_ENTRIES=1，导入后注入测试字幕条目（Timeline/Transcript 截图 fixture）。
+    /// 注意：仅用于视觉验收截图；生产路径（提取/Review）不经过此 fixture。
+    @MainActor
+    static func entriesFixtureIfRequested(workspace: WorkspaceModel) {
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_ENTRIES"] == "1" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+            let data = [
+                SubtitleEntryData(startMs: 500, endMs: 3_000, text: "Hello SubLift", confidence: 0.95),
+                SubtitleEntryData(startMs: 4_000, endMs: 7_000, text: "第二行字幕内容", confidence: 0.88),
+                SubtitleEntryData(startMs: 9_000, endMs: 14_000, text: "A short line", confidence: 0.62),
+                SubtitleEntryData(startMs: 20_000, endMs: 22_000, text: "Last", confidence: 0.4),
+            ]
+            workspace.editor.load(data)
+            workspace.selectSubtitle(id: workspace.editor.entries.first?.id)
+        }
+    }
+
     static func save(window: NSWindow, to path: String) {
         guard let view = window.contentView else { return }
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }

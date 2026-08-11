@@ -571,7 +571,7 @@
           "name": "实现 Timeline 几何",
           "description": "建立条目与播放头的确定性映射。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "10310.02",
@@ -580,7 +580,7 @@
           "dependencies": [
             "10310.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "10310.03",
@@ -589,11 +589,11 @@
           "dependencies": [
             "10310.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 10310 Subtitle Timeline 与播放导航。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Timeline/TimelineGeometry.swift：TimelineGeometry 纯逻辑（barHeight 32pt（28–40 合同）、minHitWidth 8pt、Range 推导、xPosition 确定性映射（t-rangeStart)/duration*width 越界 clamp、零时长保护）、entryWidth 最小命中宽度；TimelineNavigation 纯逻辑（next = 第一个 startMs > currentMs；previous = 跳过当前显示字幕取之前最近完整字幕）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Timeline/SubtitleTimelineView.swift：32pt 条带（条目块半透明 Accent、点击 seek 到条目 start、空白点击按时间逆映射 seek、播放头 2pt Accent、Previous/Next 按钮（导航纯逻辑 + 边界禁用）、时间范围文本、无障碍 label/hint/action）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift：header 下方接入 SubtitleTimelineView（entries 非空时），新增 videoDurationMs 参数。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：传 metadataLoader.metadata?.durationMs。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_ENTRIES（注入测试条目截图 fixture——仅视觉验收，生产路径不经过）。\n- 新增 apps/macos/Tests/SubLiftMacTests/SubtitleTimelineTests.swift：16 个测试（几何确定性/clamp/零时长/最小命中宽度/播放头/范围推导/视频时长优先映射/导航边界与空集）。\n- 新增 docs/plans/features/10310.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Timeline 高 32pt（28–40 合同内）；时间几何确定性（纯函数、无随机/副作用）。\n- 极短条目最小命中宽度 8pt（entryWidth ≥ minHitWidth）。\n- 点击条目块 seek 到该条目 start；点击空白按时间逆映射 seek；播放头实时位置。\n- Previous/Next：边界正确（第一条内 previous nil、末条后 next nil、条目内语义），禁用态明确；Space 复用既有 Playback 命令（未重复注册快捷键）。\n- 映射范围：视频时长 >0 时按视频时长（0→durationMs），否则回退 entries 首尾（测试 testMappingPrefersVideoDurationRange）。\n- 不实现波形、多轨、缩放或拖拽改时（non-goals）。\n\n验证（最终代码状态）：\n- 完整 ：141 个 XCTest（新增 16 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10310/）：\n- V06b-timeline.png：Timeline 条带（条目块 + 播放头 + Previous/Next），Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；auto-open 测试视频 + SUBLIFT_EVIDENCE_ENTRIES 注入 4 条测试条目）。程序化检查：Timeline 区域 1469 个 accent 像素（条目块与播放头，逻辑 y≈120–170）、Transcript 区持续文本（header+Timeline+4 行条目）、无裁切。\n- 截图在全部审核修复后重新生成。\n- 注：mock/vision 引擎对测试视频提取均生成 0 条（Worker 管线行为，不改动），Timeline 视觉验收使用 DEBUG 注入条目（仅截图，生产路径不经过）。\n\naccessibility labels/values 清单：\n- 条目块：label\"字幕 <n>，<start> 到 <end>\"、isButton trait、hint\"跳转到该字幕\"、accessibilityAction seek。\n- 播放头：label\"播放位置\"。\n- Previous/Next 按钮：label\"上一条字幕\"/\"下一条字幕\"+help；边界禁用。\n- 时间范围文本：label\"时间范围 <start>–<end>\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（141+140 全绿）：无 P0/P1；3 个 P2：①验收要求按视频时长映射（实现用 entries 首尾）——修复：SubtitleTimelineView 加 videoDurationMs + effectiveRange 优先视频时长回退 entries，新增测试；②点击条目应 seek 到条目 start——修复：条目块 onTapGesture seek start（空白保留逆映射）；③seek 交互面缺无障碍/键盘——修复：条目块 accessibilityElement + label + isButton + hint + accessibilityAction，Previous/Next 原生 Button 键盘可达，Space 未重复注册。\n- 复核 Agent 确认 3 个 P2 修复全部通过（映射逻辑正确、点击不冲突、无障碍完整、测试通过）。\n- 修复后重新运行完整 swift test（141+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Timeline 含更多视觉装饰；实现为 32pt 简洁条带（合同内）。\n- 点击空白按时间逆映射 seek（设计未强制，合理补充）。\n\n未执行验证（如实记录）：\n- Timeline 点击 seek 与 Previous/Next 的真实鼠标交互未执行（系统\"辅助功能访问（事件）\"权限警告持续存在）；几何与导航逻辑由 16 个单测覆盖，渲染由截图确认。\n- VoiceOver 条目块激活的真实验证未执行（同权限阻塞）；accessibilityAction 由代码审查确认。\n\n后续 Feature 边界：\n- 不实现波形、多轨、缩放或拖拽改时（non-goals 保持）。\n- 10311 将实现 Settings（General/Recognition/Advanced）与引擎可见性。"
     },
     {
       "id": "10311",

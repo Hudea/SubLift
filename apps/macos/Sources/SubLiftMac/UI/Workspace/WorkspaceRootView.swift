@@ -88,6 +88,7 @@ struct WorkspaceRootView: View {
                 EvidenceShot.regionFixtureIfRequested(workspace: workspace)
                 EvidenceShot.extractFixtureIfRequested(workspace: workspace)
                 EvidenceShot.selectFixtureIfRequested(workspace: workspace)
+                EvidenceShot.entriesFixtureIfRequested(workspace: workspace)
                 EvidenceShot.scheduleIfRequested()
                 #endif
             }
@@ -125,7 +126,8 @@ struct WorkspaceRootView: View {
                         commands: workspace.commandAvailability,
                         currentMs: workspace.playerModel.currentMs,
                         readOnlyNotice: TranscriptReadOnlyNotice.text(for: workspace.state),
-                        onSelectSubtitle: { workspace.selectSubtitle(id: $0) }
+                        onSelectSubtitle: { workspace.selectSubtitle(id: $0) },
+                        videoDurationMs: workspace.metadataLoader.metadata?.durationMs ?? 0
                     )
                 }
 

@@ -76,6 +76,8 @@ struct TranscriptPanel: View {
     let readOnlyNotice: String?
     /// 选中字幕变化时通知（切换 Inspector 到 Subtitle 模式，不强制打开）。
     let onSelectSubtitle: (UUID?) -> Void
+    /// 视频总时长（ms）；>0 时 Timeline 按视频时长映射。
+    let videoDurationMs: Int
 
     @State private var searchQuery = ""
     /// 搜索变化后待滚动的当前播放字幕（List 可能因无结果被拆掉，重建后消费）。
@@ -94,6 +96,15 @@ struct TranscriptPanel: View {
                     .accessibilityElement(children: .combine)
             }
             Divider()
+            if !editor.entries.isEmpty {
+                SubtitleTimelineView(
+                    entries: editor.entries,
+                    currentMs: currentMs,
+                    videoDurationMs: videoDurationMs,
+                    onSeek: onSeek
+                )
+                Divider()
+            }
             content
         }
         .background(Color(nsColor: .textBackgroundColor))
