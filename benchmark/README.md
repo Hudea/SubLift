@@ -19,9 +19,12 @@ benchmark/
   datasets/                  # GT、确定性生成 recipe 与数据 manifest
   baselines/                 # 已验收、进入版本控制的冻结结论
   parity/                    # C++ cutover fixtures / goldens
-debug/benchmark/             # 本机输入、运行产物与历史归档（不入库）
+debug/                       # 配置引用的固定本地媒体（不入库）
+debug/benchmark/             # imports、runs、perf 与历史归档（不入库）
 scripts/
-  run_benchmark_manifest.py  # 旧入口兼容包装器
+  run_benchmark_manifest.py  # 三个历史复现 shim 之一
+  measure_perf_overhead.py   # 三个历史复现 shim 之一
+  compare_roi_ab.py          # 三个历史复现 shim 之一
   diagnostics/               # 非标准算法定位脚本
 ```
 
@@ -29,8 +32,13 @@ scripts/
 
 - 代码不放在仓库根 `benchmark/`，避免“Python 包、数据、报告”同层混放；
 - 临时运行一律进入 `debug/benchmark/`；
+- `debug/Zootopia_*.mp4|mkv` 是历史版本化配置引用的本地输入契约，不是运行产物；
 - `benchmark/baselines/` 只保存经过协议验收的版本化结论；
 - 产品 C++/GUI/Python 导出均通过同一个 `score` 口径比较。
+
+`phases.json` 是当前 checkout 的 root marker；`feature-list.json` 只为旧 checkout
+保留 fallback。`configs / datasets / baselines / parity` 都是版本化资产，不属于本机清理
+候选；本机输入和生成物的边界见 [`docs/design/benchmark.md`](../docs/design/benchmark.md)。
 
 ## 四个日常命令
 
@@ -259,7 +267,8 @@ Zootopia 1080p / 5fps / Vision / ROI `[0,848,1920,87]`：
 
 ## 兼容入口
 
-以下旧脚本仍可运行，但只负责转发并打印迁移提示：
+以下旧脚本是历史复现 shim：仍可运行，但只负责转发并打印迁移提示。新自动化和文档不得
+调用它们。
 
 ```bash
 uv run python scripts/run_benchmark_manifest.py <config>
@@ -267,4 +276,4 @@ uv run python scripts/measure_perf_overhead.py
 uv run python scripts/compare_roi_ab.py <full> <roi>
 ```
 
-新自动化和文档应只使用 `sublift-benchmark`。
+唯一 canonical 入口是 `uv run sublift-benchmark`。

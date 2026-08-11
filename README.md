@@ -6,7 +6,7 @@
 
 ## 特性
 
-- **Apple Vision OCR**：默认中英双语识别（zh-Hans + en-US），通过 PyObjC 桥接
+- **Apple Vision OCR**：C++/ObjC++ 为产品路径，PyObjC 保留 Oracle；默认中英双语识别（zh-Hans + en-US）
 - **PaddleOCR 跨平台引擎**：PP-OCRv6 + ONNX Runtime；C++ Native 为产品默认，
   Python rapidocr 保留为 Oracle 与一键回滚
 - **像素差异打轴**：双信号帧签名（前景占比 + dHash）+ 三态状态机，时间轴稳定
@@ -30,18 +30,38 @@
 - **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.8 已完成；Paddle Native 已正式 cutover）
 - **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
-- [Harness 迁移架构](docs/plans/architecture/harness-migration.md) — Phase 索引、会话流程与验证分层
+- [Harness 迁移架构（历史）](docs/plans/architecture/harness-migration.md) — Phase 7 初次迁移记录；当前精简边界见 AGENTS 与 ADR-0033
 
 ## 安装
 
 ```bash
 git clone <repo>
 cd SubLift
-./init.sh                  # Harness L0：文件、JSON、Phase index（秒级）
+./init.sh                  # 开工基线：连续性入口与 Phase detail JSON 链
 ./scripts/verify-standard.sh  # 完整日常验证：lint/测试/C++/parity
 uv sync --extra vision     # 仅需单独补装 Vision 依赖时使用
 uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
 ```
+
+### 本地产物卫生
+
+默认只预览可重建的 L1 生成产物及预计释放空间，不写盘：
+
+```bash
+uv run python scripts/cleanup_local_artifacts.py
+```
+
+Swift build、C++ build 与 Python 环境必须分别显式选择；`.venv` 不在推荐默认范围：
+
+```bash
+uv run python scripts/cleanup_local_artifacts.py --swift-build
+uv run python scripts/cleanup_local_artifacts.py --cpp-build
+uv run python scripts/cleanup_local_artifacts.py --python-env
+```
+
+工具只接受当前 Git checkout 内的固定路径，拒绝仓库根、Git 元数据、路径逃逸、符号链接、
+视频、SRT/GT 与未分类生成文件。`--apply` 会执行实际删除；在真实工作区使用前必须先取得
+用户的再次明确授权。它从不清理分支、worktree、模型、外部资源或固定本地媒体。
 
 ### 原生 C++ 构建（vision/mock 产品路径，**不强制 uv**）
 
@@ -138,6 +158,8 @@ export SUBLIFT_RUNTIME=python
 ## macOS GUI（开发者构建）
 
 > Phase 2 GUI 当前通过 SwiftPM 构建运行，**不做独立 `.app` 分发包**（见 ADR-0009）。
+> GUI 默认启动 C++ `sublift_worker`；只有显式设置 `SUBLIFT_RUNTIME=python` 时才使用
+> Python Worker 作为 Oracle / 开发回滚。
 
 ```bash
 cd apps/macos
@@ -161,8 +183,8 @@ swift run SubLiftMac
 ## 开发
 
 ```bash
-./init.sh                     # Harness L0，会话开始时运行
-./scripts/verify-standard.sh  # 标准产品验证（原 init.sh 完整门）
+./init.sh                     # 开工基线，会话开始/结束时运行
+./scripts/verify-standard.sh  # 标准产品验证
 uv run pytest                 # Python 单元测试
 uv run pytest -m integration  # 集成测试（需外部视频、ffmpeg、Vision 或 Paddle 模型）
 uv run ruff check .           # lint
@@ -172,9 +194,9 @@ uv run mypy src tests         # 类型检查（strict）
 ### Harness 与进度
 
 `phases.json → docs/phases/phase*.json` 是当前开发 Phase 和 feature 的操作真源；
-`.agent/` 提供可恢复的 Plan / Test / Review / Verify 流程。根
-`feature-list.json` 仍保留给历史文档和旧工具兼容，不能用于选择新任务。详见
-[AGENTS.md](AGENTS.md) 与 [Harness 迁移架构](docs/plans/architecture/harness-migration.md)。
+`.agent/` 当前只保留轻量规则、会话入口和提交辅助，复杂能力编排已从活跃 Harness 移出，
+后续按真实需要增量引入。根 `feature-list.json` 仍保留给历史文档和旧工具兼容，不能用于
+选择新任务。详见 [AGENTS.md](AGENTS.md) 与 [ADR-0033](docs/DECISIONS.md)。
 
 ### 架构与设计
 
@@ -191,8 +213,9 @@ Zootopia 固定片段（1080p、5fps、统一 diagnostic 口径）的最终结�
 Benchmark 统一使用 `uv run sublift-benchmark`；入口与指标说明见
 [benchmark/README.md](benchmark/README.md)（设计见
 [docs/design/benchmark.md](docs/design/benchmark.md)）。已验收的
-[质量与性能归因基线](benchmark/baselines/README.md)随仓库版本化；本地输入、运行与历史
-归档统一写入 `debug/benchmark/`。
+[质量与性能归因基线](benchmark/baselines/README.md)随仓库版本化。版本化配置引用的固定
+本地媒体保留在 `debug/` 根目录且不入库；GUI/C++ 导入、运行、性能报告与历史归档统一写入
+`debug/benchmark/`。
 
 ### 技术栈
 

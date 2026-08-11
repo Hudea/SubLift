@@ -9,6 +9,10 @@ created: 2026-08-03
 
 # 架构计划：SubLift 新 Harness 迁移
 
+> 历史计划：本文记录 Phase 7 初次迁移时的完整能力编排设计。2026-08-10 起，活跃
+> Harness 已按 ADR-0033 和 `/Users/hudea/Project/my_Harness` subtraction 模板收缩；
+> 本文不再代表当前 `.agent/` 文件布局或 `init.sh` 接口。
+
 ## 目标
 
 将 SubLift 的协作编排、进度索引与会话基线接入新 Harness，同时保留已完成产品功能、历史任务证据和现有验证能力。迁移完成后，`phases.json → detail_file → features[]` 是唯一操作性进度入口；新任务可使用 `.agent/` 的 Plan / Test / Review / Verify 流程；日常 `./init.sh` 是秒级 L0，而完整产品验证仍有一个明确、可直接执行的入口。

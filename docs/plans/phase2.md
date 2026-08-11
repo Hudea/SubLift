@@ -149,7 +149,7 @@ SubLift/
    ↓
 [PipelineClient.on_entries] → @Published entries
    ↓
-[SubtitleList 显示 + 编辑](双击改文本 / 合并 / 拆分)
+[SubtitleList 显示 + 编辑：双击改文本 / 合并 / 拆分]
     ↓
 [NSSavePanel] → Swift 端 SrtFormatter.format() 写文件
 ```

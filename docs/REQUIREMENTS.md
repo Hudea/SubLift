@@ -2,7 +2,7 @@
 
 ## 1. 项目目标
 
-为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Python CLI 与 macOS SwiftUI 开发者版本；PaddleOCR 已作为可选 CLI/GUI 引擎接入，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
+为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Native C++ CLI/Worker、Python Oracle/兼容 CLI 与 macOS SwiftUI 开发者版本；Vision、PaddleOCR 和 Mock 均已接入统一运行时边界，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
 
 **Phase 6.0–6.9 开发范围已完成：** 产品执行路径已迁移到 C++ Core，并与冻结 Python
 Oracle 对齐；vision/mock/Paddle 均已完成 C++ cutover。Paddle C++ 不可用时
@@ -42,7 +42,8 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
   Quad crop、Cls、Rec、metadata 字典与 CTC；stage、3 来源/614.272s 质量、性能、长流、
   cancel/restart 与回滚门均通过。Python rapidocr 保留为 Oracle/fallback。
   `--engine paddle` CLI/GUI 可选，首次模型下载后离线推理，模型缓存位于
-  `~/.cache/sublift/rapidocr-models`。
+  `~/.cache/sublift/rapidocr-models`。C++ capability 缺失时 fail-closed；Python rapidocr
+  只通过显式 runtime 作为 Oracle / 开发回滚。
 
 ### 3.2 Benchmark 与可观察性
 
@@ -121,7 +122,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 ### Phase 2 — macOS GUI
 
 - [x] 拖拽、预览、候选区域多选、字幕编辑与 SRT 导出
-- [x] SwiftUI ↔ Python UDS 闭环，mkv 走系统 ffmpeg
+- [x] SwiftUI ↔ Worker UDS 闭环；默认 C++ Worker，显式 Python runtime 用于 Oracle / 回滚，mkv 预览走系统 ffmpeg
 - [x] vision / paddle / mock 设置持久化
 - [~] 独立 `.app` 分发与公证经用户决定跳过（ADR-0009）
 
@@ -131,7 +132,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] 增量 `feed/ocr_segment/finalize`、`push_entry`、真实进度与快速取消
 - [x] 固定 GT：timing recall 96.6%、precision 98.8%、F1 97.7%
 - [x] 固定 GT：CER macro 3.2%、字符准确率 97.6%、usable 92.0%、noise/empty 0
-- [x] Python 与 Swift 自动验证全绿
+- [x] Python、C++ 与 Swift 自动验证全绿
 - [x] ≥10 分钟非 Zootopia GUI 手工体验验收已完成；多样化 GT 扩充留待后续
 
 ### Phase 4 — ROI 数据通路与真实长流验收（已完成）
@@ -155,3 +156,15 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] 自动对账硬门：summary/trace 内 `call_count == stages.ocr.count == throughput.ocr_calls`；parent 与外层 ocr wall 交叉校验；off 路径无分阶段计时
 - [x] 正式报告 `docs/reports/phase4.2-ocr-attribution-baseline.md`：hash/质量/对账通过；`vision_perform≈99%`；下一方向为多源 GT 后的代表帧排序与有效调用实验
 - [x] feat-043 已作为归因与优化分流任务收口；summary 扰动 1.319 未过，仅限制它不能作为产品速度基线。若未来需要此用途，另做交错 off/summary 配对复测
+
+### Phase 5 — PaddleOCR 第二引擎（已完成）
+
+- [x] Python rapidocr 接入、模型定位、质量与性能门完成
+- [x] Paddle 作为 CLI/GUI 可选引擎，模型缓存后可离线运行
+
+### Phase 6 — Native C++ Core（当前开发范围已完成）
+
+- [x] vision / mock / paddle 默认 C++ Worker，协议与冻结 Oracle parity 通过
+- [x] C++ capability 缺失时 fail-closed；显式 Python runtime 保留 Oracle / 开发回滚
+- [x] Native target、Ports/Adapters、ResourceLocator 与开发期构建边界收口
+- [ ] 独立 `.app`、依赖随包、签名、公证与最终发布 artifact Python-free 门后置到未来发布阶段

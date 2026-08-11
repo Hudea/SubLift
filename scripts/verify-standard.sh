@@ -1,5 +1,5 @@
 #!/bin/bash
-# SubLift 标准产品验证门（日常开发门，非完整发布门）。
+# SubLift 标准产品验证门（开发门，非完整发布门）。
 #
 # 该脚本由旧的重型 init.sh 迁入。Harness 的 ./init.sh 只做秒级 L0；
 # 不要把本脚本中的依赖同步、构建或测试重新塞回默认会话入口。
@@ -13,11 +13,11 @@
 # 完整发布门请显式打开（见下方环境变量）或单独调用 check_cutover_gate.py。
 #
 # 环境变量：
-#   SUBLIFT_INIT_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS VISION=ON）
-#   SUBLIFT_INIT_RUNTIME=1       额外跑 cutover runtime wall/cancel/restart/RSS
-#   SUBLIFT_INIT_GT=1            额外跑 GT L3（有片则测；缺片则按脚本策略 WAIVE/FAIL）
-#   SUBLIFT_INIT_REQUIRE_GT=1    GT 视频缺失则 cutover 失败（发布门）
-#   SUBLIFT_INIT_SKIP_CUTOVER=1  跳过整个 cutover（仅应急；不推荐）
+#   SUBLIFT_VERIFY_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS VISION=ON）
+#   SUBLIFT_VERIFY_RUNTIME=1       额外跑 cutover runtime wall/cancel/restart/RSS
+#   SUBLIFT_VERIFY_GT=1            额外跑 GT L3（有片则测；缺片则按脚本策略 WAIVE/FAIL）
+#   SUBLIFT_VERIFY_REQUIRE_GT=1    GT 视频缺失则 cutover 失败（发布门）
+#   SUBLIFT_VERIFY_SKIP_CUTOVER=1  跳过整个 cutover（仅应急；不推荐）
 #
 # 防膨胀：见 AGENTS.md「环境与标准命令」；新增步骤不得复制既有门或污染版本库产物。
 set -euo pipefail
@@ -53,7 +53,7 @@ check() {
 run_check() {
     local label="$1"
     shift
-    if "$@" >/tmp/sublift_init.log 2>&1; then
+    if "$@" >/tmp/sublift_verify.log 2>&1; then
         printf "${GREEN}[OK]${NC}  %s\n" "$label"
         pass=$((pass + 1))
     else
@@ -63,14 +63,14 @@ run_check() {
             pass=$((pass + 1))
         else
             printf "${RED}[FAIL]${NC} %s\n" "$label"
-            cat /tmp/sublift_init.log
+            cat /tmp/sublift_verify.log
             fail=$((fail + 1))
         fi
     fi
 }
 
 echo "=============================="
-echo " SubLift 环境检查"
+echo " SubLift 标准验证"
 echo "=============================="
 echo
 
@@ -124,7 +124,7 @@ echo
 
 if command -v cmake >/dev/null 2>&1; then
     cmake_cmd=(cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON)
-    if [ "$(uname -s)" = "Darwin" ] && [ "${SUBLIFT_INIT_SKIP_VISION:-0}" != "1" ]; then
+    if [ "$(uname -s)" = "Darwin" ] && [ "${SUBLIFT_VERIFY_SKIP_VISION:-0}" != "1" ]; then
         cmake_cmd+=(-DSUBLIFT_ENABLE_VISION=ON)
     fi
     if command -v ninja >/dev/null 2>&1; then
@@ -151,7 +151,7 @@ echo " Python 测试（单次，含 post-build IPC）"
 echo "=============================="
 echo
 # After C++ build so tests/ipc/test_cpp_worker.py can run (not skip for missing binary).
-# --no-cov: init 是启动门，不是 coverage 门（完整 cov 由开发者显式 pytest 配置）。
+# --no-cov: 标准验证门不是 coverage 门（完整 cov 由开发者显式 pytest 配置）。
 # 不再二次单独跑 test_cpp_worker.py。
 run_check "pytest" "${UV[@]}" pytest -m "not integration" --no-cov
 
@@ -161,25 +161,25 @@ echo " Cutover 正确性门（parity）"
 echo "=============================="
 echo
 
-if [ "${SUBLIFT_INIT_SKIP_CUTOVER:-0}" = "1" ]; then
-    printf "${YELLOW}[SKIP]${NC} cutover（SUBLIFT_INIT_SKIP_CUTOVER=1）\n"
+if [ "${SUBLIFT_VERIFY_SKIP_CUTOVER:-0}" = "1" ]; then
+    printf "${YELLOW}[SKIP]${NC} cutover（SUBLIFT_VERIFY_SKIP_CUTOVER=1）\n"
 elif [ ! -x build/cpp/bin/sublift_worker ] && [ ! -x build/cpp-rel/bin/sublift_worker ]; then
     printf "${RED}[FAIL]${NC} sublift_worker 缺失，无法跑 cutover parity\n"
     fail=$((fail + 1))
 else
-    # 日常 init：parity goldens 必跑；runtime/GT 默认关（发布用 env 打开）。
+    # 日常验证：parity goldens 必跑；runtime/GT 默认关（发布用 env 打开）。
     cutover_args=(python scripts/parity/check_cutover_gate.py --check)
     cutover_args+=(--report-out /tmp/sublift_cutover_gate.md)
 
-    if [ "${SUBLIFT_INIT_RUNTIME:-0}" = "1" ]; then
+    if [ "${SUBLIFT_VERIFY_RUNTIME:-0}" = "1" ]; then
         : # keep runtime
     else
         cutover_args+=(--skip-runtime)
     fi
 
-    if [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" = "1" ]; then
+    if [ "${SUBLIFT_VERIFY_REQUIRE_GT:-0}" = "1" ]; then
         cutover_args+=(--require-gt)
-    elif [ "${SUBLIFT_INIT_GT:-0}" = "1" ]; then
+    elif [ "${SUBLIFT_VERIFY_GT:-0}" = "1" ]; then
         : # measure if asset present, else script WAIVE
     else
         cutover_args+=(--skip-gt)
@@ -187,10 +187,10 @@ else
 
     if "${UV[@]}" "${cutover_args[@]}" >/tmp/sublift_cutover_gate.log 2>&1; then
         printf "${GREEN}[OK]${NC}  cutover gate"
-        if [ "${SUBLIFT_INIT_RUNTIME:-0}" != "1" ] || { [ "${SUBLIFT_INIT_GT:-0}" != "1" ] && [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" != "1" ]; }; then
+        if [ "${SUBLIFT_VERIFY_RUNTIME:-0}" != "1" ] || { [ "${SUBLIFT_VERIFY_GT:-0}" != "1" ] && [ "${SUBLIFT_VERIFY_REQUIRE_GT:-0}" != "1" ]; }; then
             printf " (parity"
-            [ "${SUBLIFT_INIT_RUNTIME:-0}" = "1" ] || printf "; runtime skipped"
-            if [ "${SUBLIFT_INIT_GT:-0}" != "1" ] && [ "${SUBLIFT_INIT_REQUIRE_GT:-0}" != "1" ]; then
+            [ "${SUBLIFT_VERIFY_RUNTIME:-0}" = "1" ] || printf "; runtime skipped"
+            if [ "${SUBLIFT_VERIFY_GT:-0}" != "1" ] && [ "${SUBLIFT_VERIFY_REQUIRE_GT:-0}" != "1" ]; then
                 printf "; GT skipped"
             fi
             printf ")"
@@ -209,7 +209,7 @@ echo "=============================="
 echo " 汇总"
 echo "=============================="
 printf "通过: ${GREEN}%d${NC}  失败: ${RED}%d${NC}\n" "$pass" "$fail"
-echo "提示: 发布门请 SUBLIFT_INIT_RUNTIME=1 SUBLIFT_INIT_REQUIRE_GT=1 ./scripts/verify-standard.sh"
+echo "提示: 发布门请 SUBLIFT_VERIFY_RUNTIME=1 SUBLIFT_VERIFY_REQUIRE_GT=1 ./scripts/verify-standard.sh"
 echo "      或 uv run python scripts/parity/check_cutover_gate.py --check --require-gt"
 
 if [ "$fail" -gt 0 ]; then
@@ -217,4 +217,4 @@ if [ "$fail" -gt 0 ]; then
     exit 1
 fi
 
-printf "${GREEN}环境验证通过，可开始开发。${NC}\n"
+printf "${GREEN}标准验证通过。${NC}\n"

@@ -178,20 +178,17 @@ video
 
 ## 10. Phase 2 macOS GUI 架构
 
-Phase 2 在 Phase 1 CLI 核心之上叠加 macOS GUI，采用 **SwiftUI 壳 + Python UDS 子进程** 的双工程布局（ADR-0005）。
+Phase 2 最初采用 **SwiftUI 壳 + Python UDS 子进程**（ADR-0005）；Phase 6 cutover 后，
+进程边界与 JSON 协议保持不变，默认后端已替换为 C++ `sublift_worker`。Python server
+仅在显式 `runtime=python` 时作为冻结 Oracle 或开发回滚。
 
 ### 10.1 双工程布局
 
 ```
 SubLift/
-  src/sublift/            # Python 核心（Phase 3 已扩展增量与行级 OCR）
-    ipc/                  # 新增：UDS server / protocol / bridge
-    pipeline/             # 串联层
-    extractor/            # 能力模块：帧采样
-    detector/             # 能力模块：字幕区域检测
-    ocr/                  # 能力模块：OCR
-    export/               # 串联层：字幕导出
-  apps/macos/             # 新增：SwiftUI 壳工程
+  cpp/                    # 默认产品 Core、Worker 与原生 adapters
+  src/sublift/            # Python Oracle、benchmark 与兼容 IPC runtime
+  apps/macos/             # SwiftUI 壳工程
     Package.swift
     Sources/SubLiftMac/
       App/
@@ -207,8 +204,9 @@ SubLift/
 |---|---|
 | 传输 | Unix Domain Socket（本地 socket 文件） |
 | 分帧 | 4 字节大端长度前缀 + UTF-8 JSON body |
-| Swift 端 | `PipelineClient` 启动 `python -m sublift.ipc.server --socket <path>`，通过 BSD socket 收发 |
-| Python 端 | `asyncio.start_unix_server` + `src/sublift/ipc/bridge.py` 处理业务消息 |
+| Swift 端 | `PipelineClient` 解析 runtime、启动对应 Worker，并通过 BSD socket 收发 |
+| 默认后端 | `sublift_worker --socket <path> --engine <engine>`；C++ capability 缺失时 fail-closed |
+| 显式回滚 | `python -m sublift.ipc.server --socket <path> --engine <engine>`；仅显式 Python runtime |
 | 消息类型 | `start_job` / `frame` / `finalize` / `cancel_job` / `progress` / `push_entry` / `entries` / `log` / `done` |
 
 ### 10.3 Swift 端分层
@@ -230,9 +228,9 @@ AVFoundation ──→ 预览与 Vision 候选框（不参与默认打轴采样�
   ↓
 PipelineClient.start_job(video_path, region_box, SubtitleProfile)
   ↓ UDS + JSON
-ipc.bridge.BridgeHandler path mode
+默认 C++ Worker（或显式 Python Worker）path mode
   ↓
-Python FfmpegExtractor ──逐帧推进──→ Pipeline.feed(frame)
+Worker-owned FfmpegExtractor ──逐帧推进──→ Pipeline.feed(frame)
   ↓
 [段闭合时触发] push_entry 增量推送 → SubtitleEditor 实时追加展示
   ↓
@@ -241,12 +239,15 @@ Python FfmpegExtractor ──逐帧推进──→ Pipeline.feed(frame)
 SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 ```
 
-默认 GUI、CLI 与 benchmark 共享 Python `FfmpegExtractor` 的像素和时间戳序列（ADR-0010）。Swift 推 JPEG 的 frame mode 仅保留为兼容与调试路径。
+默认 GUI 与 Native CLI 使用 C++ extractor；Python Oracle / benchmark 使用 Python extractor。
+两条实现由冻结 extractor/parity 契约约束，而不是通过共享同一个 Python 实例保持一致。
+Swift 推 JPEG 的 frame mode 仅保留为兼容与调试路径。
 
 ### 10.5 关键约束
 
-- **历史 Phase 2 约束**：Phase 2 尽量不改 Python 核心；Phase 3 已明确解除该约束，以实现增量 pipeline、统一抽帧和 OCR 行级选择。
-- **平台 API 隔离**：Apple Vision 在 GUI 端仅用于字幕区域候选框检测（`VisionTextDetector.swift`）；Python OCR 由用户所选的 `ocr/vision.py` 或 `ocr/paddle.py` 执行。
+- **运行时路由**：vision/mock/Paddle 默认 C++；Paddle capability 不可用时明确报错，不静默改引擎或回退 Python。
+- **平台 API 隔离**：GUI 内 Apple Vision 只负责字幕区域候选框；实际 OCR 由选定 Worker 的 Vision/Paddle adapter 执行。
+- **显式回滚**：`SUBLIFT_RUNTIME=python` 或等价显式参数才进入 Python，GUI 显示最终 runtime 身份。
 - **无分发包**：Phase 2 不做独立 `.app` 打包与 Apple 公证（ADR-0009），GUI 通过 `swift run SubLiftMac` 在开发者环境运行。
 
 ## 11. phase3-opt-perf 架构
@@ -254,8 +255,9 @@ SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
 ### 11.1 Benchmark 驱动
 
 Benchmark 可执行代码位于正式包 `src/sublift/benchmark/`，配置、GT、冻结基线与
-parity 资产分别位于仓库根 `benchmark/configs|datasets|baselines|parity`，本机产物统一
-写入 `debug/benchmark/`。入口 `sublift-benchmark` 提供 `run / matrix / score / show`
+parity 资产分别位于仓库根 `benchmark/configs|datasets|baselines|parity`。固定本地媒体
+保留在 `debug/` 根目录且不入库；imports、runs、perf 与 archive 写入 `debug/benchmark/`。
+入口 `sublift-benchmark` 提供 `run / matrix / score / show`
 以及 recorder 扰动、ROI 对照专项命令；历史脚本仅保留兼容转发。
 
 `run/matrix` 使用同源 Python `Pipeline + FfmpegExtractor + OCR` 以保留阶段性能埋点；
@@ -354,13 +356,12 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 ## 16. Harness 协作与验证边界
 
 项目的操作性进度索引为 `phases.json`，每个 `detail_file` 指向
-`docs/phases/phase*.json` 的唯一 feature 记录。`.agent/` 提供 session bootstrap、
-Feature/Phase 编排、Plan/Test/Review/Verify 及可恢复 state；state 只保存运行态，
-不进入版本库。历史 `feature-list.json` 和 `feat-*` 任务记录保留为文档/旧工具兼容面，
-不再用于选择当前任务。
+`docs/phases/phase*.json` 的唯一 feature 记录。`.agent/` 当前只提供轻量规则、
+session bootstrap/handoff 与提交辅助；复杂能力编排已经从活跃 Harness 移出，未来按
+项目真实需要增量引入。历史 `feature-list.json` 和 `feat-*` 记录保留为文档/旧工具
+兼容面，不再用于选择当前任务。
 
-`./init.sh` 是秒级 Harness L0，只检查必需文件、JSON 与 Phase 索引链；完整的产品日常门
-迁入 `scripts/verify-standard.sh`，仍覆盖依赖同步、ruff、mypy、C++ build/ctest、单次非集成
-pytest 和 cutover parity。此 Agent Harness 与 C++ parity/golden harness 是不同概念，后者仍是
-产品正确性测试契约。迁移设计与兼容边界见
-[Harness 迁移架构](plans/architecture/harness-migration.md)。
+`./init.sh` 只检查 `AGENTS.md`、`progress.md`、`phases.json` 与其 `detail_file` JSON 链；
+不安装依赖、不构建、不运行产品测试。完整产品日常门由 `scripts/verify-standard.sh` 承担。
+此 Agent Harness 与 C++ parity/golden harness 是不同概念，后者仍是产品正确性测试契约。
+Phase 7 初次迁移是历史记录；当前精简边界见 ADR-0033。

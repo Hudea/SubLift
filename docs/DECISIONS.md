@@ -5,9 +5,57 @@
 
 ---
 
+## ADR-0034 标准验证入口与 Harness 初始化命名解耦（2026-08-10）
+
+- **状态**：已确认并由 09002 实施。
+- **背景**：`./init.sh` 已收缩为会话开工所需的轻量 Harness L0，但完整产品门
+  `scripts/verify-standard.sh` 仍沿用 `SUBLIFT_INIT_*` 环境变量、临时日志和“日常 init”措辞。
+  这会把验证门误导为初始化职责，也与 ADR-0033 的边界相冲突。
+- **决策**：标准验证脚本只接受 `SUBLIFT_VERIFY_SKIP_VISION`、
+  `SUBLIFT_VERIFY_RUNTIME`、`SUBLIFT_VERIFY_GT`、`SUBLIFT_VERIFY_REQUIRE_GT` 与
+  `SUBLIFT_VERIFY_SKIP_CUTOVER`；临时日志统一为 `/tmp/sublift_verify*` 语义。旧
+  `SUBLIFT_INIT_*` 不保留 alias、warning 或转发。`./init.sh` 的内容和职责不变。
+- **理由**：接口名称应准确区分“可靠开工前提”与“产品交付验证”。直接切换可以避免延长
+  已废止 Harness 命名的兼容债；当前没有稳定的外部自动化接口需要兼容窗。
+- **影响**：活跃命令使用 `SUBLIFT_VERIFY_*`；ADR-0032、历史 Phase evidence 和 Harness
+  migration 计划保留其当时的 `SUBLIFT_INIT_*` 叙述，作为历史事实而不改写。
+
+---
+
+## ADR-0033 精简活跃 Harness；校正运行时与历史 Phase 边界（2026-08-10）
+
+- **状态**：已确认并由 09001 实施。
+- **背景**：Phase 7 初次迁移引入了完整能力编排包和兼容转发；随后 canonical 模板
+  `/Users/hudea/Project/my_Harness` 的 `subtraction` 版本将复杂编排归档，只保留轻量规则、
+  session/commit skills 与初始化策略。SubLift 工作区已经删除旧能力文件，但 `AGENTS.md`、
+  `init.sh` 和项目文档仍按旧布局引用它们；GUI 文档也仍把 Python Worker 写成默认后端。
+  另有未合入 main 的 Phase 8 UI 分支实验，以及 Phase 2/3/6 中已明确后置却让根 Phase
+  长期显示 blocked 的历史任务。
+- **决策**：
+  1. SubLift 活跃 `.agent/` 以 subtraction 模板的活跃文件为准；模板 `archive/` 是模板仓库
+     历史，不复制回项目，也不模拟已经移出的 state / receipt / gate。
+  2. `./init.sh` 只检查 `AGENTS.md`、`progress.md`、`phases.json` 与其 detail JSON 链；
+     不再提供 `--standard` 或旧环境变量转发。完整产品门继续由
+     `scripts/verify-standard.sh` 独立承担。
+  3. 项目文档统一描述当前运行时：GUI/CLI 默认 C++ Worker，Python 仅由显式 runtime
+     进入 Oracle / 开发回滚；UDS framing 与业务协议保持共享。
+  4. Phase 2、3、6 的既定开发范围视为完成，根索引标为 done；各 detail 文件中的 blocked
+     历史任务和 evidence 原样冻结，表示未来分发或新数据范围，不代表当前存在活动阻塞。
+  5. 未合入 main 的 `UI/macos-ui-redesign` 保留为 branch-only 实验，不恢复、不合并；其
+     Phase 8 编号不复用，main 的文档稳定工作登记为 Phase 9。
+  6. Benchmark 正式代码与版本化资产继续保留；固定本地媒体位于 `debug/` 根目录，
+     imports/runs/perf/archive 位于 `debug/benchmark/`，历史包装器仍在兼容窗口内。
+- **理由**：活跃契约必须与真实文件布局一致；初始化只证明“能否可靠开工”，不能再次膨胀成
+  交付门。历史 deferred 工作与当前 blocker 分开后，进度导航才不会持续制造伪进行中状态。
+- **影响**：ADR-0032 的 Phase 索引和 legacy/canonical 兼容决策继续有效；其中完整能力编排
+  布局、`init.sh --standard` 与旧 flag 转发已由本 ADR 取代。产品行为不变，后续复杂 Harness
+  能力只在出现真实需求时增量引入。
+
+---
+
 ## ADR-0032 采用新 Harness；以兼容层保留历史追踪与完整产品门（2026-08-03）
 
-- **状态**：已确认并实施。
+- **状态**：历史已实施；活跃 Harness 布局与初始化入口已由 ADR-0033 收缩。
 - **背景**：项目原先以 `feature-list.json` 和重型 `init.sh` 作为协作入口；新的
   `/Volumes/lab/pp/my_Harness` 提供 `.agent/` 编排协议、`phases.json → detail_file` 索引和
   秒级 L0。SubLift 已有 111 条 `feat-*` 历史记录、非模板字段/状态、两个小数 Phase 文件名，
@@ -46,7 +94,8 @@
   1. 可执行代码迁入 `src/sublift/benchmark/`，随 `sublift` 包安装并进入 strict mypy；
      `RunConfig` 归配置层，配置解析不再反向依赖 runner。
   2. 仓库根 `benchmark/` 只保留 `configs / datasets / baselines / parity` 四类入库资产；
-     本机 imports、runs、perf 与历史归档统一放 `debug/benchmark/`。
+     固定本地媒体沿用版本化配置引用的 `debug/` 根路径且不入库，本机 imports、runs、perf
+     与历史归档统一放 `debug/benchmark/`。
   3. 唯一新入口为 `sublift-benchmark`，提供 `run / matrix / score / show / overhead /
      compare-roi`；历史三个脚本只保留转发窗口。
   4. v2 config 分离 `run` 与 `matrix`；通用 dotted `--set` 和 `--vary` 扩参数，未知字段

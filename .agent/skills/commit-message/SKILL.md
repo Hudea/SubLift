@@ -5,7 +5,7 @@ description: 根据当前工作区 staged/unstaged/untracked 判断提交边界�
 
 # Commit Message
 
-只做**范围判断 + 起草 message**；真正提交见 `.agent/skills/commit`。有 Feature 编排时，由调用方把本轮输出记入 `commit-message` receipt 与 `commit_preparation`（形状见 capability-run / feature state schema）。
+只做**范围判断 + 起草 message**；真正提交见 `.agent/skills/commit`。
 
 ## 1. 收集
 
