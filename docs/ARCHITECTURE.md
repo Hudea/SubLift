@@ -328,7 +328,7 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 [Phase 4.2 正式报告](reports/phase4.2-ocr-attribution-baseline.md)。下一优化先补多源 GT，
 再在质量门内实验代表帧排序与有效 OCR 调用数。
 
-## 15. Phase 10 macOS Native Workbench UI（已规划，待实施）
+## 15. Phase 10 macOS Native Workbench UI（已实施）
 
 Phase 10 保留 SwiftUI + UDS + 默认 C++ Worker 架构，只重组单窗口 Session 的状态所有权与
 原生 macOS Surface。目标新增 `WorkspaceModel/WorkspaceState` 作为组合层：负责 video、
@@ -345,6 +345,12 @@ Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings
 [docs/design_ui](design_ui/README.md)，实施计划见
 [Phase 10 macOS Workbench UI](plans/architecture/phase10-macos-workbench-ui.md)，跟踪见
 [phase10.json](phases/phase10.json)。
+
+**实施状态（2026-08-12）**：Phase 10 全部 12 个实施 Feature（10103–10412）已完成并逐 Feature
+原子提交（Welcome 导入、Workspace Shell、Context Inspector、Region Editing、Transcript Panel、
+Processing 安全、Review/Export、Timeline、Settings、响应式与辅助功能硬化），10413 收口审计通过；
+完整 `swift test`（158 XCTest + 140 Swift Testing）全绿，V01–V10/A01–A02 证据与各 Feature
+evidence 见 `docs/phases/phase10.json` 与 `docs/design_ui/evidence/`。
 
 ## 16. 架构决策
 
