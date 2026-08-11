@@ -1,0 +1,344 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 9 - Repository Stabilization and Cleanup",
+  "features": [
+    {
+      "id": "09001",
+      "name": "精简 Harness 并校正文档真源",
+      "description": "以 /Users/hudea/Project/my_Harness 的 subtraction 版本为模板，收缩 SubLift 的活跃 Harness 与 init 入口，校正 C++ 默认运行时、macOS GUI、benchmark、Phase 导航和历史兼容边界的文档漂移，不改变产品行为。",
+      "module": [
+        ".agent/",
+        "AGENTS.md",
+        "init.sh",
+        "README.md",
+        "progress.md",
+        "phases.json",
+        "docs/ARCHITECTURE.md",
+        "docs/REQUIREMENTS.md",
+        "docs/DECISIONS.md",
+        "docs/design/macos-gui.md",
+        "docs/phases/phase9.json"
+      ],
+      "dependencies": [],
+      "acceptance_criteria": [
+        "活跃 .agent 文件与新模板的活跃 Harness 布局一致，项目文档不再宣称已归档的能力编排仍处于启用状态。",
+        "./init.sh 只检查 AGENTS.md、progress.md、phases.json 及其 detail_file JSON 链，不安装依赖、不构建、不运行产品测试。",
+        "README、ARCHITECTURE、REQUIREMENTS 与 macOS GUI 设计一致描述 C++ Worker 为默认产品路径、Python 为显式 Oracle/回滚。",
+        "phases.json 与 progress.md 将历史后置事项和当前活动工作区分开，Phase 8 分支实验不被误作 main 当前范围。",
+        "benchmark 文档明确正式代码、版本化资产、本机产物、兼容包装器和固定本地媒体的边界。",
+        "相关 JSON、文档格式、./init.sh 及与文档改动范围匹配的验证实际通过。"
+      ],
+      "non_goals": [
+        "不修改 Python、C++ 或 Swift 产品代码。",
+        "不恢复已归档的 Plan、Test、Review、Verify、Feature/Phase 编排能力包。",
+        "不删除历史 Phase evidence、benchmark 资产、本地视频、缓存、分支或 worktree。",
+        "不恢复或合并 UI/macos-ui-redesign 的产品改动。",
+        "不提交或推送 Git 改动。"
+      ],
+      "architecture_refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/design/macos-gui.md",
+        "docs/design/benchmark.md",
+        "docs/DECISIONS.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09001.01",
+          "name": "对齐精简 Harness 与初始化入口",
+          "description": "确认活跃模板文件，移除项目级过期导航并将 init.sh 收缩到连续性基线。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09001.02",
+          "name": "校正运行时与 GUI 文档",
+          "description": "统一 C++ 默认、Python 显式回滚、UDS 协议与 GUI 数据流描述。",
+          "dependencies": ["09001.01"],
+          "status": "done"
+        },
+        {
+          "id": "09001.03",
+          "name": "收口 Phase 与 benchmark 文档边界",
+          "description": "区分历史后置事项、分支实验、正式 benchmark 资产和本机输入产物。",
+          "dependencies": ["09001.02"],
+          "status": "done"
+        },
+        {
+          "id": "09001.04",
+          "name": "验证与证据收口",
+          "description": "运行文档、JSON、Harness 和相关标准验证，写入真实 evidence 并完成导航。",
+          "dependencies": ["09001.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成 Harness 与文档稳定化；未修改 Python、C++ 或 Swift 产品代码。\n\n范围结果：\n- 活跃 .agent 文件集合与 /Users/hudea/Project/my_Harness subtraction 模板一致；14 个活跃文件经 diff -w -B 比较语义一致，仅清理空白。模板 archive 未复制回项目。\n- init.sh 收缩为 AGENTS.md、progress.md、phases.json 与 detail_file JSON 链的最低开工检查，不再安装依赖、构建、测试或转发旧参数。\n- AGENTS、README、ARCHITECTURE、REQUIREMENTS、macOS GUI、benchmark、Phase 导航与 ADR 已校正；C++ Worker 为默认产品路径，Python 仅为显式 Oracle/开发回滚。历史 Phase/ADR 保留其当时事实，并由 ADR-0033 标明当前边界。\n\n验证：\n- ./init.sh：OK。\n- bash -n init.sh scripts/verify-standard.sh：通过。\n- git diff --check：通过。\n- jq empty phases.json 与全部 docs/phases/*.json：通过；Phase 索引唯一性、detail_file/status 约束和 Phase 9 Feature 结构的 jq 定向检查通过。\n- 变更文档本地 Markdown 链接检查：通过。\n- 活跃 .agent 路径集合比较、14 个文件语义比较及项目面向使用者文档的已归档路径扫描：通过。\n- .venv/bin/python -m pytest tests/test_benchmark_config.py tests/test_benchmark_matrix.py --no-cov：23 passed（3.08s）。\n- cd apps/macos && swift test：XCTest 37 executed、1 skipped、0 failures；Swift Testing 139 tests / 11 suites passed。跳过项为本机构建未提供 C++ Paddle 的 live capability，用例按预期跳过。\n\n完整 scripts/verify-standard.sh 未运行：本 Feature 只改 Harness/文档/导航，已按范围运行语法、结构、链接、benchmark 配置和 GUI runtime 契约验证。"
+    },
+    {
+      "id": "09002",
+      "name": "验证入口命名去耦",
+      "description": "将标准产品验证脚本从历史 SUBLIFT_INIT_* 命名迁移到 SUBLIFT_VERIFY_*，同步临时日志和活跃文档，使完整验证门与轻量 Harness init 在名称和职责上彻底分离。",
+      "module": [
+        "scripts/verify-standard.sh",
+        "AGENTS.md",
+        "docs/DECISIONS.md"
+      ],
+      "dependencies": ["09001"],
+      "acceptance_criteria": [
+        "scripts/verify-standard.sh 支持 SUBLIFT_VERIFY_SKIP_VISION、SUBLIFT_VERIFY_RUNTIME、SUBLIFT_VERIFY_GT、SUBLIFT_VERIFY_REQUIRE_GT 与 SUBLIFT_VERIFY_SKIP_CUTOVER，行为与原对应开关一致。",
+        "不保留 SUBLIFT_INIT_* alias；活跃脚本、AGENTS 与当前架构计划不再将标准验证描述为 init 行为，历史 ADR/Phase evidence 原文不改写。",
+        "临时日志名称统一使用 verify 语义，且 ./init.sh 的内容和职责不发生变化。",
+        "bash 语法、变量静态扫描、./init.sh 与 ./scripts/verify-standard.sh 的范围匹配验证通过，真实证据写入本 Feature。"
+      ],
+      "non_goals": [
+        "不修改产品代码、测试算法、cutover gate 逻辑或发布门阈值。",
+        "不清理 benchmark wrapper、手工脚本、本地构建目录或媒体。",
+        "不重写 ADR-0032 等历史记录中当时存在的 SUBLIFT_INIT_* 描述。",
+        "不提交或推送，除非用户另行明确授权。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase9-repository-cleanup.md",
+        "docs/DECISIONS.md",
+        ".agent/rules/initialization.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09002.01",
+          "name": "迁移验证变量与临时日志命名",
+          "description": "在 verify-standard.sh 内完成五个环境变量、提示文本、注释和临时日志路径的机械迁移，不增加 alias。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09002.02",
+          "name": "同步活跃文档与决策",
+          "description": "更新 AGENTS 的标准/发布验证命令，并在 DECISIONS 记录验证命名与轻量 init 解耦。",
+          "dependencies": ["09002.01"],
+          "status": "done"
+        },
+        {
+          "id": "09002.03",
+          "name": "验证并写入证据",
+          "description": "运行语法、静态扫描、init 和标准门验证，确认历史文本未被误改并写入 evidence。",
+          "dependencies": ["09002.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成标准验证入口命名去耦；未修改 init.sh、产品代码、cutover 参数语义或发布阈值。\n\n范围结果：\n- scripts/verify-standard.sh 的五个开发者环境变量统一为 SUBLIFT_VERIFY_*，不保留 SUBLIFT_INIT_* alias、warning 或转发；/tmp/sublift_verify.log 与终端提示统一使用 verify 语义。\n- AGENTS 的发布 / 完整 cutover 命令改为 SUBLIFT_VERIFY_RUNTIME 与 SUBLIFT_VERIFY_REQUIRE_GT。\n- 新增 ADR-0034，明确完整验证门与轻量 Harness init 的边界；ADR-0032、历史 Phase evidence 与 Harness migration 计划未改写。\n\n验证：\n- bash -n init.sh scripts/verify-standard.sh：通过。\n- ./init.sh：OK；并以 git diff --exit-code -- init.sh 确认实现未变。\n- rg -n 'SUBLIFT_INIT_|sublift_init|日常 init' scripts/verify-standard.sh AGENTS.md：无结果。\n- ./scripts/verify-standard.sh：通过；ruff、strict mypy、CMake/CTest、pytest 全部通过（552 passed, 23 deselected, 46.40s）；cutover 12 项 parity goldens 通过，默认按门策略跳过 runtime 与 GT L3。\n- git diff --check、Phase JSON jq 解析、活跃接口扫描和历史 ADR/Phase/迁移计划未改检查：均通过。\n\n限制：首次标准门调用受沙箱对 uv 缓存的访问限制而中止；在获准的同一标准门重跑后完整通过。"
+    },
+    {
+      "id": "09003",
+      "name": "收口根目录手工脚本",
+      "description": "逐项审计 scripts/ 根目录的手工验收与一次性诊断入口，将独有检查迁入 diagnostics 或 integration tests，删除已有等价覆盖的脚本，不新建长期 archive。",
+      "module": [
+        "scripts/",
+        "tests/",
+        "docs/"
+      ],
+      "dependencies": ["09002"],
+      "acceptance_criteria": [
+        "根目录手工脚本均有职责、输入、输出、引用、等价覆盖和处置结论，不能仅按文件名或引用数量删除。",
+        "取消、内存、流式、真实视频或质量验收中的独有检查先迁移再删除；仍有价值的诊断入口进入明确子目录并参数化媒体路径。",
+        "历史 Phase evidence 保留原命令文本，scripts/parity 与三个 benchmark compatibility wrapper 不在本 Feature 删除。",
+        "Ruff、mypy、相关单测/integration tests、链接与活跃引用扫描通过。"
+      ],
+      "non_goals": [
+        "不修改产品行为或降低任何质量、性能、取消和稳定性门。",
+        "不处理 benchmark wrapper、versioned fixtures/goldens 或 feature-list fallback。",
+        "不删除本地媒体、构建目录、分支或 worktree。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase9-repository-cleanup.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09003.01",
+          "name": "建立逐脚本处置表",
+          "description": "审计 scripts 根目录入口及其自动测试、文档和历史 evidence 引用。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09003.02",
+          "name": "迁移独有检查并删除冗余入口",
+          "description": "先补齐等价覆盖，再移动仍受支持的诊断入口或删除已完全重复的脚本。",
+          "dependencies": ["09003.01"],
+          "status": "done"
+        },
+        {
+          "id": "09003.03",
+          "name": "验证脚本边界",
+          "description": "运行静态检查、相关测试与引用扫描，写入处置和验证证据。",
+          "dependencies": ["09003.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成根目录手工脚本审计与收口；未修改产品算法、scripts/parity、三个 benchmark compatibility wrapper、本机媒体或历史 Phase evidence。\n\n范围结果：\n- 在 scripts/diagnostics/README.md 建立九项处置表，记录职责、输入输出、文档/Phase 引用、自动覆盖、独有验收能力及结论证据。\n- 独有低频诊断迁入 scripts/diagnostics：audit_python_ipc.py（显式 Python Oracle UDS）、extract_frames.py、compare_detectors.py 与 long_video_ux.py；前三者增加显式媒体/输出参数，长视频诊断保留显式视频并使用 diagnostics 输出语义。\n- 删除 test_cancel.py、test_cli_e2e.py、test_export_e2e.py、test_pipeline_e2e.py 与 test_streaming.py。它们的取消、流式、CLI、导出与 SRT 评分行为已有 tests/test_pipeline.py、tests/test_ipc_bridge.py、tests/ipc/test_cpp_worker.py、tests/test_cli.py、tests/test_export.py、tests/test_benchmark_*.py 和 canonical sublift-benchmark run/score 覆盖。\n\n验证：\n- 四个诊断入口的 --help 通过；以现有本地视频只读输入，在 /private/tmp/sublift-09003.VFZHuj 生成 2 张抽帧和 4 张检测器对照 PNG。\n- audit_python_ipc.py 与 long_video_ux.py 对不存在视频分别以预期 2 / 1 退出，未创建 socket 或输出。\n- ./init.sh、git diff HEAD --check、Phase JSON jq 解析、活跃根脚本/旧路径引用扫描通过；确认 scripts/parity、三个 benchmark wrapper 和 verify-standard.sh 未改。\n- ./scripts/verify-standard.sh：通过；ruff、strict mypy、CMake/CTest、pytest（552 passed, 23 deselected, 42.63s）及 12 项 cutover parity goldens 全部通过；默认策略跳过 runtime 与 GT L3。\n\n限制：真实长视频、Python Oracle UDS 的 RSS/子进程退出诊断属于低频外部媒体验收，本次只验证入口、参数边界和不依赖 OCR 的图像诊断；未把它们伪装成默认 C++ 产品门。"
+    },
+    {
+      "id": "09004",
+      "name": "收口 Benchmark 兼容边界",
+      "description": "保持 sublift-benchmark 为唯一 canonical CLI，保留三个小型 wrapper 作为历史复现 shim，明确 configs、fixtures、goldens、baselines 与 feature-list fallback 的生命周期和验证责任。",
+      "module": [
+        "src/sublift/benchmark/",
+        "benchmark/",
+        "scripts/run_benchmark_manifest.py",
+        "scripts/measure_perf_overhead.py",
+        "scripts/compare_roi_ab.py",
+        "tests/test_benchmark_config.py",
+        "tests/test_benchmark_matrix.py",
+        "tests/test_compare_roi_ab.py"
+      ],
+      "dependencies": ["09003"],
+      "acceptance_criteria": [
+        "活跃文档只推荐 uv run sublift-benchmark；三个 wrapper 明确标记为历史复现 shim，且只转发、不复制 benchmark 实现。",
+        "Phase 专用 configs、fixtures、goldens、datasets 与 baselines 按引用和测试参与度分类，版本化证据不因名称含 legacy 或旧 feat 编号被删除。",
+        "feature-list.json fallback 保留为 legacy checkout 契约，并由新 Harness、legacy marker 与无 marker 测试覆盖。",
+        "benchmark 配置、wrapper 转发、ROI 对照和相关文档验证通过。"
+      ],
+      "non_goals": [
+        "本 Phase 不删除三个 wrapper 或 feature-list.json fallback。",
+        "不重写 benchmark 指标、质量阈值、golden 内容或历史报告结论。",
+        "不执行或删除 debug 下的本机 benchmark 产物。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase9-repository-cleanup.md",
+        "docs/design/benchmark.md",
+        "benchmark/README.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09004.01",
+          "name": "建立 Benchmark 资产生命周期表",
+          "description": "按 canonical、历史复现、版本化验证和本机产物分类入口与资产。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09004.02",
+          "name": "收紧 shim 与 fallback 契约",
+          "description": "确保 wrapper 仅转发 canonical CLI，并补足 repo-root compatibility 测试和文档。",
+          "dependencies": ["09004.01"],
+          "status": "done"
+        },
+        {
+          "id": "09004.03",
+          "name": "验证 Benchmark 边界",
+          "description": "运行 benchmark/ROI 专项并确认版本化资产和历史引用无断裂。",
+          "dependencies": ["09004.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成 benchmark 兼容入口与资产边界收口；未修改 benchmark 算法、质量阈值、feature-list.json fallback、三个 wrapper 的转发行为、fixtures、goldens、baselines、datasets 或 debug 本机产物。\n\n范围结果：\n- docs/design/benchmark.md 建立 canonical CLI、historical shim、root marker compatibility、versioned configs/datasets/baselines/parity、local inputs 和 local generated artifacts 的生命周期表。\n- benchmark/README.md 只推荐 uv run sublift-benchmark；三个旧脚本明确为历史复现 shim，文档中的旧命令仅保留在 compatibility 说明。\n- 新增 tests/test_benchmark_wrappers.py：三个 wrapper 各自以 --help 实际启动，断言迁移提示和 canonical run/overhead/compare-roi 子命令；新增无 marker 时 discover_repo_root 回退 cwd 的回归测试。\n\n验证：\n- .venv/bin/python -m pytest tests/test_benchmark_config.py tests/test_benchmark_wrappers.py tests/test_benchmark_matrix.py tests/test_compare_roi_ab.py --no-cov：34 passed。\n- uv run sublift-benchmark --help：通过，列出 run / matrix / score / compare-roi / overhead / show。\n- ./scripts/verify-standard.sh：通过；ruff、strict mypy、CMake/CTest、pytest（556 passed, 23 deselected, 43.34s）及 12 项 cutover parity goldens 全部通过；默认策略跳过 runtime 与 GT L3。\n- git diff HEAD --check、Phase JSON jq 解析、活跃 wrapper 引用扫描通过；版本化 benchmark 资产、feature-list.json 与 src/sublift/benchmark/config.py 均确认未改。\n\n限制：本 Feature 只验证 wrapper 的无副作用帮助转发和配置/root 契约；不运行依赖本地视频的真实 benchmark 长跑，也不生成或删除 debug 产物。"
+    },
+    {
+      "id": "09005",
+      "name": "建立本地产物卫生入口",
+      "description": "提供默认 dry-run、分级显式选择且限制在仓库固定路径内的本地产物清理入口，保护视频、SRT、GT、Git 元数据和工作区外路径。",
+      "module": [
+        ".gitignore",
+        "scripts/",
+        "tests/",
+        "README.md"
+      ],
+      "dependencies": ["09004"],
+      "acceptance_criteria": [
+        "默认执行只展示候选路径和预计释放空间，不写盘；L1 生成产物、Swift build、C++ build 与 Python 环境使用独立显式选项。",
+        "清理目标使用已解析的仓库内固定路径，不接受 HOME、~、路径逃逸、宽泛 glob 或 Git 路径。",
+        "debug 下的 mp4、mkv、用户 SRT/GT 和未知文件默认保护，.venv 也不在推荐清单内。",
+        "dry-run、路径保护、空目录、重复执行和拒绝媒体删除测试通过；首次真实删除仍须用户再次明确授权。"
+      ],
+      "non_goals": [
+        "本 Feature 登记与实现不等于授权立即删除任何本机文件。",
+        "不删除分支、worktree、Git 对象、本地媒体、SRT/GT 或模型资产。",
+        "不把清理逻辑加入 ./init.sh 或标准产品验证门。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase9-repository-cleanup.md",
+        ".agent/rules/initialization.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09005.01",
+          "name": "定义清理类别与保护策略",
+          "description": "冻结 L1/L2 候选、L0 媒体保护和仓库路径解析规则。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09005.02",
+          "name": "实现默认 dry-run 入口",
+          "description": "实现按类别展示和显式执行接口，不使用宽泛 git clean 或递归未解析目标。",
+          "dependencies": ["09005.01"],
+          "status": "done"
+        },
+        {
+          "id": "09005.03",
+          "name": "验证安全边界",
+          "description": "覆盖路径逃逸、媒体保护、重复执行与空候选，并记录未执行真实删除。",
+          "dependencies": ["09005.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成本地产物卫生入口；当前 checkout 未执行 --apply，未删除任何本机构建、环境、debug、媒体、SRT、GT、模型、分支、worktree 或 Git 对象。\n\n范围结果：\n- 新增 scripts/cleanup_local_artifacts.py：从当前 Git checkout 动态解析绝对根路径，默认只 dry-run L1 生成产物；--generated、--swift-build、--cpp-build 和 --python-env 分别选择固定分类目录，.venv 不在默认范围。\n- 目标严格限制为已登记的仓库内相对路径。仓库根、.git、路径逃逸、符号链接、视频、SRT/GT、未分类生成文件都会被标记 protected；--apply 前对每个 ready target 重新验证。未使用 git clean、HOME、~、未解析变量或宽泛删除 glob。\n- README 说明默认预览、四类显式选项与真实 --apply 前仍须再次获得用户授权。\n\n验证：\n- 当前 checkout 默认 dry-run 实测：仅显示绝对路径；debug/frames 46.6 MiB、debug/failure_frames_feat034_p1_fix2 15.9 MiB、debug/benchmark/runs 755.6 KiB，总计约 63.2 MiB；未写盘。\n- tests/test_cleanup_local_artifacts.py：9 passed，覆盖默认零写入、空间统计、绝对路径、默认/显式分类、路径逃逸、仓库根、Git 元数据、符号链接、视频/SRT/GT/未知文件保护、空候选和临时根内重复 apply。\n- ./init.sh、ruff check .、mypy src tests、git diff HEAD --check、固定 target / safety surface 审查均通过。\n- ./scripts/verify-standard.sh：通过；ruff、strict mypy、CMake/CTest、pytest（565 passed, 23 deselected, 43.34s）及 12 项 cutover parity goldens 全部通过；默认策略跳过 runtime 与 GT L3。\n\n限制：真实删除只在 pytest tmp_path 中验证；对当前电脑的 --apply 仍未运行，后续必须由用户在预览清单基础上再次明确授权。"
+    },
+    {
+      "id": "09006",
+      "name": "完成 Phase 9 仓库稳定化",
+      "description": "汇总前序清理结果，运行完整标准产品门和文档/路径扫描，确认当前入口、兼容面、历史证据与本机保护边界一致后收口 Phase 9。",
+      "module": [
+        "scripts/verify-standard.sh",
+        "docs/phases/phase9.json",
+        "phases.json",
+        "progress.md",
+        "README.md",
+        "AGENTS.md"
+      ],
+      "dependencies": ["09005"],
+      "acceptance_criteria": [
+        "09002–09005 均已完成且 evidence 可追溯，没有以收尾 Feature 替代前序缺失验证。",
+        "./init.sh、./scripts/verify-standard.sh、JSON/schema、Markdown 链接、活跃入口与 ignored-path 扫描通过。",
+        "canonical、compatibility、versioned evidence、本机输入和可重建产物边界在文档与仓库中一致。",
+        "Phase 9、phases.json 与 progress.md 状态正确收口，未解决风险继续保留而非伪装完成。"
+      ],
+      "non_goals": [
+        "不补做独立发布、签名、公证、多源 GT 或 UI 分支合并。",
+        "不在收尾阶段顺手修改产品行为或删除未授权资产。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase9-repository-cleanup.md",
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md"
+      ],
+      "subtasks": [
+        {
+          "id": "09006.01",
+          "name": "审计前序证据与剩余风险",
+          "description": "核对 09002–09005 的验收、evidence 和未解决风险。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "09006.02",
+          "name": "运行 Phase 标准验证",
+          "description": "运行标准产品门及文档、JSON、入口和路径边界扫描。",
+          "dependencies": ["09006.01"],
+          "status": "done"
+        },
+        {
+          "id": "09006.03",
+          "name": "收口 Phase 导航",
+          "description": "写入真实 evidence，更新 Phase 索引与 progress 导航。",
+          "dependencies": ["09006.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-10 完成 Phase 9 收尾；09002–09005 不是由本条替代：它们均为 done、子任务均完成且 evidence 非空，对应原子提交依次为 09392ba、0c5dc2d、077bfc5、be75f4e；基线 08f8516 是当前分支祖先。\n\n收口结果：\n- 验证入口保持 ./init.sh 的秒级 L0 与 scripts/verify-standard.sh 的标准产品门分层；标准门只使用 SUBLIFT_VERIFY_* 命名。\n- 手工诊断入口、benchmark canonical CLI / 三个仅转发 historical shim、版本化 benchmark 资产与本机生成物边界，以及安全本地产物 dry-run 入口保持一致。当前 checkout 没有执行 cleanup_local_artifacts.py --apply；未删除本机构建、环境、debug、媒体、SRT、GT、模型、分支、worktree 或 Git 对象。\n- 修复既有 Markdown 链接：Phase 6.8 索引改为 adapters/paddle 的现行源路径；Phase 2 数据流中的 UI 文案不再被解释为链接。\n- phases.json、phase9 detail 与 progress.md 同步为已完成；完整发布、签名/公证、多源 GT、Phase 8 未合入 main 的 UI 分支仍在本 Phase 非目标范围。\n\n验证：\n- ./init.sh、bash -n init.sh scripts/verify-standard.sh、git diff --check 与 jq empty phases.json docs/phases/*.json 通过。\n- 以 phaseN.schema.json 的 canonical 分支字段、ID、状态、依赖和唯一性约束进行 jq 定向检查通过；09002–09005 evidence / 子任务完成状态与提交链审计通过。\n- 受版本控制的 96 个 Markdown 文档本地链接扫描通过；活跃入口、旧 SUBLIFT_INIT_* 命名、根 scripts 清单、diagnostics 清单、benchmark compatibility 引用以及可重建 target 的 ignored / tracked-path 扫描通过。\n- ./scripts/verify-standard.sh 通过：uv sync（vision+paddle extras）、ruff、strict mypy、CMake/CTest、pytest（565 passed, 23 deselected, 43.93s）与 12 项 cutover parity goldens 全部通过。\n\n限制保留：本轮默认显式跳过 cutover runtime 性能门与 GT L3；发布前仍须以 SUBLIFT_VERIFY_RUNTIME=1 SUBLIFT_VERIFY_REQUIRE_GT=1 运行完整发布门。09005 的真实删除仅在 pytest tmp_path 中验证，当前电脑仍须由用户在 dry-run 清单基础上再次明确授权。"
+    }
+  ]
+}

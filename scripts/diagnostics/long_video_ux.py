@@ -1,11 +1,11 @@
-"""feat-040：真实长视频 path-mode 体验验收（与 GUI 默认 path mode 同源 IPC）。
+"""真实长视频 path-mode UX 诊断（与 GUI 默认 path mode 同源 IPC）。
 
 用法::
 
-    uv run python scripts/feat040_long_video_ux.py \\
+    uv run python scripts/diagnostics/long_video_ux.py \\
       --video "/path/to/long.mp4" \\
       --region 0,880,1920,180 \\
-      --out debug/feat040_ux
+      --out debug/diagnostics/long-video-ux
 
 不把视频内容写入仓库；仅记录时长、分辨率、区域、时间戳日志与 RSS。
 """
@@ -22,20 +22,16 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-_REPO = Path(__file__).resolve().parents[1]
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
-
-from sublift.benchmark.srt import load_srt  # noqa: E402
-from sublift.export.srt import SrtExporter  # noqa: E402
-from sublift.extractor.ffmpeg_extractor import (  # noqa: E402
+from sublift.benchmark.srt import load_srt
+from sublift.export.srt import SrtExporter
+from sublift.extractor.ffmpeg_extractor import (
     probe_duration_ms,
     probe_source_frame,
 )
-from sublift.ipc.bridge import BridgeHandler  # noqa: E402
-from sublift.ipc.protocol import build_cancel_job, build_start_job  # noqa: E402
-from sublift.models import SubtitleEntry  # noqa: E402
-from sublift.ocr.vision import VisionOcrEngine, is_vision_available  # noqa: E402
+from sublift.ipc.bridge import BridgeHandler
+from sublift.ipc.protocol import build_cancel_job, build_start_job
+from sublift.models import SubtitleEntry
+from sublift.ocr.vision import VisionOcrEngine, is_vision_available
 
 
 @dataclass
@@ -229,7 +225,7 @@ async def cancel_then_restart_same_bridge(
         region=region,
         duration_ms=duration_ms,
         fps=fps,
-        video_id="feat040-cancel",
+        video_id="long-video-cancel",
         cancel_after_video_ms=30_000,
         max_wall_s=120.0,
     )
@@ -240,7 +236,7 @@ async def cancel_then_restart_same_bridge(
         region=region,
         duration_ms=duration_ms,
         fps=fps,
-        video_id="feat040-restart",
+        video_id="long-video-restart",
         cancel_after_video_ms=20_000,
         max_wall_s=60.0,
     )
@@ -251,7 +247,7 @@ async def cancel_then_restart_same_bridge(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="feat-040 long video path-mode UX")
+    parser = argparse.ArgumentParser(description="长视频 path-mode UX 诊断")
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument(
         "--region",
@@ -260,7 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         help="source-frame region x,y,w,h",
     )
     parser.add_argument("--fps", type=float, default=5.0)
-    parser.add_argument("--out", type=Path, default=Path("debug/feat040_ux"))
+    parser.add_argument("--out", type=Path, default=Path("debug/diagnostics/long-video-ux"))
     parser.add_argument(
         "--full-max-video-s",
         type=float,
@@ -339,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
             region=region,
             duration_ms=duration_ms,
             fps=args.fps,
-            video_id="feat040-full",
+        video_id="long-video-full",
             cancel_after_video_ms=None,
             max_wall_s=None,
         )

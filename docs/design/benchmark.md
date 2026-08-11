@@ -2,7 +2,7 @@
 
 > 实现：`src/sublift/benchmark/`
 > 配置与数据：`benchmark/`
-> 本机产物：`debug/benchmark/`
+> 固定本地媒体：`debug/`；本机运行产物：`debug/benchmark/`
 > 入口：`uv run sublift-benchmark`
 
 用法见 [`benchmark/README.md`](../../benchmark/README.md)。
@@ -63,18 +63,19 @@
 产品热路径仍只依赖 `src/sublift/diagnostics/performance.py` 中的可选 recorder，
 不依赖 benchmark 包。
 
-## 4. 资产边界
+## 4. 资产与兼容生命周期
 
-| 路径 | 生命周期 |
-|---|---|
-| `benchmark/configs/` | 可复现 run/matrix 配置，入库 |
-| `benchmark/datasets/` | GT、生成 recipe、数据 manifest，入库 |
-| `benchmark/baselines/` | 已验收冻结结论，入库 |
-| `benchmark/parity/` | C++ cutover fixtures/goldens，入库 |
-| `debug/benchmark/imports/` | GUI、C++、外部工具导出的原始输入，不入库 |
-| `debug/benchmark/runs/` | 当前标准运行与矩阵报告，不入库 |
-| `debug/benchmark/perf/` | 正式本机性能运行，不入库 |
-| `debug/benchmark/archive/` | 旧目录迁移归档，不入库 |
+| 类别 | 路径 / 入口 | 生命周期与规则 |
+|---|---|---|
+| Canonical CLI | `uv run sublift-benchmark` | 唯一受支持的 benchmark 入口；活跃文档、自动化与新命令只使用它。 |
+| Historical shim | `scripts/run_benchmark_manifest.py`、`scripts/measure_perf_overhead.py`、`scripts/compare_roi_ab.py` | R2 历史复现兼容面；只可打印提示并向 canonical CLI 转发，不复制 runner/config/report 实现。由 `tests/test_benchmark_wrappers.py` 覆盖。 |
+| Root marker compatibility | `phases.json`；`feature-list.json` fallback | 新 checkout 优先使用 `phases.json`；仅 legacy checkout 使用 `feature-list.json`。无任一 marker 时回退调用时 cwd，三种情况由 `tests/test_benchmark_config.py` 覆盖。 |
+| Versioned configs | `benchmark/configs/` | 可复现 run/matrix 配置，入库；被报告或测试引用的 Phase config 不因编号或名称过旧而删除。 |
+| Versioned datasets | `benchmark/datasets/` | GT、生成 recipe 与数据 manifest，入库。 |
+| Versioned baselines | `benchmark/baselines/` | 已验收冻结结论，入库；临时运行不得写入。 |
+| Versioned parity assets | `benchmark/parity/` | C++ cutover fixtures/goldens，入库；不是运行垃圾。 |
+| Local inputs | `debug/Zootopia_*.mp4|mkv` | 历史配置与专项脚本引用的固定本地媒体，不入库；不是临时运行产物。 |
+| Local generated artifacts | `debug/benchmark/imports/`、`runs/`、`perf/`、`archive/` | 机器本地产物；分别承载导入、当前运行/矩阵报告、性能运行和旧目录迁移归档。 |
 
 临时运行不能写入 `benchmark/baselines/`。基线晋升必须先完成同负载、多轮、质量门
 和环境记录，再手工复制结论。

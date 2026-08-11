@@ -102,7 +102,7 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | Threading | `VisionOcrEngine::recognize` is **not thread-safe**; callers must serialize (no concurrent recognize) |
 | Pixel path | Product/parity path is **RGB24**. BGR24/Gray8 are best-effort conversions only |
 | C++ parity L0 vs L4 | C++ parity **L0** covers box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`; it runs from `./scripts/verify-standard.sh`, not Harness `./init.sh`. **L4** is live Vision text/conf 的可选报告；`dump_vision --live` 只保留说明性入口。 |
-| Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_INIT_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
+| Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_VERIFY_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
 
 ## sublift_worker CLI & Dual-Track Opt-in Guide (Phase 6.5)
 

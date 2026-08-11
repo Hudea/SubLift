@@ -12,16 +12,16 @@
     {
       "id": "phase2",
       "name": "Phase 2 - macOS GUI",
-      "description": "SwiftUI 开发者 GUI；独立分发仍按既有用户决策后置。",
+      "description": "SwiftUI 开发者 GUI 的既定范围已完成；独立分发按 ADR-0009/0030 作为未来范围后置。",
       "detail_file": "docs/phases/phase2.json",
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "phase3",
       "name": "Phase 3 - Optimization and usability",
-      "description": "Benchmark、增量处理与质量优化；独立 baseline 历史任务保持 blocked。",
+      "description": "Benchmark、增量处理与质量优化的既定范围已完成；新的多源 GT 作为未来质量范围另行登记。",
       "detail_file": "docs/phases/phase3.json",
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "phase4",
@@ -54,15 +54,22 @@
     {
       "id": "phase6",
       "name": "Phase 6 - Native C++ Core Migration",
-      "description": "C++ Core 与 Paddle cutover 已完成；产品分发相关任务按 ADR-0030 后置。",
+      "description": "C++ Core、全引擎 cutover 与开发架构已完成；产品分发按 ADR-0030 作为未来范围后置。",
       "detail_file": "docs/phases/phase6.json",
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "phase7",
       "name": "Phase 7 - Harness Migration",
       "description": "将项目协作、Phase 索引和会话基线迁移到新 Harness；不改变产品运行时。",
       "detail_file": "docs/phases/phase7.json",
+      "status": "done"
+    },
+    {
+      "id": "phase9",
+      "name": "Phase 9 - Repository Stabilization and Cleanup",
+      "description": "对齐精简 Harness，校正文档真源，并分阶段收口验证命名、手工脚本、benchmark 兼容边界与本地产物卫生；Phase 8 保留给未合入 main 的 UI 分支实验。",
+      "detail_file": "docs/phases/phase9.json",
       "status": "done"
     }
   ]

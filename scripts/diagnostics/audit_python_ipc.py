@@ -1,14 +1,17 @@
-"""增量架构内存与推送时机端到端审计。
+"""Python Oracle IPC 的内存与推送时机诊断。
 
-启动真实的 UDS Server，发送 start_job，测量 RSS 物理内存峰值、首条字幕推送延迟，
-并测试并发发送 cancel_job 的安全性与真正资源退出，以及立即重启新任务的能力。
+启动真实的 Python UDS Server，发送 start_job，测量 RSS 物理内存峰值、首条字幕
+推送延迟，并测试并发 cancel_job、资源退出和立即重启。它诊断显式 Python Oracle
+路径，不替代默认 C++ Worker 的产品门。
 
 用法：
-    uv run --extra vision python scripts/audit_memory_push.py
+    uv run --extra vision python scripts/diagnostics/audit_python_ipc.py \\
+      --video /path/to/video.mp4 --engine vision
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -16,11 +19,8 @@ import struct
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Any
-
-# 测试视频配置
-VIDEO_PATH = "debug/Zootopia_clip_1080p.mp4"
-SOCKET_PATH = "/tmp/sublift_audit.sock"
 
 
 async def read_message(reader: asyncio.StreamReader) -> dict[str, Any] | None:
@@ -78,19 +78,35 @@ async def get_child_pids(parent_pid: int) -> list[int]:
         return []
 
 
-async def run_audit() -> None:
-    print("=== 开始真实 IPC 增量架构审计 ===")
+async def run_audit(
+    *,
+    video_path: Path,
+    socket_path: Path,
+    engine: str,
+    fps: float,
+    region: list[int],
+) -> int:
+    print("=== 开始 Python Oracle IPC 诊断 ===")
 
-    if not os.path.exists(VIDEO_PATH):
-        print(f"找不到测试视频: {VIDEO_PATH}")
-        return
+    if not video_path.is_file():
+        print(f"找不到测试视频: {video_path}", file=sys.stderr)
+        return 2
 
-    if os.path.exists(SOCKET_PATH):
-        os.remove(SOCKET_PATH)
+    if socket_path.exists():
+        print(f"socket 路径已存在，拒绝覆盖: {socket_path}", file=sys.stderr)
+        return 2
 
     # 1. 启动真实的 UDS Server 子进程
     server_process = subprocess.Popen(
-        ["python", "-m", "sublift.ipc.server", "--socket", SOCKET_PATH],
+        [
+            sys.executable,
+            "-m",
+            "sublift.ipc.server",
+            "--socket",
+            str(socket_path),
+            "--engine",
+            engine,
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -99,24 +115,24 @@ async def run_audit() -> None:
     try:
         # 等待 Socket 建立
         for _ in range(20):
-            if os.path.exists(SOCKET_PATH):
+            if socket_path.exists():
                 break
             await asyncio.sleep(0.1)
         else:
             print("Server 启动超时")
-            return
+            return 1
 
-        reader, writer = await asyncio.open_unix_connection(SOCKET_PATH)
+        reader, writer = await asyncio.open_unix_connection(str(socket_path))
 
         start_msg = {
             "type": "start_job",
             "video_id": "audit-test-1",
-            "video_path": VIDEO_PATH,
-            "fps": 5.0,
-            "engine": "vision",
+            "video_path": str(video_path),
+            "fps": fps,
+            "engine": engine,
             "confidence_threshold": 0.5,
             "enable_ssim_patrol": True,
-            "region_box": [0, 860, 1920, 220],
+            "region_box": region,
         }
 
         print("[Client] 发送 start_job...")
@@ -212,12 +228,12 @@ async def run_audit() -> None:
         start_msg2 = {
             "type": "start_job",
             "video_id": "audit-test-2",
-            "video_path": VIDEO_PATH,
-            "fps": 5.0,
-            "engine": "vision",
+            "video_path": str(video_path),
+            "fps": fps,
+            "engine": engine,
             "confidence_threshold": 0.5,
             "enable_ssim_patrol": True,
-            "region_box": [0, 860, 1920, 220],
+            "region_box": region,
         }
         await write_message(writer, start_msg2)
         job2_t0 = time.time()
@@ -250,13 +266,61 @@ async def run_audit() -> None:
         # 测试结束，关闭连接
         writer.close()
         await writer.wait_closed()
+        return 0
 
     finally:
         server_process.terminate()
         server_process.wait()
-        if os.path.exists(SOCKET_PATH):
-            os.remove(SOCKET_PATH)
+        if socket_path.exists():
+            socket_path.unlink()
+
+
+def _parse_region(raw: str) -> list[int]:
+    try:
+        region = [int(value) for value in raw.split(",")]
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("区域必须是 x,y,width,height") from exc
+    if len(region) != 4 or region[2] <= 0 or region[3] <= 0:
+        raise argparse.ArgumentTypeError("区域必须是 x,y,width,height，且宽高为正")
+    return region
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Python Oracle IPC 内存与推送时机诊断")
+    parser.add_argument("--video", type=Path, required=True, help="待诊断的本地视频")
+    parser.add_argument(
+        "--socket",
+        type=Path,
+        default=None,
+        help="可选 UDS socket 路径；默认使用当前进程专用的 /tmp 路径",
+    )
+    parser.add_argument("--engine", choices=["vision", "mock", "paddle"], default="vision")
+    parser.add_argument("--fps", type=float, default=5.0)
+    parser.add_argument("--region", type=_parse_region, default=[0, 860, 1920, 220])
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.fps <= 0:
+        print("--fps 必须大于 0", file=sys.stderr)
+        return 2
+    video_path = args.video.expanduser().resolve()
+    socket_path = (
+        args.socket.expanduser().resolve()
+        if args.socket is not None
+        else Path("/tmp") / f"sublift-audit-{os.getpid()}.sock"
+    )
+    return asyncio.run(
+        run_audit(
+            video_path=video_path,
+            socket_path=socket_path,
+            engine=args.engine,
+            fps=args.fps,
+            region=args.region,
+        )
+    )
 
 
 if __name__ == "__main__":
-    asyncio.run(run_audit())
+    raise SystemExit(main())

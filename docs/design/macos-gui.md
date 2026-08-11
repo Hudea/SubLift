@@ -1,6 +1,25 @@
 # macOS GUI 模块设计
 
-> `apps/macos/Sources/SubLiftMac/` — SwiftUI 壳、IPC 客户端、抽帧、编辑与导出。
+> `apps/macos/Sources/SubLiftMac/` — SwiftUI 壳、运行时路由、UDS 客户端、预览、编辑与导出。
+>
+> ADR-0005 记录了最初的 SwiftUI + Python Worker 方案；Phase 6 cutover 后，GUI 默认启动
+> C++ `sublift_worker`，Python server 只在显式 runtime 下承担 Oracle / 开发回滚。
+
+## 运行时边界
+
+GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runtime 与 engine，
+`PipelineClient` 再启动对应 Worker；两种 Worker 使用同一套 UDS framing 与业务消息。
+
+| 选择 | 后端 | 行为 |
+|---|---|---|
+| 默认 vision / mock | C++ `sublift_worker` | 产品主路径 |
+| 默认 paddle，capability 可用 | C++ `sublift_worker` | 产品主路径 |
+| 默认 paddle，capability 不可用 | 无 | fail-closed，显示可操作错误 |
+| 显式 `runtime=python` | `python -m sublift.ipc.server` | Oracle / 开发回滚 |
+
+解析优先级为显式参数 → `SUBLIFT_RUNTIME` → 产品默认 C++。不允许因 C++ capability
+缺失而静默切换 Python、Vision 或 Mock。GUI 记录并展示最终 `WorkerChoice`，避免界面设置
+与真实执行后端漂移。
 
 ## 模块职责
 
@@ -8,169 +27,131 @@
 
 | 文件 | 职责 |
 |---|---|
-| `PipelineClient.swift` | 启动 Python IPC 子进程，通过 UDS 进行 4 字节长度前缀 + JSON 分帧的消息收发。 |
-| `Messages.swift` | IPC 消息 Codable 定义，与 Python 端 `src/sublift/ipc/protocol.py` 字段对齐。 |
-| `FrameSampler.swift` | 为预览候选框扫描、代表帧截取和 legacy frame mode 提供 AVFoundation 采样；不参与默认打轴提取。 |
-| `FfmpegFallback.swift` | 为 mkv 预览/代表帧、元数据探测及 legacy frame mode 提供 ffmpeg 兜底。 |
-| `PreviewLayout.swift` | 根据视频宽高比、左栏可用尺寸和控制区预留高度，为预览区计算受上限约束的高度。 |
-| `SubtitleExtractor.swift` | 启动 IPC 后发送 `start_job(video_path, region_box, subtitle_profile)`；消费后端 `progress` / `push_entry` / 最终 `entries`，协调取消、重试和处理倍速。 |
-| `ProcessingRate.swift` | 将已处理的视频时长除以实际处理耗时，格式化为相对实时的处理倍速（如 `4.0× 实时`）。 |
-| `SubtitleEditor.swift` | 维护可编辑字幕列表，提供文本修改、合并、拆分与当前高亮节流。 |
-| `SubtitleEntry.swift` | 带 `UUID` 的可变字幕条目模型，负责与 IPC 不可变 `SubtitleEntryData` 双向转换。 |
-| `SrtFormatter.swift` | Swift 端 SRT 文本格式化，不经过 IPC 调 Python。 |
-| `VisionTextDetector.swift` | 对代表帧执行 `VNRecognizeTextRequest`，返回文字候选框（归一化 rect + 文本 + 置信度）。 |
-| `RegionSelectionModel.swift` | 候选框多选状态机，自动预选下部候选框并推算全宽 Y 带合并区域。 |
-| `VideoCoordinateMapper.swift` | 像素/视图/Vision 归一化坐标换算与区域合并。 |
-| `VideoMetadata.swift` | 异步加载视频文件名、大小、分辨率、时长、编码（AVFoundation + ffprobe 兜底 mkv）。 |
+| `RuntimePolicy.swift` | 解析 runtime / engine / 来源；执行 C++ 默认与 fail-closed 规则。 |
+| `PipelineClient.swift` | 查找并启动 C++ 或显式 Python Worker；负责 UDS 连接、framing、握手、请求与资源回收。 |
+| `Messages.swift` | IPC Codable 消息；字段与 C++/Python 共享协议对齐。 |
+| `SubtitleExtractor.swift` | 发送 path-mode `start_job`，消费 progress / push_entry / entries / done，协调取消、日志与处理倍速。 |
+| `FrameSampler.swift` | 为预览候选框扫描、代表帧和 legacy frame mode 提供 AVFoundation 采样；不参与默认打轴。 |
+| `FfmpegFallback.swift` | 为 mkv 预览/代表帧、元数据及 legacy frame mode 提供系统 ffmpeg 兜底。 |
+| `VideoMetadata.swift` | 异步读取文件名、大小、分辨率、时长和编码；mkv 使用 ffprobe 兜底。 |
+| `VisionTextDetector.swift` | 在 GUI 内对代表帧检测文字候选框；只服务选区，不承担产品 OCR。 |
+| `RegionSelectionModel.swift` | 管理候选框多选，并推算全宽字幕带区域。 |
+| `VideoCoordinateMapper.swift` | 转换像素、视图与 Vision 归一化坐标。 |
+| `SubtitleEditor.swift` / `SubtitleEntry.swift` | 维护可编辑字幕、当前高亮、合并与拆分。 |
+| `SrtFormatter.swift` | 在 Swift 端格式化 SRT，不调用 Worker。 |
+| `ProcessingRate.swift` / `PreviewLayout.swift` | 处理倍速格式化与预览布局纯计算。 |
 
 ### UI
 
 | 文件 | 职责 |
 |---|---|
-| `SubLiftMacApp.swift` | `@main` 入口、`ContentView` 组合、全局状态（videoURL / metadataLoader / extractor / editor）。 |
-| `DropZone.swift` | 拖拽导入包装，`.dropDestination(for: URL.self)` 接收文件。 |
-| `VideoPreview.swift` | `AVPlayerLayer` 视频预览 + 播放/暂停/seek 控制条 + PlayerModel。 |
-| `RegionOverlay.swift` | 候选框叠加、候选列表、多选交互与合并区域预览。 |
-| `SubtitleList.swift` | 字幕列表、文本编辑、合并/拆分/导出 SRT 按钮。 |
-| `SettingsView.swift` | OCR 引擎选择（vision / paddle / mock），`@AppStorage("default_engine")` 持久化。 |
-| `TimeFormatter.swift` | 毫秒 → `HH:MM:SS.mmm` 纯函数工具。 |
+| `SubLiftMacApp.swift` | `@main` 入口、主视图组合与应用状态。 |
+| `DropZone.swift` | 接收本地视频拖入。 |
+| `VideoPreview.swift` | AVPlayer 预览、播放/暂停与 seek。 |
+| `RegionOverlay.swift` | 候选框叠加、多选与合并区域预览。 |
+| `SubtitleList.swift` | 字幕列表、文本编辑、合并/拆分和导出。 |
+| `SettingsView.swift` | vision / paddle / mock 选择与 UserDefaults 持久化。 |
+| `TimeFormatter.swift` | 毫秒时间格式化。 |
 
 ## IPC 协议
 
-### 传输层
+### 传输与进程
 
-- **传输**：Unix Domain Socket，socket 路径由 Swift 端生成（`NSTemporaryDirectory() + UUID`）。
-- **分帧**：4 字节大端长度前缀 + UTF-8 JSON body。
-- **启动**：Swift 端 `Process.launchPath = .venv/bin/python`，参数 `["-m", "sublift.ipc.server", "--socket", sock_path, "--engine", engine]`。
-- **关闭**：Swift 端 `stop()` 关闭 socket、terminate 子进程、unlink socket 文件。
+- **传输**：Unix Domain Socket；Swift 为每次连接生成临时 socket 路径。
+- **分帧**：4 字节大端 body 长度 + UTF-8 JSON。
+- **C++ 启动**：`sublift_worker --socket <path> --engine <engine>`。
+- **Python 启动**：`python -m sublift.ipc.server --socket <path> --engine <engine> --log-level INFO`，仅显式回滚。
+- **关闭**：`PipelineClient.stop()` 幂等关闭 fd、终止子进程并 unlink socket。
+- **能力探测**：Paddle 路由前对将要启动的 C++ Worker 执行 `--probe-engine paddle`。
 
 ### 消息类型
 
-| 方向 | 消息 | 关键字段 |
+| 方向 | 消息 | 关键语义 |
 |---|---|---|
-| Swift → Python | `start_job` | `video_id`, `video_path?`, `fps`, `engine`, `confidence_threshold`, `region_box?`, `subtitle_profile?`, `duration_ms`；`video_path` 非空即进入默认 path mode |
-| Swift → Python | `frame` | 仅 legacy frame mode：`video_id`, `ts_ms`, `jpeg_bytes: base64`；后端解码后立即 `Pipeline.feed()`，不累计帧 |
-| Swift → Python | `finalize` | 仅 legacy frame mode：关闭末段并执行最终 dedupe；不是“收到后才开始跑整条 Pipeline” |
-| Swift → Python | `cancel_job` | `video_id` |
-| Python → Swift | `progress` | `video_id`, `stage`, `pct`, `eta_ms`；阶段为 ready / processing / finalizing |
-| Python → Swift | `push_entry` | 段闭合并完成 OCR 后立即推送单条字幕，用于首条反馈与增量列表 |
-| Python → Swift | `entries` | 最终 dedupe 后的全量条目，`is_final=true`；Swift 用它覆盖增量列表 |
-| Python → Swift | `log` | `video_id`, `level`, `msg` |
-| Python → Swift | `done` | `video_id`, `ok`, `error?` |
-| 控制 | `hello` / `bye` / `error` | 握手与控制错误 |
+| Swift → Worker | `hello` / `bye` | 能力握手与连接关闭。 |
+| Swift → Worker | `start_job` | `video_id`、`video_path?`、fps、engine、region、subtitle profile；有 `video_path` 即 path mode。 |
+| Swift → Worker | `cancel_job` | 取消当前作业并释放 extractor / Pipeline 资源。 |
+| Swift → Worker | `frame` / `finalize` | 仅 legacy frame mode；产品 GUI 不使用。 |
+| Worker → Swift | `progress` | ready / processing / finalizing 阶段与 `pct`。 |
+| Worker → Swift | `push_entry` | 字幕段闭合并完成 OCR 后的增量条目。 |
+| Worker → Swift | `entries` | 最终 dedupe 后的全量结果，`is_final=true`。 |
+| Worker → Swift | `log` / `done` / `error` | 诊断、业务结束与协议错误。 |
 
-默认 path mode 不发送 `frame` / `finalize`。`start_job` 请求在后端处理期间保持打开，
-同一连接先收到 `progress` / `push_entry`，最后以 `entries(is_final=true)` 作为主响应。
-服务进程启动时的 `--engine` 是实际 OCR 引擎的权威来源；若与 `start_job.engine` 不一致，
-服务端返回带原文的 `done(ok=false)`，不会静默以另一引擎执行。
+Worker 启动时绑定的 engine 是实际执行身份；若与 `start_job.engine` 不一致，返回明确失败，
+不得以其他引擎继续。单条消息上限为 64 MiB；C++ 与 Python Worker 均遵守同一 framing
+边界和字段兼容契约。
 
-### 流式边界与安全保障
+## 默认 GUI 数据流
 
-- path mode 的 worker 从 `FfmpegExtractor` 取一帧就调用一次 `Pipeline.feed()`，不会保存全片帧。
-- Pipeline 只保留当前字幕段所需的少量 OCR 代表帧，数量由 `ocr_consensus_frames` 限制（默认 4）；内存不随视频时长线性增长。
-- `MAX_FRAMES` / `MAX_TOTAL_PIXELS` 已随批量缓冲删除，不再是当前安全模型的一部分。
-- legacy frame mode 仍限制单帧 `MAX_JPEG_BYTES=20MB` 与 `MAX_IMAGE_PIXELS=50_000_000`，并校验 Base64/JPEG；解码失败返回协议错误，不崩溃 server。
-- 取消 path mode 时同时设置取消状态并终止 ffmpeg 子进程；worker 在 `finally` 中回收 extractor 和线程，随后可启动新任务。
-
-## 抽帧：打轴 vs 预览
-
-### 打轴采样（统一后端，默认）
-
-GUI 提取默认走 **path mode**：`start_job.video_path` 传入本地绝对路径，Python
-`BridgeHandler` 使用 **`FfmpegExtractor`**（与 CLI / `run_benchmark` 同源）：
-
-```
-Swift start_job(video_path, fps, region_box, …)
-  → Python FfmpegExtractor(fps)  raw RGB 均匀网格
-  → Pipeline.feed / ocr_segment
-  → progress + push_entry + entries(is_final=True)
-```
-
-- **不再**经 AVF PTS 跳采样 + JPEG q=0.85 推帧（避免与验收 F1 漂移 ~10pp）。
-- 无 `video_path` 时仍可走 legacy **frame mode**（Swift 推 JPEG）供调试。
-- 产品 GUI 不调用 legacy frame mode；`FrameMessage.region_box` 是否为空不影响默认路径，任务区域已由 `start_job.region_box` 一次性配置。
-- 提取栏的处理倍速由 Swift 根据 path mode 的真实进度与本地计时计算：`(processed_frames / sample_fps) / elapsed_seconds`。它表示处理吞吐量而非播放速度；开始 0.25 秒内不显示，以避免计时粒度造成的跳变。
-
-### 预览 / 选区用帧（仍可 AVF）
-
-代表帧 Vision 候选框、播放预览继续用 AVFoundation；与打轴采样解耦。
-
-### 左栏自适应布局
-
-左栏将预览、播放控制、元数据、区域候选和提取栏放在单一纵向布局中。预览高度取
-`min(按源视频比例拟合的高度, 可用高度 - 240pt 控制区预留, 420pt)`；因此缩小窗口时，
-预览先收缩而不会吞掉下方交互。提取栏把按钮/引擎与采样/状态拆为两行，状态文本限制
-为单行截断，避免窄栏频繁换行。
-
-### 预览与兼容路径：Swift 侧 AVF / ffmpeg
-
-```
-AVURLAsset → AVAssetReader → PTS 跳采样 → JPEG q=0.85
-.mkv 等：系统 ffmpeg MJPEG 流（FfmpegFrameSampler）
+```text
+用户拖入视频
+  ↓
+DropZone → VideoMetadata → AVPlayer 预览
+  ↓
+VisionTextDetector 扫描代表帧 → 用户选择字幕区域
+  ↓
+RuntimePolicy.resolve(engine, runtime)
+  ↓
+PipelineClient 启动 C++ Worker（或显式 Python Worker）并握手
+  ↓
+start_job(video_path, region_box, subtitle_profile)
+  ↓
+Worker-owned FfmpegExtractor → Pipeline.feed / ocr_segment / finalize
+  ↓
+progress + push_entry → SubtitleEditor 增量展示
+  ↓
+entries(is_final=true) → SubtitleEditor 覆盖为最终去重结果
+  ↓
+SubtitleList 编辑 → SrtFormatter → NSSavePanel 写文件
 ```
 
-- 这条路径服务于预览、候选框扫描和兼容测试，不是产品默认打轴数据源。
-- `FfmpegDetector.whichFfmpeg()` 检测系统 ffmpeg，缺失弹窗引导 `brew install ffmpeg`。
+默认 path mode 不发送 JPEG `frame`，避免 AVFoundation 跳采样相位与有损编码造成质量漂移。
+C++ 与 Python extractor 是两套实现，其时间戳、ROI、像素和取消行为由冻结 parity/golden
+契约约束。
 
-## 字幕编辑模型
+## 预览、选区与 legacy frame mode
 
-`SubtitleEditor`（`@MainActor ObservableObject`）维护可编辑字幕列表：
+- AVFoundation 负责播放预览和常见容器代表帧。
+- 系统 ffmpeg 负责 mkv 预览/元数据兜底；缺失时 UI 提示安装。
+- `VisionTextDetector` 只决定 `region_box`，不替代 Worker 内 OCR。
+- 无 `video_path` 时协议仍支持 Swift 推 JPEG 的 legacy frame mode，供兼容测试和诊断；
+  产品 GUI 始终发送视频路径并使用 Worker-owned path mode。
+- legacy frame mode 继续限制 JPEG 大小、解码后像素数并拒绝无效 Base64/JPEG。
+
+## 字幕区域与坐标
+
+`RegionSelectionModel` 默认选择画面下部文字候选。多个候选合并为 source-frame 坐标：
+
+```text
+x = 0
+width = video_width
+y = min(selected.y) - padding
+height = max(selected.maxY) - min(selected.y) + 2 * padding
+```
+
+`region_box` 随 `start_job` 一次发送。有效固定区域进入 ROI path；未选择区域时 Worker
+使用 BottomCrop 语义。GUI 视图坐标、Vision 归一化坐标与 source-frame 像素坐标只在
+`VideoCoordinateMapper` 中转换。
+
+## 字幕编辑与导出
+
+`SubtitleEditor` 在主线程维护带 UUID 的可编辑条目：
 
 | 操作 | 行为 |
 |---|---|
-| `load(_ entries:)` | 从 IPC `entries` 拷贝为带 UUID 的可编辑模型 |
-| `updateText(at:id, text:)` | 修改单条文本 |
-| `merge(at:index)` | 与下一条合并：start = 当前.start，end = 下一条.end，text = "当前 下一条"，confidence = max |
-| `split(at:index)` | 在中点 split：前段保留原 text，后段 text 置空 |
-| `updateCurrent(atMs:)` | 根据播放时间更新 `currentId`，内部节流避免频繁刷新 |
-| `exportEntries()` | 返回 `[SubtitleEntryData]` 供 `SrtFormatter` 使用 |
+| load | 以 Worker 最终 entries 替换增量列表。 |
+| updateText | 修改单条文本。 |
+| merge | 与下一条合并时间范围和文本。 |
+| split | 在时间中点拆分，后段文本置空。 |
+| updateCurrent | 根据播放时间节流更新当前条目。 |
 
-编辑后的导出不走 IPC，直接由 Swift 端 `SrtFormatter.format(entries:)` 格式化并写文件。
-
-## Vision 字幕区域检测
-
-### 检测流程
-
-```
-代表帧 CGImage
-  → VNRecognizeTextRequest(recognitionLanguages: ["zh-Hans", "en-US"])
-  → VNImageRequestHandler.performRequests
-  → observations.topCandidates(1)
-  → 候选框数组（归一化 rect + text + confidence）
-```
-
-### 多选与合并
-
-- `RegionSelectionModel` 自动预选位于画面下部的候选框（字幕常见位置）。
-- 用户可点击候选列表增/减选择。
-- `VideoCoordinateMapper.mergedFullWidthRegion(selected:in:)` 将选中框合并为：
-  - `x = 0, width = video_width`
-  - `y = min(selected.y) - padding, height = max(selected.maxY) - min(selected.y) + 2*padding`
-- 合并后的 `region_box: [x,y,w,h]` 通过 `start_job` 传给 Python，`bridge.py` 据此选择 `FixedRegionDetector`；无选择时回退 `BottomCropDetector`。
-
-## SRT 导出
-
-`SrtFormatter` 为纯函数 enum，输入 `[SubtitleEntryData]`：
-
-```
-1
-00:00:01,000 --> 00:00:05,000
-字幕文本
-
-2
-...
-```
-
-- 时间码格式 `HH:MM:SS,mmm`，小时可超 24 不回绕。
-- 条目间空行，末尾保留换行。
-- 非法时间戳（负数或 endMs < startMs）抛出 `SrtFormatError`。
-
-导出由 `SubtitleList` header 的「导出 SRT」按钮触发，`SubLiftMacApp` 中通过 `NSSavePanel` 选路径并 UTF-8 写文件。
+编辑后的导出完全在 Swift 端完成。`SrtFormatter` 校验非负时间和 `end >= start`，输出
+`HH:MM:SS,mmm`、条目间空行及末尾换行。
 
 ## 已知约束
 
-- **仅开发者构建运行**：Phase 2 不做独立 `.app` 与公证，GUI 通过 `swift run SubLiftMac` 启动。
-- **mkv 依赖系统 ffmpeg**：未安装时 UI 禁用 mkv 拖入并弹窗引导。
-- **首条反馈取决于首段闭合**：当前已是真增量处理，段闭合后立即 OCR 并 `push_entry`；首条耗时不再随整部视频长度增长，但会受首段时长和 Vision 冷启动影响。
-- **长视频 GUI 手工体验尚未收口**：自动审计已验证内存平稳、取消和重启；≥10 分钟非 Zootopia 视频的进度观感与完整交互仍待人工验收。
-- **时间码拖动调整未实现**：编辑功能目前仅支持文本修改、合并、拆分，时间码手动调整留待后续。
+- 当前只支持 SwiftPM 开发者运行；独立 `.app`、依赖随包、签名和公证后置。
+- Python runtime 是显式开发回滚，不代表未来发布 artifact 会携带 Python。
+- legacy frame mode 仍是协议兼容面，移除前必须先审计测试与外部消费者。
+- 一次只处理一个视频；批量队列和精细时间码拖动尚未实现。
+- 长视频交互已有历史手工验收，但尚未形成持续运行的跨片源 GUI 回归套件。

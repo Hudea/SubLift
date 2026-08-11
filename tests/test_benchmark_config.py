@@ -9,6 +9,7 @@ import pytest
 
 from sublift.benchmark.config import (
     ManifestError,
+    discover_repo_root,
     load_manifest,
     load_run_config,
     resolve_run_config,
@@ -79,6 +80,19 @@ def test_load_run_config_keeps_feature_list_marker_as_legacy_fallback(tmp_path: 
 
     assert config.video_path == repo / "debug/movie.mp4"
     assert config.ground_truth_path == repo / "benchmark/datasets/movie.srt"
+
+
+def test_discover_repo_root_falls_back_to_cwd_without_markers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest = tmp_path / "orphan" / "run.json"
+    manifest.parent.mkdir(parents=True)
+    manifest.write_text("{}", encoding="utf-8")
+    fallback = tmp_path / "fallback"
+    fallback.mkdir()
+    monkeypatch.chdir(fallback)
+
+    assert discover_repo_root(manifest) == fallback
 
 
 def test_load_run_config_rejects_invalid_region_box(tmp_path: Path) -> None:
