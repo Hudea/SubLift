@@ -92,12 +92,12 @@
         "docs/design_ui/implementation-map.md"
       ],
       "subtasks": [
-        {"id": "10102.01", "name": "定义状态与命令矩阵", "description": "把设计状态合同编码为纯状态、Inspector mode 与命令可用性。", "dependencies": [], "status": "not-started"},
-        {"id": "10102.02", "name": "实现 WorkspaceModel 协调", "description": "接入现有 Core models，处理导入、提取、取消、最终结果和选择事件。", "dependencies": ["10102.01"], "status": "not-started"},
-        {"id": "10102.03", "name": "验证生命周期不变量", "description": "覆盖成功/失败/取消/重试/迟到事件与只读阶段。", "dependencies": ["10102.02"], "status": "not-started"}
+        {"id": "10102.01", "name": "定义状态与命令矩阵", "description": "把设计状态合同编码为纯状态、Inspector mode 与命令可用性。", "dependencies": [], "status": "done"},
+        {"id": "10102.02", "name": "实现 WorkspaceModel 协调", "description": "接入现有 Core models，处理导入、提取、取消、最终结果和选择事件。", "dependencies": ["10102.01"], "status": "done"},
+        {"id": "10102.03", "name": "验证生命周期不变量", "description": "覆盖成功/失败/取消/重试/迟到事件与只读阶段。", "dependencies": ["10102.02"], "status": "done"}
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-11 完成 10102 Workspace Session 状态模型与验收修复。\n\n实际修改文件：\n- apps/macos/Sources/SubLiftMac/Core/WorkspaceState.swift：新增 10 种 WorkspaceState、4 种 InspectorMode、TranscriptAccessMode 与统一 command availability 矩阵。\n- apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift：新增单窗口协调模型，组合 Player/Extractor/Editor/Metadata/Region；统一导入、提取、流式条目、最终结果、取消、失败、重试、选择与 Inspector intent。\n- apps/macos/Sources/SubLiftMac/Core/VideoMetadata.swift：拆分 fetch 与 publish，确保 metadata 只在 Workspace 校验 session token 后发布。\n- apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift：以 WorkspaceModel 作为视频 URL、导入、提取和取消的真实入口，移除 View 内重复协调。\n- apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift：接入 TranscriptAccessMode 与统一 commands，处理期禁用编辑、拆分、合并和导出。\n- apps/macos/Tests/SubLiftMacTests/WorkspaceModelTests.swift、VideoMetadataTests.swift：覆盖状态矩阵、非法 Open、乱序事件、流式/最终隔离、重新提取失败/取消恢复、metadata fetch/publish 隔离。\n- docs/phases/phase10.json、progress.md：同步 Feature 状态与真实验证证据。\n\n已实现的不变量：\n- loading/starting/processing/finalizing 阶段拒绝非法 Open；公开 intent 与 command matrix 一致。\n- metadata 请求先返回值，再以 session token、取消状态和 loading 前置状态校验后发布，迟到结果不会污染当前 Session。\n- 提取事件同时校验 Workspace job token 与合法前置状态，finalizing 不会被迟到 progress 倒退。\n- 流式条目仅作为只读投影；最终 entries 原子替换后才进入 review 并开放编辑/导出。\n- 从已有 review 重新提取时暂存最后成功结果；新任务失败或取消后恢复该结果及可用命令，首次任务失败/取消则清理临时条目。\n- 子 ObservableObject 的 objectWillChange 转发给 Workspace，SwiftUI 可稳定观察嵌套 Core 状态。\n\n验证：\n- `swift test --filter WorkspaceModelTests`：18 个 XCTest 全部通过。\n- `swift test`：55 个 XCTest 与 140 个 Swift Testing 测试全部通过，退出码 0。\n- `git diff --check`：通过。\n- `./init.sh`：OK。\n\n限制：本 Feature 不重排主窗口，也不实现 Welcome/Toolbar/Inspector/Timeline/Settings 的 Phase 10 视觉布局；后续从 10103 继续。"
     },
     {
       "id": "10103",

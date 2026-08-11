@@ -14,6 +14,8 @@ struct SubtitleList: View {
     @ObservedObject var editor: SubtitleEditor
     let onSeek: (Int) -> Void
     let onExport: () -> Void
+    let accessMode: TranscriptAccessMode
+    let commands: WorkspaceCommandAvailability
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,7 +42,7 @@ struct SubtitleList: View {
             } label: {
                 Label("导出 SRT", systemImage: "square.and.arrow.down")
             }
-            .disabled(editor.entries.isEmpty)
+            .disabled(!commands.canExport)
             Button {
                 if let id = editor.selectedId, let idx = editor.entries.firstIndex(where: { $0.id == id }) {
                     editor.split(at: idx)
@@ -48,7 +50,7 @@ struct SubtitleList: View {
             } label: {
                 Label("拆分", systemImage: "rectangle.split.2x1")
             }
-            .disabled(editor.selectedId == nil)
+            .disabled(!commands.canSplit)
             Button {
                 if let id = editor.selectedId, let idx = editor.entries.firstIndex(where: { $0.id == id }) {
                     editor.merge(at: idx)
@@ -56,7 +58,7 @@ struct SubtitleList: View {
             } label: {
                 Label("合并", systemImage: "link")
             }
-            .disabled(editor.selectedId == nil)
+            .disabled(!commands.canMerge)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -83,7 +85,11 @@ struct SubtitleList: View {
                 SubtitleRow(
                     entry: entry,
                     isCurrent: entry.id == editor.currentId,
-                    onTextChange: { newText in editor.updateText(at: entry.id, text: newText) }
+                    isEditable: accessMode == .editable,
+                    onTextChange: { newText in
+                        guard accessMode == .editable else { return }
+                        editor.updateText(at: entry.id, text: newText)
+                    }
                 )
                 .tag(entry.id)
                 .listRowInsets(EdgeInsets())
@@ -104,6 +110,7 @@ struct SubtitleList: View {
 private struct SubtitleRow: View {
     let entry: SubtitleEntry
     let isCurrent: Bool
+    let isEditable: Bool
     let onTextChange: (String) -> Void
 
     @State private var isEditing = false
@@ -141,7 +148,11 @@ private struct SubtitleRow: View {
                         .foregroundStyle(entry.text.isEmpty ? .secondary : .primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .simultaneousGesture(
-                            TapGesture(count: 2).onEnded { isEditing = true }
+                            TapGesture(count: 2).onEnded {
+                                if isEditable {
+                                    isEditing = true
+                                }
+                            }
                         )
                 }
             }
@@ -151,6 +162,11 @@ private struct SubtitleRow: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+        .onChange(of: isEditable) { editable in
+            if !editable {
+                isEditing = false
+            }
+        }
     }
 
     @ViewBuilder

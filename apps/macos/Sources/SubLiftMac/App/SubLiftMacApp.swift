@@ -25,12 +25,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 // MARK: - ContentView
 
 struct ContentView: View {
-    @State private var videoURL: URL?
-    @StateObject private var playerModel = PlayerModel()
-    @StateObject private var extractor = SubtitleExtractor()
-    @StateObject private var editor = SubtitleEditor()
-    @StateObject private var metadataLoader = VideoMetadataLoader()
-    @StateObject private var regionModel = RegionSelectionModel()
+    @StateObject private var workspace = WorkspaceModel()
+
+    private var playerModel: PlayerModel { workspace.playerModel }
+    private var extractor: SubtitleExtractor { workspace.extractor }
+    private var editor: SubtitleEditor { workspace.editor }
+    private var metadataLoader: VideoMetadataLoader { workspace.metadataLoader }
+    private var regionModel: RegionSelectionModel { workspace.regionModel }
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
     @State private var showFfmpegMissingAlert = false
@@ -39,7 +40,7 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if let url = videoURL {
+            if let url = workspace.currentVideoURL {
                 HSplitView {
                     // 左侧：预览 + 控制 + 元数据 + 提取
                     leftPane(url: url)
@@ -55,7 +56,9 @@ struct ContentView: View {
                                 playerModel.seek(toMs: ms)
                             }
                         },
-                        onExport: exportSRT
+                        onExport: exportSRT,
+                        accessMode: workspace.transcriptAccessMode,
+                        commands: workspace.commandAvailability
                     )
                         .frame(minWidth: 360)
                 }
@@ -66,51 +69,7 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 480)
         .dropDestination(for: URL.self) { items, _ in
             guard let url = items.first else { return false }
-            videoURL = url
-            return true
-        }
-        .onChange(of: videoURL) { newURL in
-            playerModel.url = newURL
-            editor.clear()
-            regionModel.clear()
-            if let url = newURL {
-                Task { await metadataLoader.load(url: url) }
-            } else {
-                metadataLoader.clear()
-            }
-            if let url = newURL, url.pathExtension.lowercased() == "mkv",
-               FfmpegDetector.detect() == nil {
-                showFfmpegMissingAlert = true
-            }
-        }
-        .onChange(of: extractor.status) { newStatus in
-            if case .done = newStatus, !extractor.entries.isEmpty {
-                editor.load(extractor.entries)
-            }
-        }
-        .onChange(of: extractor.entries) { newEntries in
-            // 流式增量：每条新字幕实时同步到 editor 显示
-            if case .done = extractor.status { return }
-            let diff = newEntries.count - editor.entries.count
-            if diff > 0 {
-                for i in (newEntries.count - diff)..<newEntries.count {
-                    editor.appendIncremental(newEntries[i])
-                }
-            }
-        }
-        .onChange(of: playerModel.currentMs) { newMs in
-            editor.updateCurrent(atMs: newMs)
-        }
-        .onChange(of: metadataLoader.metadata) { meta in
-            guard let meta, let url = videoURL else { return }
-            Task {
-                await regionModel.detect(
-                    url: url,
-                    videoWidth: meta.width,
-                    videoHeight: meta.height,
-                    durationMs: meta.durationMs
-                )
-            }
+            return importVideo(url)
         }
         .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
             Button("确定", role: .cancel) { }
@@ -236,21 +195,18 @@ struct ContentView: View {
         VStack(spacing: 8) {
             HStack(spacing: 12) {
                 Button {
-                    extractor.extract(
-                        videoURL: url,
-                        fps: samplingQuality.sampleFps,
+                    workspace.startExtraction(
                         engine: defaultEngine,
-                        regionBox: regionModel.regionBoxForIPC(),
-                        subtitleProfile: regionModel.subtitleProfileForIPC()
+                        quality: samplingQuality
                     )
                 } label: {
                     Label("提取字幕", systemImage: "text.viewfinder")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(extractor.isRunning)
+                .disabled(!workspace.commandAvailability.canExtract)
 
-                if extractor.isRunning {
-                    Button("取消") { extractor.cancel() }
+                if workspace.commandAvailability.canStop {
+                    Button("取消") { workspace.cancelExtraction() }
                         .buttonStyle(.bordered)
                 }
 
@@ -388,13 +344,24 @@ struct ContentView: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         if panel.runModal() == .OK {
-            videoURL = panel.url
+            if let url = panel.url {
+                _ = importVideo(url)
+            }
         }
+    }
+
+    @discardableResult
+    private func importVideo(_ url: URL) -> Bool {
+        guard workspace.openVideo(url: url) else { return false }
+        if url.pathExtension.lowercased() == "mkv", FfmpegDetector.detect() == nil {
+            showFfmpegMissingAlert = true
+        }
+        return true
     }
 
     /// 在当前播放位置重跑 Vision 选区（用户可先 seek 到有字幕的画面）。
     private func redetectRegionAtPlayhead() {
-        guard let meta = metadataLoader.metadata, let url = videoURL else { return }
+        guard let meta = metadataLoader.metadata, let url = workspace.currentVideoURL else { return }
         let seconds = Double(playerModel.currentMs) / 1000.0
         Task {
             await regionModel.detectAt(
@@ -407,6 +374,7 @@ struct ContentView: View {
     }
 
     private func exportSRT() {
+        guard workspace.commandAvailability.canExport else { return }
         let entries = editor.exportEntries()
         guard !entries.isEmpty else { return }
 
@@ -429,7 +397,7 @@ struct ContentView: View {
     }
 
     private func defaultSRTFilename() -> String {
-        guard let videoURL else { return "subtitle.srt" }
+        guard let videoURL = workspace.currentVideoURL else { return "subtitle.srt" }
         return videoURL.deletingPathExtension().appendingPathExtension("srt").lastPathComponent
     }
 }
