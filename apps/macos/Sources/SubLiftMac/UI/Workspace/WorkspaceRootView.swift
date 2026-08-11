@@ -83,6 +83,7 @@ struct WorkspaceRootView: View {
             }
             .onAppear {
                 #if DEBUG
+                EvidenceShot.settingsFixtureIfRequested()
                 EvidenceShot.autoOpenIfRequested(workspace: workspace)
                 EvidenceShot.inspectorFixtureIfRequested(workspace: workspace)
                 EvidenceShot.regionFixtureIfRequested(workspace: workspace)

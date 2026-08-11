@@ -1,5 +1,6 @@
 #if DEBUG
 import AppKit
+import SwiftUI
 
 /// Phase 10 视觉验收辅助：将当前可见窗口渲染为 PNG（仅 DEBUG 构建）。
 ///
@@ -19,7 +20,8 @@ enum EvidenceShot {
         guard let path = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SHOT"] else { return }
         let delay = Double(ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DELAY"] ?? "0") ?? 0
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) else { return }
+            // keyWindow 优先；多窗口（Settings fixture）时取最后创建的可见窗口。
+            guard let window = NSApp.keyWindow ?? NSApp.windows.last(where: { $0.isVisible }) else { return }
             save(window: window, to: path)
         }
     }
@@ -93,6 +95,23 @@ enum EvidenceShot {
             ]
             workspace.editor.load(data)
             workspace.selectSubtitle(id: workspace.editor.entries.first?.id)
+        }
+    }
+
+    /// 若设置了 SUBLIFT_EVIDENCE_SETTINGS=1，创建承载 SettingsView 的窗口（V07 截图 fixture）。
+    /// 仅 DEBUG 截图用：真实渲染 SettingsView，截图后由进程退出清理。
+    @MainActor
+    static func settingsFixtureIfRequested() {
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SETTINGS"] == "1" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            let hosting = NSHostingController(rootView: SettingsView())
+            let window = NSWindow(contentViewController: hosting)
+            window.setContentSize(NSSize(width: 500, height: 340))
+            window.title = "Settings"
+            window.styleMask = [.titled, .closable]
+            window.isReleasedWhenClosed = false
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
         }
     }
 

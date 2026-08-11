@@ -68,6 +68,7 @@ struct ExtractionInspector: View {
 
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
+    @AppStorage("developer_mode") private var developerMode: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -90,9 +91,9 @@ struct ExtractionInspector: View {
                 .foregroundStyle(.secondary)
 
             Picker("引擎", selection: $defaultEngine) {
-                Text(OcrEngineName.vision.displayName).tag(OcrEngineName.vision)
-                Text(OcrEngineName.paddle.displayName).tag(OcrEngineName.paddle)
-                Text(OcrEngineName.mock.displayName).tag(OcrEngineName.mock)
+                ForEach(EngineCapability.visibleEngines(developerMode: developerMode), id: \.self) { engine in
+                    Text(engine.displayName).tag(engine)
+                }
             }
             .pickerStyle(.radioGroup)
             .disabled(extractor.isRunning)

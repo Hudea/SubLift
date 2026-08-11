@@ -629,7 +629,7 @@
           "name": "建立多页 Settings",
           "description": "拆分 General/Recognition/Advanced 并保持系统原生布局。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "10311.02",
@@ -638,7 +638,7 @@
           "dependencies": [
             "10311.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "10311.03",
@@ -647,11 +647,11 @@
           "dependencies": [
             "10311.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 10311 Settings 与引擎可见性。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Settings/EngineCapability.swift：EngineCapability 纯逻辑（visibleEngines：mock 仅 developerMode；status：ffmpeg/paddle/developerMode 注入、缺失如实 inline；runtimeLabel：RuntimePolicy.resolve 真实解析，Python 仅显式 Oracle/回滚）；SettingsPresentation.sections = [General, Recognition, Advanced]、actions 空（断言无下载按钮）。\n- 重写 apps/macos/Sources/SubLiftMac/UI/Settings/SettingsView.swift：TabView 三分区（General 采样质量+帮助、Recognition 引擎 picker（visibleEngines）+ 引擎状态区（真实检测 FfmpegDetector/模型目录）、Advanced Developer Mode toggle + 运行时可见性 + \"Python 仅作为显式 Oracle 或回滚使用\"说明）；无假模型下载按钮。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift：引擎 Picker 改用 EngineCapability.visibleEngines(developerMode:)（P1 修复：主提取流程 Mock 仅开发者模式可见，与 Settings 同一真源）。\n- 删除 apps/macos/Sources/SubLiftMac/UI/SettingsView.swift（旧单分区面板，被替代）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_SETTINGS（创建承载 SettingsView 的窗口截图 fixture，release 不含）。\n- 新增 apps/macos/Tests/SubLiftMacTests/SettingsTests.swift：10 个测试（可见引擎/mock 仅 developer/无 Automatic/Whisper/各引擎 status/runtime label/三分区/无下载按钮）。\n- 新增 docs/plans/features/10311.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Settings 分为 General / Recognition / Advanced（TabView 三分区）。\n- Automatic 和 Whisper 不出现（OcrEngineName 无这些值 + UI 无文案）。\n- Mock 仅在 Developer Mode 可见：Settings Recognition 引擎选择器与 ExtractionInspector 引擎选择器共用 EngineCapability.visibleEngines（P1 修复，同一真源）。\n- Python 仅作为显式 Oracle/回滚：runtimeLabel 来自 RuntimePolicy.resolve 真实解析（未修改 RuntimePolicy 本身）；无\"自动切换\"类文案。\n- capability 缺失用真实 inline 状态：ffmpeg（FfmpegDetector.detect 真实进程检测）缺失显示\"MKV 导入与回退预览不可用\"；paddle 模型目录（~/.cache/sublift/rapidocr-models，与 Python DEFAULT_MODEL_DIR 对齐）缺失显示\"模型未安装\"。\n- 不提供假模型下载按钮（SettingsPresentation.actions 为空 + View 无下载 UI）。\n\n验证（最终代码状态）：\n- 完整 ：151 个 XCTest（新增 10 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10311/）：\n- V07-settings.png：Settings 面板（500×340 逻辑），Light，实际运行应用（DEBUG fixture 创建承载 SettingsView 的窗口并渲染；keyWindow 优先、多窗口取最后可见窗口）。程序化检查：500×340 尺寸、65 色（General tab 采样质量 segmented + 帮助文本 + 三个 tab 图标）。\n- 截图在全部审核修复后重新生成。\n\naccessibility labels/values 清单：\n- General：采样质量 picker label\"采样质量\"。\n- Recognition：引擎 picker label\"OCR 引擎\"；引擎状态行 combine\"<引擎>：<状态>\"+detail label。\n- Advanced：开发者模式 toggle label\"开发者模式\"；运行时行 combine label\"<引擎>：<runtime>\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（151+140 全绿、0 warning）：无 P0；P1 为验收 3\"Mock 仅在 Developer Mode 可见\"应用级未满足（ExtractionInspector 引擎选择器无条件暴露 Mock）——修复：改用 EngineCapability.visibleEngines(developerMode:)，与 Settings 同一真源。\n- 复核 Agent 确认 P1 修复通过（选择器与 Settings 一致；defaultEngine=mock 且开发者模式关闭时选择器不越界）。\n- 修复后重新运行完整 swift test（151+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Settings 为单窗格 Form；实现为 TabView 三分区（更清晰对应验收 1）。\n- capability 状态为真实检测（非参考图的示意色块）。\n\n未执行验证（如实记录）：\n- Settings 窗口的真实菜单路径（⌘,）打开未执行（菜单命令 selector 在 swift run 进程中不可达，改用 DEBUG fixture 直接创建 Settings 窗口截图）；SettingsView 渲染与分区由截图确认。\n- Developer Mode toggle 的真实交互切换未执行（权限阻塞）；visibleEngines 逻辑由单测覆盖。\n\n后续 Feature 边界：\n- 不引入新引擎、不新增第三方依赖（non-goals 保持）。\n- 10412 将做响应式与辅助功能硬化（含 Settings 的键盘/AX 路径）并在最终 UI 重跑 V01–V10。"
     },
     {
       "id": "10412",
