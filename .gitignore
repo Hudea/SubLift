@@ -1,4 +1,5 @@
 .claude/
+.commandcode/
 .ruff_cache/
 
 debug/

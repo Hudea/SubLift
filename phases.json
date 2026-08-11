@@ -71,6 +71,13 @@
       "description": "对齐精简 Harness，校正文档真源，并分阶段收口验证命名、手工脚本、benchmark 兼容边界与本地产物卫生；Phase 8 保留给未合入 main 的 UI 分支实验。",
       "detail_file": "docs/phases/phase9.json",
       "status": "done"
+    },
+    {
+      "id": "phase10",
+      "name": "Phase 10 - macOS Native Workbench UI",
+      "description": "按已冻结的 vNext 设计基线，将现有 SwiftUI GUI 分阶段升级为原生 macOS 字幕工作台；不扩张到批量队列、自动引擎、新格式或分发。",
+      "detail_file": "docs/phases/phase10.json",
+      "status": "in-progress"
     }
   ]
 }

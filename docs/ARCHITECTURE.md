@@ -328,7 +328,25 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 [Phase 4.2 正式报告](reports/phase4.2-ocr-attribution-baseline.md)。下一优化先补多源 GT，
 再在质量门内实验代表帧排序与有效 OCR 调用数。
 
-## 15. 架构决策
+## 15. Phase 10 macOS Native Workbench UI（已规划，待实施）
+
+Phase 10 保留 SwiftUI + UDS + 默认 C++ Worker 架构，只重组单窗口 Session 的状态所有权与
+原生 macOS Surface。目标新增 `WorkspaceModel/WorkspaceState` 作为组合层：负责 video、
+metadata、player、region、extraction、transcript、selection 和 command availability；
+现有 focused Core models 继续拥有 IPC、播放、坐标、编辑与导出逻辑，View 不复制业务实现。
+
+主窗口采用 Video Workspace + Transcript Panel + 可选 Context Inspector，不增加永久左侧
+Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings 只存放跨 Session
+偏好。processing/finalizing 的 Live Transcript 必须只读，只有最终 `entries` 替换完成后才进入
+可编辑 Review，从结构上消除最终结果覆盖处理中用户修改的风险。
+
+本 Phase 不改变 runtime fail-closed、Worker path mode、ROI/坐标、算法或 UDS framing；也不
+实现 Task Center/批量队列、自动引擎、Whisper、ASS/VTT、模型下载与独立分发。设计入口见
+[docs/design_ui](design_ui/README.md)，实施计划见
+[Phase 10 macOS Workbench UI](plans/architecture/phase10-macos-workbench-ui.md)，跟踪见
+[phase10.json](phases/phase10.json)。
+
+## 16. 架构决策
 
 完整决策记录见 [DECISIONS.md](DECISIONS.md)，要点：
 
@@ -352,8 +370,9 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 - **ADR-0018**：PaddleOCR 采用 rapidocr PP-OCRv6 + onnxruntime，模型缓存放在用户缓存目录；作为可选第二 OCR 引擎接入
 - **ADR-0024**：在去 Python/打包前插入 Phase 6.8，先完成 Paddle Native stage parity、多源质量门、性能与安全 cutover
 - **ADR-0029**：Paddle Native 全门通过后正式默认 C++；ORT 以已验收 SHA 和相对 rpath 固化，Python 保留回滚
+- **ADR-0035**：Phase 10 采用单视频 Native Workbench + Context Inspector；Live Transcript 在 final entries 前只读，未来能力不做假入口
 
-## 16. Harness 协作与验证边界
+## 17. Harness 协作与验证边界
 
 项目的操作性进度索引为 `phases.json`，每个 `detail_file` 指向
 `docs/phases/phase*.json` 的唯一 feature 记录。`.agent/` 当前只提供轻量规则、

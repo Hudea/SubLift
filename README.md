@@ -179,6 +179,9 @@ swift run SubLiftMac
 - **SRT 导出**：点击「导出 SRT」选择保存路径
 
 > 处理 mkv 需要系统已安装 ffmpeg，否则 UI 会提示 `brew install ffmpeg`。
+>
+> Phase 10 已完成 Native Workbench 设计与 Feature 拆解，但产品界面尚未升级；
+> 实施真源见 [UI 设计入口](docs/design_ui/README.md)。
 
 ## 开发
 
@@ -202,7 +205,7 @@ uv run mypy src tests         # 类型检查（strict）
 
 - [架构设计](docs/ARCHITECTURE.md) — 模块布局、数据流、分层原则
 - [需求规格](docs/REQUIREMENTS.md) — 功能需求、非功能需求、验收标准
-- 设计文档：[pipeline](docs/design/pipeline.md) · [ocr](docs/design/ocr.md) · [extractor](docs/design/extractor.md) · [benchmark](docs/design/benchmark.md) · [macos-gui](docs/design/macos-gui.md) · [OCR 内部性能归因（Phase 4.2 计划）](docs/design/ocr-performance-attribution.md)
+- 设计文档：[UI vNext](docs/design_ui/README.md) · [pipeline](docs/design/pipeline.md) · [ocr](docs/design/ocr.md) · [extractor](docs/design/extractor.md) · [benchmark](docs/design/benchmark.md) · [macos-gui 当前实现](docs/design/macos-gui.md) · [OCR 内部性能归因（Phase 4.2 计划）](docs/design/ocr-performance-attribution.md)
 - [Benchmark 用法](benchmark/README.md) — 统一 `run/matrix/score` 入口、产物与回归锚点
 - [已知障碍](docs/HURDLES.md) — 开发中遇到的技术问题与解决方案
 

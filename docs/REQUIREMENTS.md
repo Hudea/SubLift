@@ -67,6 +67,9 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - **F25 导出对话框** ✅：选择保存位置并导出 SRT。
 - **F26 引擎管理 UI** ✅：vision / paddle / mock 选择通过 UserDefaults 持久化。
 - **F27 独立 `.app` 分发** ❌：按 ADR-0009 跳过；当前通过 SwiftPM 构建运行。
+- **F28 Native Workbench UI** ❌：Phase 10 设计基线已冻结，计划以单视频 Workspace、
+  Context Inspector、只读 Live Transcript、可编辑 Review、轻量字幕时间线与分层 Settings
+  重组现有能力；产品实现尚未开始，不包含 F10 自动引擎或 F24 批量队列。
 
 ## 4. 非功能需求
 
@@ -79,6 +82,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
 | **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ macOS 开发者环境可构建运行；PaddleOCR 是不依赖 Vision 的可选 OCR 引擎 |
 | **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
+| **GUI 可用性 / 可访问性** | macOS 原生状态、960×600 最小布局、键盘/VoiceOver、浅深色与系统 Accent 可用 | ❌ Phase 10 已定义 V01–V10/A01–A02 验收矩阵，待实施 |
 
 ## 5. 输入输出规范
 
@@ -168,3 +172,10 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] C++ capability 缺失时 fail-closed；显式 Python runtime 保留 Oracle / 开发回滚
 - [x] Native target、Ports/Adapters、ResourceLocator 与开发期构建边界收口
 - [ ] 独立 `.app`、依赖随包、签名、公证与最终发布 artifact Python-free 门后置到未来发布阶段
+
+### Phase 10 — macOS Native Workbench UI（已规划，待开发）
+
+- [x] 外部设计说明与 8 张参考图已整理为 `docs/design_ui/` 设计、状态、实现映射和资产基线
+- [x] Task Center/批量队列、Automatic/Whisper、ASS/VTT、模型下载与分发已从本 Phase 排除
+- [ ] Workspace Session、Native Shell、Inspector、Region、Transcript、Processing/Review、Timeline 与 Settings 按 Feature 顺序实施
+- [ ] V01–V10 视觉状态、A01–A02 辅助功能、Swift 测试与项目标准门全部通过

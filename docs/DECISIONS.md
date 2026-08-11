@@ -5,6 +5,32 @@
 
 ---
 
+## ADR-0035 Phase 10 采用 Native Workbench 与处理期只读 Transcript（2026-08-11）
+
+- **状态**：设计与实施边界已确认；10001 已登记，产品实施待 10102 起逐项推进。
+- **背景**：现有 SwiftUI GUI 已具备单视频导入、预览、字幕区域、流式结果、编辑、取消和
+  SRT 导出，但 `ContentView` 直接组合多组状态，metadata/候选/提取控件长期占据主内容。
+  `push_entry` 会先追加到 Editor，final entries 又会整体替换；若处理时允许编辑，会产生
+  用户修改被覆盖的风险。外部 vNext 设计同时包含 Task Center、Automatic、Whisper 等未来图景，
+  与当前 F10/F24 和引擎矩阵并不等价。
+- **决策**：
+  1. Phase 10 采用一个 Window 一个视频 Session 的 Native Workbench；主窗口由 Video、
+     Transcript 与可选 Context Inspector 组成，不增加永久左 Sidebar。
+  2. 新增 WorkspaceModel/State 只负责组合现有 focused Core models 与 command availability；
+     不把 IPC、算法、坐标、编辑或导出实现搬进 View。
+  3. processing/finalizing 的 Live Transcript 只允许选择、seek、浏览和搜索；final entries
+     原子落地后才进入可编辑 Review。
+  4. Toolbar/Menu/Context menu 复用同一 commands；Session 参数进 Inspector，跨 Session
+     偏好进 Settings，Mock/Python Oracle 进入 Advanced/Developer。
+  5. Task Center/批量、Automatic engine、Whisper、ASS/VTT、模型下载和独立分发不因参考图
+     进入 Phase 10；只有真实契约、数据和测试存在时才显示入口。
+- **理由**：该结构强化当前单视频核心路径，保留 C++/Python runtime 和 UDS 边界，并用明确
+  状态所有权消除数据覆盖风险；系统组件也能自然适配 macOS 13+、浅深色和辅助功能。
+- **影响**：设计真源为 `docs/design_ui/`，Feature 顺序与证据在 `docs/phases/phase10.json`；
+  当前 GUI 在 Feature 完成前仍按 `docs/design/macos-gui.md` 描述，不能宣称已视觉升级。
+
+---
+
 ## ADR-0034 标准验证入口与 Harness 初始化命名解耦（2026-08-10）
 
 - **状态**：已确认并由 09002 实施。

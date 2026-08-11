@@ -4,6 +4,10 @@
 >
 > ADR-0005 记录了最初的 SwiftUI + Python Worker 方案；Phase 6 cutover 后，GUI 默认启动
 > C++ `sublift_worker`，Python server 只在显式 runtime 下承担 Oracle / 开发回滚。
+>
+> **当前/目标边界：** 本文描述已实现的 Phase 2/6 GUI。Phase 10 的目标视觉、交互状态、
+> 组件迁移与验收合同见 [`docs/design_ui/`](../design_ui/README.md)；在对应 Feature 完成前，
+> 不得把 vNext 参考图当作当前产品行为。
 
 ## 运行时边界
 
