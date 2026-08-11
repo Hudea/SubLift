@@ -74,6 +74,8 @@ struct TranscriptPanel: View {
     let currentMs: Int
     /// processing/finalizing 时显示的只读说明（VoiceOver 可读）。
     let readOnlyNotice: String?
+    /// 选中字幕变化时通知（切换 Inspector 到 Subtitle 模式，不强制打开）。
+    let onSelectSubtitle: (UUID?) -> Void
 
     @State private var searchQuery = ""
     /// 搜索变化后待滚动的当前播放字幕（List 可能因无结果被拆掉，重建后消费）。
@@ -217,6 +219,7 @@ struct TranscriptPanel: View {
                 }
             }
             .onChange(of: editor.selectedId) { id in
+                onSelectSubtitle(id)
                 if let id, let entry = editor.entries.first(where: { $0.id == id }) {
                     editor.updateCurrent(atMs: entry.startMs)
                     onSeek(entry.startMs)

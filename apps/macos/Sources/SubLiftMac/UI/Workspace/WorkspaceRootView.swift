@@ -87,6 +87,7 @@ struct WorkspaceRootView: View {
                 EvidenceShot.inspectorFixtureIfRequested(workspace: workspace)
                 EvidenceShot.regionFixtureIfRequested(workspace: workspace)
                 EvidenceShot.extractFixtureIfRequested(workspace: workspace)
+                EvidenceShot.selectFixtureIfRequested(workspace: workspace)
                 EvidenceShot.scheduleIfRequested()
                 #endif
             }
@@ -123,7 +124,8 @@ struct WorkspaceRootView: View {
                         accessMode: workspace.transcriptAccessMode,
                         commands: workspace.commandAvailability,
                         currentMs: workspace.playerModel.currentMs,
-                        readOnlyNotice: TranscriptReadOnlyNotice.text(for: workspace.state)
+                        readOnlyNotice: TranscriptReadOnlyNotice.text(for: workspace.state),
+                        onSelectSubtitle: { workspace.selectSubtitle(id: $0) }
                     )
                 }
 
@@ -138,6 +140,8 @@ struct WorkspaceRootView: View {
                         regionModel: workspace.regionModel,
                         extractor: workspace.extractor,
                         workspaceState: workspace.state,
+                        editor: workspace.editor,
+                        transcriptAccessMode: workspace.transcriptAccessMode,
                         onRedetectRegion: redetectRegionAtPlayhead
                     ) {
                         workspace.setInspectorPresented(false)

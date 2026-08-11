@@ -67,6 +67,18 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_SELECT=1，提取完成后选中第一条字幕（Subtitle Inspector 截图 fixture）。
+    @MainActor
+    static func selectFixtureIfRequested(workspace: WorkspaceModel) {
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SELECT"] == "1" else { return }
+        // 等 mock 提取完成（entries 就绪）后选中第一条。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+            if let first = workspace.editor.entries.first {
+                workspace.selectSubtitle(id: first.id)
+            }
+        }
+    }
+
     static func save(window: NSWindow, to path: String) {
         guard let view = window.contentView else { return }
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }

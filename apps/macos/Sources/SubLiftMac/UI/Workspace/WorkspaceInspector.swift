@@ -15,6 +15,8 @@ struct WorkspaceInspector: View {
     let regionModel: RegionSelectionModel
     let extractor: SubtitleExtractor
     let workspaceState: WorkspaceState
+    let editor: SubtitleEditor
+    let transcriptAccessMode: TranscriptAccessMode
     let onRedetectRegion: () -> Void
     let onClose: () -> Void
 
@@ -73,7 +75,10 @@ struct WorkspaceInspector: View {
                 state: workspaceState
             )
         case .subtitle:
-            placeholder
+            SubtitleInspector(
+                editor: editor,
+                accessMode: transcriptAccessMode
+            )
         }
     }
 
