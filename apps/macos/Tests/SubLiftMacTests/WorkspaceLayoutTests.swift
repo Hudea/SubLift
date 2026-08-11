@@ -105,4 +105,25 @@ final class WorkspaceLayoutTests: XCTestCase {
         )
         XCTAssertEqual(clamped, 660, accuracy: 0.1)
     }
+
+    func testClampedLeftWidthYieldsToTranscriptWhenSpaceTight() {
+        // 960 窗口 + Inspector 300 → 可用 660 < 400+320：Video 让位保证 Transcript ≥320，
+        // 不产生 HStack 溢出。
+        let left = WorkspaceLayout.clampedLeftWidth(
+            proposed: 607.6, containerWidth: 660, leftMin: 400, rightMin: 320
+        )
+        XCTAssertEqual(left, 340, accuracy: 0.1)
+        XCTAssertGreaterThanOrEqual(660 - left - 1, 319)
+
+        // 空间充足时正常 clamp（1200 容器）。
+        let normal = WorkspaceLayout.clampedLeftWidth(
+            proposed: 700, containerWidth: 1200, leftMin: 400, rightMin: 320
+        )
+        XCTAssertEqual(normal, 700, accuracy: 0.1)
+        // 拖动到极限：右栏保底 320。
+        let extreme = WorkspaceLayout.clampedLeftWidth(
+            proposed: 9999, containerWidth: 1200, leftMin: 400, rightMin: 320
+        )
+        XCTAssertEqual(extreme, 880, accuracy: 0.1)
+    }
 }

@@ -44,14 +44,17 @@ enum WorkspaceLayout {
     }
 
     /// 用户拖动 Split divider 后对左栏宽度的 clamp：
-    /// 不低于左栏最小宽，且不给右栏留低于其最小宽的空间。
+    /// - 空间充足时：左栏 ∈ [leftMin, container − rightMin]（右栏保底 rightMin）；
+    /// - 空间不足时（container < leftMin + rightMin）：优先保证右栏 ≥ rightMin，
+    ///   左栏让位（可低于 leftMin），避免 HStack 溢出。
     static func clampedLeftWidth(
         proposed: CGFloat,
         containerWidth: CGFloat,
         leftMin: CGFloat,
         rightMin: CGFloat
     ) -> CGFloat {
-        let upperBound = max(containerWidth - rightMin, leftMin)
-        return min(max(proposed, leftMin), upperBound)
+        let upperBound = max(containerWidth - rightMin, 0)
+        let lowerBound = min(leftMin, upperBound)
+        return min(max(proposed, lowerBound), max(upperBound, lowerBound))
     }
 }

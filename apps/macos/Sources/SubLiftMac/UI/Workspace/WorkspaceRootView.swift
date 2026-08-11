@@ -123,10 +123,15 @@ struct WorkspaceRootView: View {
                     )
                 }
 
-                // Inspector 容器骨架：先回收其预留位（10105 起填充内容）。
+                // Inspector 容器骨架：先回收其预留位（内容按模式分发）。
                 if workspace.isInspectorPresented {
                     Divider()
-                    WorkspaceInspector(mode: workspace.inspectorMode) {
+                    WorkspaceInspector(
+                        mode: workspace.inspectorMode,
+                        metadataLoader: workspace.metadataLoader,
+                        playerModel: workspace.playerModel,
+                        videoURL: workspace.currentVideoURL
+                    ) {
                         workspace.setInspectorPresented(false)
                     }
                 }
@@ -219,8 +224,6 @@ struct WorkspaceRootView: View {
                 Divider()
                 VideoControlsView(model: workspace.playerModel)
                 Divider()
-                metadataBar
-                Divider()
                 RegionCandidateList(model: workspace.regionModel) {
                     redetectRegionAtPlayhead()
                 }
@@ -250,54 +253,6 @@ struct WorkspaceRootView: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipped()
-    }
-
-    // MARK: - 元数据栏（10105 迁移到 Video Inspector 前保留）
-
-    private var metadataBar: some View {
-        HStack(spacing: 16) {
-            if let meta = workspace.metadataLoader.metadata {
-                Label {
-                    Text(meta.fileName)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } icon: {
-                    Image(systemName: "film")
-                }
-
-                Divider()
-                    .frame(height: 14)
-
-                Label(VideoMetadata.formatResolution(width: meta.width, height: meta.height), systemImage: "aspectratio")
-
-                Divider()
-                    .frame(height: 14)
-
-                Label(TimeFormatter.formatMs(meta.durationMs), systemImage: "clock")
-
-                Divider()
-                    .frame(height: 14)
-
-                Label(meta.codec, systemImage: "cpu")
-
-                Divider()
-                    .frame(height: 14)
-
-                Label(VideoMetadata.formatFileSize(meta.fileSize), systemImage: "doc")
-
-                Spacer()
-            } else {
-                ProgressView()
-                    .scaleEffect(0.7)
-                Text("解析元数据...")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-        }
-        .font(.system(.caption, design: .monospaced))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
     }
 
     // MARK: - 提取栏（Extract/Stop 已移入 Toolbar；此处保留参数与真实状态投影）
