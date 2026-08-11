@@ -40,6 +40,7 @@ final class WorkspaceModel: ObservableObject {
     private var priorStateBeforeRegionEditing: WorkspaceState = .ready
     private var metadataTask: Task<Void, Never>?
     private let metadataRequest: MetadataRequest
+    private let importPolicy: VideoImportPolicy
     private var retainedFinalEntries: [SubtitleEntryData]?
     private var liveEntryCount = 0
 
@@ -51,7 +52,8 @@ final class WorkspaceModel: ObservableObject {
         editor: SubtitleEditor? = nil,
         metadataLoader: VideoMetadataLoader? = nil,
         regionModel: RegionSelectionModel? = nil,
-        metadataRequest: MetadataRequest? = nil
+        metadataRequest: MetadataRequest? = nil,
+        importPolicy: VideoImportPolicy = VideoImportPolicy()
     ) {
         let resolvedMetadataLoader = metadataLoader ?? VideoMetadataLoader()
         self.playerModel = playerModel ?? PlayerModel()
@@ -62,6 +64,7 @@ final class WorkspaceModel: ObservableObject {
         self.metadataRequest = metadataRequest ?? { url in
             await resolvedMetadataLoader.fetch(url: url)
         }
+        self.importPolicy = importPolicy
 
         setupSubscriptions()
     }
@@ -160,10 +163,23 @@ final class WorkspaceModel: ObservableObject {
 
     // MARK: - Public Intent & Event Handlers
 
+    /// 导入校验真源：Open Panel、drop 反馈与 `openVideo` 门共用。
+    func validateImport(_ url: URL) -> VideoImportValidation {
+        importPolicy.validate(url: url)
+    }
+
     /// 打开或切换视频：重置 Session 临时状态（不改 Settings），生成新 sessionToken 并加载 metadata。
+    ///
+    /// 在改变 Session 前执行 fail-closed 校验：非法格式或 MKV 缺 ffmpeg 直接拒绝。
     @discardableResult
     func openVideo(url: URL) -> Bool {
         guard commandAvailability.canOpen else { return false }
+        switch importPolicy.validate(url: url) {
+        case .valid:
+            break
+        case .unsupportedFormat, .mkvRequiresFfmpeg:
+            return false
+        }
 
         metadataTask?.cancel()
 

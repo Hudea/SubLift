@@ -9,6 +9,7 @@ struct SubLiftMacApp: App {
         WindowGroup {
             ContentView()
         }
+        .defaultSize(width: 1280, height: 800)
         Settings {
             SettingsView()
         }
@@ -37,59 +38,90 @@ struct ContentView: View {
     @State private var showFfmpegMissingAlert = false
     @State private var exportError: String?
     @State private var showExportSuccess = false
+    @State private var isDropTargeted = EvidenceShot.isDropTargetFixture
+    @State private var dropErrorMessage: String?
 
     var body: some View {
-        Group {
-            if let url = workspace.currentVideoURL {
-                HSplitView {
-                    // 左侧：预览 + 控制 + 元数据 + 提取
-                    leftPane(url: url)
-                    .frame(minWidth: 400)
+        DropTargetView(isTargeted: $isDropTargeted, onDrop: importVideo) {
+            Group {
+                if let url = workspace.currentVideoURL {
+                    HSplitView {
+                        // 左侧：预览 + 控制 + 元数据 + 提取
+                        leftPane(url: url)
+                        .frame(minWidth: 400)
 
-                    // 右侧：字幕列表 + 编辑
-                    SubtitleList(
-                        editor: editor,
-                        onSeek: { ms in
-                            if playerModel.loadFailed {
-                                playerModel.fallbackSeek(toMs: ms)
-                            } else {
-                                playerModel.seek(toMs: ms)
-                            }
-                        },
-                        onExport: exportSRT,
-                        accessMode: workspace.transcriptAccessMode,
-                        commands: workspace.commandAvailability
+                        // 右侧：字幕列表 + 编辑
+                        SubtitleList(
+                            editor: editor,
+                            onSeek: { ms in
+                                if playerModel.loadFailed {
+                                    playerModel.fallbackSeek(toMs: ms)
+                                } else {
+                                    playerModel.seek(toMs: ms)
+                                }
+                            },
+                            onExport: exportSRT,
+                            accessMode: workspace.transcriptAccessMode,
+                            commands: workspace.commandAvailability
+                        )
+                            .frame(minWidth: 360)
+                    }
+                } else {
+                    WelcomeView(
+                        onOpen: openFile,
+                        isDropTargeted: isDropTargeted || EvidenceShot.isDropTargetFixture
                     )
-                        .frame(minWidth: 360)
                 }
-            } else {
-                emptyState
             }
-        }
-        .frame(minWidth: 800, minHeight: 480)
-        .dropDestination(for: URL.self) { items, _ in
-            guard let url = items.first else { return false }
-            return importVideo(url)
-        }
-        .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            Text("mkv 视频需要 ffmpeg 支持。请先安装：\nbrew install ffmpeg\n\n安装后重新打开视频。")
-        }
-        .alert("导出失败", isPresented: Binding(
-            get: { exportError != nil },
-            set: { if !$0 { exportError = nil } }
-        )) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            if let exportError {
-                Text(exportError)
+            .frame(minWidth: 800, minHeight: 480)
+            .overlay(alignment: .top) {
+                if isDropTargeted, workspace.currentVideoURL != nil {
+                    Text("松开以打开新视频")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(.regularMaterial, in: Capsule())
+                        .padding(.top, 10)
+                        .transition(.opacity)
+                }
             }
-        }
-        .alert("导出成功", isPresented: $showExportSuccess) {
-            Button("确定", role: .cancel) { }
-        } message: {
-            Text("SRT 字幕已保存。")
+            .overlay(alignment: .bottom) {
+                if let dropErrorMessage {
+                    dropErrorBanner(dropErrorMessage)
+                }
+            }
+            .animation(.easeOut(duration: 0.15), value: isDropTargeted)
+            .alert("需要 ffmpeg", isPresented: $showFfmpegMissingAlert) {
+                Button("好", role: .cancel) { }
+            } message: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("此 MKV 视频需要 ffmpeg 才能预览和提取。请安装 ffmpeg 后重新打开视频。")
+                    Text("brew install ffmpeg")
+                        .font(.system(.body, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .alert("导出失败", isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            )) {
+                Button("确定", role: .cancel) { }
+            } message: {
+                if let exportError {
+                    Text(exportError)
+                }
+            }
+            .alert("导出成功", isPresented: $showExportSuccess) {
+                Button("确定", role: .cancel) { }
+            } message: {
+                Text("SRT 字幕已保存。")
+            }
+            .onAppear {
+                #if DEBUG
+                EvidenceShot.scheduleIfRequested()
+                #endif
+            }
         }
     }
 
@@ -319,30 +351,14 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - 空状态
-
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "film")
-                .font(.system(size: 48))
-                .foregroundStyle(.secondary)
-            Text("SubLift")
-                .font(.title)
-            Text("硬字幕提取工具")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Button("打开视频") { openFile() }
-                .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-    }
+    // MARK: - 导入意图（Open Panel 与 drop 共用）
 
     private func openFile() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.movie]
+        panel.allowedContentTypes = VideoImportPolicy.openPanelContentTypes
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        panel.message = "选择 MP4、MOV 或 MKV 视频"
         if panel.runModal() == .OK {
             if let url = panel.url {
                 _ = importVideo(url)
@@ -350,13 +366,48 @@ struct ContentView: View {
         }
     }
 
+    /// 统一导入 intent：先校验（fail-closed），再交给 WorkspaceModel 打开。
+    /// - 非法格式：返回 false 并给出 inline 图标+文字反馈（不改变 Session）。
+    /// - MKV 缺 ffmpeg：返回 false 并弹出 actionable alert（不改变 Session）。
+    /// - 状态不允许打开（如 processing）：返回 false 并给出明确反馈，避免"松开以打开"承诺落空。
     @discardableResult
     private func importVideo(_ url: URL) -> Bool {
-        guard workspace.openVideo(url: url) else { return false }
-        if url.pathExtension.lowercased() == "mkv", FfmpegDetector.detect() == nil {
+        switch workspace.validateImport(url) {
+        case .valid:
+            dropErrorMessage = nil
+            if workspace.openVideo(url: url) {
+                return true
+            }
+            dropErrorMessage = "当前无法打开新视频。"
+            return false
+        case .unsupportedFormat(let ext):
+            dropErrorMessage = ext.isEmpty
+                ? "无法打开：仅支持 MP4、MOV、MKV 视频。"
+                : "无法打开 .\(ext)：仅支持 MP4、MOV、MKV 视频。"
+            return false
+        case .mkvRequiresFfmpeg:
             showFfmpegMissingAlert = true
+            return false
         }
-        return true
+    }
+
+    /// 非法拖入反馈：图标 + 文字（非纯颜色），4 秒后自动消失。
+    private func dropErrorBanner(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.callout)
+            .foregroundStyle(.red)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.bottom, 16)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isStaticText)
+            .task(id: message) {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                if dropErrorMessage == message {
+                    dropErrorMessage = nil
+                }
+            }
     }
 
     /// 在当前播放位置重跑 Vision 选区（用户可先 seek 到有字幕的画面）。
