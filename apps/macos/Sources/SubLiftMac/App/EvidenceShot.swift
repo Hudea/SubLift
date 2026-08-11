@@ -24,6 +24,21 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_OPEN=<视频路径>，启动后自动导入（ready 状态截图 fixture）。
+    @MainActor
+    static func autoOpenIfRequested(workspace: WorkspaceModel) {
+        guard let path = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_OPEN"] else { return }
+        _ = workspace.openVideo(url: URL(fileURLWithPath: path))
+    }
+
+    /// 若设置了 SUBLIFT_EVIDENCE_INSPECTOR=1，启动后打开 Inspector（V03 截图 fixture）。
+    @MainActor
+    static func inspectorFixtureIfRequested(workspace: WorkspaceModel) {
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_INSPECTOR"] == "1" {
+            workspace.setInspectorPresented(true)
+        }
+    }
+
     static func save(window: NSWindow, to path: String) {
         guard let view = window.contentView else { return }
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
