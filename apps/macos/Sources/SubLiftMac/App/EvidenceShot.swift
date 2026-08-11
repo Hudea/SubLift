@@ -50,6 +50,17 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_EXTRACT=1，启动后以 Mock 引擎提取（Review 截图 fixture）。
+    @MainActor
+    static func extractFixtureIfRequested(workspace: WorkspaceModel) {
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_EXTRACT"] == "1" {
+            // 等 metadata 加载完成（state → ready）后再开始提取；mock 引擎真实完成 → review。
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                workspace.startExtraction(engine: .mock, quality: .fast)
+            }
+        }
+    }
+
     static func save(window: NSWindow, to path: String) {
         guard let view = window.contentView else { return }
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }

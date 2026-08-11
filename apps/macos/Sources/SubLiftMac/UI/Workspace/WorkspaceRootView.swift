@@ -86,6 +86,7 @@ struct WorkspaceRootView: View {
                 EvidenceShot.autoOpenIfRequested(workspace: workspace)
                 EvidenceShot.inspectorFixtureIfRequested(workspace: workspace)
                 EvidenceShot.regionFixtureIfRequested(workspace: workspace)
+                EvidenceShot.extractFixtureIfRequested(workspace: workspace)
                 EvidenceShot.scheduleIfRequested()
                 #endif
             }
@@ -109,7 +110,7 @@ struct WorkspaceRootView: View {
                 ) {
                     videoPane(url: url)
                 } right: {
-                    SubtitleList(
+                    TranscriptPanel(
                         editor: workspace.editor,
                         onSeek: { ms in
                             if workspace.playerModel.loadFailed {
@@ -120,7 +121,8 @@ struct WorkspaceRootView: View {
                         },
                         onExport: exportSRT,
                         accessMode: workspace.transcriptAccessMode,
-                        commands: workspace.commandAvailability
+                        commands: workspace.commandAvailability,
+                        currentMs: workspace.playerModel.currentMs
                     )
                 }
 
