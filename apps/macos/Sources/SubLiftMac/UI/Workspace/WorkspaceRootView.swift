@@ -122,7 +122,8 @@ struct WorkspaceRootView: View {
                         onExport: exportSRT,
                         accessMode: workspace.transcriptAccessMode,
                         commands: workspace.commandAvailability,
-                        currentMs: workspace.playerModel.currentMs
+                        currentMs: workspace.playerModel.currentMs,
+                        readOnlyNotice: TranscriptReadOnlyNotice.text(for: workspace.state)
                     )
                 }
 
@@ -135,6 +136,8 @@ struct WorkspaceRootView: View {
                         playerModel: workspace.playerModel,
                         videoURL: workspace.currentVideoURL,
                         regionModel: workspace.regionModel,
+                        extractor: workspace.extractor,
+                        workspaceState: workspace.state,
                         onRedetectRegion: redetectRegionAtPlayhead
                     ) {
                         workspace.setInspectorPresented(false)
@@ -229,7 +232,7 @@ struct WorkspaceRootView: View {
                 Divider()
                 VideoControlsView(model: workspace.playerModel)
                 Divider()
-                extractionBar
+                ExtractionProgressView(extractor: workspace.extractor)
                 Spacer(minLength: 0)
             }
         }
@@ -255,94 +258,6 @@ struct WorkspaceRootView: View {
         .frame(maxWidth: .infinity)
         .frame(height: height)
         .clipped()
-    }
-
-    // MARK: - 提取栏（Extract/Stop 已移入 Toolbar；此处保留参数与真实状态投影）
-
-    private var extractionBar: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
-                Picker("", selection: $defaultEngine) {
-                    Text("Apple Vision").tag(OcrEngineName.vision)
-                    Text("PaddleOCR").tag(OcrEngineName.paddle)
-                    Text("Mock 引擎").tag(OcrEngineName.mock)
-                }
-                .labelsHidden()
-                .frame(width: 130)
-                .disabled(workspace.extractor.isRunning)
-                .help("OCR 引擎")
-                .accessibilityLabel("OCR 引擎")
-
-                Spacer(minLength: 0)
-
-                statusLabel
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(minWidth: 100, maxWidth: .infinity, alignment: .trailing)
-            }
-
-            HStack(spacing: 12) {
-                Picker("采样", selection: $samplingQuality) {
-                    ForEach(SamplingQuality.allCases) { quality in
-                        Text(quality.displayName).tag(quality)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 180)
-                .help(samplingQuality.helpText)
-                .disabled(workspace.extractor.isRunning)
-                .accessibilityLabel("采样密度")
-                Spacer(minLength: 0)
-            }
-
-            if let runtimeIdentity = workspace.extractor.runtimeIdentity {
-                Text(runtimeIdentity)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .accessibilityLabel("OCR 运行时：\(runtimeIdentity)")
-            }
-
-            switch workspace.extractor.status {
-            case .processing(let progress, _, _):
-                ProgressView(value: progress)
-                    .progressViewStyle(.linear)
-            case .finalizing:
-                ProgressView()
-                    .progressViewStyle(.linear)
-            default:
-                EmptyView()
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    @ViewBuilder
-    private var statusLabel: some View {
-        switch workspace.extractor.status {
-        case .idle:
-            Text("就绪").foregroundStyle(.secondary)
-        case .startingServer:
-            Text("正在启动服务...").foregroundStyle(.orange)
-        case .processing(let progress, let frameCount, let totalFrames):
-            HStack(spacing: 6) {
-                Text("提取与识别中 \(frameCount)/\(totalFrames) (\(Int(progress * 100))%)")
-                    .foregroundStyle(.blue)
-                if let rateText = ProcessingRate.displayText(for: workspace.extractor.processingRate) {
-                    Text(rateText)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .font(.system(.body, design: .monospaced))
-        case .finalizing:
-            Text("正在整理字幕...").foregroundStyle(.orange)
-        case .done(let count):
-            Text("完成，识别 \(count) 条")
-                .foregroundStyle(.green)
-        case .error(let msg):
-            Text(msg).foregroundStyle(.red)
-        }
     }
 
     // MARK: - 不支持的预览（mkv 等 AVPlayer 无法播放的格式）

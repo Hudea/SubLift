@@ -50,14 +50,20 @@ enum EvidenceShot {
         }
     }
 
-    /// 若设置了 SUBLIFT_EVIDENCE_EXTRACT=1，启动后以 Mock 引擎提取（Review 截图 fixture）。
+    /// 若设置了 SUBLIFT_EVIDENCE_EXTRACT=1，启动后提取（Review/Processing 截图 fixture）。
+    /// 引擎由 SUBLIFT_EVIDENCE_ENGINE 指定（默认 mock；vision 用于捕捉真实 processing 状态）。
     @MainActor
     static func extractFixtureIfRequested(workspace: WorkspaceModel) {
-        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_EXTRACT"] == "1" {
-            // 等 metadata 加载完成（state → ready）后再开始提取；mock 引擎真实完成 → review。
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                workspace.startExtraction(engine: .mock, quality: .fast)
-            }
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_EXTRACT"] == "1" else { return }
+        let engineName = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_ENGINE"] ?? "mock"
+        let engine: OcrEngineName = switch engineName {
+        case "vision": .vision
+        case "paddle": .paddle
+        default: .mock
+        }
+        // 等 metadata 加载完成（state → ready）后再开始提取。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            workspace.startExtraction(engine: engine, quality: .fast)
         }
     }
 

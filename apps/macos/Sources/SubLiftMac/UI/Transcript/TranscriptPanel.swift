@@ -72,6 +72,8 @@ struct TranscriptPanel: View {
     let commands: WorkspaceCommandAvailability
     /// 当前播放时间（ms），用于"在播放头处显示"。
     let currentMs: Int
+    /// processing/finalizing 时显示的只读说明（VoiceOver 可读）。
+    let readOnlyNotice: String?
 
     @State private var searchQuery = ""
     /// 搜索变化后待滚动的当前播放字幕（List 可能因无结果被拆掉，重建后消费）。
@@ -80,6 +82,15 @@ struct TranscriptPanel: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            if let readOnlyNotice {
+                Label(readOnlyNotice, systemImage: "lock.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .accessibilityElement(children: .combine)
+            }
             Divider()
             content
         }

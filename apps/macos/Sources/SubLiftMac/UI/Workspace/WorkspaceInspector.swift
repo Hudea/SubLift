@@ -13,6 +13,8 @@ struct WorkspaceInspector: View {
     let playerModel: PlayerModel
     let videoURL: URL?
     let regionModel: RegionSelectionModel
+    let extractor: SubtitleExtractor
+    let workspaceState: WorkspaceState
     let onRedetectRegion: () -> Void
     let onClose: () -> Void
 
@@ -65,7 +67,12 @@ struct WorkspaceInspector: View {
                 regionModel: regionModel,
                 onRedetectAtPlayhead: onRedetectRegion
             )
-        case .extraction, .subtitle:
+        case .extraction:
+            ExtractionInspector(
+                extractor: extractor,
+                state: workspaceState
+            )
+        case .subtitle:
             placeholder
         }
     }
