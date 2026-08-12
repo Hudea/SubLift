@@ -2,7 +2,7 @@ import Foundation
 
 /// 08205：单任务运行结果。
 enum BatchRunOutcome: Equatable, Sendable {
-    case completed(entryCount: Int, outputURL: URL)
+    case completed(entryCount: Int, outputURL: URL, runtimeIdentity: String?)
     case failed(String)
     case cancelled
 }

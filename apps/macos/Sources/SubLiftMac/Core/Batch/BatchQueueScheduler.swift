@@ -229,7 +229,7 @@ final class BatchQueueScheduler {
         }
 
         switch outcome {
-        case .completed(let entryCount, let outputURL):
+        case .completed(let entryCount, let outputURL, let runtimeIdentity):
             // 从当前活动态推进到 exporting（中间态可能已由 onUpdate 报告）。
             while let next = state.tasks[index].status.nextActiveStage {
                 _ = state.tasks[index].transition(to: next)
@@ -238,7 +238,7 @@ final class BatchQueueScheduler {
             state.tasks[index].recordResult(BatchTaskResult(
                 entryCount: entryCount,
                 outputURL: outputURL,
-                runtimeIdentity: nil
+                runtimeIdentity: runtimeIdentity
             ))
         case .failed(let message):
             // 先记录失败（活动态守卫），再进入终态。

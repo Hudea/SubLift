@@ -359,7 +359,7 @@
           "name": "计划 Runner 事件合同并写 RED 测试",
           "description": "固定 progress/final/cancel/runtime/export/teardown 测试，先以 fake client/runner 观察失败。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08206.02",
@@ -368,7 +368,7 @@
           "dependencies": [
             "08206.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08206.03",
@@ -377,11 +377,11 @@
           "dependencies": [
             "08206.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08206 接入真实提取 Runner 与自动导出。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchExtractionRunner.swift：BatchIPCClient 协议（startBatch/stop/lastWorkerChoice/requestBatchStreaming(message,onProgress:)）；BatchExtractionRunner（BatchTaskRunning 生产实现）：每任务 clientFactory 独占 PipelineClient、defer stop() teardown（幂等）；隐藏 Mock 启动前再次归一化（normalizedSelection non-dev → vision）；事件映射：start → .preparing、onProgress（非 finalizing）→ .extracting + pct 钳 0-1、stage==\"finalizing\" → .exporting、final entries → SrtFormatter.format + AtomicSrtWriter.write 原子写出成功后才 .completed(entryCount:outputURL:runtimeIdentity:)、连接失败 → .failed、Task 取消 → .cancelled；runBlocking 用 withTaskCancellationHandler（onCancel → client.stop() 中断阻塞读 → connectionClosed → continuation 必然 resume，无泄漏）；sidecar 默认输出 fallback；写出后释放完整 entries（outcome 只保留 count/output/runtime 摘要）。\n- 修改 apps/macos/Sources/SubLiftMac/Core/PipelineClient.swift：extension PipelineClient: BatchIPCClient——startBatch（包装 start(engine:)）+ requestBatchStreaming（onProgress 透传 requestStreaming）；最小 conform 无核心逻辑改动。\n- 修改 apps/macos/Sources/SubLiftMac/Core/Batch/BatchTaskRunning.swift：BatchRunOutcome.completed 加 runtimeIdentity（摘要）。\n- 修改 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueScheduler.swift：finishRun completed 3 元组适配（runtimeIdentity 存入 BatchTaskResult）。\n- 确认无改动：Core/SubtitleExtractor.swift（Workspace 路径保持；Batch 独立 IPC 生命周期，不共享可变 extractor）、Core/SrtFormatter.swift、Tests/PipelineClientIntegrationTests.swift（08206.module 声明但实际零改动——smoke 落在 BatchExtractionRunnerTests.swift）。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchExtractionRunnerTests.swift：FakeBatchIPCClient（行为驱动 onRequest(onProgress) + blocksOnRead 阻塞读模拟 + stop signal 中断）7 个 Fake IPC 测试：成功链原子写出/runtime 摘要（cpp）/独占 teardown（startCalls==1、stopCalls==1、teardown 后 started false）/onProgress 真实 pct 透传（>0.5 断言）/finalizing → exporting/写出失败（chmod-000）→ failed/连接失败 → failed/阻塞读期间取消 → .cancelled 不挂起（P1 回归）/启动前取消/空结果 completed/Mock 归一化；BatchExtractionRunnerSmokeTests：debug/spikes/mp4-h264.mp4 + mov-h264.mov 真实串行 IPC smoke（completed + SRT 原子写出 + runtime 非 nil；素材/worker/python 缺失 XCTSkip 环境 guard）。\n- 新增 docs/plans/features/08206.md：Runner 事件合同/独占性/原子写出顺序/允许文件/测试类/验收/停止条件。\n- docs/phases/phase8.json（08206 in-progress→done）、phases.json（phase8 in-progress）。\n\n验收标准落实（5 条全满足）：\n1. 每任务 clientFactory 创建独占 PipelineClient（defer stop() teardown 关闭 socket）；Workspace 与 Batch 不共享可变 SubtitleExtractor（SubtitleExtractor.swift 零改动；Batch 独立 IPC 生命周期）。\n2. Runner 事件真实映射：starting（startBatch）→ .preparing、processing（onProgress pct）→ .extracting、finalizing → .exporting、final entries → 原子写出、runtime（lastWorkerChoice.runtime.rawValue）、error → .failed；Scheduler 不解析 UDS（纯 port 调用）；隐藏 Mock 启动前再次归一化（fake 测试断言 startBatch 收到 vision）。\n3. final entries 只有 SrtFormatter.format + AtomicSrtWriter.write 成功后才 .completed；写出后 outcome 只保留 entryCount/outputURL/runtimeIdentity 摘要（完整 entries 释放）。\n4. 取消：runBlocking onCancel → client.stop() 中断阻塞读 → connectionClosed → .cancelled（阻塞取消测试证明不挂起）；teardown 后下一任务可启动（新 client）；失败/空结果按合同处理（空 0 条 completed）。\n5. Fake IPC 7 测试 + 两小视频真实串行 IPC smoke（6.2s 真实 worker）通过；WorkspaceModel/SubtitleExtractor/PipelineClient 回归全绿；完整 swift test 274 XCTest + 140 Swift Testing 全绿；verify-standard 10/10。\n\nTDD 过程：RED 缺失类型（cannot find 'BatchIPCClient'/'BatchExtractionRunner' in scope 已保存）；实现期修复：start 签名不匹配（startBatch 包装）、EntriesMessage init（无 type 参数）、teardown 后 started false 语义。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（独占/事件映射/原子写出）：needs changes 无 P0；P1（取消不关闭运行中 Worker——阻塞读期间取消导致 continuation 永不 resume、队列卡死、worker 泄漏；对照 SubtitleExtractor 的 cancel-关 socket 机制）+ P2×2 + P3。\n- Agent 2（IPC/资源/回归）：needs changes 2×P1——(1) 同取消问题（withCheckedThrowingContinuation 不会因取消自动 resume；defer stop 不可达）；(2) 冻结合同 onProgress 未接线（进度恒 0%）；确认 PipelineClient 改动最小无回归。\n- Agent 3（测试真实性/台账）：PASS 无 P0/P1；Fake IPC 真实、真实 smoke 真实（素材未动）、RED 复现；P2×2（取消测试盲区——只测启动前取消、smoke 环境脆弱性）+ P3。\n- 三路确认：413 测试全绿（含真实 smoke），但测试全绿掩盖了取消/进度两个真问题（现有测试不覆盖）。\n\n主 Agent 修改（全部经重新测试 274+140 全绿 + verify-standard 10/10）：\n- P1-1：runBlocking(client:operation:) withTaskCancellationHandler——onCancel → client.stop() 中断阻塞读（recv 返回 → connectionClosed → continuation resume）；startBatch 与 requestBatchStreaming 都走该包装；新增 testCancellationDuringBlockingReadReturnsCancelled（Fake blocksOnRead + stop signal 中断 → .cancelled 不挂起，带超时）。\n- P1-2：requestBatchStreaming 加 onProgress 参数（协议 + PipelineClient 透传）；Runner 映射（非 finalizing → .extracting + pct；finalizing → .exporting）；测试 onRequest 报告 0.2/0.7/1.0(finalizing) 并断言 progresses 含 >0.5。\n- P2-1：补阻塞读取消测试（见上）。\n- P2-2：smoke 前 guard worker 可执行 + .venv python（缺失 XCTSkip）。\n- P3-1：删除未使用的 FrameSampler.estimateFrameCount 调用。\n- 复核 Agent（deleg_6612bac8）：PASS——5 项修复全部正确（runBlocking 取消链完整、continuation 单次 resume、onProgress 透传链路、Fake 模拟真实、smoke guard 合理）；完整套件 274+140 全绿。\n\n记录决策（非阻塞）：\n- stopCalls 在取消路径为 2（onCancel + defer 双保险，幂等）——测试断言 >=1。\n- 08206.module 声明 PipelineClientIntegrationTests.swift 但实际零改动（smoke 在 BatchExtractionRunnerTests.swift）——收口时 module 对齐。\n- smoke 依赖素材 debug/spikes/mp4-h264.mp4/mov-h264.mov（未删除/修改）与 worker/python 环境；缺失时 XCTSkip 如实记录。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：274 XCTest（266 基线 + 8 新增 Batch Runner/Smoke）+ 140 Swift Testing 全绿；真实 smoke 5.8s。\n- ./scripts/verify-standard.sh：10/10 通过（08206 额外标准门）。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过。\n\n未执行项（如实记录）：\n- Zootopia_clip_test_2min.mp4 取消/重启路径 smoke 未跑（08206 验收只要求两个小视频串行；Zootopia 素材保留供 08309/08410 使用）。\n- 其余全部真实验证（Fake IPC + 真实 worker IPC）。\n\n后续 Feature 边界：\n- 08207 队列持久化与恢复（Application Support/SubLift/batch-queue-v1.json、schemaVersion=1、原子替换、节流保存、恢复 interrupted/paused、损坏 fail-closed）待启动。"
     },
     {
       "id": "08207",

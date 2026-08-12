@@ -679,3 +679,20 @@ extension PipelineClientError: LocalizedError {
         }
     }
 }
+
+// MARK: - 08206 Batch IPC conform
+
+extension PipelineClient: BatchIPCClient {
+    /// 批量 Runner 用的启动入口（包装既有 start 全参签名）。
+    public func startBatch(engine: String) throws {
+        try start(engine: engine)
+    }
+
+    /// 批量 Runner 用的阻塞式流式请求（onProgress 透传；最终 entries 由响应返回）。
+    public func requestBatchStreaming(
+        _ message: StartJobMessage,
+        onProgress: @escaping @Sendable (Double, String) -> Void
+    ) throws -> EntriesMessage {
+        try requestStreaming(message, expecting: EntriesMessage.self, onProgress: onProgress)
+    }
+}
