@@ -48,7 +48,7 @@ final class FakeRunner: BatchTaskRunning, @unchecked Sendable {
         }
 
         let behavior = lock.withLock { behaviors[task.id] }
-        let outcome = await behavior?(onUpdate) ?? .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/out.srt"))
+        let outcome = await behavior?(onUpdate) ?? .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/out.srt"), runtimeIdentity: nil)
         return outcome
     }
 }
@@ -97,9 +97,9 @@ final class BatchQueueSchedulerTests: XCTestCase {
         let t1 = makeTask("1.mp4")
         let t2 = makeTask("2.mp4")
         let t3 = makeTask("3.mp4")
-        runner.setBehavior(t1.id) { _ in .completed(entryCount: 3, outputURL: URL(fileURLWithPath: "/tmp/1.srt")) }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 4, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
-        runner.setBehavior(t3.id) { _ in .completed(entryCount: 5, outputURL: URL(fileURLWithPath: "/tmp/3.srt")) }
+        runner.setBehavior(t1.id) { _ in .completed(entryCount: 3, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 4, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
+        runner.setBehavior(t3.id) { _ in .completed(entryCount: 5, outputURL: URL(fileURLWithPath: "/tmp/3.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2, t3])
         scheduler.start()
@@ -117,7 +117,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
         let t1 = makeTask("1.mp4")
         let t2 = makeTask("2.mp4")
         runner.setBehavior(t1.id) { _ in .failed("worker error") }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2])
         scheduler.start()
@@ -137,9 +137,9 @@ final class BatchQueueSchedulerTests: XCTestCase {
         let t1Gate = AsyncGate()
         runner.setBehavior(t1.id) { _ in
             await t1Gate.waitUntilOpened()
-            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"))
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
         }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2])
         scheduler.start()
@@ -165,9 +165,9 @@ final class BatchQueueSchedulerTests: XCTestCase {
         runner.setBehavior(t1.id) { _ in
             await t1Gate.waitUntilOpened()
             if Task.isCancelled { return .cancelled }
-            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"))
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
         }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2])
         scheduler.start()
@@ -198,7 +198,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
             if Task.isCancelled { return .cancelled }
             return .cancelled
         }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2])
         scheduler.start()
@@ -222,7 +222,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
             onUpdate(.extracting, 0.9)
             return .cancelled
         }
-        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt")) }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
 
         let scheduler = makeScheduler(tasks: [t1, t2])
         scheduler.start()
@@ -244,7 +244,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
             onUpdate(.extracting, 0.1)
             onUpdate(.extracting, 0.5)
             onUpdate(.extracting, 0.9)
-            return .completed(entryCount: 3, outputURL: URL(fileURLWithPath: "/tmp/1.srt"))
+            return .completed(entryCount: 3, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
         }
         let scheduler = makeScheduler(tasks: [t1])
         scheduler.start()
@@ -281,7 +281,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertEqual(scheduler.state.tasks[0].status, .failed)
 
         // retry：failed → waiting，新 run token 重新排队。
-        runner.setBehavior(t1.id) { _ in .completed(entryCount: 7, outputURL: URL(fileURLWithPath: "/tmp/1.srt")) }
+        runner.setBehavior(t1.id) { _ in .completed(entryCount: 7, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil) }
         XCTAssertTrue(scheduler.retry(t1.id))
         XCTAssertEqual(scheduler.state.tasks[0].status, .waiting)
         scheduler.start()
@@ -352,7 +352,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
         var tasks: [BatchTask] = []
         for i in 0..<50 {
             let t = makeTask("\(i).mp4")
-            runner.setBehavior(t.id) { _ in .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/\(i).srt")) }
+            runner.setBehavior(t.id) { _ in .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/\(i).srt"), runtimeIdentity: nil) }
             tasks.append(t)
         }
         let scheduler = makeScheduler(tasks: tasks)
