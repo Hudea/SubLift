@@ -30,8 +30,15 @@ struct SettingsView: View {
         .padding(24)
         .frame(width: 500, height: 340)
         .onAppear {
+            normalizeDefaultEngine()
             ffmpegAvailable = FfmpegDetector.detect() != nil
             paddleModelsAvailable = Self.paddleModelsExist()
+        }
+        .onChange(of: developerMode) { _ in
+            normalizeDefaultEngine()
+        }
+        .onChange(of: defaultEngine) { _ in
+            normalizeDefaultEngine()
         }
     }
 
@@ -63,7 +70,7 @@ struct SettingsView: View {
     private var recognitionTab: some View {
         Form {
             Section {
-                Picker("OCR 引擎", selection: $defaultEngine) {
+                Picker("OCR 引擎", selection: normalizedDefaultEngineBinding) {
                     ForEach(EngineCapability.visibleEngines(developerMode: developerMode), id: \.self) { engine in
                         Text(engine.displayName).tag(engine)
                     }
@@ -147,6 +154,34 @@ struct SettingsView: View {
     }
 
     // MARK: - 真实检测
+
+    /// Picker 的读取也经过归一化，因此即使 `onAppear` 尚未执行，菜单标签也不会空白。
+    private var normalizedDefaultEngineBinding: Binding<OcrEngineName> {
+        Binding(
+            get: {
+                EngineCapability.normalizedSelection(
+                    defaultEngine,
+                    developerMode: developerMode
+                )
+            },
+            set: { selection in
+                defaultEngine = EngineCapability.normalizedSelection(
+                    selection,
+                    developerMode: developerMode
+                )
+            }
+        )
+    }
+
+    private func normalizeDefaultEngine() {
+        let normalized = EngineCapability.normalizedSelection(
+            defaultEngine,
+            developerMode: developerMode
+        )
+        if normalized != defaultEngine {
+            defaultEngine = normalized
+        }
+    }
 
     /// Paddle 模型目录（与 Python `DEFAULT_MODEL_DIR` 对齐）。
     private static func paddleModelsExist() -> Bool {

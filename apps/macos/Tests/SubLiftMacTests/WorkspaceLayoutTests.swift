@@ -126,4 +126,50 @@ final class WorkspaceLayoutTests: XCTestCase {
         )
         XCTAssertEqual(extreme, 880, accuracy: 0.1)
     }
+
+    func testResolvedColumnsReclampCachedWidthWhenInspectorShrinksContainer() {
+        // 先在 1280 宽布局中得到 793.6pt 的 Video；Inspector 打开后 Split 容器缩至 980。
+        // 即使缓存仍是旧宽度，也必须重新 clamp，且 1pt divider 计入总宽，不能挤压 Transcript。
+        let collapsed = WorkspaceLayout.resolvedColumns(
+            proposedLeftWidth: 793.6,
+            containerWidth: 980,
+            dividerWidth: 1,
+            leftMin: 400,
+            rightMin: 320
+        )
+
+        XCTAssertEqual(collapsed.left, 659, accuracy: 0.1)
+        XCTAssertEqual(collapsed.right, 320, accuracy: 0.1)
+        XCTAssertEqual(collapsed.total, 980, accuracy: 0.1)
+    }
+
+    func testResolvedColumnsAcceptCurrentPreferenceAfterContainerExpands() {
+        // 容器恢复后，当前宽度偏好落在新边界内时保持不变。
+        let expanded = WorkspaceLayout.resolvedColumns(
+            proposedLeftWidth: 793.6,
+            containerWidth: 1280,
+            dividerWidth: 1,
+            leftMin: 400,
+            rightMin: 320
+        )
+
+        XCTAssertEqual(expanded.left, 793.6, accuracy: 0.1)
+        XCTAssertEqual(expanded.right, 485.4, accuracy: 0.1)
+        XCTAssertEqual(expanded.total, 1280, accuracy: 0.1)
+    }
+
+    func testResolvedColumnsStayWithinContainerAcrossRepeatedDrags() {
+        for proposed in [793.6, 1200, 200, 900, 659, 10_000] {
+            let columns = WorkspaceLayout.resolvedColumns(
+                proposedLeftWidth: proposed,
+                containerWidth: 980,
+                dividerWidth: 1,
+                leftMin: 400,
+                rightMin: 320
+            )
+            XCTAssertEqual(columns.total, 980, accuracy: 0.1)
+            XCTAssertGreaterThanOrEqual(columns.right, 320)
+            XCTAssertGreaterThanOrEqual(columns.left, 400)
+        }
+    }
 }

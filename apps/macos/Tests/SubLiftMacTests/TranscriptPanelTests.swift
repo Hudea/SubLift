@@ -44,6 +44,15 @@ final class TranscriptSearchTests: XCTestCase {
         let entries = makeEntries()
         XCTAssertTrue(TranscriptSearch.filteredEntries(entries, query: "不存在的内容").isEmpty)
     }
+
+    func testFilteredRowsPreserveSourceSequenceNumbers() {
+        let entries = makeEntries()
+
+        let rows = TranscriptSearch.filteredRows(entries, query: "l")
+
+        XCTAssertEqual(rows.map(\.sourceNumber), [1, 3])
+        XCTAssertEqual(rows.map(\.entry.id), [entries[0].id, entries[2].id])
+    }
 }
 
 /// 10207：Transcript 行展示纯逻辑。

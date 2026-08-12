@@ -77,7 +77,7 @@
       "name": "Phase 10 - macOS Native Workbench UI",
       "description": "按已冻结的 vNext 设计基线，将现有 SwiftUI GUI 分阶段升级为原生 macOS 字幕工作台；不扩张到批量队列、自动引擎、新格式或分发。",
       "detail_file": "docs/phases/phase10.json",
-      "status": "in-progress"
+      "status": "done"
     }
   ]
 }

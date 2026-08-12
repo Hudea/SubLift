@@ -26,6 +26,18 @@ enum WorkspaceLayout {
         var total: CGFloat { video + transcript }
     }
 
+    /// 已把 divider 计入容器预算的最终两栏宽度。
+    ///
+    /// `proposedLeftWidth` 可以是窗口缩放或 Inspector 开关前缓存的旧值；每次布局都重新
+    /// clamp，确保任何缓存值都不会让两栏越出当前容器。
+    struct ResolvedColumns: Equatable {
+        let left: CGFloat
+        let right: CGFloat
+        let divider: CGFloat
+
+        var total: CGFloat { left + divider + right }
+    }
+
     /// 计算 Video / Transcript 宽度。
     ///
     /// - Parameters:
@@ -56,5 +68,28 @@ enum WorkspaceLayout {
         let upperBound = max(containerWidth - rightMin, 0)
         let lowerBound = min(leftMin, upperBound)
         return min(max(proposed, lowerBound), max(upperBound, lowerBound))
+    }
+
+    /// 将 divider 与两栏完整分配到当前容器中，避免右栏用最小宽度反向撑破 HStack。
+    static func resolvedColumns(
+        proposedLeftWidth: CGFloat,
+        containerWidth: CGFloat,
+        dividerWidth: CGFloat,
+        leftMin: CGFloat,
+        rightMin: CGFloat
+    ) -> ResolvedColumns {
+        let resolvedDivider = min(max(dividerWidth, 0), max(containerWidth, 0))
+        let panesWidth = max(containerWidth - resolvedDivider, 0)
+        let left = clampedLeftWidth(
+            proposed: proposedLeftWidth,
+            containerWidth: panesWidth,
+            leftMin: leftMin,
+            rightMin: rightMin
+        )
+        return ResolvedColumns(
+            left: left,
+            right: max(panesWidth - left, 0),
+            divider: resolvedDivider
+        )
     }
 }

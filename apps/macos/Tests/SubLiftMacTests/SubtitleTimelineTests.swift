@@ -131,3 +131,25 @@ final class TimelineNavigationTests: XCTestCase {
         XCTAssertNil(TimelineNavigation.previousEntryIndex(currentMs: 0, entries: []))
     }
 }
+
+/// 10414：Timeline 范围标签使用紧凑、单行友好的时间文本。
+final class TimelineRangePresentationTests: XCTestCase {
+
+    func testSubHourRangeOmitsMillisecondsAndRedundantHour() {
+        XCTAssertEqual(
+            TimelineRangePresentation.text(startMs: 1_250, endMs: 189_999),
+            "0:01–3:09"
+        )
+    }
+
+    func testHourRangeKeepsHourContext() {
+        XCTAssertEqual(
+            TimelineRangePresentation.text(startMs: 3_723_000, endMs: 7_204_000),
+            "1:02:03–2:00:04"
+        )
+    }
+
+    func testEmptyRangeUsesPlaceholder() {
+        XCTAssertEqual(TimelineRangePresentation.text(startMs: 0, endMs: 0), "—")
+    }
+}

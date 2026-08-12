@@ -770,6 +770,71 @@
       ],
       "status": "done",
       "evidence": "2026-08-12 完成 10413 Phase 10 收口。Phase 10 全部 12 个实施 Feature（10103–10412）与收口审计均 done，Phase 10 关闭。\n\n审计（10102–10412 全部）：\n- 全部 13 个 Feature（10001、10102、10103–10413）status=done；全部 subtasks done；全部 evidence 非空（脚本断言，0 问题）。\n- 截图完整性：evidence 目录 10103(2)/10104(3)/10105(1)/10206(1)/10207(1)/10208(1)/10209(1)/10310(1)/10311(1)/10412(8) 共 20 张，覆盖 V01–V08 与 Light/Dark 矩阵；A01/A02 以 KeyboardShortcutCatalog 与逐 Feature accessibility 清单体现（真实 VoiceOver 会话受权限限制未执行，记录于 10412 evidence）。\n\n旧 UI 引用扫描（替代组件接线完成后删除）：\n- SubtitleList / ContentView / DropZone / RegionCandidateList / statusLabel / extractionBar / importVideo：全部 0 残留引用（grep 验证）；emptyState 5 处为各新 View 的私有空态组件（非旧 ContentView）。\n- 已删除文件：UI/SubtitleList.swift（10207）、App/SubLiftMacApp.swift 内 ContentView（10104）、UI/DropZone.swift 重写为 DropTargetView（10103）、UI/SettingsView.swift（10311）。\n\n双重状态真源扫描：\n- View 层无直接写核心状态（.state = / .entries = 无匹配；selectedId 赋值仅在模型内）；WorkspaceModel 为单窗口 Session 与 command availability 唯一真源；focused Core models（Player/Region/Editor/Extractor）持有各自职责。\n\n文档同步：\n- docs/ARCHITECTURE.md §15：Phase 10 标记\"已实施\"并附实施状态（12 Feature、测试、证据索引）。\n- docs/REQUIREMENTS.md：F28 Native Workbench UI ❌→✅（2026-08-12 完成，non-goals 不含 F10/F24）；GUI 可用性/可访问性行 ❌→✅（附证据索引与 10412 未执行项说明）。\n- docs/phases/phase10.json、progress.md：状态与导航同步（10413 后 Phase 10 全 done）。\n\n最终验证（全部通过）：\n- ./init.sh：OK。\n- 完整 swift test（apps/macos，PYTHONPATH 清空）：158 XCTest + 140 Swift Testing 全绿，退出码 0。\n- ./scripts/verify-standard.sh：10/10 通过（lint/type/test/build/parity cutover gate，runtime 与 GT 按默认跳过）。\n- jq empty phases.json docs/phases/phase10.json：通过；git diff --check：通过。\n- Markdown 本地链接扫描（docs/ 全量相对链接）：0 断链。\n- Schema 校验：phaseN.schema.json 必填（project/phase/features）结构级核验通过（13 features 均含 id/name/module/subtasks/status/evidence）；**完整 JSON Schema 校验未执行**——仓库无可用 JSON Schema validator（jsonschema 库未安装），按规则不伪造结果、未新增第三方依赖（如需完整校验须用户授权安装）。\n\n实际修改文件（10413）：\n- docs/ARCHITECTURE.md（Phase 10 状态同步）、docs/REQUIREMENTS.md（F28 与 GUI 可用性行同步）、docs/phases/phase10.json（10413 状态与 evidence）、progress.md（导航更新）、docs/plans/features/10413.md（本计划）。\n\n独立审核与复核：\n- 10413 为审计/收口 Feature，无新业务代码；逐项核验由脚本断言（status/subtasks/evidence/引用扫描/链接扫描/测试/静态检查）完成；最终验证门（init/完整测试/verify-standard）由主 Agent 独立运行。\n\n未执行验证（如实记录）：\n- 完整 JSON Schema 校验（无 validator，见上）。\n- Computer Use 最终全流程冒烟（Welcome/Open/drop/processing/review/export/timeline/settings/960×600/Light/Dark/键盘/VoiceOver）未执行完整交互序列——系统\"辅助功能访问（事件）\"与录屏权限警告持续存在（cua-driver 对多数窗口捕获 0x0）；等价覆盖：各 Feature 的 EvidenceShot 截图（含 Light/Dark 矩阵）、KeyboardShortcutCatalog 与逐 Feature accessibility 清单、完整测试套件（158+140）。\n\nPhase 10 关闭条件：全部满足（目标行为实现、验证运行、evidence 写入、init 通过）。"
+    },
+    {
+      "id": "10414",
+      "name": "修复 Phase 10 实现审计问题并完成真实验收",
+      "description": "针对独立实现审计发现的隐藏 Mock 引擎、Inspector 响应式挤压、Esc 命令失效、搜索编号漂移及关键视觉细节执行 TDD 修复、独立复核与真实 macOS UI 验收。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Settings/",
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/",
+        "apps/macos/Sources/SubLiftMac/UI/Transcript/",
+        "apps/macos/Sources/SubLiftMac/UI/Timeline/",
+        "apps/macos/Sources/SubLiftMac/UI/Welcome/",
+        "apps/macos/Sources/SubLiftMac/App/WorkspaceCommands.swift",
+        "apps/macos/Tests/SubLiftMacTests/",
+        "docs/plans/features/10414.md"
+      ],
+      "dependencies": [
+        "10413"
+      ],
+      "acceptance_criteria": [
+        "关闭开发者模式后持久化 Mock 被归一为可见生产引擎，Picker 不空白，composition root 在启动提取前也拒绝隐藏 Mock。",
+        "Inspector 切换、窗口缩放与反复拖动分隔线不会让 Transcript 低于设计最小宽度或产生横向溢出。",
+        "Region Editing 中真实 Esc 命令可以退出，Space 播放保持有效；测试覆盖实际命令路由而非仅字符串目录。",
+        "Transcript 搜索保留源字幕序号；Welcome、Timeline 全范围文本和 Toolbar 关键状态操作在紧凑宽度保持清晰层级与可读语义。",
+        "按计划、TDD、代码审核、修改复核、定向测试、完整 Swift 测试、标准项目门和真实 UI 冒烟形成可复核 evidence。",
+        "./init.sh、JSON 解析、Markdown links、git diff --check 通过，phases.json 与 progress.md 仅在全部验收完成后恢复 Phase 10 done。"
+      ],
+      "non_goals": [
+        "不扩展 Task Center、Automatic、ASS/VTT、模型下载等 Phase 10 外产品范围。",
+        "不修改 OCR/Worker 算法或新增第三方依赖。",
+        "不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10414.01",
+          "name": "以 TDD 修复审计问题",
+          "description": "补失败测试并修复引擎安全、响应式布局、快捷键、搜索编号与视觉细节。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10414.02",
+          "name": "独立审核与修改复核",
+          "description": "主 Agent 审查并行实现，补 composition root 保护并复核运行行为。",
+          "dependencies": [
+            "10414.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10414.03",
+          "name": "真实 UI 与完整项目验收",
+          "description": "执行真实 App 冒烟、完整测试与项目门，记录证据并同步进度真源。",
+          "dependencies": [
+            "10414.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10414 Phase 10 独立审计修复、修改复核与真实 macOS UI 验收；未提交或推送。\n\nTDD 与实现：\n- 引擎安全：先以缺失 normalizedSelection 的编译红灯锁定持久化 Mock 问题；新增 EngineCapability.normalizedSelection，Settings 与 Extraction Inspector 的 Picker 读写/生命周期均归一化，Workspace composition root 启动提取前再次 fail-closed。定向 EngineCapabilityTests 12/12 通过。\n- 响应式布局：先以缺失 resolvedColumns 的编译红灯锁定缓存宽度问题；每次布局重新 clamp、将 1pt divider 纳入总宽预算、右栏不再以 minWidth 撑破 HStack，拖动以手势起点计算。Workspace/Layout/Toolbar/command 定向组最终 25/25 通过。\n- 真实 Esc：初版 App 菜单 shortcut 的路由单测虽通过，但主 Agent 第一次 Computer Use 复核在搜索框持有 first responder 时仍失败；未将其误判为验收通过。修改复核改用生命周期受控的 AppKit local keyDown monitor，在 first responder 前仅拦截 regionEditing 下的物理 Esc，其他状态与 Space 原样下传；predicate、路由、幂等安装/拆除与 deinit 清理均有测试。\n- Transcript/视觉：先以缺失 filteredRows、TimelineRangePresentation、WelcomeLayout 的编译红灯锁定契约；搜索投影保留源序号，Timeline 采用 effectiveRange 的紧凑无毫秒单行文本，Welcome 聚合核心层级并独立置底本机隐私说明，关键状态 Toolbar 强制 title+icon。定向组 33/33 通过。\n\n独立代码审核：\n- 三个子 Agent 按互斥文件范围实施并自审，主 Agent 逐文件检查合并差异、要求补齐 Extraction Inspector 同源归一化与 composition-root 二次保护，并以真实 UI 揭示/退回初版 Esc 假绿，修复后重放同一路径。\n- 未新增依赖，未扩大到 Task Center/Automatic/ASS/VTT/模型下载或 OCR/Worker 算法。\n\n真实 macOS UI（临时 debug app bundle，Computer Use，真实仓库 MP4 debug/spikes/mp4-h264.mp4）：\n- 预置 default_engine=mock 且 developer_mode=false 后打开 Settings > Recognition，Picker 非空并显示 Apple Vision，持久化 Mock 已安全归一；截图 settings-mock-normalized.jpeg。\n- 1280 工作区开关 Inspector 后缩至实际 960×652：Video / Transcript / Inspector 三栏均完整，Transcript 保持约 320pt、无横向溢出；截图 compact-inspector.jpeg。\n- DEBUG 字幕 fixture 仅用于有行数据的展示验收（未冒充 OCR 结果）：搜索 l 后结果保留源序号 1/3/4，Timeline 范围 0:00–0:05 单行；截图 search-source-numbering.jpeg。\n- 搜索框保持 first responder 并保留值 l，进入 Region Editing 后真实按 Esc：复修前失败，复修后成功退出且 Toolbar 恢复“字幕区域”，搜索值未被清空；截图 escape-first-responder-fixed.jpeg。\n- Space 命令原接线保留；monitor predicate 测试证明 keyCode 49 不拦截，KeyboardShortcutCatalog 继续断言 bare Space。文本框编辑态下 Space 仍由文本输入控件正常处理。\n- 证据目录：docs/design_ui/evidence/10414/（4 张真实系统截图；fixture 使用边界见上）。\n\n最终验证：\n- 完整 Swift：177 XCTest + 140 Swift Testing 全绿，0 failures，退出码 0。\n- env PYTHONPATH= ./scripts/verify-standard.sh：10/10 通过（uv sync、ruff、mypy、CMake/CTest、pytest、cutover parity；runtime 与 GT 发布门按默认跳过）。\n- swift build、git diff --check、JSON 解析通过；最终 ./init.sh 通过。\n- Phase 结构定向核验：14 Features，10414 与其 3 个 subtask 均 done、evidence 非空、依赖 10413 存在；完整 JSON Schema validator 仍未安装，因此未伪造完整 schema 校验。\n\n残余限制：未在 10414 重跑真实 Finder 外部拖拽与完整 VoiceOver 朗读会话；本轮真实 AX 树覆盖关键控件与状态，原有 DropTarget/辅助功能自动测试保持全绿。发布前仍需按项目提示运行 runtime+GT 完整发布门。"
     }
   ]
 }

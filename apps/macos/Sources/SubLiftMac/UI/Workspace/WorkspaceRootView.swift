@@ -11,6 +11,7 @@ struct WorkspaceRootView: View {
 
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
+    @AppStorage("developer_mode") private var developerMode = false
 
     @State private var isDropTargeted = EvidenceShot.isDropTargetFixture
     @State private var dropErrorMessage: String?
@@ -31,6 +32,10 @@ struct WorkspaceRootView: View {
                 }
             }
             .frame(minWidth: 960, minHeight: 600)
+            .background {
+                WorkspaceEscapeKeyMonitorView(workspace: workspace)
+                    .frame(width: 0, height: 0)
+            }
             .toolbar { toolbarContent }
             .overlay(alignment: .top) {
                 if isDropTargeted, workspace.currentVideoURL != nil {
@@ -80,12 +85,6 @@ struct WorkspaceRootView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .subliftRequestExportSRT)) { _ in
                 exportSRT()
-            }
-            .onExitCommand {
-                // A01：Esc 退出区域编辑（KeyboardShortcutCatalog）。
-                if workspace.state == .regionEditing {
-                    workspace.exitRegionEditing()
-                }
             }
             .onAppear {
                 #if DEBUG
@@ -192,15 +191,15 @@ struct WorkspaceRootView: View {
                 }
             } label: {
                 Label(workspace.state == .regionEditing ? "完成区域编辑" : "字幕区域", systemImage: "viewfinder")
+                    .labelStyle(.titleAndIcon)
             }
             .disabled(!workspace.commandAvailability.canEditRegion && !workspace.commandAvailability.isRegionActive)
             .help(workspace.state == .regionEditing ? "完成区域编辑" : "进入字幕区域编辑")
 
             if workspace.commandAvailability.canExtract {
-                Button {
-                    workspace.startExtraction(engine: defaultEngine, quality: samplingQuality)
-                } label: {
+                Button(action: startExtraction) {
                     Label("提取字幕", systemImage: "text.viewfinder")
+                        .labelStyle(.titleAndIcon)
                 }
                 .help("开始提取字幕")
             }
@@ -210,6 +209,7 @@ struct WorkspaceRootView: View {
                     workspace.cancelExtraction()
                 } label: {
                     Label("停止", systemImage: "stop.fill")
+                        .labelStyle(.titleAndIcon)
                 }
                 .help("停止当前提取")
             }
@@ -358,6 +358,19 @@ struct WorkspaceRootView: View {
     }
 
     // MARK: - 提取与导出
+
+    /// Composition-root fail-closed：即使 Settings 未出现或持久化偏好来自旧版本，
+    /// 生产模式也不会把隐藏的 Mock 引擎传给提取任务。
+    private func startExtraction() {
+        let engine = EngineCapability.normalizedSelection(
+            defaultEngine,
+            developerMode: developerMode
+        )
+        if defaultEngine != engine {
+            defaultEngine = engine
+        }
+        workspace.startExtraction(engine: engine, quality: samplingQuality)
+    }
 
     /// 在当前播放位置重跑 Vision 选区（用户可先 seek 到有字幕的画面）。
     private func redetectRegionAtPlayhead() {

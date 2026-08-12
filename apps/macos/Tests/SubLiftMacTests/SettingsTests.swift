@@ -12,6 +12,42 @@ final class EngineCapabilityTests: XCTestCase {
         XCTAssertTrue(EngineCapability.visibleEngines(developerMode: false).contains(.paddle))
     }
 
+    func testPersistedMockFallsBackToVisionOutsideDeveloperMode() {
+        XCTAssertEqual(
+            EngineCapability.normalizedSelection(.mock, developerMode: false),
+            .vision
+        )
+    }
+
+    func testPersistedMockRemainsSelectedInDeveloperMode() {
+        XCTAssertEqual(
+            EngineCapability.normalizedSelection(.mock, developerMode: true),
+            .mock
+        )
+    }
+
+    func testVisibleProductionSelectionIsPreserved() {
+        XCTAssertEqual(
+            EngineCapability.normalizedSelection(.paddle, developerMode: false),
+            .paddle
+        )
+    }
+
+    func testNormalizedSelectionAlwaysBelongsToVisibleEngines() {
+        for developerMode in [false, true] {
+            for engine in OcrEngineName.allCases {
+                let normalized = EngineCapability.normalizedSelection(
+                    engine,
+                    developerMode: developerMode
+                )
+                XCTAssertTrue(
+                    EngineCapability.visibleEngines(developerMode: developerMode).contains(normalized),
+                    "\(normalized) must be visible when developerMode=\(developerMode)"
+                )
+            }
+        }
+    }
+
     func testNoAutomaticOrWhisperEngines() {
         let all = EngineCapability.visibleEngines(developerMode: true)
         XCTAssertFalse(all.contains { $0.rawValue.contains("automatic") })

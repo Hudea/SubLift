@@ -1,4 +1,26 @@
+import Foundation
 import SwiftUI
+
+/// Timeline 范围标签：省略毫秒与不足一小时的冗余小时位，降低紧凑窗口中的换行风险。
+enum TimelineRangePresentation {
+
+    static func text(startMs: Int, endMs: Int) -> String {
+        guard endMs > startMs else { return "—" }
+        return "\(component(startMs))–\(component(endMs))"
+    }
+
+    private static func component(_ milliseconds: Int) -> String {
+        let totalSeconds = max(0, milliseconds) / 1_000
+        let seconds = totalSeconds % 60
+        let totalMinutes = totalSeconds / 60
+        let minutes = totalMinutes % 60
+        let hours = totalMinutes / 60
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        }
+        return String(format: "%d:%02d", totalMinutes, seconds)
+    }
+}
 
 /// 10310：Subtitle Timeline 条带（28–40pt）。
 ///
@@ -43,8 +65,21 @@ struct SubtitleTimelineView: View {
 
             Text(timeRangeText)
                 .font(.system(.caption2, design: .monospaced))
+                .monospacedDigit()
                 .foregroundStyle(.secondary)
-                .frame(width: 92, alignment: .trailing)
+                .lineLimit(1)
+                .allowsTightening(true)
+                .minimumScaleFactor(0.75)
+                .frame(
+                    minWidth: 68,
+                    idealWidth: 86,
+                    maxWidth: 96,
+                    minHeight: nil,
+                    idealHeight: nil,
+                    maxHeight: nil,
+                    alignment: .trailing
+                )
+                .layoutPriority(1)
                 .accessibilityLabel("时间范围 \(timeRangeText)")
         }
         .padding(.horizontal, 12)
@@ -133,9 +168,8 @@ struct SubtitleTimelineView: View {
     }
 
     private var timeRangeText: String {
-        let range = TimelineGeometry.range(from: entries)
-        guard range.durationMs > 0 else { return "—" }
+        let range = effectiveRange
         let endMs = range.startMs + range.durationMs
-        return "\(TimeFormatter.formatMs(range.startMs))–\(TimeFormatter.formatMs(endMs))"
+        return TimelineRangePresentation.text(startMs: range.startMs, endMs: endMs)
     }
 }

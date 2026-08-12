@@ -5,11 +5,26 @@ import SwiftUI
 /// Transcript 搜索过滤投影：只影响显示，不改变 entries 顺序或导出内容。
 enum TranscriptSearch {
 
+    /// 搜索结果保留其在源 Transcript 中的一基序号，避免过滤后重新编号。
+    struct IndexedEntry {
+        let sourceNumber: Int
+        let entry: SubtitleEntry
+    }
+
+    /// 按 query 生成带源序号的展示投影。
+    static func filteredRows(_ entries: [SubtitleEntry], query: String) -> [IndexedEntry] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return entries.enumerated().compactMap { offset, entry in
+            guard trimmed.isEmpty || entry.text.localizedCaseInsensitiveContains(trimmed) else {
+                return nil
+            }
+            return IndexedEntry(sourceNumber: offset + 1, entry: entry)
+        }
+    }
+
     /// 按 query 过滤 entries（大小写不敏感子串匹配；空白 query 返回全部）。
     static func filteredEntries(_ entries: [SubtitleEntry], query: String) -> [SubtitleEntry] {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return entries }
-        return entries.filter { $0.text.localizedCaseInsensitiveContains(trimmed) }
+        filteredRows(entries, query: query).map(\.entry)
     }
 }
 
@@ -153,14 +168,14 @@ struct TranscriptPanel: View {
 
     @ViewBuilder
     private var content: some View {
-        let filtered = TranscriptSearch.filteredEntries(editor.entries, query: searchQuery)
+        let filteredRows = TranscriptSearch.filteredRows(editor.entries, query: searchQuery)
 
         if editor.entries.isEmpty {
             emptyState(icon: "captions.bubble", title: "尚未提取字幕", detail: nil)
-        } else if filtered.isEmpty {
+        } else if filteredRows.isEmpty {
             emptyState(icon: "magnifyingglass", title: "没有匹配的字幕", detail: "尝试其他关键词，或清除搜索。")
         } else {
-            listContent(filtered)
+            listContent(filteredRows)
         }
     }
 
@@ -182,13 +197,14 @@ struct TranscriptPanel: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func listContent(_ filtered: [SubtitleEntry]) -> some View {
+    private func listContent(_ filteredRows: [TranscriptSearch.IndexedEntry]) -> some View {
         ScrollViewReader { proxy in
             List(selection: $editor.selectedId) {
-                ForEach(Array(filtered.enumerated()), id: \.element.id) { index, entry in
+                ForEach(filteredRows, id: \.entry.id) { row in
+                    let entry = row.entry
                     TranscriptRow(
                         entry: entry,
-                        index: index + 1,
+                        index: row.sourceNumber,
                         isCurrent: entry.id == editor.currentId,
                         isEditable: accessMode == .editable,
                         canSplit: commands.canSplit && TranscriptRowAvailability.canSplit(

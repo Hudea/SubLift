@@ -80,6 +80,15 @@ struct ExtractionInspector: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .accessibilityElement(children: .contain)
+        .onAppear {
+            normalizeDefaultEngine()
+        }
+        .onChange(of: developerMode) { _ in
+            normalizeDefaultEngine()
+        }
+        .onChange(of: defaultEngine) { _ in
+            normalizeDefaultEngine()
+        }
     }
 
     // MARK: - 设置（跨 Session 偏好）
@@ -90,7 +99,7 @@ struct ExtractionInspector: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
-            Picker("引擎", selection: $defaultEngine) {
+            Picker("引擎", selection: normalizedDefaultEngineBinding) {
                 ForEach(EngineCapability.visibleEngines(developerMode: developerMode), id: \.self) { engine in
                     Text(engine.displayName).tag(engine)
                 }
@@ -115,7 +124,7 @@ struct ExtractionInspector: View {
 
     private var infoSection: some View {
         let rows = ExtractionInspectorPresentation.rows(
-            engine: defaultEngine,
+            engine: normalizedDefaultEngine,
             quality: samplingQuality,
             runtimeIdentity: extractor.runtimeIdentity,
             state: state
@@ -140,6 +149,33 @@ struct ExtractionInspector: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel("\(row.label)：\(row.value)")
             }
+        }
+    }
+
+    private var normalizedDefaultEngine: OcrEngineName {
+        EngineCapability.normalizedSelection(
+            defaultEngine,
+            developerMode: developerMode
+        )
+    }
+
+    /// 与 Settings 共用同一归一化策略，防止陈旧 Mock 偏好让 radio group 为空。
+    private var normalizedDefaultEngineBinding: Binding<OcrEngineName> {
+        Binding(
+            get: { normalizedDefaultEngine },
+            set: { selection in
+                defaultEngine = EngineCapability.normalizedSelection(
+                    selection,
+                    developerMode: developerMode
+                )
+            }
+        )
+    }
+
+    private func normalizeDefaultEngine() {
+        let normalized = normalizedDefaultEngine
+        if normalized != defaultEngine {
+            defaultEngine = normalized
         }
     }
 }

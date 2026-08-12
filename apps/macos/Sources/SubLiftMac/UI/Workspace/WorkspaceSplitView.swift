@@ -14,18 +14,27 @@ struct WorkspaceSplitView<Left: View, Right: View>: View {
     @ViewBuilder let left: () -> Left
     @ViewBuilder let right: () -> Right
 
-    @State private var videoWidth: CGFloat = 0
+    /// 用户最后一次拖动选择的有效宽度；窗口/Inspector 改变时会再次按当前容器动态 clamp。
+    /// 未发生拖动时使用父视图重算的 `initialVideoWidth`，开关 Inspector 会恢复目标比例。
+    @State private var videoWidth: CGFloat?
+    @State private var dragStartVideoWidth: CGFloat?
 
     var body: some View {
         GeometryReader { geometry in
             let container = geometry.size.width
-            let resolved = resolvedVideoWidth(container: container)
+            let columns = WorkspaceLayout.resolvedColumns(
+                proposedLeftWidth: videoWidth ?? initialVideoWidth,
+                containerWidth: container,
+                dividerWidth: 1,
+                leftMin: leftMin,
+                rightMin: rightMin
+            )
             HStack(spacing: 0) {
                 left()
-                    .frame(width: resolved)
+                    .frame(width: columns.left)
 
                 Divider()
-                    .frame(width: 1)
+                    .frame(width: columns.divider)
                     .overlay(
                         Rectangle()
                             .fill(Color(nsColor: .separatorColor))
@@ -41,38 +50,26 @@ struct WorkspaceSplitView<Left: View, Right: View>: View {
                     .gesture(
                         DragGesture(minimumDistance: 1)
                             .onChanged { value in
-                                videoWidth = WorkspaceLayout.clampedLeftWidth(
-                                    proposed: initialVideoWidth + value.translation.width,
+                                let dragStart = dragStartVideoWidth ?? columns.left
+                                if dragStartVideoWidth == nil {
+                                    dragStartVideoWidth = dragStart
+                                }
+                                videoWidth = WorkspaceLayout.resolvedColumns(
+                                    proposedLeftWidth: dragStart + value.translation.width,
                                     containerWidth: container,
+                                    dividerWidth: columns.divider,
                                     leftMin: leftMin,
                                     rightMin: rightMin
-                                )
+                                ).left
+                            }
+                            .onEnded { _ in
+                                dragStartVideoWidth = nil
                             }
                     )
 
                 right()
-                    .frame(width: max(container - resolved - 1, rightMin))
-            }
-            .onAppear {
-                videoWidth = WorkspaceLayout.clampedLeftWidth(
-                    proposed: initialVideoWidth,
-                    containerWidth: container,
-                    leftMin: leftMin,
-                    rightMin: rightMin
-                )
+                    .frame(width: columns.right)
             }
         }
-    }
-
-    private func resolvedVideoWidth(container: CGFloat) -> CGFloat {
-        guard videoWidth > 0 else {
-            return WorkspaceLayout.clampedLeftWidth(
-                proposed: initialVideoWidth,
-                containerWidth: container,
-                leftMin: leftMin,
-                rightMin: rightMin
-            )
-        }
-        return videoWidth
     }
 }

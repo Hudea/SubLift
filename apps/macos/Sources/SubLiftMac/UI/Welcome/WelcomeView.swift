@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// Welcome 的稳定布局契约：核心内容保持一个视觉组，隐私说明独立锚定底部。
+enum WelcomeLayout {
+    static let coreGroupSpacing: CGFloat = 24
+    static let actionGroupSpacing: CGFloat = 14
+    static let contentMaxWidth: CGFloat = 520
+
+    static func verticalInset(forHeight height: CGFloat) -> CGFloat {
+        height < 700 ? 24 : 40
+    }
+}
+
 /// Phase 10 V01：Welcome / Empty 工作区。
 ///
 /// 单一 Open 主动作 + 本机处理说明 + 支持格式；不使用整窗 Card、渐变或永久虚线框。
@@ -9,57 +20,61 @@ struct WelcomeView: View {
     let isDropTargeted: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
-            Spacer(minLength: 24)
+        GeometryReader { geometry in
+            let verticalInset = WelcomeLayout.verticalInset(forHeight: geometry.size.height)
 
-            VStack(spacing: 16) {
-                appIcon
-                Text("SubLift")
-                    .font(.title.weight(.semibold))
-                Text("从视频中提取可编辑字幕")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .accessibilityElement(children: .combine)
+            ZStack {
+                VStack(spacing: WelcomeLayout.coreGroupSpacing) {
+                    VStack(spacing: 16) {
+                        appIcon
+                        Text("SubLift")
+                            .font(.title.weight(.semibold))
+                        Text("从视频中提取可编辑字幕")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
 
-            Spacer(minLength: 44)
+                    VStack(spacing: WelcomeLayout.actionGroupSpacing) {
+                        Button(action: onOpen) {
+                            Label("打开视频…", systemImage: "folder")
+                                .font(.body)
+                                .padding(.horizontal, 4)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .accessibilityLabel("打开视频")
+                        .accessibilityHint("从文件面板选择 MP4、MOV 或 MKV 视频")
 
-            VStack(spacing: 14) {
-                Button(action: onOpen) {
-                    Label("打开视频…", systemImage: "folder")
-                        .font(.body)
-                        .padding(.horizontal, 4)
+                        Text(isDropTargeted ? "松开以打开视频" : "或将视频拖到此处")
+                            .font(.callout)
+                            .fontWeight(isDropTargeted ? .semibold : .regular)
+                            .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary)
+                            .accessibilityLabel(
+                                isDropTargeted
+                                    ? "拖拽激活，松开以打开视频"
+                                    : "或将视频拖到此处"
+                            )
+
+                        Text(VideoImportPolicy.supportedFormatsText)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                            .accessibilityLabel("支持格式：MP4、MOV、MKV")
+                    }
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityLabel("打开视频")
-                .accessibilityHint("从文件面板选择 MP4、MOV 或 MKV 视频")
+                .padding(.vertical, verticalInset)
 
-                Text(isDropTargeted ? "松开以打开视频" : "或将视频拖到此处")
-                    .font(.callout)
-                    .fontWeight(isDropTargeted ? .semibold : .regular)
-                    .foregroundStyle(isDropTargeted ? Color.accentColor : Color.secondary)
-                    .accessibilityLabel(
-                        isDropTargeted
-                            ? "拖拽激活，松开以打开视频"
-                            : "或将视频拖到此处"
-                    )
-
-                Text(VideoImportPolicy.supportedFormatsText)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityLabel("支持格式：MP4、MOV、MKV")
+                VStack {
+                    Spacer(minLength: 0)
+                    Label("所有处理均在本机完成", systemImage: "lock.shield")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("所有处理均在本机完成")
+                }
+                .padding(.vertical, verticalInset)
             }
-
-            Spacer(minLength: 0)
-
-            Label("所有处理均在本机完成", systemImage: "lock.shield")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.bottom, 20)
-                .accessibilityLabel("所有处理均在本机完成")
         }
-        .frame(maxWidth: 520)
+        .frame(maxWidth: WelcomeLayout.contentMaxWidth)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
