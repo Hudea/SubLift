@@ -5,6 +5,54 @@
 
 ---
 
+## ADR-0036 合并项目辅助架构记录并释放 Phase 9（2026-08-12）
+
+- **状态**：已确认，由 07002 实施。
+- **背景**：Phase 7 初次 Harness 迁移与原 Phase 9 仓库稳定化都服务于项目辅助架构；后者
+  包含 Harness 收缩、验证入口、诊断脚本、benchmark 兼容和本地产物卫生，并未形成独立的
+  产品能力阶段。继续占用根索引中的 `phase9` 会阻碍项目为下一项真实范围建立新的 Phase 9。
+- **决策**：
+  1. Phase 7 更名为 `Project Auxiliary Architecture`，吸收原 Phase 9 的 `09001–09006`。
+  2. `09001–09006`、subtask、依赖和 evidence 作为稳定历史记录原样保留，不改写为 `070xx`。
+  3. 根 `phases.json` 移除原 `phase9`，旧 `docs/phases/phase9.json` 容器删除；其历史记录的
+     操作真源改为 `docs/phases/phase7.json`。
+  4. `phase9` 索引 ID 与 `docs/phases/phase9.json` 路径立即可复用。未来新 Phase 9 从未占用的
+     `09101` 开始登记，避免与原批次的 `09001–09006` 冲突；本决策不预设新 Phase 9 的范围。
+  5. 历史计划、ADR、诊断表和 evidence 中的“Phase 9”仍表示 2026-08-10 当时的批次名称；
+     现行导航必须标明其已归档到 Phase 7，不能再把旧路径当作当前真源。
+- **理由**：Phase 是当前工作的领域容器，Feature ID/evidence 是审计标识。移动容器但保留稳定
+  ID，既能校正领域结构并释放 Phase 9，也不会制造历史重编号、断链或伪造证据。
+- **影响**：Phase 7 同时保存两次项目辅助架构演进；新 Phase 9 可按正常 canonical 结构创建，
+  且不依赖旧 Phase 9 的状态或 detail 文件。
+
+---
+
+## ADR-0035 Phase 10 采用 Native Workbench 与处理期只读 Transcript（2026-08-11）
+
+- **状态**：已确认并由 10001–10415 实施；10416 完成当前文档收口。
+- **背景**：现有 SwiftUI GUI 已具备单视频导入、预览、字幕区域、流式结果、编辑、取消和
+  SRT 导出，但 `ContentView` 直接组合多组状态，metadata/候选/提取控件长期占据主内容。
+  `push_entry` 会先追加到 Editor，final entries 又会整体替换；若处理时允许编辑，会产生
+  用户修改被覆盖的风险。外部 vNext 设计同时包含 Task Center、Automatic、Whisper 等未来图景，
+  与当前 F10/F24 和引擎矩阵并不等价。
+- **决策**：
+  1. Phase 10 采用一个 Window 一个视频 Session 的 Native Workbench；主窗口由 Video、
+     Transcript 与可选 Context Inspector 组成，不增加永久左 Sidebar。
+  2. 新增 WorkspaceModel/State 只负责组合现有 focused Core models 与 command availability；
+     不把 IPC、算法、坐标、编辑或导出实现搬进 View。
+  3. processing/finalizing 的 Live Transcript 只允许选择、seek、浏览和搜索；final entries
+     原子落地后才进入可编辑 Review。
+  4. Toolbar/Menu/Context menu 复用同一 commands；Session 参数进 Inspector，跨 Session
+     偏好进 Settings，Mock/Python Oracle 进入 Advanced/Developer。
+  5. Task Center/批量、Automatic engine、Whisper、ASS/VTT、模型下载和独立分发不因参考图
+     进入 Phase 10；只有真实契约、数据和测试存在时才显示入口。
+- **理由**：该结构强化当前单视频核心路径，保留 C++/Python runtime 和 UDS 边界，并用明确
+  状态所有权消除数据覆盖风险；系统组件也能自然适配 macOS 13+、浅深色和辅助功能。
+- **影响**：设计真源为 `docs/design_ui/`，Feature 顺序与证据在 `docs/phases/phase10.json`；
+  当前 GUI 已采用 Native Workbench，现行模块与数据流由 `docs/design/macos-gui.md` 描述。
+
+---
+
 ## ADR-0034 标准验证入口与 Harness 初始化命名解耦（2026-08-10）
 
 - **状态**：已确认并由 09002 实施。

@@ -4,6 +4,10 @@
 >
 > ADR-0005 记录了最初的 SwiftUI + Python Worker 方案；Phase 6 cutover 后，GUI 默认启动
 > C++ `sublift_worker`，Python server 只在显式 runtime 下承担 Oracle / 开发回滚。
+>
+> **当前实现：** Phase 10 Native Workbench 已实施；视觉、交互状态和验收边界见
+> [`docs/design_ui/`](../design_ui/README.md)，逐 Feature 证据见
+> [`docs/phases/phase10.json`](../phases/phase10.json)。
 
 ## 运行时边界
 
@@ -27,6 +31,10 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 
 | 文件 | 职责 |
 |---|---|
+| `WorkspaceModel.swift` / `WorkspaceState.swift` | 单窗口 Session 组合根；校验状态转换、job token、Inspector intent、Transcript 权限和 command availability。 |
+| `WorkspaceLayout.swift` | 计算 Video/Transcript/Inspector 的比例、最小宽度与 divider clamp。 |
+| `VideoImportPolicy.swift` | 统一 Open/drop 格式校验；MKV 缺 ffmpeg 时在改变 Session 前 fail-closed。 |
+| `ExtractionConfiguration.swift` | 表达引擎与采样质量的 active/final 运行配置快照。 |
 | `RuntimePolicy.swift` | 解析 runtime / engine / 来源；执行 C++ 默认与 fail-closed 规则。 |
 | `PipelineClient.swift` | 查找并启动 C++ 或显式 Python Worker；负责 UDS 连接、framing、握手、请求与资源回收。 |
 | `Messages.swift` | IPC Codable 消息；字段与 C++/Python 共享协议对齐。 |
@@ -45,12 +53,16 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 
 | 文件 | 职责 |
 |---|---|
-| `SubLiftMacApp.swift` | `@main` 入口、主视图组合与应用状态。 |
-| `DropZone.swift` | 接收本地视频拖入。 |
+| `SubLiftMacApp.swift` / `WorkspaceCommands.swift` | `@main`、WorkspaceModel 生命周期、系统菜单与快捷键。 |
+| `Welcome/WelcomeView.swift` / `DropZone.swift` | 空工作区、Open 主动作与统一视频拖入目标。 |
+| `Workspace/WorkspaceRootView.swift` / `WorkspaceSplitView.swift` | Native 根视图、Toolbar、Video/Transcript Split、Inspector 和提取请求入口。 |
 | `VideoPreview.swift` | AVPlayer 预览、播放/暂停与 seek。 |
-| `RegionOverlay.swift` | 候选框叠加、多选与合并区域预览。 |
-| `SubtitleList.swift` | 字幕列表、文本编辑、合并/拆分和导出。 |
-| `SettingsView.swift` | vision / paddle / mock 选择与 UserDefaults 持久化。 |
+| `RegionOverlay.swift` / `Region/RegionInspector.swift` | Region Editing 候选、多选、合并区域与几何投影。 |
+| `Transcript/TranscriptPanel.swift` / `TranscriptRow.swift` | 处理期只读与 Review 编辑、搜索、selection/current 和上下文命令。 |
+| `Workspace/WorkspaceInspector.swift` / 各 Inspector | Video / Region / Extraction / Subtitle 上下文详情；Extraction 配置只读。 |
+| `Extraction/ExtractionProgressView.swift` / `QuickExtractionSettingsBar.swift` | 真实进度、runtime、Stop，以及共用 AppStorage 的紧凑引擎/采样设置和重新提取确认。 |
+| `Timeline/SubtitleTimelineView.swift` | 字幕条带、播放头、点击 seek 与前后字幕导航。 |
+| `Settings/SettingsView.swift` / `EngineCapability.swift` | General / Recognition / Advanced 分区、真实 capability 与 Developer Mode。 |
 | `TimeFormatter.swift` | 毫秒时间格式化。 |
 
 ## IPC 协议
@@ -84,11 +96,13 @@ Worker 启动时绑定的 engine 是实际执行身份；若与 `start_job.engin
 ## 默认 GUI 数据流
 
 ```text
-用户拖入视频
+用户 Open 或拖入视频
   ↓
-DropZone → VideoMetadata → AVPlayer 预览
+VideoImportPolicy 校验 → WorkspaceModel 创建/替换 Session
   ↓
-VisionTextDetector 扫描代表帧 → 用户选择字幕区域
+VideoMetadata + AVPlayer 预览 → VisionTextDetector 候选 → Region Editing
+  ↓
+WorkspaceRootView.requestExtraction 冻结 active ExtractionConfiguration
   ↓
 RuntimePolicy.resolve(engine, runtime)
   ↓
@@ -98,11 +112,11 @@ start_job(video_path, region_box, subtitle_profile)
   ↓
 Worker-owned FfmpegExtractor → Pipeline.feed / ocr_segment / finalize
   ↓
-progress + push_entry → SubtitleEditor 增量展示
+progress + push_entry → WorkspaceModel 的只读 Live Transcript 投影
   ↓
-entries(is_final=true) → SubtitleEditor 覆盖为最终去重结果
+entries(is_final=true) → SubtitleEditor 原子载入 + final 配置快照 → Review
   ↓
-SubtitleList 编辑 → SrtFormatter → NSSavePanel 写文件
+TranscriptPanel 编辑/搜索/定位 → SrtFormatter → NSSavePanel 写文件
 ```
 
 默认 path mode 不发送 JPEG `frame`，避免 AVFoundation 跳采样相位与有损编码造成质量漂移。
@@ -135,7 +149,9 @@ height = max(selected.maxY) - min(selected.y) + 2 * padding
 
 ## 字幕编辑与导出
 
-`SubtitleEditor` 在主线程维护带 UUID 的可编辑条目：
+`SubtitleEditor` 在主线程维护带 UUID 的最终可编辑条目；WorkspaceModel 在
+starting/processing/finalizing 阶段只暴露只读 Transcript，最终 entries 原子落地进入 Review
+后才开放以下 mutation：
 
 | 操作 | 行为 |
 |---|---|
@@ -155,3 +171,4 @@ height = max(selected.maxY) - min(selected.y) + 2 * padding
 - legacy frame mode 仍是协议兼容面，移除前必须先审计测试与外部消费者。
 - 一次只处理一个视频；批量队列和精细时间码拖动尚未实现。
 - 长视频交互已有历史手工验收，但尚未形成持续运行的跨片源 GUI 回归套件。
+- V10 系统辅助功能设置切换、完整 VoiceOver 会话及部分真实点击受当前系统权限限制；自动测试、代码审核和 EvidenceShot 渲染覆盖边界见 Phase 10 evidence。

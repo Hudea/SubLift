@@ -91,7 +91,7 @@
     "canonical_feature_id": {
       "type": "string",
       "pattern": "^[0-9]{5}$",
-      "description": "前两位为 Phase、第三位为子阶段、后两位为 Feature 序号。"
+      "description": "五位稳定历史标识。新建时前两位为所属 Phase、第三位为子阶段、后两位为 Feature 序号；已完成 Feature 被吸收到同领域 Phase 时保留原 ID，不因容器变化重编号。"
     },
     "legacy_subtask": {
       "type": "object",
@@ -159,6 +159,7 @@
     },
     "canonical_subtask": {
       "type": "object",
+      "description": "Subtask ID 继承所属 Feature 的稳定五位 ID；吸收式 Phase 迁移时同样不重编号。",
       "additionalProperties": false,
       "required": ["id", "name", "description", "dependencies", "status"],
       "properties": {

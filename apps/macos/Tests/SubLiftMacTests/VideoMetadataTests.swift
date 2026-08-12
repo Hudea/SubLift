@@ -5,6 +5,20 @@ import Testing
 /// feat-020：VideoMetadata 纯函数单测（格式化）。
 struct VideoMetadataTests {
 
+    @Test @MainActor
+    func fetchDoesNotPublishBeforeCoordinatorValidation() async {
+        let loader = VideoMetadataLoader()
+        let url = URL(fileURLWithPath: "/tmp/nonexistent-metadata-test.mp4")
+
+        let fetched = await loader.fetch(url: url)
+
+        #expect(fetched.fileName == url.lastPathComponent)
+        #expect(loader.metadata == nil)
+
+        loader.publish(fetched)
+        #expect(loader.metadata == fetched)
+    }
+
     // MARK: - formatCodec
 
     @Test

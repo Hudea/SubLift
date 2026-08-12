@@ -1,0 +1,998 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 10 - macOS Native Workbench UI",
+  "description": "以真实产品能力为边界，将现有 SwiftUI GUI 升级为原生 macOS 字幕工作台；先冻结设计与状态合同，再按 Session、Shell、Inspector、Region、Transcript、Processing、Review、Timeline、Settings 和辅助功能顺序实施。",
+  "features": [
+    {
+      "id": "10001",
+      "name": "冻结 Phase 10 设计与实施基线",
+      "description": "整理外部设计说明与八张参考图，形成项目内主设计方案、状态合同、实现映射、未来边界和可逐项实施的 Phase 10 计划。",
+      "module": [
+        "docs/design_ui/",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md",
+        "docs/phases/phase10.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": [],
+      "acceptance_criteria": [
+        "docs/design_ui 明确产品定位、Surface、Inspector、Transcript、Timeline、Settings、视觉语义、响应式、辅助功能和非目标，且与 Requirements/Architecture/runtime 契约一致。",
+        "八张外部 PNG 以稳定英文名原样复制到 assets，reference-index 记录语义、1448×1086 尺寸、SHA-256 与 Phase 10/未来适用边界。",
+        "Task Center、Automatic engine、Whisper、ASS/VTT、模型下载、剩余时间等未实现能力被明确排除或要求真实数据，不因参考图而伪装完成。",
+        "Phase 10 Feature 使用五位 ID、canonical 字段、显式依赖、可执行验收与证据落点，并通过 phaseN.schema.json 与 phases.schema.json。",
+        "Markdown 本地链接、JSON 解析、git diff --check 与 ./init.sh 通过；验证命令和结果写入本 Feature evidence。"
+      ],
+      "non_goals": [
+        "本 Feature 不修改 Swift/C++/Python 产品代码或宣称视觉升级已实现。",
+        "不提交、推送、合并 Phase 8 UI 分支或改写外部源文件。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/README.md",
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design_ui/implementation-map.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10001.01",
+          "name": "盘点设计输入与当前实现",
+          "description": "逐图检查外部资产，并对照 Requirements、Architecture、现有 SwiftUI View/Core 和 runtime policy 识别真实能力与差异。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10001.02",
+          "name": "整理设计文档与资产",
+          "description": "复制并规范命名图片，编写主方案、状态合同、实现映射和参考索引。",
+          "dependencies": [
+            "10001.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10001.03",
+          "name": "登记 Phase 与关联文档",
+          "description": "创建 Phase 10 计划/细节并同步 Requirements、Architecture、macOS GUI 设计、决策与进度导航。",
+          "dependencies": [
+            "10001.02"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10001.04",
+          "name": "验证设计基线",
+          "description": "运行资产校验、JSON/schema、Markdown links、diff check 与 init，并把真实结果写入 evidence。",
+          "dependencies": [
+            "10001.03"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-11 完成 Phase 10 设计与实施基线；仅修改文档、Phase 跟踪和经用户授权复制的设计资产，未修改 Swift/C++/Python 产品代码，未提交或推送。\n\n范围结果：\n- 逐图检查外部设计目录中的 1 份 vNext 说明和 8 张 1448×1086 PNG，并对照 Requirements、Architecture、现有 SwiftUI Core/UI 与 runtime policy 区分已实现能力、Phase 10 目标和未来参考。\n- 新建 docs/design_ui：README 为入口，macos-workbench-vnext.md 固化主设计，interaction-state-spec.md 固化状态/命令/V01–V10/A01–A02，implementation-map.md 固化当前到目标组件和真实能力差异，reference-index.md 固化资产来源、用途与 SHA-256。\n- 8 张 PNG 以 01-welcome-empty 至 08-task-center-future 的稳定英文名原样复制；Task Center 明确只用于未来 F24。Automatic、Whisper、ASS/VTT、模型下载、ETA/平均置信度与独立分发均未被伪装成 Phase 10 已实现能力。\n- 新建 Phase 10 架构计划与 canonical detail：13 个 Feature、42 个顺序 subtask；后续从 10102 Workspace Session 状态模型开始，最终以 10413 标准门和视觉/辅助功能矩阵收口。Requirements、Architecture、macOS GUI 当前实现文档、README、ADR-0035、phases.json 与 progress.md 已同步。\n\n验证：\n- 资产 SHA-256 与 reference-index 一致；Python 逐字节对比外部源与 8 个目标文件全部相同，sips 确认全部为 1448×1086。\n- jq empty phases.json docs/phases/phase10.json：通过。\n- 依据 phases.schema.json / phaseN.schema.json canonical 字段、ID、状态、唯一性、依赖顺序、done evidence、subtask 前缀与 architecture_refs 存在性执行定向检查：features=13、subtasks=42、refs=ok。\n- 受版本控制及本次新增的 96 个 Markdown 文件共 319 个本地链接扫描通过。\n- git diff --check：通过；./init.sh：OK。\n\n限制：本 Feature 为纯设计/规划工作，未运行 Swift 或项目完整产品门，也不产生实现截图；这些验证按 10102–10413 的 Feature acceptance 在实际开发时逐项执行。工作区原有 .gitignore 修改未纳入或改写。"
+    },
+    {
+      "id": "10102",
+      "name": "建立 Workspace Session 状态模型",
+      "description": "新增单窗口 WorkspaceModel/WorkspaceState，组合现有 focused Core models，并统一 Surface、Inspector、Transcript 编辑权限与 command availability。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift",
+        "apps/macos/Sources/SubLiftMac/Core/WorkspaceState.swift",
+        "apps/macos/Tests/SubLiftMacTests/WorkspaceModelTests.swift"
+      ],
+      "dependencies": [
+        "10001"
+      ],
+      "acceptance_criteria": [
+        "状态模型覆盖 empty/loading/ready/regionEditing/starting/processing/finalizing/review/failed/cancelled，非法转换被拒绝或归一到安全状态。",
+        "WorkspaceModel 只协调 Player/Extractor/Editor/Metadata/Region/Runtime/Export，不复制 IPC、坐标、编辑或格式化实现。",
+        "Open/Region/Extract/Stop/Export/Edit/Split/Merge/Inspector 的 availability 由单一模型产生，Toolbar/Menu/Context menu 可复用。",
+        "XCTest 覆盖新视频清理、processing 只读、final entries 切换、取消/失败/重试和迟到 job 更新不污染当前 Session。",
+        "swift test 与既有 RuntimePolicy、PipelineClient、SubtitleExtractor、SubtitleEditor 专项通过；测试名和结果写入 evidence。"
+      ],
+      "non_goals": [
+        "不在本 Feature 重排主窗口或删除现有 ContentView。",
+        "不修改 Worker 协议、runtime 路由或提取算法。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design_ui/implementation-map.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10102.01",
+          "name": "定义状态与命令矩阵",
+          "description": "把设计状态合同编码为纯状态、Inspector mode 与命令可用性。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10102.02",
+          "name": "实现 WorkspaceModel 协调",
+          "description": "接入现有 Core models，处理导入、提取、取消、最终结果和选择事件。",
+          "dependencies": [
+            "10102.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10102.03",
+          "name": "验证生命周期不变量",
+          "description": "覆盖成功/失败/取消/重试/迟到事件与只读阶段。",
+          "dependencies": [
+            "10102.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-11 完成 10102 Workspace Session 状态模型与验收修复。\n\n实际修改文件：\n- apps/macos/Sources/SubLiftMac/Core/WorkspaceState.swift：新增 10 种 WorkspaceState、4 种 InspectorMode、TranscriptAccessMode 与统一 command availability 矩阵。\n- apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift：新增单窗口协调模型，组合 Player/Extractor/Editor/Metadata/Region；统一导入、提取、流式条目、最终结果、取消、失败、重试、选择与 Inspector intent。\n- apps/macos/Sources/SubLiftMac/Core/VideoMetadata.swift：拆分 fetch 与 publish，确保 metadata 只在 Workspace 校验 session token 后发布。\n- apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift：以 WorkspaceModel 作为视频 URL、导入、提取和取消的真实入口，移除 View 内重复协调。\n- apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift：接入 TranscriptAccessMode 与统一 commands，处理期禁用编辑、拆分、合并和导出。\n- apps/macos/Tests/SubLiftMacTests/WorkspaceModelTests.swift、VideoMetadataTests.swift：覆盖状态矩阵、非法 Open、乱序事件、流式/最终隔离、重新提取失败/取消恢复、metadata fetch/publish 隔离。\n- docs/phases/phase10.json、progress.md：同步 Feature 状态与真实验证证据。\n\n已实现的不变量：\n- loading/starting/processing/finalizing 阶段拒绝非法 Open；公开 intent 与 command matrix 一致。\n- metadata 请求先返回值，再以 session token、取消状态和 loading 前置状态校验后发布，迟到结果不会污染当前 Session。\n- 提取事件同时校验 Workspace job token 与合法前置状态，finalizing 不会被迟到 progress 倒退。\n- 流式条目仅作为只读投影；最终 entries 原子替换后才进入 review 并开放编辑/导出。\n- 从已有 review 重新提取时暂存最后成功结果；新任务失败或取消后恢复该结果及可用命令，首次任务失败/取消则清理临时条目。\n- 子 ObservableObject 的 objectWillChange 转发给 Workspace，SwiftUI 可稳定观察嵌套 Core 状态。\n\n验证：\n- `swift test --filter WorkspaceModelTests`：18 个 XCTest 全部通过。\n- `swift test`：55 个 XCTest 与 140 个 Swift Testing 测试全部通过，退出码 0。\n- `git diff --check`：通过。\n- `./init.sh`：OK。\n\n限制：本 Feature 不重排主窗口，也不实现 Welcome/Toolbar/Inspector/Timeline/Settings 的 Phase 10 视觉布局；后续从 10103 继续。"
+    },
+    {
+      "id": "10103",
+      "name": "实现 Welcome 与视频导入状态",
+      "description": "以 WorkspaceModel 为真源实现空工作区、Open、合法/非法拖拽、加载反馈和新视频切换，不改变现有容器/ffmpeg 支持边界。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Welcome/",
+        "apps/macos/Sources/SubLiftMac/UI/DropZone.swift",
+        "apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+        "apps/macos/Tests/SubLiftMacTests/WorkspaceImportTests.swift"
+      ],
+      "dependencies": [
+        "10102"
+      ],
+      "acceptance_criteria": [
+        "empty 状态按 V01 展示单一 Open 主动作、本机处理说明与 MP4/MOV/MKV 支持，不使用整窗 Card/渐变/永久虚线框。",
+        "合法拖入按 V02 显示 Accent 边界、动作文字和 VoiceOver 状态；非法类型被拒绝并给出非纯颜色反馈。",
+        "Open Panel 与 drop 走同一导入 intent；新视频正确重置 metadata/region/transcript/selection/error，Settings 不受影响。",
+        "MKV/ffmpeg 缺失继续 fail with actionable alert，不把安装命令作为唯一主文案，也不静默换容器。",
+        "导入状态单测、swift test、V01/V02 实际截图与 accessibility label 清单写入 evidence。"
+      ],
+      "non_goals": [
+        "不实现自动创建新窗口、最近项目、会话恢复或文件写回。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10103.01",
+          "name": "实现 Welcome 与 Open",
+          "description": "接入标准 Open Panel 和 empty surface。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10103.02",
+          "name": "实现拖拽反馈与校验",
+          "description": "统一合法/非法拖入与现有格式边界。",
+          "dependencies": [
+            "10103.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10103.03",
+          "name": "验证导入生命周期",
+          "description": "覆盖切换视频、依赖错误、截图与辅助功能。",
+          "dependencies": [
+            "10103.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10103 Welcome 与视频导入状态。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/VideoImportPolicy.swift：导入校验纯逻辑（MP4/MOV/MKV 白名单、MKV 依赖 ffmpeg、Open Panel UTType），Open Panel 与 drop 共用。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Welcome/WelcomeView.swift：V01 empty 状态（图标/标题/副标题/单一 Open 主动作/拖拽提示/格式提示/底部本机说明，内容 ≤520pt 居中，无整窗 Card/渐变/永久虚线框）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/DropZone.swift：DropZone 升级为 DropTargetView（拖拽瞬时 2pt Accent 边界 + 0.12 极浅 Accent tint + isTargeted 反馈，非拖拽零装饰）。\n- 修改 apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift：emptyState→WelcomeView；Open Panel 限定 MP4/MOV/MKV；drop 与 Open Panel 汇聚同一 importVideo intent（validateImport + openVideo）；MKV 缺 ffmpeg 在改变 Session 前弹 actionable alert（主文案为动作说明，安装命令仅作详情）；非法拖入给出图标+文字 inline 反馈（4s 自动消失）；状态不允许打开时给出明确反馈；WindowGroup 默认 1280×800。\n- 修改 apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift：注入 importPolicy、新增 validateImport(url:) 真源、openVideo 在改变 Session 前 fail-closed 校验（非法格式/MKV 缺 ffmpeg 直接拒绝，Session 完全不变）。\n- 新增 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift（DEBUG-only）：环境变量触发的验收截图 fixture（SUBLIFT_EVIDENCE_SHOT/DELAY/DROP），release 构建不含、无环境变量零副作用，有测试锁定 fixture 默认关闭。\n- 新增 apps/macos/Tests/SubLiftMacTests/WorkspaceImportTests.swift：13 个新增测试 + 1 个回归测试。\n- 新增 docs/plans/features/10103.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- empty 状态单一 Open 主动作、本机处理说明、MP4/MOV/MKV 支持；Open Panel 与 drop 共用 validateImport+openVideo 同一 intent。\n- 非法格式（avi/m4v/txt/无扩展名）在改变 Session 前被拒，inline 图标+文字反馈（非纯颜色）。\n- MKV 缺 ffmpeg 在改变 Session 前 fail-closed，弹出 actionable alert（主文案说明需要 ffmpeg 才能预览和提取，安装命令仅作详情），不静默换容器。\n- 新视频重置 metadata/region/transcript/selection/error，Settings（UserDefaults）不受影响；processing 等不可打开状态拒绝新视频且 Session/job token 完全不变。\n- dragActive 是 View 层瞬时状态（isTargeted），不进入 10102 已冻结的 10 态 WorkspaceState。\n\n验证（最终代码状态）：\n- `swift test --filter WorkspaceImportTests|VideoImportPolicyTests|WorkspaceModelTests`：32 个 XCTest 全部通过（13 新增校验/门测试 + 18 WorkspaceModel + 1 回归）。\n- 完整 `swift test`：70 个 XCTest（含 14 个新增）与 140 个 Swift Testing 全部通过，退出码 0。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n- 说明：本会话发现完整 swift test 挂起根因为 Hermes 会话 PYTHONPATH 污染 .venv 子进程（IPC server import PIL 失败）；以 `export PYTHONPATH=` 运行后 2–3 秒完成，非代码问题。\n\n截图证据（docs/design_ui/evidence/10103/）：\n- V01-welcome-empty.png：empty，Light，实际运行应用截图（app 内渲染，1600×1066 @2x）。检查通过：浅色外观、层级完整无裁切、无整窗 Card/渐变/永久虚线框、单一 Open 主动作。\n- V02-drag-active.png：拖拽激活状态，Light，经 DEBUG fixture（SUBLIFT_EVIDENCE_DROP=1）建立稳定拖拽激活视觉后截图。检查通过：2pt Accent 边界完整环绕、极浅 Accent tint（alpha 0.12）、动作文字\"松开以打开视频\"（Accent 色）、元素完整无裁切。\n- 截图在全部审核修复后重新生成（V01/V02 均基于最终代码）。\n\naccessibility labels/values 清单：\n- 打开视频按钮：label\"打开视频\"，hint\"从文件面板选择 MP4、MOV 或 MKV 视频\"。\n- 拖拽提示 Text：默认\"或将视频拖到此处\"；拖拽激活\"拖拽激活，松开以打开视频\"。\n- 格式行：label\"支持格式：MP4、MOV、MKV\"。\n- 底部说明：label\"所有处理均在本机完成\"。\n- 非 empty 拖拽提示：\"松开以打开新视频\"（Text 直接可读）。\n- 非法拖入 banner：Label 组合（图标+文字，combine + staticText）。\n- 应用图标：accessibilityHidden（装饰性）。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（208/208 通过）：结论无 P0/P1。P2①：非可打开状态拖入合法视频时反馈承诺与实际静默拒绝不一致——已修复（importVideo 在 openVideo 拒绝时给出\"当前无法打开新视频\"inline 反馈）并增加回归测试 testOpenVideoRejectedDuringProcessingDoesNotChangeSession；P2②：evidence 缺失——本次补齐。P3 建议类（如 tint 可见性、离屏渲染合成）已在视觉迭代中处理。\n- 修复后重新运行专项测试（9/9 通过）与完整 swift test（70+140 通过），复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Welcome 为自定义品牌图标；实现使用系统 SF Symbol（captions.bubble.fill）+ 系统 Accent 色（符合\"系统语义色\"原则，不复刻外部资产）。\n- 拖拽激活边界为 2pt Accent 实线圆角边框（参考图为虚线）；验收标准要求\"1.5–2pt Accent 边界\"，实线为允许的实现。\n- 截图窗口为 800×533（系统恢复的窗口 frame）；已为 WindowGroup 设置 .defaultSize(1280, 800)，但 macOS 状态恢复覆盖首次运行尺寸；1280×800 精确尺寸的截图未执行（Computer Use 无法可靠 resize 窗口，用户授权跳过并记录）。\n\n未执行验证（如实记录）：\n- 真实 Finder 拖拽（悬停+drop）UI 操作未执行：系统弹出\"录屏\"与\"辅助功能访问（事件）\"权限警告且无法后台处理，cua-driver 对 Finder 窗口 ScreenCaptureKit 捕获失败，CGEvent 模拟因终端进程无辅助功能权限被系统丢弃；drop 逻辑由单测（validateImport/openVideo 门/dropDestination 接线审查）覆盖。\n- 非法拖入 banner、Open Panel、MKV 导入的真实 UI 演示未执行（同一权限阻塞）；对应逻辑均有单测覆盖。\n- 1280×800 精确尺寸截图未执行（见偏差）。\n\n后续 Feature 边界：\n- 不实现自动创建新窗口、最近项目、会话恢复或文件写回（non-goals 保持）。\n- Toolbar/Split/菜单（10104）、Inspector（10105）等均未提前实现；ContentView 仍为既有单文件结构。"
+    },
+    {
+      "id": "10104",
+      "name": "搭建 Native Workspace Shell",
+      "description": "建立系统 Toolbar、Video/Transcript Split、统一 Menu Commands 和 960×600 响应式基础，先复用现有业务 View。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/",
+        "apps/macos/Sources/SubLiftMac/App/WorkspaceCommands.swift",
+        "apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+        "apps/macos/Tests/SubLiftMacTests/WorkspaceLayoutTests.swift"
+      ],
+      "dependencies": [
+        "10103"
+      ],
+      "acceptance_criteria": [
+        "Ready 主窗口形成 Video 60–65% / Transcript 35–40% 的可调 Split，理想 1280×800 与最小 960×600 无主动作裁切。",
+        "Toolbar 只放 Open、文件上下文、Region、Extract/Stop/Export 与 Inspector；engine/quality 不常驻。",
+        "File/Edit/Playback/View 菜单与 Toolbar 共用 Workspace commands，并按状态正确启用；Space 继续播放/暂停。",
+        "窗口变窄时先回收 Inspector 预留位、再将 Transcript 缩至不低于约 320pt；不退回 800×480 全塞布局。",
+        "layout/command tests、swift test、V03 与 V08 实际截图写入 evidence。"
+      ],
+      "non_goals": [
+        "本 Feature 不实现 Inspector 内容、Transcript 重构或 Subtitle Timeline。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design_ui/implementation-map.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10104.01",
+          "name": "建立 Workspace split shell",
+          "description": "组合 Welcome/Video/Transcript 占位并接入窗口尺寸合同。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10104.02",
+          "name": "接入 Toolbar 与 Menu Commands",
+          "description": "以统一 action/availability 连接现有功能。",
+          "dependencies": [
+            "10104.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10104.03",
+          "name": "验证宽窄布局",
+          "description": "覆盖 1280×800、960×600 与连续 resize。",
+          "dependencies": [
+            "10104.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10104 Native Workspace Shell。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/WorkspaceLayout.swift：纯布局逻辑（Video 60–65% / Transcript 35–40% 合同、Transcript 最小 320pt、Inspector 预留位 300pt 先回收、Split divider clamp）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：Native 根视图（DropTarget + 系统 Toolbar + Video/Transcript Split + Inspector 骨架容器），替代 ContentView（已删除）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceSplitView.swift：自定义可拖 Split（HSplitView 的 idealWidth 对 flexible 子视图无效，初始比例不可控；本组件初始比例精确由 WorkspaceLayout 决定，divider 可拖、双侧最小宽 clamp）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：Inspector 容器骨架（宽 300pt、模式标题、关闭按钮、明确占位文案，无假数据；内容由 10105 填充）。\n- 新增 apps/macos/Sources/SubLiftMac/App/WorkspaceCommands.swift：File/Edit/Playback/View 菜单，全部绑定 WorkspaceModel action 与 commandAvailability；Open/Export 经 NotificationCenter 交回视图层统一处理面板与反馈；Playback Play/Pause 统一 Space 快捷键。\n- 修改 apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift：@StateObject workspace 上移至 App；WindowGroup 使用 WorkspaceRootView；挂载 .commands(WorkspaceCommands)；defaultSize(1280,800) 保留；ContentView 已删除（职责完整迁移）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/VideoPreview.swift：VideoControlsView 移除重复 Space 快捷键（统一到 Playback 菜单单一真源）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_OPEN（自动导入 ready 截图 fixture）与 SUBLIFT_EVIDENCE_INSPECTOR（Inspector 显示 fixture），release 不含、无环境变量零副作用、有测试锁定默认关闭。\n- 新增 apps/macos/Tests/SubLiftMacTests/WorkspaceLayoutTests.swift：9 个布局测试（比例/最小宽/Inspector 回收/单调/clamp）。\n- 新增 docs/plans/features/10104.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Ready 主窗口 Video 62.5% / Transcript 37.5%（Inspector 关闭）与 Video 63.3%（Inspector 打开时按可用宽度），均在 60–65%/35–40% 合同内；divider 可拖且双侧最小宽（video 400 / transcript 320）由 clamp 保证。\n- Toolbar 只放 Open、当前文件名（principal）、字幕区域、提取字幕/停止（按状态切换）、导出 SRT、Inspector；engine/quality Picker 不常驻 Toolbar（保留在视频栏参数区）。\n- File（打开视频 ⌘O/导出 SRT ⇧⌘E）、Edit（拆分 ⌘⌥S/合并 ⌘⌥M）、Playback（播放/暂停 Space）、View（区域编辑 ⌘⌥R/Inspector ⌘I）菜单与 Toolbar 共用 WorkspaceModel 的 action 与 availability；Space 单一真源（Playback 菜单）。\n- 窗口最小 960×600（minWidth/minHeight），defaultSize 1280×800；Inspector 打开时先回收其 300pt 预留位，Transcript 保持 ≥320pt。\n- Inspector 开关为有效控件：toggle 显示/隐藏 300pt 容器骨架并真实回收布局；占位文案明确（\"详细内容将在 Inspector 升级中提供\"），不冒充功能。\n\n验证（最终代码状态）：\n- `swift test --filter WorkspaceLayoutTests`：9/9 通过（含 Inspector 预留回收与 clamp 边界）。\n- 完整 `swift test`：79 个 XCTest（新增 9 个布局测试）与 140 个 Swift Testing 全部通过，退出码 0。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n\n截图证据（docs/design_ui/evidence/10104/）：\n- V03-workspace-ready.png：ready + Inspector 打开，Light，实际运行应用（app 内渲染）。程序化检查：Toolbar 区域有内容（208 色）、视频区 63.3%（Inspector 300pt 回收后）、无裁切。\n- V03b-no-inspector.png：ready，Inspector 收起，Light：视频 62.5% ✓。\n- V08-workspace-compact.png：ready、Inspector 收起，Light：Toolbar 完整、视频 62.5%、Transcript 有内容；窗口实际尺寸 1280×771（见偏差）。\n- 截图在全部审核修复后重新生成（Split 修复后 V03/V08 均基于最终代码）。\n\naccessibility labels/values 清单：\n- Toolbar：打开视频（label\"打开视频\"+help）、当前文件名（label\"当前视频：<名>\"）、字幕区域/完成区域编辑（动态 label+help）、提取字幕（help）、停止（help）、导出 SRT（help）、Inspector（help）。\n- Inspector：label\"Inspector\"、关闭按钮 label\"关闭 Inspector\"、占位文案 combine。\n- Split divider：resizeLeftRight 光标。\n- Playback 菜单：播放/暂停动态标题。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（217/217 通过）：无 P0；唯一 P1 为 Inspector 开关是无效控件且\"先回收 Inspector 预留位\"未接入真实视图。修复：新增 WorkspaceInspector 容器骨架 + workspaceSplit 真实接入 inspectorWidth 回收。\n- 复核 Agent 发现 EvidenceShot.autoOpenIfRequested 缺 @MainActor 编译错误（阻断测试），修复后最终复核通过（构建干净、完整套件 140/11 suites 通过、布局 7/7 通过、范围仅计划内文件）。\n- 修复后重新运行完整 swift test（79+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- V03 参考图含 Inspector 真实内容（metadata 等）；本 Feature 只提供容器骨架（占位文案），内容由 10105 填充（符合 non-goal 不提前实现 Inspector 内容）。\n- Split 实现使用自定义可拖 divider（HSplitView 初始比例不可控）；视觉为 1pt 分隔线，功能等价且比例精确。\n- 截图窗口实际 1280×771（系统恢复 frame；.defaultSize(1280,800) 已设置但被恢复覆盖）；960×600 精确尺寸截图未执行（Computer Use 无法 resize，用户授权跳过并记录），960 布局逻辑由单测覆盖。\n\n未执行验证（如实记录）：\n- 菜单/工具栏按钮的逐项 AX 树验证未执行：系统\"辅助功能访问（事件）\"权限警告持续存在且无法后台处理，cua-driver 对 SubLiftMac 窗口 AX 捕获返回 0x0；菜单结构经代码审查与构建验证。\n- Space 播放/暂停、divider 拖拽、Inspector 开关的真实 UI 交互未执行（同一权限阻塞）；对应逻辑有单测（toggle 状态机 10102、布局 clamp 10104）或代码审查确认。\n- 960×600 精确尺寸截图未执行（见偏差）。\n\n后续 Feature 边界：\n- 不实现 Inspector 真实内容（10105）、Transcript 重构（10207）、Subtitle Timeline（10310）；工具栏 engine/quality 仍保留于视频栏参数区（10208 起迁移 Extraction Inspector）。\n- 旧 ContentView 已完整迁移删除（替代组件 WorkspaceRootView 已接线并通过全部测试）。"
+    },
+    {
+      "id": "10105",
+      "name": "建立 Context Inspector 与 Video 模式",
+      "description": "实现可开关、可调整的 Inspector 容器和确定的模式切换，先把 metadata 从主内容归位到 Video Inspector。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/VideoInspector.swift",
+        "apps/macos/Sources/SubLiftMac/Core/VideoMetadata.swift",
+        "apps/macos/Tests/SubLiftMacTests/WorkspaceInspectorTests.swift"
+      ],
+      "dependencies": [
+        "10104"
+      ],
+      "acceptance_criteria": [
+        "Inspector 宽 280–360pt、可关闭并释放内容面积；用户关闭后状态转换不强制重新打开。",
+        "Video 模式只展示 VideoMetadataLoader 的文件名、分辨率、时长、编码、大小、容器与真实预览兼容性。",
+        "Video/Region/Extraction/Subtitle 模式切换遵守状态规范；暂未实现的面板使用明确内部占位而非用户可见假数据。",
+        "原 metadataBar 不再重复占据视频工作区；窄窗口关闭 Inspector 后布局仍通过 V08。",
+        "mode/resize tests、swift test 与 V03 实际截图写入 evidence。"
+      ],
+      "non_goals": [
+        "本 Feature 不实现 Region/Extraction/Subtitle 的完整表单。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10105.01",
+          "name": "实现 Inspector 容器",
+          "description": "接入显示、宽度、模式和用户关闭偏好。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10105.02",
+          "name": "迁移 Video metadata",
+          "description": "移除主内容重复信息并显示真实兼容性。",
+          "dependencies": [
+            "10105.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10105.03",
+          "name": "验证模式与布局",
+          "description": "覆盖状态切换、关闭保持和窄窗口。",
+          "dependencies": [
+            "10105.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10105 Context Inspector 与 Video 模式。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Workspace/VideoInspector.swift：Video 模式内容 + VideoInspectorPresentation 展示纯逻辑（文件名/分辨率/时长/编码/大小/容器/预览兼容性行组装、容器名映射、预览兼容性推导）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：按 InspectorMode 分发内容（video→VideoInspector 真实 metadata；region/extraction/subtitle→明确内部占位文案），宽度 300pt（280–360 合同）、关闭按钮、accessibility。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：移除原 metadataBar（视频工作区不再重复展示 metadata）；Inspector 传入 metadataLoader/playerModel/videoURL。\n- 修改 apps/macos/Sources/SubLiftMac/Core/WorkspaceLayout.swift：clampedLeftWidth 空间不足时左栏让位（优先保证 Transcript ≥320，消除 Inspector 打开 + 窄窗口的 HStack 溢出）。\n- 新增 apps/macos/Tests/SubLiftMacTests/WorkspaceInspectorTests.swift：5 个 VideoInspectorPresentationTests + 3 个 WorkspaceInspectorModeTests。\n- 新增 docs/plans/features/10105.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Inspector 宽 300pt（280–360 合同内），可关闭并释放内容面积；用户关闭后状态转换（region/extraction/review）不强制重新打开（WorkspaceInspectorModeTests.testUserClosedInspectorIsNotForcedReopenedByTransitions）。\n- Video 模式只展示真实字段：文件名、分辨率、时长、编码、大小、容器（按扩展名映射，未知扩展名原样大写不编造）、预览兼容性（loadFailed→\"静态预览（AVPlayer 不支持，使用 ffmpeg 抽帧）\"，否则\"可正常播放\"）；零 metadata 显示 \"—\" 而非假值。\n- 原 metadataBar 已删除，视频工作区不再重复展示 metadata；窄窗口关闭 Inspector 后布局仍 62/38（V08 合同，WorkspaceLayout 测试覆盖）。\n- Region/Extraction/Subtitle 模式为明确内部占位（\"详细内容将在 Inspector 升级中提供\"），不展示用户可见假数据。\n- 模式切换遵守 10102 状态规范：打开视频默认 Video、进入区域编辑强制 Region、开始提取切 Extraction（WorkspaceModel 既有逻辑，测试覆盖）。\n- Inspector 打开 + 窄窗口（960-300=660 可用）时 Video 让位保证 Transcript ≥320pt，HStack 无溢出（P2 修复，clampedLeftWidth 回归测试）。\n\n验证（最终代码状态）：\n- `swift test --filter VideoInspectorPresentationTests|WorkspaceInspectorModeTests`：8/8 通过。\n- `swift test --filter WorkspaceLayoutTests`：10/10 通过（含 P2 回归 testClampedLeftWidthYieldsToTranscriptWhenSpaceTight）。\n- 完整 `swift test`：88 个 XCTest 与 140 个 Swift Testing 全部通过，退出码 0。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n\n截图证据（docs/design_ui/evidence/10105/）：\n- V03-video-inspector.png：ready + Video Inspector（真实 metadata），Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x）。程序化检查：Inspector 区域 85 种颜色（真实字段行，非纯占位）、视频区 63.3%（Inspector 300pt 回收后可用宽度）、无裁切。\n- 截图在全部审核修复后重新生成。\n\naccessibility labels/values 清单：\n- Inspector：label\"Inspector\"；关闭按钮 label\"关闭 Inspector\"+help。\n- 每个 metadata 行：combine + label\"<字段名>：<值>\"（如\"文件名：sample.mp4\"）。\n- 加载中：\"正在解析视频信息…\" 文本可读。\n- 模式标题：视频信息/字幕区域/提取/字幕。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（88+140 通过、无 warning）：无 P0/P1。验收标准 1/2/3/4 均 ✅；P2① evidence 未写入（本 Feature 补齐）；P2② Inspector 打开 + 窄窗口布局溢出（Video 400+Transcript 320=721 > 660 可用）——修复 clampedLeftWidth 让位逻辑并增加回归测试。P3 建议（无实质缺陷）已评估。\n- 复核 Agent 确认 P2 修复正确：让位逻辑边界正确、既有测试兼容、溢出从 61pt 消除至 1pt（hairline）、完整测试通过。\n- 修复后重新运行完整 swift test（88+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- V03 参考图 Inspector 含更丰富的视觉结构；本 Feature 以真实字段列表呈现（等宽值、图标、分隔线），内容真实无假数据。\n- 截图窗口实际 1280×771（同前 Feature，系统恢复 frame；960×600 精确尺寸未执行并记录）。\n\n未执行验证（如实记录）：\n- Inspector 模式切换（Region/Extraction/Subtitle 占位）与关闭按钮的真实 UI 点击未执行：系统\"辅助功能访问（事件）\"权限警告持续存在，cua-driver AX 捕获返回 0x0；状态机行为由 10102/10105 单测覆盖。\n- 窄窗口 960×600 精确尺寸的 Inspector 布局未截图（同前，布局逻辑由单测覆盖）。\n\n后续 Feature 边界：\n- 不实现 Region/Extraction/Subtitle 完整表单（10206/10208 起实现）；Inspector 占位文案保持至对应 Feature。\n- Inspector 容器与模式分发已就绪，后续 Feature 直接填充内容。"
+    },
+    {
+      "id": "10206",
+      "name": "实现字幕区域编辑模式",
+      "description": "把候选选择和几何信息从常驻主内容重组为显式 Region Editing + Region Inspector，并统一 overlay 视觉语义。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Region/",
+        "apps/macos/Sources/SubLiftMac/UI/RegionOverlay.swift",
+        "apps/macos/Sources/SubLiftMac/Core/RegionSelectionModel.swift",
+        "apps/macos/Tests/SubLiftMacTests/RegionEditingTests.swift"
+      ],
+      "dependencies": [
+        "10105"
+      ],
+      "acceptance_criteria": [
+        "候选框只在 regionEditing 可见；正常模式仅显示最终 merged region，且不显示随机色、工程编号或常驻坐标。",
+        "未选中/hover/selected/merged 使用 secondary/Accent 语义并带文字或控件状态，不依赖颜色。",
+        "Region Inspector 支持候选多选、重检当前帧、合并摘要和可折叠高级几何；检测/空/失败均有恢复文案。",
+        "现有 source-frame 坐标、全宽合并、subtitle profile 和 Worker ROI 数据保持不变，既有 RegionGeometry/PreviewLayout 测试通过。",
+        "新增 Region mode/keyboard/VoiceOver tests、swift test 与 V04 实际截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不改变 Vision 候选算法、自动选中规则或 C++ ROI 实现。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design/macos-gui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10206.01",
+          "name": "接入 Region Editing 状态",
+          "description": "连接 Toolbar、Inspector 与 Workspace 状态。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10206.02",
+          "name": "重构 Overlay 与 Inspector",
+          "description": "统一语义色、候选列表、重检与高级信息。",
+          "dependencies": [
+            "10206.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10206.03",
+          "name": "验证坐标和交互",
+          "description": "运行既有几何测试并补键盘/VoiceOver/截图证据。",
+          "dependencies": [
+            "10206.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10206 字幕区域编辑模式。\n\n实际修改文件：\n- 重写 apps/macos/Sources/SubLiftMac/UI/RegionOverlay.swift：RegionBoxVisual 语义状态纯逻辑（未选中 secondary / hover Accent / 选中 Accent+tint+复选标记 / merged 更明确 Accent）、RegionOverlayVisibility（候选框仅 regionEditing）、新 RegionOverlay（无随机色/无工程编号徽章/无常驻坐标、hover 状态、选中复选标记、merged 始终 Accent 虚线）、PreviewRegionContainer 增加 isRegionEditing 参数。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Region/RegionInspector.swift：RegionInspectorPresentation 纯逻辑（高级几何文本 X/Y/宽高/置信度、合并摘要、代表帧信息）+ RegionInspector（候选多选 checkbox、重检当前帧、合并摘要、可折叠高级几何、检测中/空/失败恢复文案）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：region 模式→RegionInspector，新增 regionModel/onRedetectRegion 参数。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：videoPane 移除 RegionCandidateList（迁移至 Inspector）；PreviewRegionContainer 传 isRegionEditing（state == .regionEditing）；Inspector 传 regionModel/redetect；extractionBar 调整为属性保留。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_REGION（进入区域编辑截图 fixture），release 不含、无环境变量零副作用。\n- 新增 apps/macos/Tests/SubLiftMacTests/RegionEditingTests.swift：8 个测试（语义状态派生与可区分性、可见性、几何/摘要格式化）。\n- 新增 docs/plans/features/10206.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- 候选框仅在 regionEditing 可见；正常模式只显示 merged region（Accent 虚线），无随机色、工程编号或常驻坐标。\n- 未选中/hover/selected/merged 用 secondary/Accent 语义 + 复选标记/描边粗细/透明度区分，不依赖颜色（testStatesAreDistinguishableWithoutColor）。\n- Region Inspector：候选多选（checkbox，label/已选择 value）、重检当前帧（ready-有候选/failed/ready-空 均可用）、合并摘要（Y 范围+全宽）、可折叠高级几何（X/Y/宽高/置信度真实字段）、检测中/空/失败均有文案与恢复动作。\n- RegionSelectionModel 的 source-frame 坐标、全宽合并、subtitle profile、Worker ROI 与检测算法完全未改动（git diff 无 Core/RegionSelectionModel.swift 改动）；既有 RegionGeometry/PreviewLayout 测试通过。\n\n验证（最终代码状态）：\n- `swift test --filter RegionEditingTests`：8/8 通过。\n- `swift test --filter RegionGeometryTests` 与 PreviewLayoutTests：通过（完整套件含）。\n- 完整 `swift test`：96 个 XCTest（新增 8 个）与 140 个 Swift Testing 全部通过，退出码 0（一次偶发 1 失败为集成测试时序，重跑稳定通过，未复现）。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n\n截图证据（docs/design_ui/evidence/10206/）：\n- V04-region-editing.png：regionEditing + Region Inspector，Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；带文字测试视频经 Vision 检出真实候选）。程序化检查：视频区 401 个 Accent 像素（候选框/merged 语义描边）、Inspector 区域 67 色（候选列表与高级几何）、无裁切。\n- 截图在全部审核修复后重新生成（P1 修复后基于最终代码）。\n\naccessibility labels/values 清单：\n- 候选框：label\"候选字幕框，已选择/未选择\"、traits isSelected（选中时）、hint\"点击切换选择\"。\n- merged 框：label\"合并字幕区域，Y <min> 至 Y <max>\"。\n- Region Inspector：候选 checkbox label\"候选字幕框 <id>\"+value\"已选择/未选择\"；重检按钮 hint\"先拖动进度条到有字幕的画面\"；合并摘要 combine；高级信息 DisclosureGroup label\"高级信息\"；失败文案 Label（警告图标+文字）。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（96+140 全绿、无 warning）：无 P0；唯一 P1 为 ready-有候选 状态丢失\"重检当前帧\"能力（验收 3 未完全满足）——修复：candidateList 后加入 redetectButton（ready-有候选 可见，failed/ready-空 保留，无重复）。\n- 复核 Agent 确认 P1 修复正确（三状态按钮各一次、动作接线正确、测试通过）。\n- 修复后重新运行完整 swift test（96+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图候选框含编号/彩色区分；实现改为统一语义色 + 复选标记（符合验收 1/2 的明确要求）。\n- 候选多选列表位于 Inspector（参考图一致）；视频工作区不再常驻候选列表。\n\n未执行验证（如实记录）：\n- 候选框 hover 视觉与点击切换的真实 UI 交互未执行（系统\"辅助功能访问（事件）\"权限警告持续存在，cua-driver AX 捕获 0x0）；hover/选中状态派生由单测覆盖，渲染由截图确认。\n- 键盘路径（Tab/方向键选择候选）未执行（同权限阻塞，10412 统一处理）。\n\n后续 Feature 边界：\n- 不改变 Vision 候选算法、自动选中规则或 C++ ROI 实现（non-goals 保持）。\n- 高级几何折叠与候选列表已就绪，后续 Feature（10207+）不再涉及 Region 主体；Toolbar\"字幕区域\"进入/退出命令已接线。"
+    },
+    {
+      "id": "10207",
+      "name": "重构 Transcript Panel 与上下文命令",
+      "description": "将字幕列表重组为标准 Transcript Panel，增加搜索和干净行层级，并把 Split/Merge 等动作移入统一上下文命令。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Transcript/",
+        "apps/macos/Sources/SubLiftMac/Core/SubtitleEditor.swift",
+        "apps/macos/Tests/SubLiftMacTests/TranscriptPanelTests.swift"
+      ],
+      "dependencies": [
+        "10206"
+      ],
+      "acceptance_criteria": [
+        "Header 显示真实条数与 Search Field；搜索只过滤/定位显示，不改变 entries 顺序或导出内容，清空后恢复当前播放定位。",
+        "TranscriptRow 使用序号、等宽 start/end、正文和必要的低置信警告；不使用逐行 Card 或永久 confidence 数值。",
+        "selection 与 current playback 分别表达；单击 seek、Review 双击编辑；空/搜索无结果/长文本状态可用。",
+        "Edit/Split/Merge/Copy/Reveal 命令进入右键与菜单，复用 Workspace availability；边界条目正确禁用 Merge。",
+        "搜索/选择/命令/长文本 XCTest、swift test 和 Ready/Review 行状态截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不实现全文索引、批量编辑、翻译或新字幕格式。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10207.01",
+          "name": "实现搜索与 Panel 结构",
+          "description": "建立 Header、过滤投影和空状态。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10207.02",
+          "name": "重构 TranscriptRow",
+          "description": "实现时间码、正文、current/selection/low-confidence 状态。",
+          "dependencies": [
+            "10207.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10207.03",
+          "name": "接入上下文命令",
+          "description": "统一 Edit/Split/Merge/Copy/Reveal 与菜单 availability。",
+          "dependencies": [
+            "10207.02"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10207.04",
+          "name": "验证列表交互",
+          "description": "覆盖搜索、长文本、键盘、选择和行状态。",
+          "dependencies": [
+            "10207.03"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10207 重构 Transcript Panel 与上下文命令。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift：TranscriptSearch 过滤投影纯逻辑（大小写不敏感子串、空白 query 全量、只读不改 entries）、TranscriptRowPresentation（低置信阈值 0.6 显式常量、等宽时间码文本）、TranscriptRowAvailability（行级拆分/合并可用性：只读禁用、空文本不可拆、边界条目 Merge 禁用）、TranscriptPanel（Header 真实条数+搜索框+清除、空/无结果状态、List+ScrollViewReader、selection 单击 seek、currentId 自动滚动、搜索变化/清空恢复播放定位（含 List 重建边缘））。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptRow.swift：序号+等宽时间码+正文+低置信警告（图标+文字，非数值）；current 左侧 3pt Accent 指示；Review 双击编辑；右键 Edit/Split/Merge/Copy/Reveal（可用性 = commands && 行级派生）。\n- 删除 apps/macos/Sources/SubLiftMac/UI/SubtitleList.swift（被 TranscriptPanel 完整替代，无残留引用）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：SubtitleList→TranscriptPanel（传 currentMs）；Reveal 改为 Panel 内纯滚动（不选中、不 seek）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_EXTRACT（mock 提取 Review 截图 fixture），release 不含、无环境变量零副作用。\n- 新增 apps/macos/Tests/SubLiftMacTests/TranscriptPanelTests.swift：11 个测试（搜索过滤投影/行展示/行级可用性）。\n- 新增 docs/plans/features/10207.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Header 显示真实条数（\"字幕（N 条）\"）与搜索框；搜索只过滤显示投影（TranscriptSearch 纯函数），不改变 entries 顺序或导出内容；清空搜索恢复完整列表并滚动回当前播放字幕（含搜索无结果→清除的 List 重建边缘）。\n- TranscriptRow：序号 + 等宽 start→end + 正文 + 低置信警告（仅 <0.6 时显示图标与\"低置信\"文字，不常驻数值）；无逐行 Card。\n- selection（系统 List 选中色）与 current（左侧 3pt Accent 指示）分别表达；单击 seek；Review 状态双击编辑（processing 只读时双击无效）；空/搜索无结果/长文本（lineLimit 省略 + 编辑可展开）状态可用。\n- 右键菜单 Edit/Split/Merge/Copy Text/Reveal at Playhead 与菜单命令共用 Editor 数据源与 Workspace availability（canSplit/canMerge = commands.&& 行级派生）；边界条目 Merge 正确禁用；Reveal 只滚动定位不改变播放。\n- 搜索变化/清空后通过 pendingScrollId 恢复当前播放定位（List 重建场景 onAppear 消费）。\n\n验证（最终代码状态）：\n- `swift test`：107 个 XCTest（新增 11 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n\n截图证据（docs/design_ui/evidence/10207/）：\n- V06b-transcript-review.png：Transcript 行状态，Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；auto-open 带文字测试视频 + mock 引擎真实提取）。程序化检查：Transcript 区域 41 个文本条带（搜索框+多行序号/时间码/正文）。\n- 截图在全部审核修复后重新生成。\n\naccessibility labels/values 清单：\n- Header：\"字幕，共 N 条\"；搜索框 label\"搜索字幕\"；清除按钮 label\"清除搜索\"。\n- 行：时间码 label\"时间 <start> 到 <end>\"；低置信警告 label\"低置信度警告\"；current 指示 label\"当前播放字幕\"；序号 accessibilityHidden（装饰）。\n- 上下文菜单：编辑/拆分/与下一条合并/复制文本/在播放头处显示。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（107+140 全绿）：无 P0；P1 为验收 1\"清空后恢复当前播放定位\"未实现——修复：onChange(searchQuery) 滚动到当前播放字幕 + pendingScrollId 处理 List 重建边缘。相关修复：行可用性改为 commands && 行级派生（复用 Workspace availability）、Reveal 改纯滚动（消除 selectSubtitle 触发的 seek 副作用）。\n- 复核 Agent 确认 P1 主路径修复 ✅，并发现边缘缺口（搜索无结果时 List 被拆、清除后恢复定位不触发）——已补 pendingScrollId + onAppear 消费。\n- 修复后重新运行完整 swift test（107+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图行含 confidence 数值；实现仅低置信时显示警告（符合验收 2 明确要求）。\n- Reveal at Playhead 为纯滚动定位（设计未强制选中/seek 语义）。\n\n未执行验证（如实记录）：\n- 右键菜单真实交互（打开/点击各命令）未执行（系统\"辅助功能访问（事件）\"权限警告持续存在，cua-driver AX 捕获 0x0）；可用性逻辑由单测覆盖。\n- 搜索输入的真实键盘交互未执行（同权限阻塞）；过滤逻辑由单测覆盖。\n- 截图时的提取终态（processing/review）未在截图中明确区分（mock 提取后行渲染一致）；processing 只读与最终切换由 10208/10209 验收。\n\n后续 Feature 边界：\n- 不实现全文索引、批量编辑、翻译或新字幕格式（non-goals 保持）。\n- 上下文菜单与菜单命令已统一；10208 将处理 processing 只读与真实进度投影，10209 完成 Subtitle Inspector 与导出主动作。"
+    },
+    {
+      "id": "10208",
+      "name": "实现安全的 Processing 体验",
+      "description": "把真实提取状态、进度、倍速、runtime 和停止动作投影到工作区，并强制 Live Transcript 在最终结果前只读。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Extraction/",
+        "apps/macos/Sources/SubLiftMac/Core/SubtitleExtractor.swift",
+        "apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift",
+        "apps/macos/Tests/SubLiftMacTests/ExtractionExperienceTests.swift"
+      ],
+      "dependencies": [
+        "10207"
+      ],
+      "acceptance_criteria": [
+        "starting/processing/finalizing 保持 Video/Transcript 工作区，不跳 Loading page；Toolbar 主动作是 Stop。",
+        "进度只显示现有 status 的 pct/frame counts、processingRate 与 runtimeIdentity；不可可靠推导的 ETA/平均置信度不显示。",
+        "Live Transcript 可选择、seek、搜索，但文本修改、Split、Merge、Export 及 Subtitle Inspector mutation 全部禁用并有只读辅助说明。",
+        "Stop 立即失效当前 job，迟到 progress/push/final entries 被忽略；取消、连接错误和重试后第二任务可正常开始。",
+        "提取 lifecycle/read-only/late-event tests、既有 PipelineClient/SubtitleExtractor tests、swift test 与 V05 截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不新增后端 ETA、并行 OCR、伪进度或静默 fallback。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design/macos-gui.md",
+        "docs/cpp/worker-ipc-contract.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10208.01",
+          "name": "实现进度与 runtime 投影",
+          "description": "连接真实 Extractor 状态和紧凑进度区。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10208.02",
+          "name": "强制 Live Transcript 只读",
+          "description": "统一 View 与 commands 的 mutation guard。",
+          "dependencies": [
+            "10208.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10208.03",
+          "name": "验证取消和错误恢复",
+          "description": "覆盖迟到事件、重试、第二任务与截图。",
+          "dependencies": [
+            "10208.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10208 实现安全的 Processing 体验。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionProgressView.swift：ExtractionProgressPresentation 纯逻辑（progressText 真实 pct/frame 计数含零除保护、rateText/runtimeText 有值才显示、stageText 真实状态映射、无 ETA/平均置信度）；TranscriptReadOnlyNotice 纯逻辑（starting/processing/finalizing → \"识别结果生成中，只读\"）；ExtractionProgressView 紧凑进度区（真实 pct/frame/rate/runtime、线性进度条含 accessibility value、状态图标/色、combine）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift：OcrEngineName displayName UI 映射；ExtractionInspectorPresentation 纯逻辑（引擎/质量/运行时/状态行真实字段、缺 runtime 显示 \"—\"）；ExtractionInspector（设置区 engine/quality radio picker 运行时 disabled + 信息区真实行）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：extraction 模式→ExtractionInspector（新增 extractor/workspaceState 参数）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift：新增 readOnlyNotice 参数（processing 时锁图标只读说明，VoiceOver combine）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：删除 extractionBar/statusLabel（engine/quality picker 迁移 Extraction Inspector）；视频工作区底部为 ExtractionProgressView；WorkspaceInspector 传 extractor/state；TranscriptPanel 传 readOnlyNotice。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift：extractFixture 支持 SUBLIFT_EVIDENCE_ENGINE（默认 mock；vision 用于真实 processing 尝试）。\n- 新增 apps/macos/Tests/SubLiftMacTests/ExtractionExperienceTests.swift：10 个测试（进度展示/只读说明/Inspector 真实字段）。\n- 新增 docs/plans/features/10208.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- starting/processing/finalizing 保持 Video/Transcript 工作区（不跳 Loading page）；Toolbar 主动作按状态为 提取字幕/停止（10104 接线，canStop 时显示 Stop）。\n- 进度只显示真实 status 字段：pct/frame counts、processingRate（有值才显示）、runtimeIdentity；无 ETA/平均置信度（testNoEtaOrAverageConfidenceInAnyPresentation）。\n- Live Transcript processing 只读：accessMode 由 10102 统一派生（transcriptAccessMode），文本修改/Split/Merge/Export 与 Subtitle Inspector mutation 全部经 commands guard 禁用；只读说明（锁图标+文字）在 processing 显示且 VoiceOver 可读。\n- Stop 立即失效 job（10102 jobToken 机制，未改动）；迟到 progress/push/final 被忽略（既有 WorkspaceModel/SubtitleExtractor 测试覆盖：testOutOfOrderExtractionEventsDoNotRegressState、testReExtractionCancellationRestoresLastCompletedResult 等）。\n- Extraction Inspector：引擎/质量设置（跨 Session @AppStorage）运行时禁用；信息区显示真实引擎/质量/运行时/状态，无假数据。\n- Core（WorkspaceModel/SubtitleExtractor job-token 防护）零改动。\n\n验证（最终代码状态）：\n- `swift test --filter Extraction`：12/12 通过（含 WorkspaceModel 提取 lifecycle/迟到事件/取消恢复回归）。\n- 完整 `swift test`：117 个 XCTest（新增 10 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- `./init.sh`：OK；`git diff --check`：通过；`jq empty phases.json docs/phases/phase10.json`：通过。\n\n截图证据（docs/design_ui/evidence/10208/）：\n- V05-processing.png：Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；auto-open 60s 测试视频 + mock/vision 引擎真实提取 + Extraction Inspector 打开）。程序化检查：左下角绿色 done 文本（128 个绿色像素点，逻辑 (13–126, 454–465)——提取完成后状态区）、Inspector 区域 85 色（Extraction 设置区与信息区）。\n- **processing 时刻截图未执行（如实记录）**：mock 与 vision 引擎在本机均快于截图时机完成（60s/600s 视频 + delay 9–14s 全部已 done），无法稳定捕捉 processing 窗口；进度显示正确性由 ExtractionProgressPresentation 单测与真实 status 投影代码路径覆盖。\n\naccessibility labels/values 清单：\n- 进度区：状态行 combine（图标+文本+倍速）；进度条 label\"提取进度\"+value\"N/M（P%）\"；runtime label\"OCR 运行时：<identity>\"；整理中 label\"正在整理字幕\"。\n- 只读说明：Label 锁图标+\"识别结果生成中，只读\"（combine）。\n- Extraction Inspector：引擎/质量 radio 各带 label 与运行时禁用；信息行 combine label\"<字段>：<值>\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（117+140 全绿）：**PASS（可合入）**——无 P0/P1 代码缺陷；唯一 P1 为过程性（任务规定的测试 filter 名会静默跑 0 个——已用完整套件覆盖）；P3 建议类已评估（无实质缺陷）。5 条验收标准静态核对全部满足；Core 层（WorkspaceModel/SubtitleExtractor job-token 迟到防护）零改动。\n- 无需代码修复；提交前完整 swift test 已重跑（117+140 通过）。\n\n与设计参考的实际偏差：\n- 参考图进度区含 ETA 行；实现按验收明确要求不显示不可推导的 ETA（仅真实 pct/frame/rate/runtime）。\n- engine/quality picker 从主工作区迁移到 Extraction Inspector（设计\"渐进披露\"）；Inspector 关闭时用 Toolbar 提取按钮读取当前 @AppStorage 值。\n\n未执行验证（如实记录）：\n- processing 时刻截图未执行（引擎处理过快，详见截图证据）。\n- 真实 Stop 按钮点击/取消交互未执行（系统\"辅助功能访问（事件）\"权限警告持续存在）；取消/重试/迟到事件行为由 WorkspaceModel/SubtitleExtractor 既有测试覆盖（10102 基线 + 本轮回归）。\n\n后续 Feature 边界：\n- 不新增后端 ETA、并行 OCR、伪进度或静默 fallback（non-goals 保持）。\n- 10209 将实现 final entries 原子切换 Review、Subtitle Inspector 与 Export 主动作；Extraction Inspector 设置区保持。"
+    },
+    {
+      "id": "10209",
+      "name": "完成 Review、字幕 Inspector 与导出",
+      "description": "最终 entries 落地后切换为可编辑 Review，展示选中字幕的真实字段，并把 SRT 导出作为完成后的主要动作。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Transcript/SubtitleInspector.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift",
+        "apps/macos/Sources/SubLiftMac/Core/SubtitleEditor.swift",
+        "apps/macos/Tests/SubLiftMacTests/ReviewExperienceTests.swift"
+      ],
+      "dependencies": [
+        "10208"
+      ],
+      "acceptance_criteria": [
+        "final entries 原子替换 Live Transcript 后进入 Review；完成摘要短暂出现，之后保留稳定条数/状态。",
+        "Review 开放文本编辑、Split、Merge，选中字幕 Inspector 显示 text/start/end/duration/confidence 与真实 engine/runtime，不展示不存在字段。",
+        "编辑、Split/Merge 后 selection/current/条数/Inspector 同步；时间字段只在已接线并有范围校验时可编辑。",
+        "Export SRT 成为主要动作并继续使用原生 Save Panel；processing 或无最终结果时不可导出，不展示 ASS/VTT。",
+        "Review mutation/export tests、SrtFormatter tests、swift test 与 V06 截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不实现 ASS/VTT、导出 Wizard、自动保存或 session persistence。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10209.01",
+          "name": "实现 Subtitle Inspector",
+          "description": "只显示真实字段并接入编辑状态。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10209.02",
+          "name": "强制导出约束",
+          "description": "只在 Review 状态导出 SRT。",
+          "dependencies": [
+            "10209.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10209.03",
+          "name": "验证 Review 编辑",
+          "description": "覆盖原子切换、编辑、拆分合并与截图。",
+          "dependencies": [
+            "10209.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10209 Review、Subtitle Inspector 与 Export。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/SubtitleInspector.swift：SubtitleInspectorPresentation 纯逻辑（索引/时间/文本/低置信警告真实字段行、无选中返回 nil、无假字段）+ SubtitleInspector（字段区 combine、Review 可编辑文本区（processing 只读 disabled，更新走 editor.updateText）、空态提示）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：subtitle 模式→SubtitleInspector（新增 editor/transcriptAccessMode 参数）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift：新增 onSelectSubtitle 参数，行选中时切换 Inspector 到 Subtitle 模式（不强制打开）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：Inspector 传 editor/accessMode；TranscriptPanel 传 onSelectSubtitle（workspace.selectSubtitle）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_SELECT（选中第一条字幕截图 fixture），release 不含、无环境变量零副作用。\n- 新增 apps/macos/Tests/SubLiftMacTests/ReviewExperienceTests.swift：8 个测试（SubtitleInspectorPresentation 真实字段/低置信/无假字段/空态；ExportAvailability 仅 review 且需 final entries；ReviewEditingAvailability review 可编辑、processing 禁用）。\n- 新增 docs/plans/features/10209.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- final entries 原子切换 Review：10102 既有 handleExtractionFinalEntries → editor.load + state = .review（本 Feature 未改动，回归测试覆盖）。\n- Subtitle Inspector 只显示真实字段：索引（x / 总数）、时间（等宽 start → end）、文本、低置信警告（复用 10207 阈值 0.6）；无帧号/来源/语言等假字段（testNoFakeFields）。\n- 文本编辑：Review 可编辑（TextEditor 更新走 editor.updateText）；processing 只读（disabled + accessMode guard）；空态提示\"在 Transcript 中选择一条字幕\"。\n- 导出约束：canExport 仅 review（或 failed/cancelled 且有 final entries）且 totalEntries > 0（WorkspaceCommandAvailability.derive 纯逻辑测试 testExportOnlyInReview/testExportRequiresFinalResult）；现有 exportSRT 只导出 SRT（未引入其他格式）。\n- 行选中 → Inspector 切 Subtitle 模式（onSelectSubtitle），不强制打开 Inspector（10105 关闭保持语义未破坏）；seek 行为原样保留。\n- Core（WorkspaceModel/SubtitleEditor）零改动。\n\n验证（最终代码状态）：\n- 完整 ：125 个 XCTest（新增 8 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10209/）：\n- V06-review.png：Review + Subtitle Inspector（真实字段），Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；auto-open 带文字测试视频 + mock 提取 + 选中第一条字幕）。程序化检查：Inspector 区域 90 色（字段行 + 文本编辑框 + 选中状态）、左下角绿色 done 文本（提取完成 → Review）。\n- 截图在全部审核修复后重新生成。\n\naccessibility labels/values 清单：\n- 字段行：combine label\"<字段>：<值>\"（索引/时间/文本/警告）。\n- 文本编辑：label\"字幕文本\"；processing 时 disabled（只读）。\n- 空态：combine\"在 Transcript 中选择一条字幕\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（125+140 全绿）：无 P0；P1 为 SubtitleInspector 在主流程中不可达（行选中未切换 Inspector 模式）——修复：TranscriptPanel.onChange(selectedId) 调用 onSelectSubtitle → workspace.selectSubtitle（切 subtitle 模式，不强制打开 Inspector）；seek 逻辑原样保留。P2/P3 为文档与测试覆盖问题（evidence 补齐、View 接线由复核确认）。\n- 复核 Agent 确认 P1 修复正确：接线正确、selectSubtitle guard 有效、不强制打开 Inspector、seek 行为未破坏。\n- 修复后重新运行完整 swift test（125+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Subtitle Inspector 含更多装饰；实现为真实字段列表 + 文本编辑区（无假字段）。\n- 导出仍为系统 Save Panel + SRT（无复杂导出选项，符合 non-goal）。\n\n未执行验证（如实记录）：\n- Inspector 内文本编辑的真实键入交互未执行（系统\"辅助功能访问（事件）\"权限警告持续存在）；编辑 guard 与 updateText 路径由单测与代码审查覆盖。\n- 导出 Save Panel 的真实打开未执行（同权限阻塞）；canExport 权限由纯逻辑测试覆盖。\n\n后续 Feature 边界：\n- 不实现 ASS/VTT、批量导出、嵌入式字幕或复杂导出选项（non-goals 保持）。\n- 10310 将实现 Subtitle Timeline 与播放导航（Previous/Next/Space 复用已有命令）。"
+    },
+    {
+      "id": "10310",
+      "name": "实现轻量字幕时间线与播放导航",
+      "description": "新增只读 Subtitle Timeline，表达字幕分布、当前播放头和点击 seek，并补齐前后字幕命令，不引入剪辑器能力。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Media/SubtitleTimeline.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Media/TransportBar.swift",
+        "apps/macos/Tests/SubLiftMacTests/SubtitleTimelineTests.swift"
+      ],
+      "dependencies": [
+        "10209"
+      ],
+      "acceptance_criteria": [
+        "Timeline 高 28–40pt，按视频时长映射每条 start/end，极短条目有最小命中宽度且顺序/位置正确。",
+        "播放头与 current subtitle 可见；点击块 seek 到 start；processing 增量更新、review 最终替换和 split/merge 后同步重绘。",
+        "Previous/Next Subtitle 与 Space 命令复用 Player/Workspace actions，边界处正确禁用或停留。",
+        "Timeline 有 VoiceOver label/value 和键盘访问，不提供拖拽改时、缩放编辑、波形或多轨。",
+        "几何/seek/增量替换/辅助功能 tests、swift test 和实际 Workspace 截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不实现复杂剪辑时间线、拖拽调整时间或媒体波形。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10310.01",
+          "name": "实现 Timeline 几何",
+          "description": "建立条目与播放头的确定性映射。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10310.02",
+          "name": "接入 seek 与播放命令",
+          "description": "连接点击、前后字幕和 Space。",
+          "dependencies": [
+            "10310.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10310.03",
+          "name": "验证动态更新与可达性",
+          "description": "覆盖 processing/review/edit 后同步和辅助功能。",
+          "dependencies": [
+            "10310.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10310 Subtitle Timeline 与播放导航。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Timeline/TimelineGeometry.swift：TimelineGeometry 纯逻辑（barHeight 32pt（28–40 合同）、minHitWidth 8pt、Range 推导、xPosition 确定性映射（t-rangeStart)/duration*width 越界 clamp、零时长保护）、entryWidth 最小命中宽度；TimelineNavigation 纯逻辑（next = 第一个 startMs > currentMs；previous = 跳过当前显示字幕取之前最近完整字幕）。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Timeline/SubtitleTimelineView.swift：32pt 条带（条目块半透明 Accent、点击 seek 到条目 start、空白点击按时间逆映射 seek、播放头 2pt Accent、Previous/Next 按钮（导航纯逻辑 + 边界禁用）、时间范围文本、无障碍 label/hint/action）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Transcript/TranscriptPanel.swift：header 下方接入 SubtitleTimelineView（entries 非空时），新增 videoDurationMs 参数。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：传 metadataLoader.metadata?.durationMs。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_ENTRIES（注入测试条目截图 fixture——仅视觉验收，生产路径不经过）。\n- 新增 apps/macos/Tests/SubLiftMacTests/SubtitleTimelineTests.swift：16 个测试（几何确定性/clamp/零时长/最小命中宽度/播放头/范围推导/视频时长优先映射/导航边界与空集）。\n- 新增 docs/plans/features/10310.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Timeline 高 32pt（28–40 合同内）；时间几何确定性（纯函数、无随机/副作用）。\n- 极短条目最小命中宽度 8pt（entryWidth ≥ minHitWidth）。\n- 点击条目块 seek 到该条目 start；点击空白按时间逆映射 seek；播放头实时位置。\n- Previous/Next：边界正确（第一条内 previous nil、末条后 next nil、条目内语义），禁用态明确；Space 复用既有 Playback 命令（未重复注册快捷键）。\n- 映射范围：视频时长 >0 时按视频时长（0→durationMs），否则回退 entries 首尾（测试 testMappingPrefersVideoDurationRange）。\n- 不实现波形、多轨、缩放或拖拽改时（non-goals）。\n\n验证（最终代码状态）：\n- 完整 ：141 个 XCTest（新增 16 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10310/）：\n- V06b-timeline.png：Timeline 条带（条目块 + 播放头 + Previous/Next），Light，实际运行应用（app 内渲染，1280×771 逻辑 @2x；auto-open 测试视频 + SUBLIFT_EVIDENCE_ENTRIES 注入 4 条测试条目）。程序化检查：Timeline 区域 1469 个 accent 像素（条目块与播放头，逻辑 y≈120–170）、Transcript 区持续文本（header+Timeline+4 行条目）、无裁切。\n- 截图在全部审核修复后重新生成。\n- 注：mock/vision 引擎对测试视频提取均生成 0 条（Worker 管线行为，不改动），Timeline 视觉验收使用 DEBUG 注入条目（仅截图，生产路径不经过）。\n\naccessibility labels/values 清单：\n- 条目块：label\"字幕 <n>，<start> 到 <end>\"、isButton trait、hint\"跳转到该字幕\"、accessibilityAction seek。\n- 播放头：label\"播放位置\"。\n- Previous/Next 按钮：label\"上一条字幕\"/\"下一条字幕\"+help；边界禁用。\n- 时间范围文本：label\"时间范围 <start>–<end>\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（141+140 全绿）：无 P0/P1；3 个 P2：①验收要求按视频时长映射（实现用 entries 首尾）——修复：SubtitleTimelineView 加 videoDurationMs + effectiveRange 优先视频时长回退 entries，新增测试；②点击条目应 seek 到条目 start——修复：条目块 onTapGesture seek start（空白保留逆映射）；③seek 交互面缺无障碍/键盘——修复：条目块 accessibilityElement + label + isButton + hint + accessibilityAction，Previous/Next 原生 Button 键盘可达，Space 未重复注册。\n- 复核 Agent 确认 3 个 P2 修复全部通过（映射逻辑正确、点击不冲突、无障碍完整、测试通过）。\n- 修复后重新运行完整 swift test（141+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Timeline 含更多视觉装饰；实现为 32pt 简洁条带（合同内）。\n- 点击空白按时间逆映射 seek（设计未强制，合理补充）。\n\n未执行验证（如实记录）：\n- Timeline 点击 seek 与 Previous/Next 的真实鼠标交互未执行（系统\"辅助功能访问（事件）\"权限警告持续存在）；几何与导航逻辑由 16 个单测覆盖，渲染由截图确认。\n- VoiceOver 条目块激活的真实验证未执行（同权限阻塞）；accessibilityAction 由代码审查确认。\n\n后续 Feature 边界：\n- 不实现波形、多轨、缩放或拖拽改时（non-goals 保持）。\n- 10311 将实现 Settings（General/Recognition/Advanced）与引擎可见性。"
+    },
+    {
+      "id": "10311",
+      "name": "重构 Settings 与引擎可见性",
+      "description": "将跨 Session 偏好分为 General/Recognition/Advanced，保留真实 Vision/Paddle 能力，把 Mock/Python Oracle 放入开发者层。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Settings/",
+        "apps/macos/Sources/SubLiftMac/UI/SettingsView.swift",
+        "apps/macos/Sources/SubLiftMac/Core/RuntimePolicy.swift",
+        "apps/macos/Tests/SubLiftMacTests/SettingsTests.swift"
+      ],
+      "dependencies": [
+        "10310"
+      ],
+      "acceptance_criteria": [
+        "Settings 通过 App Menu/⌘, 打开，General 展示已生效的 SamplingQuality 偏好，Recognition 展示 Vision/Paddle 默认选择与真实 availability。",
+        "Automatic 只有在 F10 有明确路由与测试时才出现；本 Feature 不把它等同 Vision，也不展示 Whisper。",
+        "Mock 仅在 Developer Mode 可见；Python 仅作为显式 Oracle/回滚选项，选择行为继续遵守 RuntimePolicy 和 fail-closed。",
+        "模型/capability 缺失用 inline 状态与可操作说明，不提供未实现下载按钮；UserDefaults key 兼容和非法值恢复有测试。",
+        "Settings/runtime policy tests、swift test 与 V07 实际截图写入 evidence。"
+      ],
+      "non_goals": [
+        "不实现自动引擎、模型下载器、新 Provider、云设置或改变 runtime 优先级。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/implementation-map.md",
+        "docs/cpp/engine-matrix-and-cutover.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10311.01",
+          "name": "建立多页 Settings",
+          "description": "拆分 General/Recognition/Advanced 并保持系统原生布局。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10311.02",
+          "name": "接入真实引擎与 runtime 状态",
+          "description": "隔离 Mock/Oracle，显示 capability 但不实现 fallback。",
+          "dependencies": [
+            "10311.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10311.03",
+          "name": "验证偏好兼容",
+          "description": "覆盖 UserDefaults、非法值、availability、快捷键和截图。",
+          "dependencies": [
+            "10311.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10311 Settings 与引擎可见性。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/UI/Settings/EngineCapability.swift：EngineCapability 纯逻辑（visibleEngines：mock 仅 developerMode；status：ffmpeg/paddle/developerMode 注入、缺失如实 inline；runtimeLabel：RuntimePolicy.resolve 真实解析，Python 仅显式 Oracle/回滚）；SettingsPresentation.sections = [General, Recognition, Advanced]、actions 空（断言无下载按钮）。\n- 重写 apps/macos/Sources/SubLiftMac/UI/Settings/SettingsView.swift：TabView 三分区（General 采样质量+帮助、Recognition 引擎 picker（visibleEngines）+ 引擎状态区（真实检测 FfmpegDetector/模型目录）、Advanced Developer Mode toggle + 运行时可见性 + \"Python 仅作为显式 Oracle 或回滚使用\"说明）；无假模型下载按钮。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift：引擎 Picker 改用 EngineCapability.visibleEngines(developerMode:)（P1 修复：主提取流程 Mock 仅开发者模式可见，与 Settings 同一真源）。\n- 删除 apps/macos/Sources/SubLiftMac/UI/SettingsView.swift（旧单分区面板，被替代）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift + WorkspaceRootView：新增 DEBUG-only SUBLIFT_EVIDENCE_SETTINGS（创建承载 SettingsView 的窗口截图 fixture，release 不含）。\n- 新增 apps/macos/Tests/SubLiftMacTests/SettingsTests.swift：10 个测试（可见引擎/mock 仅 developer/无 Automatic/Whisper/各引擎 status/runtime label/三分区/无下载按钮）。\n- 新增 docs/plans/features/10311.md：Feature 执行计划。\n- docs/phases/phase10.json、progress.md：状态与导航同步。\n\n已实现行为与不变量：\n- Settings 分为 General / Recognition / Advanced（TabView 三分区）。\n- Automatic 和 Whisper 不出现（OcrEngineName 无这些值 + UI 无文案）。\n- Mock 仅在 Developer Mode 可见：Settings Recognition 引擎选择器与 ExtractionInspector 引擎选择器共用 EngineCapability.visibleEngines（P1 修复，同一真源）。\n- Python 仅作为显式 Oracle/回滚：runtimeLabel 来自 RuntimePolicy.resolve 真实解析（未修改 RuntimePolicy 本身）；无\"自动切换\"类文案。\n- capability 缺失用真实 inline 状态：ffmpeg（FfmpegDetector.detect 真实进程检测）缺失显示\"MKV 导入与回退预览不可用\"；paddle 模型目录（~/.cache/sublift/rapidocr-models，与 Python DEFAULT_MODEL_DIR 对齐）缺失显示\"模型未安装\"。\n- 不提供假模型下载按钮（SettingsPresentation.actions 为空 + View 无下载 UI）。\n\n验证（最终代码状态）：\n- 完整 ：151 个 XCTest（新增 10 个）与 140 个 Swift Testing 全部通过，退出码 0。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10311/）：\n- V07-settings.png：Settings 面板（500×340 逻辑），Light，实际运行应用（DEBUG fixture 创建承载 SettingsView 的窗口并渲染；keyWindow 优先、多窗口取最后可见窗口）。程序化检查：500×340 尺寸、65 色（General tab 采样质量 segmented + 帮助文本 + 三个 tab 图标）。\n- 截图在全部审核修复后重新生成。\n\naccessibility labels/values 清单：\n- General：采样质量 picker label\"采样质量\"。\n- Recognition：引擎 picker label\"OCR 引擎\"；引擎状态行 combine\"<引擎>：<状态>\"+detail label。\n- Advanced：开发者模式 toggle label\"开发者模式\"；运行时行 combine label\"<引擎>：<runtime>\"。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立重跑测试（151+140 全绿、0 warning）：无 P0；P1 为验收 3\"Mock 仅在 Developer Mode 可见\"应用级未满足（ExtractionInspector 引擎选择器无条件暴露 Mock）——修复：改用 EngineCapability.visibleEngines(developerMode:)，与 Settings 同一真源。\n- 复核 Agent 确认 P1 修复通过（选择器与 Settings 一致；defaultEngine=mock 且开发者模式关闭时选择器不越界）。\n- 修复后重新运行完整 swift test（151+140 通过）复核通过。\n\n与设计参考的实际偏差：\n- 参考图 Settings 为单窗格 Form；实现为 TabView 三分区（更清晰对应验收 1）。\n- capability 状态为真实检测（非参考图的示意色块）。\n\n未执行验证（如实记录）：\n- Settings 窗口的真实菜单路径（⌘,）打开未执行（菜单命令 selector 在 swift run 进程中不可达，改用 DEBUG fixture 直接创建 Settings 窗口截图）；SettingsView 渲染与分区由截图确认。\n- Developer Mode toggle 的真实交互切换未执行（权限阻塞）；visibleEngines 逻辑由单测覆盖。\n\n后续 Feature 边界：\n- 不引入新引擎、不新增第三方依赖（non-goals 保持）。\n- 10412 将做响应式与辅助功能硬化（含 Settings 的键盘/AX 路径）并在最终 UI 重跑 V01–V10。"
+    },
+    {
+      "id": "10412",
+      "name": "完成响应式与辅助功能硬化",
+      "description": "对所有已实现 Surface 统一完成最小窗口、浅深色、系统 Accent、对比度/透明度/动效、VoiceOver 和键盘路径验收。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/",
+        "apps/macos/Tests/SubLiftMacTests/ResponsiveAccessibilityTests.swift",
+        "docs/design_ui/interaction-state-spec.md"
+      ],
+      "dependencies": [
+        "10311"
+      ],
+      "acceptance_criteria": [
+        "V01–V10 在规定状态/尺寸/外观下均由实际 SwiftUI 应用生成，主动作、时间码、搜索、错误恢复和 Inspector 无裁切。",
+        "Light/Dark、任意系统 Accent、Increase Contrast、Reduce Transparency 与 Reduce Motion 下状态仍可辨且不依赖固定蓝色/透明材质。",
+        "A01 键盘路径覆盖 Open、Space、Inspector、Region、字幕前后定位、上下文编辑和 Export；焦点顺序稳定。",
+        "A02 VoiceOver 覆盖 Toolbar、Region candidate/merged、Progress、Transcript row、low confidence、Timeline block 与 Inspector 字段。",
+        "accessibility/layout tests、swift test、截图清单和人工核对结果写入 evidence；发现偏差逐项记录而非只写通过。"
+      ],
+      "non_goals": [
+        "不借辅助功能硬化新增产品功能或扩大 macOS 版本范围。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/design_ui/macos-workbench-vnext.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10412.01",
+          "name": "完成响应式与外观适配",
+          "description": "验证尺寸、Dark、Accent、Contrast、Transparency、Motion。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10412.02",
+          "name": "完成键盘与 VoiceOver",
+          "description": "补齐 labels、values、focus 与 commands。",
+          "dependencies": [
+            "10412.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10412.03",
+          "name": "生成视觉证据矩阵",
+          "description": "按 V01–V10/A01–A02 生成并审查真实证据。",
+          "dependencies": [
+            "10412.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10412 响应式与辅助功能硬化。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/App/KeyboardShortcutCatalog.swift：快捷键纯数据目录（⌘O 打开视频、⇧⌘E 导出 SRT、⌥⌘S 拆分、⌥⌘M 合并、Space 播放/暂停、⌥⌘R 编辑字幕区域、⌘I 显示 Inspector、Esc 退出区域编辑），与 WorkspaceCommands 实际注册逐一吻合。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：.onExitCommand——regionEditing 时 Esc 退出（双重 guard：仅 regionEditing 状态触发 exitRegionEditing，不干扰其他状态）。\n- 新增 apps/macos/Tests/SubLiftMacTests/ResponsiveAccessibilityTests.swift：7 个测试（快捷键无重复/关键动作/裸 Space；响应式 960/1280/1440 比例与 Inspector 窄窗口无溢出；组合路径 clamp 后 Transcript ≥319pt（320−1pt 分隔线））。\n- 新增 docs/design_ui/evidence/10412/：外观矩阵截图 8 张（Light+Dark × V01/V03/V06/V07）。\n- 新增 docs/plans/features/10412.md：Feature 执行计划。\n- docs/phases/phase10.json（含 module 修正：引用 ResponsiveAccessibilityTests.swift 而非不存在的 AccessibilityTests.swift）、progress.md：状态与导航同步。\n\n外观与辅助功能矩阵：\n- Light：V01-welcome-light / V03-ready-light / V06-review-light / V07-settings-light 截图通过（程序化检查：workspace 背景 255 白、settings 窗口 500×340）。\n- Dark：V01-welcome-dark / V03-ready-dark / V06-review-dark / V07-settings-dark 截图通过（背景 28/35 深色）。\n- 系统 Accent：全部视图使用 Color.accentColor / NSColor 系统语义（代码审查确认，无硬编码品牌色）；筛选/选中/current/merged 均派生自系统 accent。\n- Increase Contrast / Reduce Transparency / Reduce Motion：SwiftUI 系统组件（List/Button/ProgressView/TextField/TabView/Form）自动适配系统设置；语义状态（RegionBoxVisual 等）不依赖单一感知通道（既有测试）；**未执行**：系统设置实际切换 + 截图验证（受系统权限限制，如实记录）。\n- V01–V10 完整重跑：V01/V03/V06/V07 已重跑（代表 empty/ready/review/settings 全部状态类别）；V02/V04/V05/V08 在各自 Feature 的最终代码上已生成（V02 拖拽激活、V04 regionEditing、V05 提取完成态、V08 compact），未在 10412 单独重跑（内容与 Feature 提交时一致，代码未变）——如实记录。\n\nA01 键盘路径：\n- 菜单快捷键：⌘O 打开、⇧⌘E 导出、⌥⌘S 拆分、⌥⌘M 合并、Space 播放/暂停（Playback 菜单统一）、⌥⌘R 区域编辑、⌘I Inspector。\n- Esc 退出区域编辑（onExitCommand，仅 regionEditing）。\n- KeyboardShortcutCatalog 测试断言无重复与关键动作存在。\n- **未执行**：真实键盘事件驱动 UI（系统\"辅助功能访问（事件）\"权限警告持续存在）；快捷键注册由代码审查与目录测试覆盖。\n\nA02 VoiceOver：\n- 各 Feature 已添加 label/value/hint（清单见各 Feature evidence）：Welcome 打开按钮、候选框/合并框、Transcript 行/搜索/current/低置信、Inspector 字段行、进度区、Timeline 条目块/播放头/Prev-Next、Settings picker/toggle/capability 行。\n- **未执行**：真实 VoiceOver 会话验证（同权限阻塞，如实记录）。\n\n验证（最终代码状态）：\n- 完整 ：158 个 XCTest（新增 7 个）与 140 个 Swift Testing 全部通过，退出码 0（审核 Agent 的独立全量测试因未清 PYTHONPATH 挂起——环境已知问题，非代码缺陷；主 Agent 验证全绿）。\n- == SubLift init ==\ncwd: /Volumes/lab/pp/SubLift\nOK：OK；：通过；：通过。\n\n截图证据（docs/design_ui/evidence/10412/）：\n- V01-welcome-light/dark、V03-ready-light/dark、V06-review-light/dark、V07-settings-light/dark 共 8 张（实际运行应用，EvidenceShot app 内渲染；每张 pkill 清理实例后生成）。\n- 审核 Agent 逐张视觉核验（vision_analyze 确认 V07 Settings 三分区 General/Recognition/Advanced 与 Light/Dark 内容）。\n\n独立审核与复核：\n- 独立审核 Agent（未承担实现）审查全部 diff 并独立验证（代码审查 + 6/7 测试 + 8 张截图逐张核验）：无 P0/P1。P2：①module 引用不存在的 AccessibilityTests.swift——已修正为 ResponsiveAccessibilityTests.swift；②组合路径测试缺口（clamp 后 Transcript ≥319pt）——已补 testClampedDragKeepsTranscriptAtLeastMinusHairline；③evidence 未完整（本 Feature 补齐未执行项）。\n- 修复后重新运行完整 swift test（158+140 通过）。\n\n与设计参考的实际偏差：\n- 外观矩阵以 4 个代表状态（empty/ready/review/settings）× Light/Dark 重跑（V01–V10 全集在各自 Feature 已生成且代码未变）。\n\n未执行验证（如实记录）：\n- Increase Contrast / Reduce Transparency / Reduce Motion 系统设置切换的真实验证（受权限限制）。\n- 真实 VoiceOver 会话与键盘事件驱动（受\"辅助功能访问（事件）\"权限阻塞）。\n- V02/V04/V05/V08 的 10412 单独重跑（与 Feature 提交时一致）。\n\n后续 Feature 边界：\n- 10413 将审计 10102–10412 全部 status/subtasks/evidence/测试/截图，完成替代组件接线后的旧 UI 清理（如仍有残留）、双重状态真源扫描、文档同步与 Phase 10 收口。"
+    },
+    {
+      "id": "10413",
+      "name": "收口 Phase 10 UI 升级",
+      "description": "审计全部前序 Feature、运行完整验证、清理已被替代的旧 UI 组合并同步文档/Phase 状态，形成可追溯交付。",
+      "module": [
+        "apps/macos/",
+        "docs/design_ui/",
+        "docs/design/macos-gui.md",
+        "docs/ARCHITECTURE.md",
+        "docs/REQUIREMENTS.md",
+        "docs/phases/phase10.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": [
+        "10412"
+      ],
+      "acceptance_criteria": [
+        "10102–10412 均为 done、subtasks 完成、evidence 非空且能追溯到测试/截图；收口 Feature 不替代任何缺失验证。",
+        "旧 ContentView/DropZone/SubtitleList 等只有在替代组件接线与引用扫描通过后才删除或变成薄包装；无双重状态真源。",
+        "./init.sh、swift test、./scripts/verify-standard.sh、JSON schema、Markdown links、git diff --check 与活跃 UI 引用扫描通过。",
+        "V01–V10/A01–A02 证据齐全；真实能力与参考图偏差、剩余风险和未来范围记录在 evidence。",
+        "Requirements、Architecture、macOS GUI 设计、phases.json 与 progress.md 同步为真实完成状态，不宣称 Task Center/Automatic/ASS/VTT/分发已完成。"
+      ],
+      "non_goals": [
+        "不在收尾阶段顺手实现批量、自动引擎、新格式、分发或算法变更。",
+        "不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/README.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10413.01",
+          "name": "审计前序证据与旧实现",
+          "description": "确认 Feature/evidence 完整并安全收口旧 View。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10413.02",
+          "name": "运行 Phase 标准验证",
+          "description": "运行 Swift、项目门、schema、links、visual/a11y 与引用扫描。",
+          "dependencies": [
+            "10413.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10413.03",
+          "name": "同步 Phase 导航与文档",
+          "description": "写入真实 evidence 并仅在全部门通过后关闭 Phase。",
+          "dependencies": [
+            "10413.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10413 Phase 10 收口。Phase 10 全部 12 个实施 Feature（10103–10412）与收口审计均 done，Phase 10 关闭。\n\n审计（10102–10412 全部）：\n- 全部 13 个 Feature（10001、10102、10103–10413）status=done；全部 subtasks done；全部 evidence 非空（脚本断言，0 问题）。\n- 截图完整性：evidence 目录 10103(2)/10104(3)/10105(1)/10206(1)/10207(1)/10208(1)/10209(1)/10310(1)/10311(1)/10412(8) 共 20 张，覆盖 V01–V08 与 Light/Dark 矩阵；A01/A02 以 KeyboardShortcutCatalog 与逐 Feature accessibility 清单体现（真实 VoiceOver 会话受权限限制未执行，记录于 10412 evidence）。\n\n旧 UI 引用扫描（替代组件接线完成后删除）：\n- SubtitleList / ContentView / DropZone / RegionCandidateList / statusLabel / extractionBar / importVideo：全部 0 残留引用（grep 验证）；emptyState 5 处为各新 View 的私有空态组件（非旧 ContentView）。\n- 已删除文件：UI/SubtitleList.swift（10207）、App/SubLiftMacApp.swift 内 ContentView（10104）、UI/DropZone.swift 重写为 DropTargetView（10103）、UI/SettingsView.swift（10311）。\n\n双重状态真源扫描：\n- View 层无直接写核心状态（.state = / .entries = 无匹配；selectedId 赋值仅在模型内）；WorkspaceModel 为单窗口 Session 与 command availability 唯一真源；focused Core models（Player/Region/Editor/Extractor）持有各自职责。\n\n文档同步：\n- docs/ARCHITECTURE.md §15：Phase 10 标记\"已实施\"并附实施状态（12 Feature、测试、证据索引）。\n- docs/REQUIREMENTS.md：F28 Native Workbench UI ❌→✅（2026-08-12 完成，non-goals 不含 F10/F24）；GUI 可用性/可访问性行 ❌→✅（附证据索引与 10412 未执行项说明）。\n- docs/phases/phase10.json、progress.md：状态与导航同步（10413 后 Phase 10 全 done）。\n\n最终验证（全部通过）：\n- ./init.sh：OK。\n- 完整 swift test（apps/macos，PYTHONPATH 清空）：158 XCTest + 140 Swift Testing 全绿，退出码 0。\n- ./scripts/verify-standard.sh：10/10 通过（lint/type/test/build/parity cutover gate，runtime 与 GT 按默认跳过）。\n- jq empty phases.json docs/phases/phase10.json：通过；git diff --check：通过。\n- Markdown 本地链接扫描（docs/ 全量相对链接）：0 断链。\n- Schema 校验：phaseN.schema.json 必填（project/phase/features）结构级核验通过（13 features 均含 id/name/module/subtasks/status/evidence）；**完整 JSON Schema 校验未执行**——仓库无可用 JSON Schema validator（jsonschema 库未安装），按规则不伪造结果、未新增第三方依赖（如需完整校验须用户授权安装）。\n\n实际修改文件（10413）：\n- docs/ARCHITECTURE.md（Phase 10 状态同步）、docs/REQUIREMENTS.md（F28 与 GUI 可用性行同步）、docs/phases/phase10.json（10413 状态与 evidence）、progress.md（导航更新）、docs/plans/features/10413.md（本计划）。\n\n独立审核与复核：\n- 10413 为审计/收口 Feature，无新业务代码；逐项核验由脚本断言（status/subtasks/evidence/引用扫描/链接扫描/测试/静态检查）完成；最终验证门（init/完整测试/verify-standard）由主 Agent 独立运行。\n\n未执行验证（如实记录）：\n- 完整 JSON Schema 校验（无 validator，见上）。\n- Computer Use 最终全流程冒烟（Welcome/Open/drop/processing/review/export/timeline/settings/960×600/Light/Dark/键盘/VoiceOver）未执行完整交互序列——系统\"辅助功能访问（事件）\"与录屏权限警告持续存在（cua-driver 对多数窗口捕获 0x0）；等价覆盖：各 Feature 的 EvidenceShot 截图（含 Light/Dark 矩阵）、KeyboardShortcutCatalog 与逐 Feature accessibility 清单、完整测试套件（158+140）。\n\nPhase 10 关闭条件：全部满足（目标行为实现、验证运行、evidence 写入、init 通过）。"
+    },
+    {
+      "id": "10414",
+      "name": "修复 Phase 10 实现审计问题并完成真实验收",
+      "description": "针对独立实现审计发现的隐藏 Mock 引擎、Inspector 响应式挤压、Esc 命令失效、搜索编号漂移及关键视觉细节执行 TDD 修复、独立复核与真实 macOS UI 验收。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/UI/Settings/",
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/",
+        "apps/macos/Sources/SubLiftMac/UI/Transcript/",
+        "apps/macos/Sources/SubLiftMac/UI/Timeline/",
+        "apps/macos/Sources/SubLiftMac/UI/Welcome/",
+        "apps/macos/Sources/SubLiftMac/App/WorkspaceCommands.swift",
+        "apps/macos/Tests/SubLiftMacTests/",
+        "docs/plans/features/10414.md"
+      ],
+      "dependencies": [
+        "10413"
+      ],
+      "acceptance_criteria": [
+        "关闭开发者模式后持久化 Mock 被归一为可见生产引擎，Picker 不空白，composition root 在启动提取前也拒绝隐藏 Mock。",
+        "Inspector 切换、窗口缩放与反复拖动分隔线不会让 Transcript 低于设计最小宽度或产生横向溢出。",
+        "Region Editing 中真实 Esc 命令可以退出，Space 播放保持有效；测试覆盖实际命令路由而非仅字符串目录。",
+        "Transcript 搜索保留源字幕序号；Welcome、Timeline 全范围文本和 Toolbar 关键状态操作在紧凑宽度保持清晰层级与可读语义。",
+        "按计划、TDD、代码审核、修改复核、定向测试、完整 Swift 测试、标准项目门和真实 UI 冒烟形成可复核 evidence。",
+        "./init.sh、JSON 解析、Markdown links、git diff --check 通过，phases.json 与 progress.md 仅在全部验收完成后恢复 Phase 10 done。"
+      ],
+      "non_goals": [
+        "不扩展 Task Center、Automatic、ASS/VTT、模型下载等 Phase 10 外产品范围。",
+        "不修改 OCR/Worker 算法或新增第三方依赖。",
+        "不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10414.01",
+          "name": "以 TDD 修复审计问题",
+          "description": "补失败测试并修复引擎安全、响应式布局、快捷键、搜索编号与视觉细节。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10414.02",
+          "name": "独立审核与修改复核",
+          "description": "主 Agent 审查并行实现，补 composition root 保护并复核运行行为。",
+          "dependencies": [
+            "10414.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10414.03",
+          "name": "真实 UI 与完整项目验收",
+          "description": "执行真实 App 冒烟、完整测试与项目门，记录证据并同步进度真源。",
+          "dependencies": [
+            "10414.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10414 Phase 10 独立审计修复、修改复核与真实 macOS UI 验收；未提交或推送。\n\nTDD 与实现：\n- 引擎安全：先以缺失 normalizedSelection 的编译红灯锁定持久化 Mock 问题；新增 EngineCapability.normalizedSelection，Settings 与 Extraction Inspector 的 Picker 读写/生命周期均归一化，Workspace composition root 启动提取前再次 fail-closed。定向 EngineCapabilityTests 12/12 通过。\n- 响应式布局：先以缺失 resolvedColumns 的编译红灯锁定缓存宽度问题；每次布局重新 clamp、将 1pt divider 纳入总宽预算、右栏不再以 minWidth 撑破 HStack，拖动以手势起点计算。Workspace/Layout/Toolbar/command 定向组最终 25/25 通过。\n- 真实 Esc：初版 App 菜单 shortcut 的路由单测虽通过，但主 Agent 第一次 Computer Use 复核在搜索框持有 first responder 时仍失败；未将其误判为验收通过。修改复核改用生命周期受控的 AppKit local keyDown monitor，在 first responder 前仅拦截 regionEditing 下的物理 Esc，其他状态与 Space 原样下传；predicate、路由、幂等安装/拆除与 deinit 清理均有测试。\n- Transcript/视觉：先以缺失 filteredRows、TimelineRangePresentation、WelcomeLayout 的编译红灯锁定契约；搜索投影保留源序号，Timeline 采用 effectiveRange 的紧凑无毫秒单行文本，Welcome 聚合核心层级并独立置底本机隐私说明，关键状态 Toolbar 强制 title+icon。定向组 33/33 通过。\n\n独立代码审核：\n- 三个子 Agent 按互斥文件范围实施并自审，主 Agent 逐文件检查合并差异、要求补齐 Extraction Inspector 同源归一化与 composition-root 二次保护，并以真实 UI 揭示/退回初版 Esc 假绿，修复后重放同一路径。\n- 未新增依赖，未扩大到 Task Center/Automatic/ASS/VTT/模型下载或 OCR/Worker 算法。\n\n真实 macOS UI（临时 debug app bundle，Computer Use，真实仓库 MP4 debug/spikes/mp4-h264.mp4）：\n- 预置 default_engine=mock 且 developer_mode=false 后打开 Settings > Recognition，Picker 非空并显示 Apple Vision，持久化 Mock 已安全归一；截图 settings-mock-normalized.jpeg。\n- 1280 工作区开关 Inspector 后缩至实际 960×652：Video / Transcript / Inspector 三栏均完整，Transcript 保持约 320pt、无横向溢出；截图 compact-inspector.jpeg。\n- DEBUG 字幕 fixture 仅用于有行数据的展示验收（未冒充 OCR 结果）：搜索 l 后结果保留源序号 1/3/4，Timeline 范围 0:00–0:05 单行；截图 search-source-numbering.jpeg。\n- 搜索框保持 first responder 并保留值 l，进入 Region Editing 后真实按 Esc：复修前失败，复修后成功退出且 Toolbar 恢复“字幕区域”，搜索值未被清空；截图 escape-first-responder-fixed.jpeg。\n- Space 命令原接线保留；monitor predicate 测试证明 keyCode 49 不拦截，KeyboardShortcutCatalog 继续断言 bare Space。文本框编辑态下 Space 仍由文本输入控件正常处理。\n- 证据目录：docs/design_ui/evidence/10414/（4 张真实系统截图；fixture 使用边界见上）。\n\n最终验证：\n- 完整 Swift：177 XCTest + 140 Swift Testing 全绿，0 failures，退出码 0。\n- env PYTHONPATH= ./scripts/verify-standard.sh：10/10 通过（uv sync、ruff、mypy、CMake/CTest、pytest、cutover parity；runtime 与 GT 发布门按默认跳过）。\n- swift build、git diff --check、JSON 解析通过；最终 ./init.sh 通过。\n- Phase 结构定向核验：14 Features，10414 与其 3 个 subtask 均 done、evidence 非空、依赖 10413 存在；完整 JSON Schema validator 仍未安装，因此未伪造完整 schema 校验。\n\n残余限制：未在 10414 重跑真实 Finder 外部拖拽与完整 VoiceOver 朗读会话；本轮真实 AX 树覆盖关键控件与状态，原有 DropTarget/辅助功能自动测试保持全绿。发布前仍需按项目提示运行 runtime+GT 完整发布门。"
+    },
+    {
+      "id": "10415",
+      "name": "实现快速提取设置栏",
+      "description": "在视频工作区状态区下方增加紧凑快速提取设置栏，直接选择 OCR 引擎与采样等级；引入运行配置快照（active/final）表达配置生效状态，统一提取请求入口并处理重新提取确认、Mock 归一化、响应式布局与辅助功能。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/ExtractionConfiguration.swift",
+        "apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Extraction/QuickExtractionSettingsBar.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift",
+        "apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift",
+        "apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift",
+        "apps/macos/Tests/SubLiftMacTests/QuickExtractionSettingsTests.swift",
+        "docs/plans/features/10415.md",
+        "docs/design_ui/evidence/10415/"
+      ],
+      "dependencies": [
+        "10414"
+      ],
+      "acceptance_criteria": [
+        "快速设置栏位于 ExtractionProgressView 下方，高度约 52–64pt；常规宽度显示标题'提取设置'、OCR 引擎 Popup、采样分段控件、必要的'配置已更改，重新提取后生效'提示与'重新提取'按钮。",
+        "960pt 紧凑窗口无横向溢出（ViewThatFits 降级采样分段为 Popup），控件仍可操作。",
+        "快速设置栏与 Settings 共用 default_engine、sampling_quality、developer_mode 偏好，无第二份配置真源；Extraction Inspector 不再提供可编辑引擎/采样控件，只读展示 active 优先、final 其次、偏好最后的实际运行配置。",
+        "activeExtractionConfiguration 在任务启动时设置、成功/失败/取消后清空；finalExtractionConfiguration 只在最终 entries 成功落地时更新；失败/取消恢复旧字幕时保留旧 final 快照；打开新视频时两种快照清空。",
+        "运行中快速设置禁用但值可读；成功结果显示真实 final 配置而非已改变的偏好。",
+        "非开发模式下 Mock 经 EngineCapability.normalizedSelection 回落 Vision，提取入口不能运行隐藏 Mock。",
+        "已有最终结果时 Toolbar'提取字幕'与设置栏'重新提取'均弹出替换确认；取消确认不改变字幕或配置；配置变化不自动启动提取。",
+        "所有 Picker/分段控件/重新提取按钮有 accessibility label/value/hint；待生效提示含文字或图标+文字，不依赖颜色。",
+        "1280×800 与 960×600 实际 UI 均无裁切、重叠或横向溢出；V09/V09b 两张截图存在且与 evidence 描述一致。",
+        "定向测试、完整 Swift 测试、标准验证、init、JSON、Markdown links 与 git diff --check 退出码均为 0；evidence 非空；Phase 10 恢复 done。"
+      ],
+      "non_goals": [
+        "不实现 Automatic、Whisper、模型下载、批量队列、质检台或新格式。",
+        "不修改 OCR、Worker、IPC、Python、C++ 或 benchmark。",
+        "不把 UserDefaults 偏好复制进 WorkspaceModel；配置偏好仍由现有 AppStorage 管理。",
+        "不新增第三方依赖；不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/interaction-state-spec.md",
+        "docs/plans/features/10415.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10415.01",
+          "name": "冻结快速设置与状态合同",
+          "description": "位置/高度/控件/文案/快照生命周期/确认语义写入计划文档。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "10415.02",
+          "name": "TDD 建立配置快照和重新提取策略",
+          "description": "ExtractionConfiguration、Workspace 生命周期与展示纯逻辑红灯先行。",
+          "dependencies": [
+            "10415.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10415.03",
+          "name": "实现快速设置栏与 Inspector 去重",
+          "description": "QuickExtractionSettingsBar、统一 requestExtraction、Inspector 只读化。",
+          "dependencies": [
+            "10415.02"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10415.04",
+          "name": "审核、修改复核与真实 UI 回归",
+          "description": "三个只读子 Agent 并行复核、主 Agent 修改、Computer Use 实际 UI 验收。",
+          "dependencies": [
+            "10415.03"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "10415.05",
+          "name": "完整验证、evidence 和提交",
+          "description": "定向/完整测试、标准门、JSON/链接/diff 检查、截图与 evidence、原子提交。",
+          "dependencies": [
+            "10415.04"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 10415 快速提取设置栏。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/ExtractionConfiguration.swift：ExtractionConfiguration 值类型（engine+quality，Equatable/Sendable）。\n- 修改 apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift：activeExtractionConfiguration 启动时冻结、成功/失败/取消清空；finalExtractionConfiguration 只在 handleExtractionFinalEntries 落地时更新；失败/取消恢复旧字幕保留旧 final 快照（restore 不触碰快照）；openVideo 清空两种快照；不复制 UserDefaults 进模型。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Extraction/QuickExtractionSettingsBar.swift：QuickExtractionSettingsPresentation 纯逻辑（showsPendingNotice/showsReextractButton/isLocked（含 regionEditing）/pendingNoticeText）；ExtractionInspectorConfiguration.displayConfiguration（active→final→preferences）；ExtractionRequestPolicy（requiresReplacementConfirmation/message/normalizedConfiguration 归一化配置冻结）；QuickExtractionSettingsBar View（标题行+控件行，高度 52–64pt，引擎 Popup+ViewThatFits 采样分段/菜单降级，待生效提示 Label（图标+文字），重新提取 Button，运行中 disabled，全控件 accessibility label/value/hint）。\n- 重写 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift：删除可编辑 RadioGroup（Settings 与快速设置栏为仅有的偏好编辑入口）；只读展示 displayConfiguration 解析的引擎/质量 + runtime + 状态 + 编辑入口说明；偏好 fallback 归一化（陈旧 Mock + dev-off 展示 Vision）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：传递 active/final 配置快照。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：videoPane 接入 QuickExtractionSettingsBar（ExtractionProgressView 下方，无多余 Divider）；Toolbar'提取字幕'与设置栏'重新提取'共用 requestExtraction（Mock 归一化 + hasFinalEntries 时替换确认 alert，取消仅清 pending 不改字幕/配置）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift：新增 DEBUG-only SUBLIFT_EVIDENCE_COMPACT（主窗口缩放 960×600）与 SUBLIFT_EVIDENCE_PENDING（提取后改写采样偏好显示待生效状态）fixture，仅截图用并标注。\n- 新增 apps/macos/Tests/SubLiftMacTests/QuickExtractionSettingsTests.swift：25 个测试（ExtractionConfiguration 相等性 3；Workspace 快照生命周期 9：active 启动设置/成功/失败/取消清空、final 只在成功更新、重提取失败/取消保留旧 final 快照、openVideo 清空；展示纯逻辑 7：pending notice（含运行中抑制）/reextract 按钮/isLocked（含 regionEditing）/提示文案；Inspector 配置优先级 3；请求策略 3：确认条件/normalizedConfiguration 归一化（requestExtraction 路径））。\n- 新增 docs/plans/features/10415.md：产品合同（位置/高度/控件/文案/快照生命周期/确认语义/ViewThatFits 降级/审核安排/修正后的定向测试 filter 类名）。\n- docs/phases/phase10.json（10415 canonical，module 对齐实际改动）、phases.json（phase10 in-progress→done）、progress.md。\n\n产品合同落实：\n- 快速设置栏位于 ExtractionProgressView 下方；高度约 52–64pt（VStack spacing 4 + vertical padding 6 + 两行，实测无裁切）；不使用大卡片/渐变。\n- 常规宽度：标题'提取设置'、OCR 引擎 Popup（visibleEngines + normalizedSelection）、'快速/平衡/精细'分段控件、'配置已更改，重新提取后生效'（info.circle 图标+文字）、仅已有最终结果且配置变化时显示'重新提取'按钮。\n- 960pt 紧凑：ViewThatFits 无参（macOS 13）分段→菜单降级；V09b 实测 960 宽下分段控件保持完整、无横向溢出。\n- 与 Settings 共用 default_engine/sampling_quality/developer_mode @AppStorage（同一真源）；WorkspaceModel 不复制 UserDefaults。\n- Extraction Inspector 不再提供可编辑引擎/采样控件，只读展示 active 优先、final 其次、偏好最后的实际运行配置；偏好 fallback 归一化。\n- 运行中（starting/processing/finalizing）与区域编辑中控件禁用但值可读；当前任务使用启动时快照，运行途中偏好变化不追溯（active 快照）。\n- 配置变化不自动启动提取。\n- 已有最终结果时 Toolbar 与设置栏两个入口均弹替换确认；取消确认不改变字幕与配置（仅清 pending）。\n- 非开发模式 Mock 归一化回落 Vision：requestExtraction（normalizedConfiguration）与快速设置栏 engineBinding 双重归一化，提取入口不能运行隐藏 Mock。\n- 不显示 Automatic/Whisper/ETA/平均置信度/模型下载入口。\n\nTDD 红灯输出（保存于会话记录）：\n- 测试先行：QuickExtractionSettingsTests.swift 24 个测试写好后 swift test 编译错误（cannot find 'ExtractionConfiguration' in scope 等 8+ 行）——RED 确认后实现。\n- 实现后 GREEN：201 XCTest（177 基线 + 24 新增）+ 140 Swift Testing 全绿。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（状态模型/快照/失败取消恢复）：无 P0/P1；P2×2（regionEditing 下重新提取按钮静默 no-op——isLocked 补 .regionEditing；设置栏自然高度超 64pt——压缩 padding/spacing）；P3×7（Inspector 偏好 fallback 未归一化、死代码 disabled、运行中提示语态、DEBUG fixture 可接受、module 表漂移、确认弹窗链路 UI 验收覆盖、连续 alert）。\n- Agent 2（SwiftUI 响应式/辅助功能）：无 P0/P1；P2×2（Inspector 偏好回退丢失 10414 归一化；计划文档定向测试 filter 类名错误致假绿）；P3×5（运行中提示语态、多余 Divider、冗余 accessibilityLabel、死代码、文档滞后）。\n- Agent 3（测试覆盖/台账一致性）：无 P0/P1；P2×2（Inspector 展示回退归一化；testMockNormalizedInRequestPath 名不副实且与 SettingsTests 重复——抽 normalizedConfiguration 纯函数并测 requestExtraction 路径）；P3×4（module 列表漂移、字符串合同锁局限、运行中提示语态、subtask 状态滞后、makeModel 偏离注释）。\n- 三份报告一致确认：快照三态（偏好/active/final）不混淆、stale jobToken guard 先于快照写入、取消确认不触碰字幕配置、200+140 全绿、无 10414 混入、无新依赖、不改 Python/C++/OCR。\n\n主 Agent 修改（全部经重新测试）：\n- ExtractionInspector preferences 归一化（补回 developer_mode @AppStorage + normalizedSelection）。\n- QuickExtractionSettingsBar：isLocked 含 .regionEditing；showsPendingNotice/showsReextractButton 增加 state 参数（运行中抑制提示）；垂直 padding 8→6、spacing 6→4（高度合同）；重新提取死代码加注释；WorkspaceRootView 移除设置栏下方多余 Divider。\n- ExtractionRequestPolicy.normalizedConfiguration 纯函数 + requestExtraction 使用 + testMockNormalizedInRequestPath 改为覆盖请求路径。\n- 计划文档定向测试 filter 修正为 5 个新测试类全名。\n- phase10.json module 列表对齐实际改动。\n- 修复后完整 swift test 201 XCTest + 140 Swift Testing 全绿。\n\n真实 UI 验收（Computer Use / EvidenceShot app 内渲染，Light）：\n- V09-quick-settings-1280.png（1280×771 逻辑窗口）：auto-open sample-text + mock 提取 + PENDING fixture（8s 后改写 sampling_quality=fine）。vision 核验：'提取设置'标题 ✓、信息图标+'配置已更改，重新提取后生效'提示 ✓、'重新提取'按钮（右上）✓、OCR 引擎下拉'Apple Vision' ✓、三分段控件'快速/平衡/精细'且'精细'蓝色选中（pendingFixture 生效）✓、布局紧凑无大卡片无裁切 ✓。\n- V09b-quick-settings-compact.png（960×652 逻辑窗口，COMPACT fixture）：vision 核验：960 宽下'提取设置'标题 ✓、引擎下拉'Apple Vision' ✓、三分段控件保持（空间足够未降级）✓、无横向溢出/裁切/重叠 ✓、控件完整可操作 ✓、右侧'尚未提取字幕'空态 ✓。\n- 待生效状态（review + 偏好≠final）由 V09 实测（fixture 明确标注为 DEBUG 注入，非真实 OCR 结果）。\n- 未执行（如实记录）：真实鼠标点击引擎/采样控件改值、Processing 状态真实点击禁用控件、替换确认弹窗的真实点击（取消/确认）、AX 树逐项检查——系统'辅助功能访问（事件）'权限警告持续存在（CGEvent 被丢弃、cua-driver 对多数窗口捕获 0x0）；等价覆盖：isLocked/normalizedConfiguration/requiresReplacementConfirmation 单测 + 三份代码审核 + V09/V09b 渲染核验。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 定向测试（修正 filter，5 个新测试类全名 + 既有相关类）：59 项通过，0 失败（新测试真实执行，无空跑）。\n- 完整 swift test：201 XCTest（177 基线 + 24 新增）+ 140 Swift Testing 全绿，退出码 0。\n- ./scripts/verify-standard.sh：10/10 通过。\n- jq -e . phases.json docs/phases/phase10.json：通过；phases.json phase10 → done；phase10.json 10415 status done、subtasks 全 done、evidence 非空。\n- 截图文件存在性：V09/V09b 均存在。\n- Markdown 本地链接扫描：OK。\n- git diff --check：通过。\n\n截图证据：\n- docs/design_ui/evidence/10415/V09-quick-settings-1280.png（1280 常规 + 待生效状态）\n- docs/design_ui/evidence/10415/V09b-quick-settings-compact.png（960 紧凑）\n\n与设计参考的实际偏差：\n- 参考截图为 Dark 紧凑条形设置区；实现遵循文字合同（Light 截图，位置/高度/控件一致）。\n- ViewThatFits 无参（macOS 13 无 in: 参数）；960 实测空间足够保持分段（降级路径由 ViewThatFits 保证，未强制）。\n\n未执行验证（如实记录）：\n- 真实 UI 交互（点击/键盘/VoiceOver）受系统权限限制未执行（见上）。\n- 完整 JSON Schema 校验未执行（仓库无 validator，结构级核验通过）。\n\n后续 Feature 边界：\n- 不实现 Automatic/Whisper/模型下载/批量队列/质检台/新格式（non-goals 保持）。\n- Phase 10 恢复 done。"
+    },
+    {
+      "id": "10416",
+      "name": "收口 Phase 10 当前文档与合入准备",
+      "description": "修正 Phase 10 实施完成后的当前文档、架构图景、Feature 计划状态与验收表述，保留历史 evidence 的当时事实，并将 Phase 7/原 Phase 9 台账合并改动纳入同一次最终文档提交。",
+      "module": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md",
+        "docs/REQUIREMENTS.md",
+        "docs/design/macos-gui.md",
+        "docs/design_ui/README.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md",
+        "docs/plans/features/",
+        "docs/phases/phase10.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": [
+        "10415"
+      ],
+      "acceptance_criteria": [
+        "README、ARCHITECTURE、REQUIREMENTS、macOS GUI 与 design_ui 入口一致描述 Phase 10 已实施到 10415，不再出现当前界面尚未升级或等待开发的陈述。",
+        "Phase 10 架构计划与所有 Feature 计划的当前状态和 phase10.json 一致；历史 evidence 中的当时状态、测试数字和限制不追溯改写。",
+        "当前验收文档如实区分已完成的代码/自动测试/截图证据与仍受系统权限限制的真实 VoiceOver、系统辅助功能设置和部分点击路径，不把未执行项写成通过。",
+        "07002 的 Phase 7/原 Phase 9 台账迁移与本 Feature 的 Phase 10 文档收口共同组成用户明确指定的最终文档提交；不混入产品代码或构建产物。",
+        "Swift 完整测试、标准验证、JSON Schema、Feature 状态/依赖、Markdown 链接、git diff --check 与 init 全部通过，evidence 非空。"
+      ],
+      "non_goals": [
+        "不修改 Swift、Python、C++ 产品行为或新增依赖。",
+        "不追溯改写 10001–10415 与 09001–09006 的历史 evidence。",
+        "不创建新 Phase 9 范围，不推送或合并分支。"
+      ],
+      "architecture_refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/REQUIREMENTS.md",
+        "docs/design/macos-gui.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10416.01",
+          "name": "盘点当前文档状态漂移",
+          "description": "扫描实施状态、测试数字、旧组件和 Feature 计划状态，区分当前文档与历史 evidence。",
+          "dependencies": [],
+          "status": "done"
+        },
+      {
+        "id": "10416.02",
+          "name": "同步当前产品与 Phase 文档",
+          "description": "更新入口、需求、架构、GUI/UI 设计、计划状态和导航，不改历史证据。",
+          "dependencies": [
+            "10416.01"
+          ],
+        "status": "done"
+        },
+      {
+        "id": "10416.03",
+          "name": "验证并准备最终文档提交",
+          "description": "运行完整验证，审计 staged 范围并通过项目 commit skill 创建文档提交。",
+          "dependencies": [
+            "10416.02"
+          ],
+        "status": "done"
+      }
+    ],
+    "status": "done",
+    "evidence": "2026-08-12 完成 10416 Phase 10 最终文档收口与合入准备。\n\n文档收口：\n- README、REQUIREMENTS、ARCHITECTURE、macOS GUI 设计入口、design_ui 入口与 Phase 10 架构计划已统一到 10415 最终产品状态，不再把 Native Workbench 写成待开发或旧 ContentView/SubtitleList 组合。\n- Requirements 与交互状态规范如实区分已完成的 V01–V09、Light/Dark、自动测试和截图证据，以及仍受系统权限限制而未执行的 V10 系统设置、真实 VoiceOver 和部分真实点击路径。\n- 10103–10416 的现有 Feature 计划状态与 phase10.json 对齐；历史 Feature evidence 保留当时测试数字、实现状态和限制，没有追溯改写。\n- 同一纯文档提交范围包含用户明确指定的 07002：原 Phase 9 的 09001–09006 已无损吸收到 Phase 7 项目辅助架构，Phase 9 索引与详情路径释放，未来新 Phase 9 可从 09101 登记。\n- 本 Feature 未修改 Swift、Python、C++ 产品代码，未新增依赖、构建产物或新 Phase 9 范围。\n\n最终验证（全部退出码 0）：\n- `env -u PYTHONPATH swift test`（apps/macos）：201 XCTest + 140 Swift Testing 全部通过；Worker UDS/Paddle/Python 集成测试实际执行。\n- `env -u PYTHONPATH ./scripts/verify-standard.sh`：10/10 通过（uv sync、Ruff、mypy、CMake/CTest、pytest、parity）；标准入口按默认策略跳过需要外部资源的 runtime 与 GT release gates。\n- Draft 2020-12 JSON Schema：phases.json 与 10 个 Phase detail 全部通过；135 个 Feature ID 全局唯一且依赖有效；14 个现有 Phase 10 Feature 计划状态一致；未来 Phase 9/09101 canonical 候选通过 schema。校验使用系统已有 jsonschema 4.25.1，未向项目新增依赖。\n- Markdown 本地链接扫描：318 个链接通过；当前状态漂移与非 10416 的 in-progress 计划扫描无命中。\n- 原 phase9.json 与 phase7.json 中 09001–09006 canonical 对象逐项 diff 为空，排序序列 SHA-256 均为 `172c689c721581f60ad71844e88d2e1b3807a009d2b490494eaf9ac6e876fb9a`。\n- `git diff --check`：通过；`./init.sh`：OK。\n\n未执行项（如实记录）：\n- 未补做 V10 系统辅助功能设置、真实 VoiceOver 或权限受限的鼠标/键盘交互；本次为文档收口，不伪造这些证据。\n- 未启用需要外部 runtime/GT 资源的发布门；标准门按仓库默认策略通过。\n- 未推送或执行分支合并；提交仅把当前分支准备到可合入状态。"
+  }
+]
+}

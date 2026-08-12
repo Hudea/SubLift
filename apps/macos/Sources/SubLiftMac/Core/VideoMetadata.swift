@@ -17,7 +17,8 @@ struct VideoMetadata: Equatable {
 final class VideoMetadataLoader: ObservableObject {
     @Published private(set) var metadata: VideoMetadata?
 
-    func load(url: URL) async {
+    /// 读取元数据但不发布，供需要 generation token 校验的协调层使用。
+    func fetch(url: URL) async -> VideoMetadata {
         let fileName = url.lastPathComponent
         let fileSize = getFileSize(url: url)
 
@@ -25,7 +26,7 @@ final class VideoMetadataLoader: ObservableObject {
             let durationMs = FfmpegFrameSampler.probeDurationMs(url: url)
             let dimensions = FfmpegFrameSampler.probeDimensions(url: url)
             let codec = FfmpegFrameSampler.probeCodec(url: url)
-            metadata = VideoMetadata(
+            return VideoMetadata(
                 fileName: fileName,
                 fileSize: fileSize,
                 width: dimensions?.0 ?? 0,
@@ -33,10 +34,19 @@ final class VideoMetadataLoader: ObservableObject {
                 durationMs: durationMs,
                 codec: codec ?? "unknown"
             )
-            return
         }
 
-        await loadWithAVFoundation(url: url, fileName: fileName, fileSize: fileSize)
+        return await loadWithAVFoundation(url: url, fileName: fileName, fileSize: fileSize)
+    }
+
+    /// 兼容既有直接使用方式；需要隔离迟到请求时应使用 `fetch(url:)`。
+    func load(url: URL) async {
+        metadata = await fetch(url: url)
+    }
+
+    /// 发布已经由协调层完成请求身份校验的结果。
+    func publish(_ metadata: VideoMetadata) {
+        self.metadata = metadata
     }
 
     func clear() {
@@ -45,7 +55,7 @@ final class VideoMetadataLoader: ObservableObject {
 
     // MARK: - Private
 
-    private func loadWithAVFoundation(url: URL, fileName: String, fileSize: Int64) async {
+    private func loadWithAVFoundation(url: URL, fileName: String, fileSize: Int64) async -> VideoMetadata {
         let asset = AVURLAsset(url: url)
 
         let durationMs: Int
@@ -57,11 +67,10 @@ final class VideoMetadataLoader: ObservableObject {
         }
 
         guard let track = try? await asset.loadTracks(withMediaType: .video).first else {
-            metadata = VideoMetadata(
+            return VideoMetadata(
                 fileName: fileName, fileSize: fileSize,
                 width: 0, height: 0, durationMs: durationMs, codec: "unknown"
             )
-            return
         }
 
         let size = try? await track.load(.naturalSize)
@@ -70,7 +79,7 @@ final class VideoMetadataLoader: ObservableObject {
 
         let codec = await loadCodec(from: track)
 
-        metadata = VideoMetadata(
+        return VideoMetadata(
             fileName: fileName,
             fileSize: fileSize,
             width: width,

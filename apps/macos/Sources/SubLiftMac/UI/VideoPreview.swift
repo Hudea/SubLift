@@ -260,7 +260,6 @@ struct VideoControlsView: View {
                     .frame(width: 20)
             }
             .buttonStyle(.borderless)
-            .keyboardShortcut(.space, modifiers: [])
             .disabled(model.loadFailed)
 
             Slider(
