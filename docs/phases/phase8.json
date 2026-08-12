@@ -177,7 +177,7 @@
           "name": "计划扫描合同并写临时目录 RED 测试",
           "description": "先用真实临时目录覆盖直接/递归、过滤、去重和拒绝报告。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08103.02",
@@ -186,7 +186,7 @@
           "dependencies": [
             "08103.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08103.03",
@@ -195,11 +195,11 @@
           "dependencies": [
             "08103.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08103 实现多文件与文件夹发现。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchInputScanner.swift：BatchInputRejectionReason（unsupportedFormat/mkvRequiresFfmpeg/unreadable/duplicate/emptyDirectory）、BatchScanRejection、BatchScanSummary、BatchInputScanner（可注入 VideoImportPolicy(ffmpegAvailable:) + existingURLs；文件/目录统一入口；默认非递归、显式递归后相对路径稳定排序；hidden/package/symlink 静默排除；去重键为 inode（systemFileNumber，大小写不敏感卷同文件不同拼写也去重，失败回落 lowercase path）；本批与队列双重去重；目录枚举失败→unreadable、真空→emptyDirectory；@unchecked Sendable（policy 闭包非 @Sendable，注释说明）；不启动 metadata/Worker/OCR）。\n- VideoImportPolicy.swift：无改动（确认已支持 ffmpegAvailable 注入）。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchInputScannerTests.swift：17 个测试（真实临时目录）：直接视频文件/不支持扩展/大小写扩展名/MKV ffmpeg 注入/批内去重/队列去重/大小写同文件去重（inode）/不存在输入/无权限文件（chmod-000）/无权限目录（chmod-000 → unreadable 非 emptyDirectory）/目录默认非递归/递归稳定排序/隐藏+package+symlink 排除/空目录/1000 项有界（<10s）/混合摘要。\n- 新增 docs/plans/features/08103.md：扫描合同/类型/允许文件/测试类/验收/停止条件。\n- docs/phases/phase8.json（08103 in-progress→done）、phases.json（phase8 in-progress）。\n\n验收标准落实（5 条全满足）：\n1. 文件/文件夹同一 scanner；默认不递归；递归后相对路径稳定排序（测试 testDirectoryNonRecursiveByDefault/testRecursiveEnumerationStableOrder）。\n2. MP4/MOV/MKV 大小写扩展名复用 VideoImportPolicy（无复制扩展名逻辑）；MKV 缺 ffmpeg（注入 ffmpegAvailable=false → .mkvRequiresFfmpeg）、无权限（chmod-000 文件/目录 → .unreadable）、空目录（.emptyDirectory）、不支持格式（.unsupportedFormat）全部结构化拒绝原因。\n3. 隐藏项/package（.pkg 目录）/symlink 不进入扫描（静默排除测试）；inode 去重键对本批与已有队列双重去重（含大小写变体同文件）。\n4. 扫描不启动 metadata/Worker/OCR（纯文件系统枚举）；1000 项扫描 <10s 有界、结果一次性返回摘要（不逐文件同步 UI）。\n5. 临时目录 TDD：RED 缺失类型（cannot find type 'BatchInputScanner' in scope 已保存）；GREEN 完整 swift test 237 XCTest + 140 Swift Testing 全绿。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（路径安全/确定性/有界性）：PASS 无 P0/P1；P2×3（大小写变体绕过 inode 去重、不可读目录误报 emptyDirectory、unreadable 分支零覆盖）；P3×5（台账滞后、Sendable 闭包形式、tearDown try?、emptyDirectory 语义过宽、package 注释过度概括）。\n- Agent 2（文件系统细节）：PASS 无 P0/P1；实证确认 standardizedFileURL 不折叠大小写（caseFold equal? false）、chmod-000 目录 EPERM code 257、.pkg 目录 isPackage=true 而 .docx 目录 false。\n- Agent 3（测试真实性/台账）：PASS 无 P0/P1；filter BatchInputScannerTests 精确匹配 13/13 真实执行（未重蹈 08102 类名覆辙）；P2（台账滞后、无权限目录误报）；P3×4。\n- 三路确认：374 测试全绿、RED 真实（git archive HEAD 复现）、无假绿、无字符串断言替代。\n\n主 Agent 修改（全部经重新测试 237+140 全绿）：\n- P2-1：去重键 inode（systemFileNumber，fallback lowercase path）；existingURLs 改 Set<String>；新增 testCaseVariantSameFileDeduplicated（.mp4/.MP4 同文件 → duplicate）。\n- P2-2：目录分支先 isReadableFile → unreadable；enumerateFiles 返回 [URL]?（nil=枚举失败→unreadable）；新增 testUnreadableDirectoryRejectedNotEmpty。\n- P2-3：新增 testUnreadableFileRejected（chmod-000 文件 → unreadable）。\n- P3：@unchecked Sendable + 注释；tearDown 权限恢复 755（644 缺 execute 导致 513 无法删除——修复测试自身 bug）；package 注释修正（LaunchServices 注册扩展名语义）。\n- 复核 Agent（deleg_25809101）：P2 修复通过（inode 探针实测同一文件同一 inode 67976926、标准 URL 保留大小写→旧键可穿透、inode 键修复真实；chmod 测试真实且清理可靠；@unchecked Sendable 无并发风险；完整测试全绿）；剩余 6 个 P3 非阻塞（emptyDirectory 语义文档化、递归中不可读子目录静默丢弃等，记录待后续）。\n\n记录决策（P3 级，非阻塞）：\n- emptyDirectory 语义：仅\"枚举成功且零文件（含过滤后）\"的目录输入记为 .emptyDirectory；只含不支持文件的目录逐文件报 unsupportedFormat（无目录级信号）——文档化。\n- 递归中不可读子目录静默丢弃（enumerateFiles ?? []）——保持静默（与顶层不可读目录的显式 unreadable 区分），后续 Feature 如需可增强。\n- inode 去重对 case-sensitive 卷：同卷 inode 唯一仍正确；跨卷批量输入（罕见）inode 可能重复——系统文件号在挂载点内唯一，记录已知边界。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：237 XCTest（221 基线 + 16 新增 BatchInputScanner）+ 140 Swift Testing 全绿。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过。\n- 既有回归：Workspace/QuickExtraction/Settings 等全部通过。\n\n未执行项（如实记录）：\n- 无（扫描为纯文件系统操作，全部真实临时目录验证）。\n\n后续 Feature 边界：\n- 08104 输出规划与冲突保护（sidecar/公共输出根/相对目录保持/路径逃逸保护/skip-rename-replace/原子写入）待启动。"
     },
     {
       "id": "08104",
