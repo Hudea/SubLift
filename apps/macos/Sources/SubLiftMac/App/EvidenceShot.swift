@@ -155,8 +155,26 @@ extension EvidenceShot {
     static func taskCenterFixtureIfRequested(model: BatchQueueModel) {
         guard let raw = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_TASKCENTER"] else { return }
         model.installFixture(makeFixtureState(raw))
+        // B02 组合：SCAN=1 → 真实临时文件导入 → 扫描摘要横幅（接受/拒绝计数）。
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SCAN"] == "1" {
+            scanFixtureIfRequested(model: model)
+        }
         openTaskCenterWindow(model: model)
         scheduleTaskCenterShotIfRequested()
+    }
+
+    /// B02 fixture：真实临时文件（2 视频 + 1 不支持扩展）导入 → lastScanSummary 横幅。
+    @MainActor
+    private static func scanFixtureIfRequested(model: BatchQueueModel) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sublift-b02-fixture", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let files = ["interview_clip.mp4", "lecture_slides.mov", "notes.txt"]
+        for name in files {
+            let url = dir.appendingPathComponent(name)
+            try? Data("fixture video bytes".utf8).write(to: url)
+        }
+        model.importInputs([dir])
     }
 
     @MainActor
@@ -172,6 +190,10 @@ extension EvidenceShot {
             let window = NSWindow(contentViewController: hosting)
             window.identifier = NSUserInterfaceItemIdentifier("task-center")
             window.title = "任务中心"
+            // B09 fixture：窗口级 Dark（不切系统外观）。
+            if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DARK"] == "1" {
+                window.appearance = NSAppearance(named: .darkAqua)
+            }
             // COMPACT=1 → 960×600（紧凑截图 fixture）。
             if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_COMPACT"] == "1" {
                 window.setContentSize(NSSize(width: 960, height: 600))

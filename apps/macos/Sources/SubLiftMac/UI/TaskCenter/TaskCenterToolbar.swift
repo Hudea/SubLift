@@ -1,24 +1,29 @@
 import SwiftUI
 
-/// 08308：Task Center Toolbar（命令按 availability 启用；真实动作）。
+/// 08308/08309：Task Center Toolbar（命令按 availability 启用；08309 接统一导入与冲突检查）。
 struct TaskCenterToolbar: View {
     @ObservedObject var model: BatchQueueModel
+    var onAddFiles: () -> Void
+    var onAddFolder: () -> Void
+    var onStart: () -> Void
 
     var body: some View {
         let queue = model.state
         let summary = TaskCenterPresentation.summary(for: queue)
 
-        Button {
-            // 08309 接线统一导入（文件+文件夹）；本 Feature 由空态 fileImporter 提供文件添加。
-        } label: {
+        Button(action: onAddFiles) {
             Label("添加文件", systemImage: "plus")
         }
-        .help("添加视频文件（空态视图提供完整选择器）")
-        .disabled(true)
+        .help("添加视频文件")
+        .accessibilityLabel("添加文件")
 
-        Button {
-            model.start()
-        } label: {
+        Button(action: onAddFolder) {
+            Label("添加文件夹", systemImage: "folder.badge.plus")
+        }
+        .help("添加文件夹（扫描其中视频）")
+        .accessibilityLabel("添加文件夹")
+
+        Button(action: onStart) {
             Label("开始", systemImage: "play.fill")
         }
         .help("开始批量提取")

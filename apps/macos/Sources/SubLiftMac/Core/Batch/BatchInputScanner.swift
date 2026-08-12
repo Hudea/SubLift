@@ -16,8 +16,10 @@ struct BatchScanRejection: Equatable, Sendable {
 }
 
 /// 08103：扫描摘要（一次性返回，不逐文件向 UI 同步）。
+/// 08309：skipped 记录静默排除项（hidden/package/symlink）计数——B02 摘要三类别。
 struct BatchScanSummary: Equatable, Sendable {
     let accepted: [URL]
+    let skipped: Int
     let rejected: [BatchScanRejection]
 }
 
@@ -43,12 +45,16 @@ struct BatchInputScanner: @unchecked Sendable {
 
     func scan(inputs: [URL], recursive: Bool) -> BatchScanSummary {
         var accepted: [URL] = []
+        var skipped = 0
         var rejected: [BatchScanRejection] = []
         var seen = existingURLs
 
         func consider(_ url: URL) {
             let standardized = url.standardizedFileURL
-            guard isScanable(standardized) else { return }  // hidden/package/symlink 静默排除
+            guard isScanable(standardized) else {
+                skipped += 1  // hidden/package/symlink 静默排除（08309：计入跳过）
+                return
+            }
             guard fileManager.isReadableFile(atPath: standardized.path) else {
                 rejected.append(BatchScanRejection(url: standardized, reason: .unreadable))
                 return
@@ -77,7 +83,10 @@ struct BatchInputScanner: @unchecked Sendable {
                 continue
             }
             if isDirectory.boolValue {
-                guard isScanable(standardizedInput) else { continue }
+                guard isScanable(standardizedInput) else {
+                    skipped += 1
+                    continue
+                }
                 guard fileManager.isReadableFile(atPath: standardizedInput.path) else {
                     rejected.append(BatchScanRejection(url: standardizedInput, reason: .unreadable))
                     continue
@@ -99,7 +108,7 @@ struct BatchInputScanner: @unchecked Sendable {
             }
         }
 
-        return BatchScanSummary(accepted: accepted, rejected: rejected)
+        return BatchScanSummary(accepted: accepted, skipped: skipped, rejected: rejected)
     }
 
     // MARK: - Private

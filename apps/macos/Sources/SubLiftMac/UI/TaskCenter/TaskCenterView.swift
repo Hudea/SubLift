@@ -1,42 +1,119 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 08308：Task Center 主视图（原生 Table/Toolbar/Detail/Summary）。
+/// 08308/08309：Task Center 主视图（Table/筛选/多选操作/统一导入/确认/Finder）。
 struct TaskCenterView: View {
     @ObservedObject var model: BatchQueueModel
-    @State private var selection: UUID?
+    @State private var selection: Set<UUID> = []
     @State private var isImportingFiles = false
+    @State private var isImportingFolder = false
+    @State private var isDropTargeted = false
+
+    // 确认/错误状态
+    @State private var showDeleteConfirmation = false
+    @State private var showConflictConfirmation = false
+    @State private var showFinderError = false
+    @State private var revealErrorURL: URL?
+    @State private var scanReasonsExpanded = false
+
+    private var selectedTasks: [BatchTask] {
+        model.state.tasks.filter { selection.contains($0.id) }
+    }
+
+    /// 选中中可删除（waiting）的数量——删除按钮与确认文案共用。
+    private var removableSelectionCount: Int {
+        selectedTasks.filter { BatchTaskCommandAvailability.canRemove($0.status) }.count
+    }
 
     var body: some View {
         let summary = TaskCenterPresentation.summary(for: model.state)
         VStack(spacing: 0) {
             summaryBar
             Divider()
-            // 条件分支（if/else）在 NSWindow hosting 离屏渲染（cacheDisplay）实测黑屏——
-            // 改用 ZStack 同时渲染表格与空态 overlay，避免 SwiftUI 分支切换问题。
+            filterBar
+            if model.lastScanSummary != nil {
+                Divider()
+                scanSummaryBanner
+            }
+            Divider()
             ZStack {
-                TaskTableView(tasks: model.state.tasks, selection: $selection)
+                TaskTableView(tasks: model.filteredTasks, selection: $selection)
+                    .contextMenu(forSelectionType: UUID.self) { ids in
+                        if let id = ids.first,
+                           let task = model.state.tasks.first(where: { $0.id == id }) {
+                            Button("在 Finder 中显示源文件") { revealSource(task) }
+                            if task.outputURL != nil {
+                                Button("在 Finder 中显示字幕") { revealOutput(task) }
+                            }
+                        }
+                    }
                 if summary.total == 0 {
                     emptyState
                 }
             }
             if summary.total > 0 {
                 Divider()
-                if let selectedID = selection,
+                selectionActionBar
+                if let selectedID = selection.count == 1 ? selection.first : nil,
                    let task = model.state.tasks.first(where: { $0.id == selectedID }) {
-                    TaskDetailView(task: task)
+                    Divider()
+                    // .id(task.id)：切换选中时重建详情（避免 @State 编辑态跨任务残留）。
+                    TaskDetailView(task: task) { configuration in
+                        _ = model.replaceTaskConfiguration(task.id, configuration)
+                    }
+                    .id(task.id)
                 }
             }
         }
-        .toolbar { TaskCenterToolbar(model: model) }
+        .toolbar {
+            TaskCenterToolbar(
+                model: model,
+                onAddFiles: { isImportingFiles = true },
+                onAddFolder: { isImportingFolder = true },
+                onStart: requestStart
+            )
+        }
+        .tint(fixtureAccentColor)
+        .onDrop(of: [.movie, .video, .mpeg4Movie, .folder, .item], isTargeted: $isDropTargeted) { providers in
+            importDroppedProviders(providers)
+        }
         .fileImporter(
             isPresented: $isImportingFiles,
-            allowedContentTypes: [.movie, .video, .mpeg4Movie],
+            allowedContentTypes: VideoImportPolicy.openPanelContentTypes,
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {
-                addVideos(urls)
+                model.importInputs(urls)
             }
+        }
+        .fileImporter(
+            isPresented: $isImportingFolder,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result {
+                model.importInputs(urls)
+            }
+        }
+        // 删除确认（危险操作；键盘焦点安全：alert 默认按钮为取消）。
+        .alert("删除选中任务？", isPresented: $showDeleteConfirmation) {
+            Button("取消", role: .cancel) {}
+            Button("删除", role: .destructive) { performDeleteSelection() }
+        } message: {
+            Text("将从队列移除 \(removableSelectionCount) 个等待任务。字幕文件不会被删除。")
+        }
+        // 输出冲突集中确认（开始前；取消不启动、不覆盖任何输出）。
+        .alert("替换现有字幕？", isPresented: $showConflictConfirmation) {
+            Button("取消", role: .cancel) { model.cancelStart() }
+            Button("替换并开始", role: .destructive) { model.confirmOutputConflictsAndStart() }
+        } message: {
+            Text("以下字幕文件已存在，将被覆盖：\n\(conflictMessage)")
+        }
+        // Finder 定位错误。
+        .alert("找不到文件", isPresented: $showFinderError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(revealErrorURL?.path ?? "")
         }
         .alert("队列恢复失败", isPresented: .init(
             get: { model.recoveryErrorMessage != nil },
@@ -48,51 +125,43 @@ struct TaskCenterView: View {
         }
     }
 
-    /// 空态（B01）：单一"添加文件"主动作 + "添加文件夹"次动作 + 本机处理说明。
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
-            Text("添加视频开始批量提取")
-                .font(.title3.weight(.medium))
-            Button("添加文件") {
-                isImportingFiles = true
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityLabel("添加文件")
-            Button("添加文件夹") {
-                // 文件夹导入（Scanner 拒绝摘要）由 08309 接线；本 Feature 提供次动作占位。
-            }
-            .disabled(true)
-            .help("文件夹导入在 08309 提供")
-            Text("视频在本机处理，不会上传。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    // MARK: - 顶部栏
+
+    /// 开始请求：先规划输出（08309）——有冲突 → 集中确认（消费 TaskCenterInteraction.replaceDecision）；无冲突直接启动。
+    private func requestStart() {
+        model.prepareOutputPlan()
+        let decision = TaskCenterInteraction.replaceDecision(
+            confirming: model.outputConflicts.isEmpty,
+            conflicts: model.outputConflicts
+        )
+        switch decision {
+        case .replaceAndStart:
+            model.confirmOutputConflictsAndStart()
+        case .cancel:
+            showConflictConfirmation = true
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    /// 真实文件选择 → 构造等待任务（engine/quality 用默认并归一化）→ 入队。
-    private func addVideos(_ urls: [URL]) {
-        let tasks = urls.map { url in
-            BatchTask.make(
-                sourceURL: url.standardizedFileURL,
-                engine: .vision,
-                quality: .fast,
-                developerMode: false
-            )
+    /// B09 fixture：非默认 Accent（DEBUG-only，SUBLIFT_EVIDENCE_ACCENT=1 → orange）。
+    private var fixtureAccentColor: Color? {
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_ACCENT"] == "1" {
+            return .orange
         }
-        model.addTasks(tasks)
+        #endif
+        return nil
     }
 
-    /// 汇总条（真实计数）。
     private var summaryBar: some View {
         let summary = TaskCenterPresentation.summary(for: model.state)
         return HStack(spacing: 16) {
             Label("\(summary.total)", systemImage: "list.bullet")
                 .labelStyle(.titleAndIcon)
-                .accessibilityLabel("任务总数 \(summary.total)")
+                .accessibilityLabel(TaskCenterAccessibility.summaryLabel(
+                    total: summary.total, waiting: summary.waiting, active: summary.active,
+                    completed: summary.completed, failed: summary.failed,
+                    cancelled: summary.cancelled, skipped: summary.skipped
+                ))
             Text("等待 \(summary.waiting)")
             Text("进行中 \(summary.active)")
             Text("完成 \(summary.completed)")
@@ -106,5 +175,224 @@ struct TaskCenterView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .accessibilityElement(children: .combine)
+    }
+
+    /// 筛选栏（08309：搜索/状态筛选只改变投影）。
+    private var filterBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("搜索文件", text: $model.searchText)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 240)
+                .accessibilityLabel("搜索文件")
+            Picker("状态", selection: $model.statusFilter) {
+                ForEach(BatchTaskStatusFilter.allCases, id: \.self) { filter in
+                    Text(filterDisplayName(filter)).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 320)
+            .accessibilityLabel("状态筛选")
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func filterDisplayName(_ filter: BatchTaskStatusFilter) -> String {
+        switch filter {
+        case .all: "全部"
+        case .waiting: "等待"
+        case .running: "进行中"
+        case .completed: "完成"
+        case .failed: "失败"
+        case .cancelled: "取消"
+        case .skipped: "跳过"
+        }
+    }
+
+    /// B02 扫描摘要横幅（接受/拒绝计数 + 逐项原因，可展开；不自动开始）。
+    private var scanSummaryBanner: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "checkmark.circle")
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("扫描完成：接受 \(model.lastScanSummary?.accepted.count ?? 0) 个，跳过 \(model.lastScanSummary?.skipped ?? 0) 个，拒绝 \(model.lastScanSummary?.rejected.count ?? 0) 个")
+                    .font(.caption)
+                if scanReasonsExpanded {
+                    ForEach(model.lastScanSummary?.rejected ?? [], id: \.url) { rejection in
+                        Text("· \(rejection.url.lastPathComponent)：\(rejection.reason.localizedDescription)")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            Spacer()
+            Button(scanReasonsExpanded ? "收起" : "查看原因") { scanReasonsExpanded.toggle() }
+                .font(.caption)
+                .accessibilityLabel(scanReasonsExpanded ? "收起拒绝原因" : "展开拒绝原因")
+            Button("关闭") { model.clearScanSummary() }
+                .font(.caption)
+                .accessibilityLabel("关闭扫描摘要")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.accentColor.opacity(0.08))
+    }
+
+    /// 选中操作栏（08309：多选删除/重排——仅 waiting 可用）。
+    private var selectionActionBar: some View {
+        return HStack(spacing: 8) {
+            Button {
+                showDeleteConfirmation = true
+            } label: {
+                Label("删除 (\(removableSelectionCount))", systemImage: "trash")
+            }
+            .disabled(removableSelectionCount == 0)
+            .help("删除选中的等待任务")
+            .accessibilityLabel("删除选中任务")
+
+            Button {
+                moveSelection(.up)
+            } label: {
+                Label("上移", systemImage: "arrow.up")
+            }
+            .disabled(!canMoveSelection(.up))
+            .help("上移选中的等待任务")
+
+            Button {
+                moveSelection(.down)
+            } label: {
+                Label("下移", systemImage: "arrow.down")
+            }
+            .disabled(!canMoveSelection(.down))
+            .help("下移选中的等待任务")
+
+            Spacer()
+            Text("选中 \(selection.count) 个")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private func canMoveSelection(_ direction: TaskCenterInteraction.MoveDirection) -> Bool {
+        guard selection.count == 1, let id = selection.first,
+              let index = model.state.tasks.firstIndex(where: { $0.id == id }) else { return false }
+        let waitingIndices = model.state.tasks.indices.filter { model.state.tasks[$0].status == .waiting }
+        guard let position = waitingIndices.firstIndex(of: index) else { return false }
+        switch direction {
+        case .up: return position > 0
+        case .down: return position < waitingIndices.count - 1
+        }
+    }
+
+    private func moveSelection(_ direction: TaskCenterInteraction.MoveDirection) {
+        guard let id = selection.first else { return }
+        var tasks = model.state.tasks
+        TaskCenterInteraction.moveTask(id: id, in: &tasks, direction: direction)
+        // reorder 参数 = 全部 waiting 任务的新顺序（槽位保留由 reorder 处理）。
+        let waitingIDs = tasks.filter { $0.status == .waiting }.map(\.id)
+        _ = model.scheduler.reorder(waitingIDs)
+    }
+
+    private func performDeleteSelection() {
+        let removable = TaskCenterInteraction.removableTaskIDs(from: selectedTasks)
+        for id in removable {
+            _ = model.remove(id)
+        }
+        selection.removeAll()
+    }
+
+    // MARK: - Finder 定位（08309）
+
+    /// 在 Finder 中定位源文件；不存在 → 错误提示（不静默）。
+    private func revealSource(_ task: BatchTask) {
+        if let url = TaskCenterInteraction.revealCandidate(for: task.sourceURL) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            revealErrorURL = task.sourceURL
+            showFinderError = true
+        }
+    }
+
+    /// 在 Finder 中定位输出字幕；不存在 → 错误提示。
+    private func revealOutput(_ task: BatchTask) {
+        guard let output = task.outputURL else { return }
+        if let url = TaskCenterInteraction.revealCandidate(for: output) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            revealErrorURL = output
+            showFinderError = true
+        }
+    }
+
+    // MARK: - 导入（文件/文件夹/drop 同一 scanner）
+
+    private func importDroppedProviders(_ providers: [NSItemProvider]) -> Bool {
+        var urls: [URL] = []
+        let lock = NSLock()
+        let group = DispatchGroup()
+        for provider in providers {
+            group.enter()
+            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
+                    lock.lock(); urls.append(url); lock.unlock()
+                }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) {
+            model.importInputs(urls)
+        }
+        return true
+    }
+
+    // MARK: - 冲突消息
+
+    private var conflictMessage: String {
+        model.outputConflicts.map { $0.outputURL.lastPathComponent }.joined(separator: "\n")
+    }
+
+    // MARK: - 空态
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 44))
+                .foregroundStyle(.secondary)
+            Text("添加视频开始批量提取")
+                .font(.title3.weight(.medium))
+            Button("添加文件") {
+                isImportingFiles = true
+            }
+            .buttonStyle(.borderedProminent)
+            .accessibilityLabel("添加文件")
+            Button("添加文件夹") {
+                isImportingFolder = true
+            }
+            .accessibilityLabel("添加文件夹")
+            Text("也可以直接拖入视频或文件夹")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("视频在本机处理，不会上传。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension BatchInputRejectionReason {
+    var localizedDescription: String {
+        switch self {
+        case .unsupportedFormat: "不支持的格式"
+        case .mkvRequiresFfmpeg: "MKV 需要 ffmpeg"
+        case .unreadable: "无法读取"
+        case .duplicate: "重复文件"
+        case .emptyDirectory: "空目录"
+        }
     }
 }

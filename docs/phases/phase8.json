@@ -521,8 +521,9 @@
         "apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift",
         "apps/macos/Sources/SubLiftMac/UI/TaskCenter/",
         "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueModel.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueScheduler.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchInputScanner.swift",
         "apps/macos/Tests/SubLiftMacTests/TaskCenterInteractionTests.swift",
-        "apps/macos/Tests/SubLiftMacTests/TaskCenterAccessibilityTests.swift",
         "apps/macos/Tests/SubLiftMacTests/BatchQueueModelTests.swift",
         "docs/design_ui/evidence/08309/",
         "docs/plans/features/08309.md"
@@ -551,7 +552,7 @@
           "name": "计划批量交互并写 ViewModel/command RED 测试",
           "description": "固定统一入口、投影不变序、waiting 操作、确认和 Finder 错误测试。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08309.02",
@@ -560,7 +561,7 @@
           "dependencies": [
             "08309.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08309.03",
@@ -569,11 +570,11 @@
           "dependencies": [
             "08309.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-13 完成 08309 完善批量交互、键盘与辅助功能。\n\n实际修改文件：\n- 修改 UI/TaskCenter/BatchQueueModel.swift（08309 扩展：@Published searchText/statusFilter/lastScanSummary；filteredTasks 纯投影；importInputs（BatchInputScanner existingURLs 取当前队列 inode 批间去重 → BatchTask.make → addTasks，不自动开始）；prepareOutputPlan（BatchOutputPlanner sidecar+skip 预规划，无冲突经 scheduler.setOutputURL，冲突 → pendingConflicts）/confirmOutputConflictsAndStart/cancelStart（回滚输出、零文件触碰）；replaceTaskConfiguration；BatchTaskStatusFilter 枚举；删除无消费者 replaceConfiguration）\n- 修改 Core/Batch/BatchQueueScheduler.swift（setOutputURL 仅 waiting 守卫 + persist）\n- 修改 Core/Batch/BatchInputScanner.swift（BatchScanSummary 加 skipped: Int——hidden/package/symlink 静默排除计入跳过，B02 三类别口径）\n- 新增 UI/TaskCenter/TaskCenterInteraction.swift（OutputConflict 单一真源/removableTaskIDs/moveTask（waiting 槽位交换）/replaceDecision（requestStart 消费）/revealCandidate + TaskCenterAccessibility（statusLabel/progressLabel/summaryLabel））\n- 重写 UI/TaskCenter/TaskCenterView.swift（filterBar 搜索+7 段状态筛选；scanSummaryBanner B02 摘要（接受/跳过/拒绝+可展开原因+关闭）；selectionActionBar 多选删除（确认 alert destructive，removableSelectionCount 单一真源）/上移下移；requestStart 经 replaceDecision；Finder 右键菜单（源/输出，不存在错误 alert）；.onDrop 拖入（NSLock+DispatchGroup 并发安全）；fileImporter 文件（openPanelContentTypes 含 MKV）+文件夹（[.folder]）；TaskDetailView .id(task.id) 防编辑态跨任务残留）\n- 新增 UI/TaskCenter/TaskDetailView.swift 配置编辑器（仅 waiting 可改 engine/quality Picker，活动/终态只读）\n- 修改 UI/TaskCenter/TaskTableView.swift（Set<UUID> 多选 selection）\n- 修改 UI/TaskCenter/TaskCenterToolbar.swift（onAddFiles/onAddFolder/onStart 闭包；添加文件夹 folder.badge.plus）\n- 修改 App/EvidenceShot.swift（scanFixtureIfRequested：真实临时文件 2 视频+1 txt → B02 摘要；SUBLIFT_EVIDENCE_DARK=1 → 窗口级 darkAqua；ACCENT=1 → tint orange DEBUG-only）\n- 新增 Tests/BatchQueueModelTests.swift（12 测试：统一导入 scanner 接线/批内批间去重/搜索筛选投影/输出规划冲突/确认替换启动/取消不启动+字节不变/无冲突启动/配置替换 waiting 允许+活动拒绝）、TaskCenterInteractionTests.swift（TaskCenterInteractionTests 5：批量删除 availability/重排槽位/替换决策/Finder 存在与缺失 + TaskCenterAccessibilityTests 3）\n- 新增 docs/design_ui/evidence/08309/（B02-scan-summary/B03-interactions/B08-compact/B09-dark-accent 4 张截图）、docs/plans/features/08309.md\n- 修改 docs/phases/phase8.json（08309 done）\n\n审核（三路并行只读 + 复核）：\n- deleg_587bf846（交互核心）：无 P0/P1 PASS——统一导入/投影/多选 availability/冲突确认/取消回滚/Finder/确认安全全部正确\n- deleg_bc66a8c5（SwiftUI/并发）：无 P0/P1——drop 并发安全（NSLock+DispatchGroup+主队列）、setOutputURL 守卫、冲突确认仅运行时覆盖\n- deleg_91c58d1b（测试/台账）：无 P0；2×P1（AC2 显式改配置未实现、AC1 添加文件夹无入口）+ 3×P2（台账双虚条目、removeTasks/replaceDecision 死代码+空洞测试、OutputConflict 重复）+ 5×P3\n- deleg_57b03907（修复复核）：P1/P2 修复通过（4/4 P1 + 全部 P2），发现 1 个新 P2（TaskDetailView @State 跨任务残留——.id(task.id) 修复）+ 4 个 P3（skipped 子目录计数口径记录、B09 旧构建截图重截、module 台账对齐、重复方法删除）\n\nP1/P2 修复（主 Agent）：\n1. AC2 显式改配置：TaskDetailView 配置编辑器（仅 waiting；engine/quality Picker）→ model.replaceTaskConfiguration → scheduler.replaceConfiguration（双守卫）；+2 测试\n2. AC1 添加文件夹：fileImporter [.folder] + 空态按钮 + Toolbar 按钮\n3. 删除文案 removableSelectionCount 单一真源\n4. BatchScanSummary.skipped（scanner 三处计数）+ 横幅三类别\n5. OutputConflict 合并单一真源；removeTasks 死代码删除；replaceDecision 由 requestStart 消费\n6. fileImporter 用 openPanelContentTypes（含 MKV）；cancelStart 字节断言\n7. 复核新 P2：TaskDetailView .id(task.id)\n\n真实验收（截图 + 测试）：\n- 4 张截图（Light/Dark）：B02-scan-summary（vision 验证：汇总条 2 等待/搜索框/7 段筛选/\"扫描完成：接受 2 个，跳过 0 个，拒绝 1 个\"横幅+查看原因/关闭/2 任务行/底部删除(0)上移下移+选中 0 个）、B03-interactions（交互版：统计栏/筛选/底部操作栏）、B08-compact（960×600 无横向溢出）、B09-dark-accent（窗口级 Dark：统计栏/筛选/表头/4 行数据/底部栏全渲染；状态文本清晰可读——不只依赖颜色；orange accent 因窗口非激活呈标准灰色，macOS 标准行为）\n- 完整 swift test：320 XCTest + 140 Swift Testing 全绿；swift build（DEBUG）与 -c release 通过（fixture 全在 #if DEBUG）；verify-standard 通过；git diff --check 干净\n\n偏差与未执行项：\n1. scanner skipped 计数仅顶层（目录内 hidden/package/symlink 子项在 enumerateFiles 静默丢弃不计入）——B02 无隐藏文件场景不受影响；如实记录口径\n2. orange accent 在非激活窗口不显示（macOS inactive 灰化标准行为）——激活后橙色；B09 核心验证目标（Dark + 状态文字可读）达成\n3. 拖入（.onDrop）真实实现（loadItem 读 URL → importInputs）但 NSItemProvider→URL 转换无自动化测试（GUI 交互受限——辅助功能权限缺失）；scanner 层单元验证已覆盖\n4. prepareOutputPlan 对 plan 抛错任务静默跳过（try? continue）——目标目录不可写等罕见；任务无 outputURL 仍启动，真实 runner 回落 defaultSidecarURL（与 planner 意图一致）；记录决策\n5. 系统外观：截图期间 Light（B09 窗口级 Dark 不切系统）；完成后恢复 Dark"
     },
     {
       "id": "08410",

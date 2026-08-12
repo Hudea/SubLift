@@ -171,6 +171,16 @@ final class BatchQueueScheduler {
         persist()
     }
 
+    /// 设置等待任务的输出计划（08309：开始前规划/替换确认；仅 waiting 可写）。
+    @discardableResult
+    func setOutputURL(_ url: URL?, for taskID: UUID) -> Bool {
+        guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { return false }
+        guard state.tasks[index].status == .waiting else { return false }
+        state.tasks[index].outputURL = url
+        persist()
+        return true
+    }
+
     // MARK: - 内部
 
     private func scheduleNextIfPossible() {

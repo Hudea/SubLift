@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// 08308：任务表格（原生 Table；列优先级：文件 > 状态 > 进度 > 引擎 > 时长 > 输出 > 添加时间）。
+/// 08308/08309：任务表格（原生 Table；多选；列优先级：文件 > 状态 > 进度 > 引擎 > 时长 > 输出 > 添加时间）。
 struct TaskTableView: View {
     let tasks: [BatchTask]
-    @Binding var selection: UUID?
+    @Binding var selection: Set<UUID>
 
     var body: some View {
         Table(tasks, selection: $selection) {
