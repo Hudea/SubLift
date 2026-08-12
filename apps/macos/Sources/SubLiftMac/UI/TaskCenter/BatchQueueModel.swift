@@ -154,10 +154,15 @@ final class BatchQueueModel: ObservableObject {
         return result
     }
 
-    /// 显式替换 waiting 任务的配置（availability 由 Scheduler 守卫）。
+    /// 显式替换 waiting 任务的配置（availability 由 Scheduler 守卫；
+    /// 引擎入口归一化——普通 UI 不接受 Mock，防御 API 层直调）。
     @discardableResult
     func replaceTaskConfiguration(_ taskID: UUID, _ configuration: ExtractionConfiguration) -> Bool {
-        let result = scheduler.replaceConfiguration(taskID, configuration)
+        let normalized = ExtractionConfiguration(
+            engine: EngineCapability.normalizedSelection(configuration.engine, developerMode: false),
+            quality: configuration.quality
+        )
+        let result = scheduler.replaceConfiguration(taskID, normalized)
         syncState()
         return result
     }

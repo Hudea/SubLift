@@ -191,6 +191,17 @@ final class BatchQueueModelTests: XCTestCase {
         XCTAssertFalse(result)
         XCTAssertEqual(model.state.tasks[0].configuration.engine, .vision)
     }
+
+    func testReplaceTaskConfigurationNormalizesMockAway() throws {
+        // P1 回归：普通 UI 不接受 Mock（app-wide"Mock 仅开发者模式"合同）。
+        let a = try makeVideo("a.mp4")
+        let model = makeModel()
+        model.importInputs([a])
+        let taskID = model.state.tasks[0].id
+        let result = model.replaceTaskConfiguration(taskID, ExtractionConfiguration(engine: .mock, quality: .fast))
+        XCTAssertTrue(result)
+        XCTAssertEqual(model.state.tasks[0].configuration.engine, .vision, "Mock 归一化回落 Vision")
+    }
 }
 
 // MARK: - 内存 Repository（测试辅助）

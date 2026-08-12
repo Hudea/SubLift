@@ -18,7 +18,8 @@ struct TaskTableView: View {
             TableColumn("状态") { task in
                 Text(TaskCenterPresentation.statusDisplayName(task.status))
                     .lineLimit(1)
-                    .accessibilityLabel("状态 \(TaskCenterPresentation.statusDisplayName(task.status))")
+                    // 08309：AX label 走 TaskCenterAccessibility 单一真源。
+                    .accessibilityLabel(TaskCenterAccessibility.statusLabel(for: task.status))
             }
             .width(min: 56, ideal: 72)
 
@@ -26,7 +27,7 @@ struct TaskTableView: View {
                 if let progressText = TaskCenterPresentation.progressText(for: task) {
                     Text(progressText)
                         .monospacedDigit()
-                        .accessibilityLabel("进度 \(progressText)")
+                        .accessibilityLabel(TaskCenterAccessibility.progressLabel(for: task) ?? progressText)
                 } else {
                     Text("—").foregroundStyle(.tertiary)
                 }

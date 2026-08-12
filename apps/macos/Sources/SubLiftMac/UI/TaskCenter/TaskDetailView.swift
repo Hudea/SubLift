@@ -38,7 +38,12 @@ struct TaskDetailView: View {
         .background(Color(nsColor: .controlBackgroundColor))
         .frame(maxHeight: 160, alignment: .top)
         .onAppear {
-            if editingEngine == nil { editingEngine = task.configuration.engine }
+            if editingEngine == nil {
+                // 归一化：持久化旧选择可能含 mock（关闭开发者模式后）——回落到可见引擎。
+                editingEngine = EngineCapability.normalizedSelection(
+                    task.configuration.engine, developerMode: false
+                )
+            }
             if editingQuality == nil { editingQuality = task.configuration.quality }
         }
         .onChange(of: editingEngine) { newValue in
@@ -56,7 +61,8 @@ struct TaskDetailView: View {
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
             Picker("引擎", selection: $editingEngine) {
-                ForEach(OcrEngineName.allCases, id: \.self) { engine in
+                // Mock 仅开发者模式可见（app-wide 合同；普通 UI 不泄漏 Mock）。
+                ForEach(EngineCapability.visibleEngines(developerMode: false), id: \.self) { engine in
                     Text(engine.displayName).tag(Optional(engine))
                 }
             }
