@@ -33,6 +33,14 @@ final class BatchExtractionRunner: BatchTaskRunning, @unchecked Sendable {
         _ task: BatchTask,
         onUpdate: @escaping @Sendable (BatchTaskStatus, Double?) -> Void
     ) async -> BatchRunOutcome {
+        // fail-closed：源文件不存在/不可读 → 快速 failed（不启动 Worker；
+        // scanner 正常路径不会产生，但持久化恢复/手动构造可能）。
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: task.sourceURL.path),
+              fileManager.isReadableFile(atPath: task.sourceURL.path) else {
+            return .failed("源文件不存在或不可读")
+        }
+
         let client = clientFactory()
         defer {
             // teardown：关闭本任务独占 socket（不迟到的资源回收；幂等）。

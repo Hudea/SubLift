@@ -170,6 +170,20 @@ final class BatchExtractionRunnerTests: XCTestCase {
         XCTAssertEqual(fakeClient.stopCalls, 1, "失败也 teardown")
     }
 
+    func testMissingSourceFileFailsFastWithoutWorker() async {
+        // 08410：源文件不存在 → fail-closed 快速 failed（不启动 Worker）。
+        let missingTask = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/definitely-missing-\(UUID().uuidString).mp4"),
+            engine: .vision, quality: .fast, developerMode: false
+        )
+        let outcome = await runner.run(missingTask) { _, _ in }
+        guard case .failed(let message) = outcome else {
+            return XCTFail("不存在文件应 failed")
+        }
+        XCTAssertTrue(message.contains("不存在"), "错误消息可读")
+        XCTAssertEqual(fakeClient.startCalls, 0, "不启动 Worker")
+    }
+
     func testCancellationDuringBlockingReadReturnsCancelled() async {
         // P1-1 回归：阻塞 requestStreaming 期间取消 → 中断读循环 → .cancelled + teardown。
         fakeClient.blocksOnRead = true

@@ -155,11 +155,12 @@ struct BatchInputScanner: @unchecked Sendable {
             guard let values = try? item.resourceValues(forKeys: [
                 .isDirectoryKey, .isHiddenKey, .isPackageKey, .isSymbolicLinkKey,
             ]) else { continue }
-            if values.isHidden == true || values.isPackage == true || values.isSymbolicLink == true {
-                continue
-            }
+            // 符号链接目录不跟随（防循环）；hidden/package 目录不递归展开；
+            // 文件级 hidden/package/symlink 过滤与跳过计数统一由 consider 的
+            // isScanable 处理（08309：B02 摘要跳过类别口径）。
             if values.isDirectory == true {
-                if recursive {
+                if recursive, values.isSymbolicLink != true,
+                   values.isHidden != true, values.isPackage != true {
                     files.append(contentsOf: enumerateFiles(in: item, recursive: true, root: root) ?? [])
                 }
             } else {

@@ -581,15 +581,16 @@
       "name": "完成 Phase 8 综合审核与验收",
       "description": "以真实混合文件夹、串行 IPC、失败/取消/恢复、输出安全、长队列资源和 B01–B10 视觉矩阵完成独立审核、修改复核、项目门与文档收口。",
       "module": [
-        "apps/macos/Sources/SubLiftMac/",
-        "apps/macos/Tests/SubLiftMacTests/",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchExtractionRunner.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchInputScanner.swift",
+        "apps/macos/Tests/SubLiftMacTests/Phase8AcceptanceTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchExtractionRunnerTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchInputScannerTests.swift",
         "docs/design_ui/evidence/08410/",
         "docs/REQUIREMENTS.md",
         "docs/ARCHITECTURE.md",
-        "docs/DECISIONS.md",
+        "README.md",
         "docs/design/macos-gui.md",
-        "docs/design_ui/batch-task-center.md",
-        "docs/plans/architecture/phase8-batch-task-center.md",
         "docs/phases/phase8.json",
         "phases.json",
         "progress.md",
@@ -621,7 +622,7 @@
           "name": "冻结综合验收矩阵并执行首次全量测试",
           "description": "核对全部 acceptance/evidence，运行混合文件夹、真实串行、恢复、资源、B01–B10 与项目门并记录失败。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08410.02",
@@ -630,7 +631,7 @@
           "dependencies": [
             "08410.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08410.03",
@@ -639,11 +640,11 @@
           "dependencies": [
             "08410.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-13 完成 08410 Phase 8 综合审核与验收。\n\n实际修改文件：\n- 新增 Tests/SubLiftMacTests/Phase8AcceptanceTests.swift（5 测试）：\n  - testMixedFolderScanningContract：真实混合目录（2 视频 + notes.txt + 嵌套子目录 1 视频 + .hidden.mp4 + clip.srt）——默认非递归 2 accepted/1 skipped/2 rejected，显式递归 3 accepted（与 scanner 合同一致）\n  - testDuplicateAndExistingSRTConflictContract：批内重复去重（accepted 1）+ 三冲突策略（默认 skip / rename 首个稳定 (N) / replace 原目标）\n  - testSerialRunFullCycleWithRealIPC：真实 IPC 串行闭环（smoke 素材 2 视频 completed + 不存在文件 fail-closed failed 不阻断 + retry 回 waiting + 输出定位 SRT 非空；60s 有界等待，实测 1.9-2.5s；worker/python 缺失 XCTSkip 门照 08206 smoke 惯例）\n  - testHundredTasksSnapshotFootprint：100 任务清单体积 41.7KB + 恢复时间 0.001s <2s\n  - testCorruptedManifestFailClosed：损坏 JSON fail-closed 不覆盖原文件（字节不变断言）\n- 修改 Core/Batch/BatchExtractionRunner.swift（run 开头 fail-closed：源文件不存在/不可读 → .failed(\"源文件不存在或不可读\")，不启动 client——修复真实缺口：综合测试发现不存在文件任务卡 extracting 60s（worker 提取不存在文件卡死））\n- 修改 Tests/BatchExtractionRunnerTests.swift（+testMissingSourceFileFailsFastWithoutWorker：不存在文件快速 failed + startCalls==0）\n- 修改 Core/Batch/BatchInputScanner.swift（enumerateFiles 重构：hidden/package 目录不递归、symlink 目录不跟随防循环、文件级 hidden/package/symlink 过滤统一由 consider 处理并计入 skipped——修复 skipped 计数在 enumerateFiles 过滤处丢失）\n- 修改 Tests/BatchInputScannerTests.swift（testHiddenAndPackageAndSymlinkExcluded 补 skipped==2 断言：隐藏文件 + symlink）\n- 新增 docs/design_ui/evidence/08410/b01-b10-index.json（B01-B10 十张截图索引：08308 的 B01/B03-waiting/B04/B05/B06/B07/B10 + 08309 的 B02/B03-interactions/B08/B09——B03 取 08309 交互版）\n- 文档收口：docs/REQUIREMENTS.md（F24 ✅、Phase 8 已完成清单、悬挂续行清理）、docs/ARCHITECTURE.md（16 章\"已实现\" + 同章末句 F24 矛盾修复）、docs/design/macos-gui.md（\"已实现\" + 批量数据流章节）、README.md（批量任务中心 ✅ + Phase 8 完成引用——P1 修复）、phases.json（phase8 done）、progress.md（Phase 8 完成 + 08410/08309/08308 条目）\n\n审核（三路并行只读）：\n- deleg_9da4b06f（验收矩阵/文档）：无 P0/P1；2×P1 文档（README.md:17/190-191\"规划中/F24 尚未实现\"与 REQUIREMENTS F24 ✅ 矛盾；ARCHITECTURE.md:389 同章矛盾残留）——已修复；P2：真实 IPC 测试缺 worker 门（照 08206 smoke 惯例补齐 XCTSkip）\n- deleg_f24586a5（测试真实性/台账）：PASS（无 P0/P1）；2×P2（RED 叙事与实测不符——记录；DECISIONS.md 收口遗漏——addendum 记录）；P3：REQUIREMENTS 悬挂续行（删）、测试注释清理（修）、AC2 teardown 证据引用 08205（记录）、100 任务与 08207 复锁（验收层复锁可接受）、scanner 单测补 skipped 断言（修）、B03 索引措辞（索引取 08309 合理）\n- deleg_c53f843a（并发/资源）：needs changes（无 P0/P1）；2×P2（worker 门同 deleg_9da4b06f；文档收口 2/5 未完成——README/ARCHITECTURE 已补）\n\nP1/P2 修复（主 Agent）：\n1. README.md:17（批量任务中心 ✅）+ :190-191（Phase 8 完成）\n2. ARCHITECTURE.md:389（Phase 8 已全部完成）\n3. Phase8AcceptanceTests worker/python 可用性门（XCTSkip）\n4. REQUIREMENTS 悬挂续行删除；测试注释清理\n5. BatchInputScannerTests skipped 计数断言\n\n真实验收（命令/执行数/结果）：\n- 真实混合目录合同：非递归 2 accepted + 1 skipped + 2 rejected；递归 3 accepted；批内重复去重 1；skip/rename (2)/replace 策略正确（Phase8AcceptanceTests 实测）\n- 真实串行 IPC 闭环：2 视频 completed（真实 C++ worker、SRT 原子写出非空）+ 不存在文件 fail-closed failed（1.9-2.5s）+ retry 回 waiting + 输出定位；串行顺序由 scheduler maxActive==1 保证（08205 FakeRunner 证据 + 本测试真实运行）\n- 恢复/资源：100 任务 41.7KB/0.001s（真实记录）；损坏 fail-closed 字节不变；完整套件后 ps 零残留 worker（实测）\n- 门：./init.sh exit 0；完整 swift test 326 XCTest + 140 Swift Testing 全绿；swift build -c release exit 0；verify-standard 10/10；git diff --check 干净；jq empty phases.json phase8.json；台账 10/10 Feature done + evidence\n- 证据：B01-B10 索引（10 张，1280×720@2x 与 960×600@2x、Light/Dark/Accent 齐）\n- 文档收口：REQUIREMENTS/ARCHITECTURE/README/macos-gui/phases.json/progress.md 状态同步（Phase 8 已完成）；Markdown 链接 0 broken\n\n偏差与未执行项：\n1. RED 叙事：真实 IPC 测试在 HEAD 上本可编译（无产品代码时 BatchExtractionRunner 源文件检查缺失 → 编译失败为真 RED 源）；综合测试为验收层（非新功能 TDD）\n2. AC2\"记录 Worker teardown 后下一项才启动\"无独立可观测断言——由 scheduler maxActive==1 构造保证 + 08205 FakeRunner 证据 + 本测试真实串行运行佐证；如实记录\n3. 100 任务体积/恢复测试与 08207 既有测试复锁（验收层复锁可接受，冗余覆盖记录）\n4. DECISIONS.md ADR-0037 历史语境句保留（收口 addendum：Phase 8 已完成）\n5. 系统外观：截图 Light（B09 窗口级 Dark）；真实点击/VoiceOver 受辅助功能权限限制（08308/08309 已记录）"
     }
   ]
 }

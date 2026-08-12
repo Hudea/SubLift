@@ -14,7 +14,7 @@
 - **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
 - **真实进度与快速取消**：CLI/GUI 展示处理阶段和百分比，GUI 可中途取消并重新开始
 - **macOS GUI**：SwiftUI 界面，拖拽导入、视频预览、增量字幕、字幕编辑、SRT 导出
-- **批量任务中心（规划中）**：Phase 8 已冻结多文件/文件夹、串行队列、安全输出与恢复架构；产品实现从 08102 开始
+- **批量任务中心** ✅：独立 Task Center（⌘⇧T）、多文件/文件夹统一导入、单并发串行队列、安全 SRT 输出与本地 JSON 恢复（Phase 8 已完成）
 
 ## 环境要求
 
@@ -187,7 +187,7 @@ swift run SubLiftMac
 > Phase 10 Native Workbench 已实施并收口；当前能力、视觉证据与已知交互限制见
 > [UI 设计入口](docs/design_ui/README.md) 和 [Phase 10 跟踪](docs/phases/phase10.json)。
 >
-> Phase 8 Task Center 已完成设计与架构规划，但 F24 尚未实现；实施计划和状态见
+> Phase 8 Task Center 已完成（08001 设计冻结 + 08102–08410 实现与综合验收）；实施与证据见
 > [批量任务中心设计合同](docs/design_ui/batch-task-center.md) 与 [Phase 8 跟踪](docs/phases/phase8.json)。
 
 ## 开发

@@ -356,7 +356,7 @@ Light/Dark、A01/A02 代码与自动测试证据见 `docs/phases/phase10.json` �
 `docs/design_ui/evidence/`；V10 系统设置切换、完整 VoiceOver 会话及部分真实点击受系统权限限制，
 未伪装为已执行。
 
-## 16. Phase 8 批量任务中心与文件夹导入（已规划）
+## 16. Phase 8 批量任务中心与文件夹导入（已实现）
 
 Phase 8 在单视频 Workspace 之外增加独立 `BatchQueueModel` 组合根；它拥有多任务清单、输入
 扫描、输出规划、串行调度、任务 Runner 与本地持久化，不把队列状态塞入 `WorkspaceModel`，
@@ -386,7 +386,7 @@ interrupted、队列 paused，用户显式继续前不启动 Worker。Phase 8 �
 目录监听、Automatic/Whisper、新格式、Worker/IPC 或分发范围。产品合同见
 [批量任务中心设计](design_ui/batch-task-center.md)，架构计划见
 [Phase 8 计划](plans/architecture/phase8-batch-task-center.md)，跟踪见
-[phase8.json](phases/phase8.json)。当前只完成 08001 规划，F24 尚未实现。
+[phase8.json](phases/phase8.json)。Phase 8 已全部完成（08001–08410，含综合验收）。
 
 ## 17. 架构决策
 

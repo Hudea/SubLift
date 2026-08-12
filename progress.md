@@ -2,16 +2,19 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-12
-- **当前 Phase：** Phase 8 批量任务中心已完成 08001 设计/架构基线；下一 Feature 为 08102 批量任务领域模型。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
+- **最后更新：** 2026-08-13
+- **当前 Phase：** Phase 8 批量任务中心已全部完成（08001–08410，综合验收已收口）。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- [Phase 8 批量任务队列与文件夹导入](docs/plans/architecture/phase8-batch-task-center.md)：按 08102 → 08103/08104 → 08205 → 08206 → 08207 → 08308 → 08309 → 08410 顺序实施。
+- Phase 8 已完成；未来新范围从 Phase 9（09101 起）或新 Phase 登记。
 
 ## 近期完成
 
+- [x] 08410：Phase 8 综合审核与验收——真实混合目录（支持/无效/重复/嵌套/已有 SRT）、真实串行 IPC 闭环（2 视频 completed + 不存在文件 fail-closed failed + retry 回 waiting + 输出定位）、恢复/资源（100 任务 41.7KB/0.001s、损坏 fail-closed、运行后零残留 Worker）、B01–B10 证据索引、项目门与文档收口（REQUIREMENTS/ARCHITECTURE/macos-gui/phases.json 同步）。
+- [x] 08309：Task Center 批量交互——统一导入（文件/文件夹/drop 同一 Scanner + B02 三类别摘要）、搜索/状态筛选投影、waiting 多选删除/重排/显式改配置、输出冲突开始前集中确认（取消零文件触碰）、Finder 定位、B02/B03/B08/B09 截图。
+- [x] 08308：原生 Task Center Window——独立 WindowGroup + ⌘⇧T（openWindow 规范路径）、原生 Table 7 列/详情/Toolbar/汇总条、scheduler.onStateChange live 更新、恢复 fail-closed、B01–B10 截图。
 - [x] 08001：Phase 8 产品合同、双组合根/串行调度/安全输出/JSON 恢复架构与 08102–08410 验收拆解已冻结；实现尚未开始，证据见 `docs/phases/phase8.json`。
 - [x] 10416：Phase 10 当前文档与计划状态已统一到 10415 最终实现；201+140 Swift 测试、标准门 10/10、JSON Schema、依赖/状态、318 个本地链接、diff check 与 init 全部通过，并与 07002 台账迁移共同组成最终纯文档提交。
 - [x] 07002：原 Phase 9 的 09001–09006 已无损吸收到 Phase 7 项目辅助架构；历史 ID/evidence 保留，Phase 9 索引与详情路径已释放，未来从 09101 起登记。
@@ -30,4 +33,4 @@
 - ADR-0036：项目辅助架构统一归入 Phase 7，保留 090xx 历史 ID 并释放 Phase 9；未来新 Phase 9 从 09101 起登记。
 - ADR-0035：Phase 10 采用无永久 Sidebar 的 Native Workbench、Context Inspector 与处理期只读 Transcript。
 
-> **Phase 8 当前只完成规划 Feature 08001**：F24 仍未实现；不得因 Task Center 参考图或计划文档宣称批量产品能力已经交付。
+> **Phase 8 已完成**（08001–08410，2026-08-13 综合验收收口）：F24 批量处理队列已实现（独立 Task Center、统一导入、串行队列、安全 SRT 输出、JSON 恢复与批量交互），全 Feature 已原子提交至 `feat/task-list` 分支并记录 evidence。

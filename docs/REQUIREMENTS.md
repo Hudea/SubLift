@@ -63,9 +63,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - **F21 预览与实时结果** ✅：视频播放、时间定位、增量字幕和当前条目高亮。
 - **F22 字幕编辑** ✅：可修改文本、合并/拆分条目；精细时间码编辑后置。
 - **F23 字幕区域选择** ✅：Vision 候选框 + 用户多选；无选择时回退下部裁剪。
-- **F24 批量处理队列** ❌（Phase 8 已规划）：当前仍一次处理一个视频；Phase 8 将增加独立
-  Task Center、多文件/文件夹发现、单并发队列、安全 SRT 输出和本地恢复，实现状态以
-  `docs/phases/phase8.json` 为准。
+- **F24 批量处理队列** ✅（Phase 8 已实现）：独立 Task Center Window（⌘⇧T）支持多文件/文件夹发现、单并发可靠串行队列、安全 SRT 输出（skip/rename/replace）、本地 JSON 恢复与批量交互（筛选/多选/重排/显式改配置）。
 - **F25 导出对话框** ✅：选择保存位置并导出 SRT。
 - **F26 引擎管理 UI** ✅：vision / paddle / mock 选择通过 UserDefaults 持久化。
 - **F27 独立 `.app` 分发** ❌：按 ADR-0009 跳过；当前通过 SwiftPM 构建运行。
@@ -101,7 +99,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 ## 6. 不在当前范围内
 
 - 软字幕轨提取、实时直播流、字幕翻译、云端 SaaS
-- ASS / VTT 完整导出、配置文件；批量 GUI 队列已进入 Phase 8 规划但尚未实现
+- ASS / VTT 完整导出、配置文件（批量 GUI 队列已随 Phase 8 实现）
 - 独立 `.app` 分发、公证，以及 Windows / Linux 产品交付
 
 ## 7. 关键风险与权衡
@@ -175,13 +173,12 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] Native target、Ports/Adapters、ResourceLocator 与开发期构建边界收口
 - [ ] 独立 `.app`、依赖随包、签名、公证与最终发布 artifact Python-free 门后置到未来发布阶段
 
-### Phase 8 — 批量任务中心与文件夹导入（规划完成，实施待开始）
+### Phase 8 — 批量任务中心与文件夹导入（已完成）
 
 - [x] 08001：Task Center、文件/文件夹扫描、任务/队列状态、配置快照、输出冲突、持久化恢复与 B01–B10 验收合同已冻结
-- [ ] 08102–08207：领域模型、Scanner、Output Planner、串行 Scheduler、真实 Runner 与 JSON Repository
-- [ ] 08308–08309：独立 Task Center Window、批量交互、键盘与辅助功能
-- [ ] 08410：真实混合文件夹、串行 IPC、失败/取消/恢复、长队列资源和完整项目门收口
-- [ ] 实现完成前 F24 仍为未实现；不展示 Whisper、Automatic、虚假 ETA 或并行 Worker
+- [x] 08102–08207：领域模型、Scanner、Output Planner、串行 Scheduler、真实 Runner 与 JSON Repository
+- [x] 08308–08309：独立 Task Center Window、批量交互、键盘与辅助功能
+- [x] 08410：综合审核与验收（真实混合目录、真实串行 IPC 闭环、恢复/资源、B01–B10 证据矩阵、项目门与文档收口）
 
 ### Phase 10 — macOS Native Workbench UI（已完成）
 

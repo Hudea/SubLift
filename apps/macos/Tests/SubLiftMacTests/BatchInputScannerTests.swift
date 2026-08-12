@@ -164,6 +164,8 @@ final class BatchInputScannerTests: XCTestCase {
         XCTAssertFalse(accepted.contains("link.mp4"), "symlink 不进入扫描")
         XCTAssertTrue(accepted.contains("visible.mp4"))
         XCTAssertTrue(accepted.contains("real.mp4"))
+        // 08309/08410：静默排除计入 skipped（隐藏文件 + symlink 各 1）。
+        XCTAssertEqual(summary.skipped, 2, "隐藏文件与 symlink 计入跳过")
     }
 
     func testEmptyDirectoryRejected() throws {
