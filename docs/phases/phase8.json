@@ -417,7 +417,7 @@
           "name": "计划 snapshot/schema/recovery 并写 RED 测试",
           "description": "先固定版本、原子故障、active 归一化和损坏文件测试。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08207.02",
@@ -426,7 +426,7 @@
           "dependencies": [
             "08207.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08207.03",
@@ -435,11 +435,11 @@
           "dependencies": [
             "08207.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08207 实现队列持久化与异常恢复。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueSnapshot.swift：BatchQueueSnapshot（schemaVersion=1/savedAt/tasks/runningTaskID/status；BatchTask Codable 复用——runToken 经 CodingKeys 排除；不保存帧/字幕全文/日志）。\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueRepository.swift：BatchQueueRepositoryError（corrupted/unknownSchemaVersion，LocalizedError 可展示）；BatchQueueRepository（BatchQueuePersisting 生产实现）：默认 Application Support/SubLift/batch-queue-v1.json（convenience init 创建目录；测试注入 fileURL）；save：snapshot → 同目录临时文件 .tmp-UUID → 原子替换（replaceItemAt/moveItem + guard nil → corrupted；moved 标志 defer 清理），失败原文件字节不变+临时清理；load：文件缺失 → .empty、损坏/未知版本 fail-closed 不覆盖原文件、活动任务（preparing/extracting/exporting）→ interrupted（transition guard 失败 → corrupted fail-closed）、running → paused（idle/paused 保持）、runningTaskID 清空、不创建 Worker；reset 显式新建；dateEncodingStrategy .deferredToDate 与 08102 一致；@unchecked Sendable 注释（仅 @MainActor Scheduler 串行访问）。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchQueueRepositoryTests.swift：12 个测试（真实临时目录）：round-trip（waiting/failed/active 恢复 interrupted+paused）/缺失 → empty/保存失败（chmod-000）原文件不变+无残留/成功路径无 tmp 残留（replaceItemAt 覆盖）/损坏 JSON corrupted 不修改文件/未知版本（schemaVersion=99）unknownSchemaVersion 不覆盖/active 恢复 interrupted+paused 终态保持/idle/paused 快照恢复保持/runToken 不持久化 + progress 字段保真/errorDescription 可展示/100 任务体积记录（42,146B）+ 恢复 <2s（实测 0.003s）/reset 删除清单。\n- 新增 docs/plans/features/08207.md：Snapshot/Schema/恢复合同（running→paused 定案）/允许文件/测试类/验收/停止条件。\n- docs/phases/phase8.json（08207 in-progress→done）、phases.json（phase8 in-progress）。\n\n验收标准落实（5 条全满足）：\n1. schemaVersion=1 保存任务摘要/顺序/配置/输出/状态/计数/错误/时间；runToken 不进入（CodingKeys 排除 + 测试锁定）；不保存帧/字幕全文/无限日志。\n2. 同目录临时文件 + 原子替换（replaceItemAt/moveItem + moved 标志）；结构/状态变化立即保存（Scheduler 命令边界 persist——08205 既有策略）；progress 不触发保存（节流策略文档化）。\n3. 恢复 preparing/extracting/exporting → interrupted（transition guard fail-closed）、running → paused、不创建 Worker（纯状态转换）；idle/paused 快照保持原状态（计划定案 + 测试锁定）。\n4. 损坏/未知版本不部分加载、不覆盖原文件（load 只读 + 字节级测试锁定）；LocalizedError 可展示（errorDescription 测试）；reset 显式新建。\n5. 临时目录 TDD 覆盖 round-trip/原子故障/损坏/未知版本/active 恢复/100 任务体积（42,146B）与恢复时间（0.003s < 2s）；完整 swift test 286 XCTest + 140 Swift Testing 全绿。\n\nTDD 过程：RED 缺失类型（cannot find 'BatchQueueRepository'/'BatchQueueRepositoryError'/'BatchQueueSnapshot' in scope 已保存）；实现期修复：makeTask 的 failed 需走合法链（advance 辅助）、损坏断言语义（load 只读不修改文件）。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（快照/原子/恢复/fail-closed）：PASS 无 P0/P1；确认快照字段完整、runToken 排除、恢复语义与状态机矩阵一致、损坏/未知版本字节级锁定、RED 真实；P2（原子故障注入只命中 write 阶段，replace/move 分支零覆盖）+ P3×11。\n- Agent 2（文件系统细节）：PASS 无 P0/P1；原子替换/故障闭环/恢复转换/日期兼容正确；实测\"目标文件只读 0o444 可让 replace 失败\"（但 POSIX rename 语义下目录可写即可替换——实测 os.replace 对 0o444 目标成功）；P2（replace 分支零覆盖）+ P3。\n- Agent 3（测试真实性/台账）：needs changes 无 P0/P1；RED 复现、8/8 真绿、100-task 42,146B 恢复 0.003s、台账一致；P2×2（replace 分支覆盖缺口、恢复 paused 语义计划漂移）+ P3。\n- 三路确认：422 测试全绿、无假绿、无字符串断言替代。\n\n主 Agent 修改（全部经重新测试 286+140 全绿）：\n- P2-1：实测确认 macOS 上 replace/move 失败无自然注入点（POSIX rename 仅需目录写权限）；补 testSaveSuccessLeavesNoTempFiles（成功路径两次保存含 replaceItemAt 覆盖后无 .tmp 残留，锁定 defer 清理执行）；Repository replaceItemAt 返回值 guard（nil → corrupted）；replace/move 失败分支记录 design-guaranteed（与 08104 同类决策）。\n- P2-2：恢复语义定案\"running → paused、idle/paused 保持原状态\"（计划措辞与实现对齐）；补 testIdleSnapshotRestoresIdle。\n- P3：补 testRunTokenNotPersistedAndProgressResultRoundTrip（runToken 不持久化 + progress 保真）；补 testErrorDescriptionsArePresentable；恢复转换 guard（transition 失败 → corrupted fail-closed）。\n- 复核 Agent（deleg_ae2ffbe2）：P2 修复通过（计划/实现一致、idle 快照测试真实、replace guard 不破坏正常路径、成功路径无残留测试真实、runToken/progress 往返真实、完整套件全绿）。\n\n记录决策（非阻塞）：\n- replace/move 失败分支 design-guaranteed（macOS POSIX 语义下无自然注入点）；成功路径清理 + 代码审查覆盖。\n- 恢复语义：仅 running → paused；idle/paused 保持（计划已定案）。\n- 08205 既有债务登记：Scheduler persist() try? 吞错（真实 Repository 入树后磁盘满/权限错误静默丢持久化承诺）——接线（08308）时处理；applyUpdate 阶段转换不触发 persist（崩溃后文件粒度停在任务启动时 .preparing，恢复语义仍正确）。\n- 生产构造点：BatchQueueScheduler/Repository 尚未接入 App 启动路径（设计连续性——08308 UI 接入时接线，本 Feature 纯 Core）。\n- 架构文档 phase8-batch-task-center.md 端口草图（snapshot 型 load()）与已实现协议（state 型 BatchQueuePersisting）不一致——pre-existing，08410 收口时对齐。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：286 XCTest（274 基线 + 12 新增 Repository）+ 140 Swift Testing 全绿（5.3s；一次 600s 前台超时后后台重跑确认偶发，非测试挂起）。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过。\n\n未执行项（如实记录）：\n- replace/move 失败分支无自动化测试（design-guaranteed，见决策）。\n- 其余全部真实临时目录验证。\n\n后续 Feature 边界：\n- 08308 原生 Task Center Window（App scene 层唯一 BatchQueueModel；独立 Window；原生 Table/List/Toolbar/Detail/Summary；只显示真实字段；B01-B10 截图）待启动。"
     },
     {
       "id": "08308",
