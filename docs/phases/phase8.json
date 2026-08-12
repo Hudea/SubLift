@@ -297,7 +297,7 @@
           "name": "计划调度不变量并写 Fake Runner RED 测试",
           "description": "先固定单并发、控制语义、token、失败继续和 availability 的可观察测试。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08205.02",
@@ -306,7 +306,7 @@
           "dependencies": [
             "08205.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08205.03",
@@ -315,11 +315,11 @@
           "dependencies": [
             "08205.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08205 实现可靠的串行队列调度器。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchTaskRunning.swift：BatchRunOutcome（completed(entryCount:outputURL:)/failed(String)/cancelled）+ BatchTaskRunning port（run(task, onUpdate) async；Scheduler 唯一运行依赖，不解析 IPC/不操作文件系统）。\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueuePersisting.swift：BatchQueuePersisting port（load/save；08207 实现 JSON 持久化）。\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueScheduler.swift：@MainActor 串行调度器——maxActive=1（前项 teardown 后启动下一项）；run token 拒绝迟到回调；Task.detached 执行 runner（不阻塞 MainActor），onUpdate 回 MainActor；applyUpdate：onUpdate 仅接受活动态、progress 与状态转换解耦（同阶段多次上报保留）、任务离开活动态后拒绝迟到进度；pauseAfterCurrent（空队列直接 paused+persist）/resume/stop（取消当前任务、token 保持有效直到 runner 返回、不再调度）/cancel（waiting 立即 cancelled；运行中立即标记 cancelled+runner 取消）/retry（requeue）/remove/reorder（槽位保留）/replaceConfiguration（仅 waiting，persist）；BatchTaskCommandAvailability 唯一真源；finishRun：completed 用 nextActiveStage 推进、failed 先 recordFailure 再 transition、cancelled 保持；persist 于命令边界与 finishRun。\n- 修改 apps/macos/Sources/SubLiftMac/Core/Batch/BatchTask.swift：nextActiveStage 辅助（preparing→extracting→exporting）+ requeue（方法内 guard canRetry 双守卫）。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchQueueSchedulerTests.swift：FakeRunner（lock 保护 maxActive/runOrder + 行为注入 + AsyncGate）+ 14 个测试：成功链 maxActive==1 严格顺序/失败继续/暂停恢复/停止取消/取消 waiting/取消运行中/迟到回调拒绝/同阶段 progress 保留（P1 回归）/onUpdate 终态拒绝（P2 回归）/retry 二次运行/completed 不可重跑/仅 waiting 命令/availability 真源/50 任务。\n- 新增 docs/plans/features/08205.md：调度不变量/Ports/控制语义/onUpdate 语义/availability 表/允许文件/测试类/验收/停止条件。\n- docs/phases/phase8.json（08205 in-progress→done）、phases.json（phase8 in-progress）。\n\n验收标准落实（5 条全满足）：\n1. Fake Runner maxActive 记录证明任意时刻最多一个活动任务（成功链/失败继续/50 任务测试断言 recordedMaxActive == 1）；runOrder 证明前项 teardown 完成后才启动下一项（严格顺序）。\n2. pauseAfterCurrent 当前任务完成后 paused（不启动下一项）+ resume 恢复；stop 取消当前任务（runner 感知 Task.isCancelled 返回 .cancelled）并停止调度、等待项保持顺序；cancel 失效 run token（迟到回调被 token 校验+状态机双重拒绝）。\n3. 单任务 failed 继续下一项；failed/cancelled/interrupted 可显式 retry 回 waiting（requeue 绕过状态机终态限制，方法内 guard canRetry 双守卫）；completed 不可重跑（availability + requeue 守卫）。\n4. remove/reorder/replaceConfiguration 仅 waiting；运行/终态非法命令由 BatchTaskCommandAvailability 唯一真源拒绝（同一 availability 用于 UI 与 Scheduler）。\n5. TDD 覆盖成功链/失败继续/暂停恢复/停止取消/迟到 progress/重排/大量等待任务（50）；完整 swift test 266 XCTest + 140 Swift Testing 全绿。\n\nTDD 过程：RED 缺失类型（cannot find 'BatchQueueScheduler' in scope 已保存）；实现期发现并修复：Task{} 继承 MainActor 死锁（改 Task.detached）、finishRun 跳级被状态机拒绝（nextActiveStage 推进链）、recordFailure 顺序（先记录后转换）、retry 终态旁路（requeue）。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（并发正确性/取消/资源所有权）：needs changes 无 P0/P1；P2×3（onUpdate 终态致 failureMessage 丢失、replaceConfiguration 缺 persist、requeue 无守卫）+ P3×7（死代码 invalidateCurrentRun+文档矛盾、persist 吞错 08207 债务、runner 挂死超时未实现、pause 空队列不 persist 等）。\n- Agent 2（状态机/时序）：needs changes 1 个 P1（同阶段 progress 更新被静默丢弃——状态机禁止自转换致 progress 冻结）+ P2×5 + P3×2；12 测试连续 2 次运行稳定、完整套件全绿。\n- Agent 3（测试真实性/台账）：PASS 无 P0/P1；FakeRunner 单并发证明可靠、RED 真实复现、台账一致；P2（迟到 final 覆盖缺口）+ P3×6。\n- 三路确认：并发设计（state 仅 MainActor 修改、detached 只触碰 runner、FakeRunner 锁保护）扎实；完整套件全绿。\n\n主 Agent 修改（全部经重新测试 266+140 全绿）：\n- P1：applyUpdate progress 与状态转换解耦（任务活动态即写 progress，同阶段多次上报保留）；onUpdate 仅接受活动态；progress 写入要求任务仍活动态（cancelled/failed 后拒绝迟到进度）；新增 testSameStageProgressUpdatesRetained（0.1/0.5/0.9→0.9）+ testOnUpdateTerminalStatusRejected（failureMessage 经 outcome 记录）。\n- P2：applyUpdate 拒绝非活动态 status（终态只走 outcome）；replaceConfiguration 补 persist()；requeue 方法内 guard canRetry；invalidateCurrentRun 死代码删除 + 计划文档/类头注释措辞修正（stop 后 token 保持有效直到 runner 返回）。\n- P3：pauseAfterCurrent 空队列补 persist()。\n- 复核 Agent（deleg_d01a4f82）：P1/P2 修复通过（同阶段 progress 保留实证、cancelled 迟到进度拒绝、onUpdate 终态拒绝、outcome 通道不破坏、requeue 双守卫、persist 补齐；BatchQueueSchedulerTests 连续 2 次 14/14 时序稳定）；追加发现 invalidateCurrentRun 仍在文件（删除被覆盖）——已删除并修类头注释；完整套件 266+140 全绿。\n\n记录决策（非阻塞，登记 08207 前债务）：\n- persist() try? 吞错：现唯一实现是测试内存 fake（永不抛错）；08207 接 JSON 持久化后静默失败=队列状态静默丢失，且 Scheduler 无错误面上报——08207 前登记。\n- runner 挂死超时未实现（架构文档\"或超时清理\"）：runner 忽略取消（挂死 IPC）时任务永远停在活动态；08206 接真实 runner 前的集成风险——08206 计划登记。\n- 持久化频率：persist 仅命令边界+finishRun；applyUpdate 的状态转换与 progress 永不持久化（08207 恢复语义 active→interrupted 下无差异）——已文档化。\n- BatchTask.swift 因 nextActiveStage/requeue 被修改（08205 需要），module 收口时对齐。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：266 XCTest（252 基线 + 14 新增 BatchQueueScheduler）+ 140 Swift Testing 全绿；BatchQueueSchedulerTests 连续 2 次运行无 flake。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过。\n- 既有回归（BatchTaskModel/Scanner/Output/Workspace 等）全部通过。\n\n未执行项（如实记录）：\n- runner 挂死超时（见决策）；其余全部 Fake Runner 真实行为验证。\n\n后续 Feature 边界：\n- 08206 真实 Runner 与自动导出（每任务独占 PipelineClient/Worker/socket/run token；Workspace 与 Batch 不共享可变 SubtitleExtractor；Scheduler 不解析 UDS；final entries 原子写出后才 completed；真实素材串行 smoke）待启动。"
     },
     {
       "id": "08206",

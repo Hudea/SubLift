@@ -1,6 +1,6 @@
 import Foundation
 
-/// 08102：批量任务状态机（纯值，无副作用）。
+/// 08102：批量任务状态机（纯值，无副作用）。08205 增加 nextActiveStage 辅助。
 ///
 /// 合法转换：
 /// waiting → preparing → extracting → exporting → completed
@@ -16,6 +16,15 @@ enum BatchTaskStatus: String, Codable, CaseIterable, Sendable {
     case cancelled
     case interrupted
     case skipped
+
+    /// 活动态的主链下一阶段（preparing→extracting→exporting；其余 nil）。
+    var nextActiveStage: BatchTaskStatus? {
+        switch self {
+        case .preparing: .extracting
+        case .extracting: .exporting
+        default: nil
+        }
+    }
 
     /// 纯状态机：判断 `from → to` 是否合法。
     static func canTransition(from: BatchTaskStatus, to: BatchTaskStatus) -> Bool {
@@ -115,6 +124,14 @@ struct BatchTask: Identifiable, Equatable, Codable, Sendable {
         guard status == .waiting else { return false }
         configuration = newConfiguration
         return true
+    }
+
+    /// retry 专用：failed/cancelled/interrupted → waiting（绕过状态机终态限制），
+    /// 清除瞬态 run token（重新排队语义）。方法内守卫防止非法 requeue。
+    mutating func requeue() {
+        guard BatchTaskCommandAvailability.canRetry(status) else { return }
+        status = .waiting
+        runToken = nil
     }
 
     /// 设置进度（clamp 到 0–1）。
