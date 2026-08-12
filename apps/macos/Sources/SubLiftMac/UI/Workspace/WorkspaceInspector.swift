@@ -17,6 +17,8 @@ struct WorkspaceInspector: View {
     let workspaceState: WorkspaceState
     let editor: SubtitleEditor
     let transcriptAccessMode: TranscriptAccessMode
+    let activeExtractionConfiguration: ExtractionConfiguration?
+    let finalExtractionConfiguration: ExtractionConfiguration?
     let onRedetectRegion: () -> Void
     let onClose: () -> Void
 
@@ -72,7 +74,9 @@ struct WorkspaceInspector: View {
         case .extraction:
             ExtractionInspector(
                 extractor: extractor,
-                state: workspaceState
+                state: workspaceState,
+                activeConfiguration: activeExtractionConfiguration,
+                finalConfiguration: finalExtractionConfiguration
             )
         case .subtitle:
             SubtitleInspector(

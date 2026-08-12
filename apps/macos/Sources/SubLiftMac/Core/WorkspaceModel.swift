@@ -26,6 +26,12 @@ final class WorkspaceModel: ObservableObject {
     /// 当前活动提取 job 的 token；任务结束/取消时清空。
     @Published private(set) var jobToken: UUID?
 
+    /// 当前运行任务的配置快照（启动时冻结）；成功/失败/取消后清空。
+    @Published private(set) var activeExtractionConfiguration: ExtractionConfiguration?
+
+    /// 最近一次成功完成任务的配置快照；只在最终 entries 落地时更新。
+    @Published private(set) var finalExtractionConfiguration: ExtractionConfiguration?
+
     // MARK: - Focused Core Models
 
     let playerModel: PlayerModel
@@ -191,6 +197,8 @@ final class WorkspaceModel: ObservableObject {
         hasFinalEntries = false
         retainedFinalEntries = nil
         liveEntryCount = 0
+        activeExtractionConfiguration = nil
+        finalExtractionConfiguration = nil
 
         // 清理旧 Session 临时状态
         editor.clear()
@@ -273,6 +281,7 @@ final class WorkspaceModel: ObservableObject {
         jobToken = token
         hasFinalEntries = false
         errorMessage = nil
+        activeExtractionConfiguration = ExtractionConfiguration(engine: engine, quality: quality)
         state = .starting
         setInspectorMode(.extraction)
 
@@ -330,6 +339,8 @@ final class WorkspaceModel: ObservableObject {
         retainedFinalEntries = nil
         liveEntryCount = 0
         hasFinalEntries = true
+        finalExtractionConfiguration = activeExtractionConfiguration
+        activeExtractionConfiguration = nil
         state = .review
 
         setInspectorMode(editor.selectedId != nil ? .subtitle : .video)
@@ -340,6 +351,7 @@ final class WorkspaceModel: ObservableObject {
         guard [.starting, .processing, .finalizing].contains(state) else { return }
         errorMessage = error
         jobToken = nil
+        activeExtractionConfiguration = nil
         restoreRetainedFinalEntries()
         state = .failed
     }
@@ -348,6 +360,7 @@ final class WorkspaceModel: ObservableObject {
     func cancelExtraction() {
         guard [.starting, .processing, .finalizing].contains(state) else { return }
         jobToken = nil
+        activeExtractionConfiguration = nil
         extractor.cancel()
         restoreRetainedFinalEntries()
         state = .cancelled

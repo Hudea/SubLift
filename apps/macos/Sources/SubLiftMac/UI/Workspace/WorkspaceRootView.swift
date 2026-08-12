@@ -18,6 +18,9 @@ struct WorkspaceRootView: View {
     @State private var showFfmpegMissingAlert = false
     @State private var exportError: String?
     @State private var showExportSuccess = false
+    /// 替换现有字幕确认（有最终结果时统一提取入口弹出；Cancel 为安全默认）。
+    @State private var showReplacementConfirmation = false
+    @State private var pendingExtractionConfiguration: ExtractionConfiguration?
 
     var body: some View {
         DropTargetView(isTargeted: $isDropTargeted, onDrop: importVideo) {
@@ -80,6 +83,20 @@ struct WorkspaceRootView: View {
             } message: {
                 Text("SRT 字幕已保存。")
             }
+            .alert(ExtractionRequestPolicy.replacementConfirmationTitle, isPresented: $showReplacementConfirmation) {
+                Button("重新提取", role: .destructive) {
+                    if let config = pendingExtractionConfiguration {
+                        workspace.startExtraction(engine: config.engine, quality: config.quality)
+                    }
+                    pendingExtractionConfiguration = nil
+                }
+                Button("取消", role: .cancel) {
+                    // 取消不得清空或修改现有字幕与配置。
+                    pendingExtractionConfiguration = nil
+                }
+            } message: {
+                Text(ExtractionRequestPolicy.replacementConfirmationMessage)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .subliftRequestOpenVideo)) { _ in
                 openFile()
             }
@@ -89,12 +106,14 @@ struct WorkspaceRootView: View {
             .onAppear {
                 #if DEBUG
                 EvidenceShot.settingsFixtureIfRequested()
+                EvidenceShot.compactFixtureIfRequested()
                 EvidenceShot.autoOpenIfRequested(workspace: workspace)
                 EvidenceShot.inspectorFixtureIfRequested(workspace: workspace)
                 EvidenceShot.regionFixtureIfRequested(workspace: workspace)
                 EvidenceShot.extractFixtureIfRequested(workspace: workspace)
                 EvidenceShot.selectFixtureIfRequested(workspace: workspace)
                 EvidenceShot.entriesFixtureIfRequested(workspace: workspace)
+                EvidenceShot.pendingFixtureIfRequested()
                 EvidenceShot.scheduleIfRequested()
                 #endif
             }
@@ -150,6 +169,8 @@ struct WorkspaceRootView: View {
                         workspaceState: workspace.state,
                         editor: workspace.editor,
                         transcriptAccessMode: workspace.transcriptAccessMode,
+                        activeExtractionConfiguration: workspace.activeExtractionConfiguration,
+                        finalExtractionConfiguration: workspace.finalExtractionConfiguration,
                         onRedetectRegion: redetectRegionAtPlayhead
                     ) {
                         workspace.setInspectorPresented(false)
@@ -197,7 +218,7 @@ struct WorkspaceRootView: View {
             .help(workspace.state == .regionEditing ? "完成区域编辑" : "进入字幕区域编辑")
 
             if workspace.commandAvailability.canExtract {
-                Button(action: startExtraction) {
+                Button(action: requestExtraction) {
                     Label("提取字幕", systemImage: "text.viewfinder")
                         .labelStyle(.titleAndIcon)
                 }
@@ -246,6 +267,12 @@ struct WorkspaceRootView: View {
                 VideoControlsView(model: workspace.playerModel)
                 Divider()
                 ExtractionProgressView(extractor: workspace.extractor)
+                QuickExtractionSettingsBar(
+                    state: workspace.state,
+                    hasFinalEntries: workspace.hasFinalEntries,
+                    finalConfiguration: workspace.finalExtractionConfiguration,
+                    onRequestExtraction: requestExtraction
+                )
                 Spacer(minLength: 0)
             }
         }
@@ -359,9 +386,11 @@ struct WorkspaceRootView: View {
 
     // MARK: - 提取与导出
 
-    /// Composition-root fail-closed：即使 Settings 未出现或持久化偏好来自旧版本，
-    /// 生产模式也不会把隐藏的 Mock 引擎传给提取任务。
-    private func startExtraction() {
+    /// 统一提取请求入口（Toolbar"提取字幕"与设置栏"重新提取"共用）。
+    ///
+    /// 先执行 Mock 归一化（持久化偏好同步回落）；已有最终结果时弹出替换确认，
+    /// 确认后才调用 startExtraction；取消不改变字幕与配置。
+    private func requestExtraction() {
         let engine = EngineCapability.normalizedSelection(
             defaultEngine,
             developerMode: developerMode
@@ -369,7 +398,18 @@ struct WorkspaceRootView: View {
         if defaultEngine != engine {
             defaultEngine = engine
         }
-        workspace.startExtraction(engine: engine, quality: samplingQuality)
+        let configuration = ExtractionRequestPolicy.normalizedConfiguration(
+            engine: engine,
+            quality: samplingQuality,
+            developerMode: developerMode
+        )
+
+        if ExtractionRequestPolicy.requiresReplacementConfirmation(hasFinalEntries: workspace.hasFinalEntries) {
+            pendingExtractionConfiguration = configuration
+            showReplacementConfirmation = true
+        } else {
+            workspace.startExtraction(engine: configuration.engine, quality: configuration.quality)
+        }
     }
 
     /// 在当前播放位置重跑 Vision 选区（用户可先 seek 到有字幕的画面）。

@@ -81,6 +81,26 @@ enum EvidenceShot {
         }
     }
 
+    /// 若设置了 SUBLIFT_EVIDENCE_COMPACT=1，将主窗口内容缩放到 960×600（V09b 紧凑截图 fixture）。
+    @MainActor
+    static func compactFixtureIfRequested() {
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_COMPACT"] == "1" else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            NSApp.windows.first(where: { $0.isVisible })?.setContentSize(NSSize(width: 960, height: 600))
+        }
+    }
+
+    /// 若设置了 SUBLIFT_EVIDENCE_PENDING=1，提取完成后修改采样偏好（显示"配置已更改"待生效状态截图 fixture）。
+    /// 仅 DEBUG 截图用：演示 final 配置与偏好不同的 UI 状态，不冒充真实 OCR 结果。
+    @MainActor
+    static func pendingFixtureIfRequested() {
+        guard ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_PENDING"] == "1" else { return }
+        // 等 mock 提取完成（final 配置已由启动时快照确定）后改写采样偏好。
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8.0) {
+            UserDefaults.standard.set(SamplingQuality.fine.rawValue, forKey: "sampling_quality")
+        }
+    }
+
     /// 若设置了 SUBLIFT_EVIDENCE_ENTRIES=1，导入后注入测试字幕条目（Timeline/Transcript 截图 fixture）。
     /// 注意：仅用于视觉验收截图；生产路径（提取/Review）不经过此 fixture。
     @MainActor
