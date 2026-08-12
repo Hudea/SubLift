@@ -237,7 +237,7 @@
           "name": "计划路径/冲突/原子写入并写 RED 测试",
           "description": "冻结 sidecar、公共根、相对路径、三冲突策略和故障注入测试。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08104.02",
@@ -246,7 +246,7 @@
           "dependencies": [
             "08104.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08104.03",
@@ -255,11 +255,11 @@
           "dependencies": [
             "08104.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08104 实现输出规划与冲突保护。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchOutputPlanner.swift：BatchOutputConflictPolicy（skip 默认/rename/replace）、BatchOutputConflict（none/skipped/renamed/replaced）、BatchOutputPlan、BatchOutputPlannerError（targetOutsideRoot/unwritableDirectory/duplicateTarget）；BatchOutputPlanner：sidecar（outputRoot nil，同 basename .srt 同目录）/公共输出根（文件夹输入保持相对 sourceRoot 目录、独立文件 basename）；source 不在 sourceRoot 下或目标逃逸公共根 → targetOutsideRoot（fail-closed）；目标目录不可写 → unwritableDirectory；planAll 同批碰撞检测（lowercased path 折叠大小写变体）→ duplicateTarget；冲突：skip 默认/rename 首个稳定 name (N).srt/replace 显式携带；不通过 shell/glob/字符串拼接生成路径。\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/AtomicSrtWriter.swift：目标同目录临时文件（.name.tmp-UUID）→ 写入 → replaceItemAt（目标存在）/moveItem（不存在）原子移动；失败 defer 清理临时文件（moved 标志防误删）；旧文件字节不变。\n- SrtFormatter.swift：无改动（回归确认）。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchOutputTests.swift：BatchOutputPlannerTests 12 + AtomicSrtWriterTests 3（真实临时目录）：sidecar 默认/公共根相对目录/独立文件 basename/逃逸拒绝（source 不在 sourceRoot 下）/默认 skip/rename 稳定（(1) 被占 → (2)）/显式 replace/无冲突/同批碰撞/大小写变体碰撞/不可写目录 fail-closed（chmod-000）/写入内容/原子替换/故障注入（锁定目录 → 旧字节不变+无临时残留）/不可写目录抛错。\n- 新增 docs/plans/features/08104.md：路径/冲突/原子写入合同/允许文件/测试类/验收/停止条件。\n- docs/phases/phase8.json（08104 in-progress→done）、phases.json（phase8 in-progress）。\n\n验收标准落实（5 条全满足）：\n1. sidecar 同 basename .srt；公共输出目录对文件夹输入保持相对目录（sub/deep/movie.mp4 → out/deep/movie.srt），独立文件用 basename。\n2. 目标标准化后仍在公共根内（isWithinRoot 前缀+\"/\"检查）；source 不在 sourceRoot 下 fail-closed；不可写目录（chmod-000）→ unwritableDirectory；同批目标碰撞（含大小写变体）→ duplicateTarget。\n3. 冲突默认 skipped；rename 首个稳定可用 name (N).srt（(1) 被占 → (2)，稳定递增）；replace 必须携带已确认策略（plan 的 conflictPolicy 显式传入 .replace）。\n4. 同卷临时文件 + replaceItemAt/moveItem 原子替换；故障注入（0o500 目录）证明旧文件字节不变且临时文件清理。\n5. 临时目录 TDD 覆盖三策略/多来源同名/路径逃逸/不可写/故障注入；RED 缺失类型（cannot find 'BatchOutputPlanner' in scope 已保存）；GREEN 完整 swift test 252 XCTest + 140 Swift Testing 全绿。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（路径安全/碰撞/原子性）：PASS 无 P0/P1；P2×4（相对目录字符串替换边界、故障注入未覆盖替换失败分支、大小写变体碰撞穿透、计划合同漂移）；P3×4。\n- Agent 2（文件系统/原子性细节）：PASS 无 P0/P1；确认原子写入失败路径（旧字节不变、临时清理、moved 标志）正确且独立复现；rename 稳定性与同批碰撞成立；P2×2（合同漂移+大小写碰撞洞）；P3×4。\n- Agent 3（测试真实性/台账）：PASS 无 P0/P1；RED 独立复现（git archive）、无假绿（filter 'BatchOutputPlannerTests|AtomicSrtWriterTests' 实跑 13/13）；P2×2（unwritableDirectory 合同偏差、大小写碰撞）；P3×3（替换失败分支未执行、测试文件命名与 module 不一致、subtask 滞后）。\n- 三路确认：完整套件全绿、SrtFormatter 零改动、无 shell/glob/字符串拼接路径生成。\n\n主 Agent 修改（全部经重新测试 252+140 全绿）：\n- P2-1：BatchOutputPlannerError 补 unwritableDirectory（对齐冻结合同 3 case）；plan() 增加 isWritableTargetDirectory 探测（目标目录或最近可写祖先；chmod-000 命中）；新增 testUnwritableTargetDirectoryFailClosed（类型化错误断言）。\n- P2-2：planAll 碰撞键 lowercased（APFS 大小写不敏感折叠 Movie.srt/movie.srt 同一文件）；新增 testCaseVariantTargetCollisionDetected。\n- P3：替换失败分支（replaceItemAt 对目录目标实测可替换，无法稳定注入失败）→ 删除不可注入测试，evidence 记录该分支由代码审查确认（moved/defer 逻辑简单直接）+ tmp 写入失败路径故障注入覆盖；测试文件合并为 BatchOutputTests.swift（类名正确，filter 无空跑）。\n- 复核 Agent（deleg_dc0f00da）：P2 修复 PASS（unwritableDirectory 探测在上溯逻辑正确、类型化断言、大小写折叠正确、删除 replace 分支测试可接受、完整套件全绿）。\n\n记录决策（非阻塞）：\n- 测试文件命名：module/计划声明 BatchOutputPlannerTests.swift + AtomicSrtWriterTests.swift 两个文件，实际合并为 BatchOutputTests.swift（类名与计划一致，filter 精确匹配无空跑）——收口时 module 对齐为实际文件。\n- replace 失败分支覆盖：无法稳定注入（replaceItemAt 对目录目标实测可替换成功），以代码审查确认 + tmp 写入失败路径故障注入覆盖（旧字节不变+无残留）。\n- 大小写折叠 key：APFS 默认大小写不敏感，lowercased 折叠正确；case-sensitive 卷上过度折叠为已知边界（与 08103 同族决策）。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：252 XCTest（237 基线 + 15 新增 BatchOutput）+ 140 Swift Testing 全绿。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过。\n- SrtFormatter/既有回归全部通过。\n\n未执行项（如实记录）：\n- replace 失败分支无自动化测试（见决策）；其余全部真实临时目录验证。\n\n后续 Feature 边界：\n- 08205 串行队列调度器（Scheduler 只依赖 Runner/Repository ports、maxActive=1、pause/stop、task ID+run token 拒绝迟到事件）待启动。"
     },
     {
       "id": "08205",
