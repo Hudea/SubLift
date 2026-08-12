@@ -210,6 +210,47 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertEqual(runner.recordedMaxActive, 1)
     }
 
+    // MARK: - onStateChange（08308 live 更新）
+
+    func testOnStateChangeFiresOnCommandAndProgress() async {
+        let t1 = makeTask("1.mp4")
+        let t2 = makeTask("2.mp4")
+        runner.setBehavior(t1.id) { onUpdate in
+            onUpdate(.extracting, 0.5)
+            onUpdate(.extracting, 0.9)
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: "cpp")
+        }
+        runner.setBehavior(t2.id) { _ in
+            .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: "cpp")
+        }
+        let scheduler = makeScheduler(tasks: [t1, t2])
+        var received: [BatchQueueState] = []
+        scheduler.onStateChange = { received.append($0) }
+
+        scheduler.start()
+        // 进度触发（0.5 到达 onUpdate → onStateChange 收集）。
+        await waitUntil { received.contains { $0.tasks.first?.progress == 0.5 } }
+        await waitForIdle(scheduler)
+
+        // 命令（start）+ 进度（0.5）+ 终态（completed 后 idle）均触发回调。
+        XCTAssertGreaterThan(received.count, 2, "命令/进度/终态都应有回调")
+        XCTAssertTrue(received.contains { $0.tasks.first?.progress == 0.5 })
+        XCTAssertEqual(received.last?.status, .idle)
+        XCTAssertEqual(received.last?.tasks.first?.status, .completed)
+    }
+
+    func testOnStateChangeNotCalledWhenNoSubscription() async {
+        // 无订阅者时调度不受影响（回调可选）。
+        let t1 = makeTask("1.mp4")
+        runner.setBehavior(t1.id) { _ in
+            .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: "cpp")
+        }
+        let scheduler = makeScheduler(tasks: [t1])
+        scheduler.start()
+        await waitForIdle(scheduler)
+        XCTAssertEqual(scheduler.state.tasks.first?.status, .completed)
+    }
+
     // MARK: - 迟到事件拒绝
 
     func testLateUpdateAfterCancellationIgnored() async {

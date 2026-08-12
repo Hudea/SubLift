@@ -33,17 +33,23 @@ final class BatchQueueRepository: BatchQueuePersisting, @unchecked Sendable {
     private let decoder: JSONDecoder
     private let fileManager = FileManager.default
 
-    /// 默认 Application Support 路径。
-    convenience init() throws {
-        let base = try FileManager.default.url(
+    /// 默认 Application Support 路径（目录创建失败回落临时目录，不阻断启动）。
+    convenience init() {
+        if let base = try? FileManager.default.url(
             for: .applicationSupportDirectory,
             in: .userDomainMask,
             appropriateFor: nil,
             create: true
-        )
-        let dir = base.appendingPathComponent("SubLift", isDirectory: true)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        self.init(fileURL: dir.appendingPathComponent("batch-queue-v1.json"))
+        ) {
+            let dir = base.appendingPathComponent("SubLift", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            self.init(fileURL: dir.appendingPathComponent("batch-queue-v1.json"))
+        } else {
+            let fallback = FileManager.default.temporaryDirectory
+                .appendingPathComponent("SubLift", isDirectory: true)
+            try? FileManager.default.createDirectory(at: fallback, withIntermediateDirectories: true)
+            self.init(fileURL: fallback.appendingPathComponent("batch-queue-v1.json"))
+        }
     }
 
     init(fileURL: URL) {

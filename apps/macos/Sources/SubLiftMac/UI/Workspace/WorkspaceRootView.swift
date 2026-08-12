@@ -13,7 +13,13 @@ struct WorkspaceRootView: View {
     @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
     @AppStorage("developer_mode") private var developerMode = false
 
-    @State private var isDropTargeted = EvidenceShot.isDropTargetFixture
+    @State private var isDropTargeted: Bool = {
+        #if DEBUG
+        EvidenceShot.isDropTargetFixture
+        #else
+        false
+        #endif
+    }()
     @State private var dropErrorMessage: String?
     @State private var showFfmpegMissingAlert = false
     @State private var exportError: String?
@@ -30,7 +36,13 @@ struct WorkspaceRootView: View {
                 } else {
                     WelcomeView(
                         onOpen: openFile,
-                        isDropTargeted: isDropTargeted || EvidenceShot.isDropTargetFixture
+                        isDropTargeted: isDropTargeted || {
+                            #if DEBUG
+                            EvidenceShot.isDropTargetFixture
+                            #else
+                            false
+                            #endif
+                        }()
                     )
                 }
             }

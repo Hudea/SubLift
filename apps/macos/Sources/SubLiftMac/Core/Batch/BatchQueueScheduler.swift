@@ -30,6 +30,9 @@ enum BatchTaskCommandAvailability {
 final class BatchQueueScheduler {
     private(set) var state: BatchQueueState
 
+    /// 状态变化回调（08308：UI 订阅实现 live 更新；命令、终态与进度变化均触发）。
+    var onStateChange: ((BatchQueueState) -> Void)?
+
     private let runner: any BatchTaskRunning
     private let repository: any BatchQueuePersisting
 
@@ -162,6 +165,12 @@ final class BatchQueueScheduler {
         return result
     }
 
+    /// 追加等待任务（Scanner 结果；08309 接线）。
+    func addTasks(_ tasks: [BatchTask]) {
+        state.tasks.append(contentsOf: tasks)
+        persist()
+    }
+
     // MARK: - 内部
 
     private func scheduleNextIfPossible() {
@@ -216,6 +225,8 @@ final class BatchQueueScheduler {
         if let progress, BatchTaskCommandAvailability.isActive(state.tasks[index].status) {
             state.tasks[index].setProgress(progress)
         }
+        // live 更新：progress/状态变化不持久化（节流），但必须通知订阅者。
+        onStateChange?(state)
     }
 
     /// 任务终态：更新状态、释放资源、调度下一项。
@@ -263,5 +274,6 @@ final class BatchQueueScheduler {
 
     private func persist() {
         try? repository.save(state)
+        onStateChange?(state)
     }
 }

@@ -144,3 +144,221 @@ enum EvidenceShot {
     }
 }
 #endif
+
+// MARK: - 08308 Task Center fixture（DEBUG-only，确定性状态截图；不冒充真实 OCR）
+
+#if DEBUG
+extension EvidenceShot {
+    /// SUBLIFT_EVIDENCE_TASKCENTER=EMPTY|WAITING|RUNNING|PAUSED|MIXED|RESTORED|ERROR
+    /// 注入确定性队列状态并打开 Task Center 窗口（截图用；不冒充真实 OCR）。
+    @MainActor
+    static func taskCenterFixtureIfRequested(model: BatchQueueModel) {
+        guard let raw = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_TASKCENTER"] else { return }
+        model.installFixture(makeFixtureState(raw))
+        openTaskCenterWindow(model: model)
+        scheduleTaskCenterShotIfRequested()
+    }
+
+    @MainActor
+    private static func openTaskCenterWindow(model: BatchQueueModel) {
+        // 隐藏主窗口（fixture 专属）：避免主窗口抢 key 使 Task Center 按钮呈非激活灰色。
+        for window in NSApp.windows where window.identifier?.rawValue != "task-center" {
+            window.orderOut(nil)
+        }
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "task-center" }) {
+            window.makeKeyAndOrderFront(nil)
+        } else {
+            let hosting = NSHostingController(rootView: TaskCenterView(model: model))
+            let window = NSWindow(contentViewController: hosting)
+            window.identifier = NSUserInterfaceItemIdentifier("task-center")
+            window.title = "任务中心"
+            // COMPACT=1 → 960×600（紧凑截图 fixture）。
+            if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_COMPACT"] == "1" {
+                window.setContentSize(NSSize(width: 960, height: 600))
+            } else {
+                window.setContentSize(NSSize(width: 1280, height: 800))
+            }
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    @MainActor
+    private static func scheduleTaskCenterShotIfRequested() {
+        guard let shotPath = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SHOT"] else { return }
+        let delay = Double(ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DELAY"] ?? "6") ?? 6
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            guard let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "task-center" }) else {
+                print("[EvidenceShot] task-center window not found")
+                return
+            }
+            // 强制激活目标窗口（离屏渲染对 inactive 窗口可能输出全黑）。
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            // 强制重建窗口内容（SwiftUI hosting 离屏缓存失效场景）。
+            window.orderOut(nil)
+            window.orderFront(nil)
+            window.makeKeyAndOrderFront(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                if let view = window.contentView {
+                let size = view.bounds.size
+                // 强制布局 + 显示（cacheDisplay 对未完成首帧/后台窗口可能得到全黑）。
+                view.layoutSubtreeIfNeeded()
+                view.displayIfNeeded()
+                // 方案一：离屏位图（与 10415 一致）。
+                var saved = false
+                if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    if let png = bitmap.representation(using: .png, properties: [:]) {
+                        // 空态窗口实测 cacheDisplay 可能得到全黑——采样中心像素检测。
+                        let isBlack = isMostlyBlack(bitmap, size: size)
+                        if !isBlack {
+                            try? png.write(to: URL(fileURLWithPath: shotPath))
+                            saved = true
+                        }
+                    }
+                }
+                // 方案二：cacheDisplay 全黑时用 PDF 矢量渲染兜底。
+                if !saved {
+                    let pdf = view.dataWithPDF(inside: view.bounds)
+                    if let image = NSImage(data: pdf),
+                       let tiff = image.tiffRepresentation,
+                       let rep = NSBitmapImageRep(data: tiff),
+                       let png = rep.representation(using: .png, properties: [:]) {
+                        try? png.write(to: URL(fileURLWithPath: shotPath))
+                        saved = true
+                    }
+                }
+                // 方案三：屏幕级捕获（CGWindowListCreateImage，需屏幕录制权限；SwiftUI 空态
+                // 离屏渲染（cacheDisplay/PDF）实测全黑时使用）。
+                if !saved {
+                    let windowID = CGWindowID(window.windowNumber)
+                    if let image = CGWindowListCreateImage(
+                        .null,
+                        [.optionIncludingWindow],
+                        windowID,
+                        [.boundsIgnoreFraming, .bestResolution]
+                    ) {
+                        let rep = NSBitmapImageRep(cgImage: image)
+                        if let png = rep.representation(using: .png, properties: [:]) {
+                            try? png.write(to: URL(fileURLWithPath: shotPath))
+                            saved = true
+                        }
+                    }
+                }
+                print("[EvidenceShot] saved \(shotPath) (\(Int(size.width))x\(Int(size.height)) points, saved=\(saved))")
+                }
+            }
+        }
+    }
+
+    /// 采样位图中心区域判断是否全黑（空态窗口 cacheDisplay 黑屏检测）。
+    private static func isMostlyBlack(_ bitmap: NSBitmapImageRep, size: CGSize) -> Bool {
+        let pixelWidth = bitmap.pixelsWide
+        let pixelHeight = bitmap.pixelsHigh
+        guard pixelWidth > 0, pixelHeight > 0 else { return true }
+        let cx = pixelWidth / 2
+        let cy = pixelHeight / 2
+        let samples = [(cx, cy), (cx - 50, cy), (cx + 50, cy), (cx, cy - 50), (cx, cy + 50)]
+        var dark = 0
+        for (x, y) in samples where x >= 0 && x < pixelWidth && y >= 0 && y < pixelHeight {
+            if let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) {
+                if c.redComponent < 0.05, c.greenComponent < 0.05, c.blueComponent < 0.05 {
+                    dark += 1
+                }
+            }
+        }
+        return dark >= 4
+    }
+
+    @MainActor
+    static func makeFixtureState(_ raw: String) -> BatchQueueState {
+        let now = Date()
+        func task(_ name: String, status: BatchTaskStatus, progress: Double? = nil, output: String? = nil) -> BatchTask {
+            var t = BatchTask.make(
+                sourceURL: URL(fileURLWithPath: "/tmp/sample/\(name)"),
+                engine: .vision,
+                quality: .fast,
+                developerMode: false,
+                createdAt: now
+            )
+            switch status {
+            case .preparing: _ = t.transition(to: .preparing)
+            case .extracting:
+                _ = t.transition(to: .preparing)
+                _ = t.transition(to: .extracting)
+            case .exporting:
+                _ = t.transition(to: .preparing)
+                _ = t.transition(to: .extracting)
+                _ = t.transition(to: .exporting)
+            case .completed:
+                _ = t.transition(to: .preparing)
+                _ = t.transition(to: .extracting)
+                _ = t.transition(to: .exporting)
+                _ = t.transition(to: .completed)
+            case .failed:
+                // 先记录错误（活动态守卫），再进入终态。
+                _ = t.transition(to: .preparing)
+                t.recordFailure("提取失败: 无法启动 Worker（未找到可执行文件）")
+                _ = t.transition(to: .failed)
+            case .cancelled: _ = t.transition(to: .cancelled)
+            case .interrupted:
+                _ = t.transition(to: .preparing)
+                _ = t.transition(to: .interrupted)
+            case .skipped: _ = t.transition(to: .skipped)
+            case .waiting: break
+            }
+            if let progress { t.setProgress(progress) }
+            if let output { t.outputURL = URL(fileURLWithPath: output) }
+            if status == .completed, let output {
+                t.recordResult(BatchTaskResult(entryCount: 42, outputURL: URL(fileURLWithPath: output), runtimeIdentity: "cpp"))
+            }
+            return t
+        }
+
+        var queue = BatchQueueState.empty
+        switch raw {
+        case "EMPTY":
+            queue.status = .idle
+        case "WAITING":
+            queue.tasks = [task("interview_01.mp4", status: .waiting),
+                           task("lecture_part2.mov", status: .waiting),
+                           task("meeting_recording.mkv", status: .waiting)]
+            queue.status = .idle
+        case "RUNNING":
+            queue.tasks = [task("interview_01.mp4", status: .extracting, progress: 0.42, output: "/tmp/sample/interview_01.srt"),
+                           task("lecture_part2.mov", status: .waiting),
+                           task("meeting_recording.mkv", status: .waiting)]
+            queue.status = .running
+            queue.runningTaskID = queue.tasks[0].id
+        case "PAUSED":
+            queue.tasks = [task("interview_01.mp4", status: .completed, output: "/tmp/sample/interview_01.srt"),
+                           task("lecture_part2.mov", status: .waiting),
+                           task("meeting_recording.mkv", status: .waiting)]
+            queue.status = .paused
+        case "MIXED":
+            queue.tasks = [task("a.mp4", status: .completed, output: "/tmp/sample/a.srt"),
+                           task("b.mov", status: .failed),
+                           task("c.mp4", status: .skipped),
+                           task("d.mp4", status: .waiting)]
+            queue.status = .idle
+        case "RESTORED":
+            queue.tasks = [task("a.mp4", status: .interrupted),
+                           task("b.mov", status: .waiting),
+                           task("c.mp4", status: .completed, output: "/tmp/sample/c.srt")]
+            queue.status = .paused
+        case "ERROR":
+            // 失败任务先记录错误（活动态）再进入 failed——否则 recordFailure 守卫拒绝。
+            var failed = task("a.mp4", status: .waiting)
+            _ = failed.transition(to: .preparing)
+            failed.recordFailure("提取失败: 无法启动 Worker（未找到可执行文件）")
+            _ = failed.transition(to: .failed)
+            queue.tasks = [failed, task("b.mov", status: .waiting)]
+            queue.status = .paused
+        default:
+            queue.status = .idle
+        }
+        return queue
+    }
+}
+#endif // 08308 Task Center fixture（DEBUG-only）

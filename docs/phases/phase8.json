@@ -446,15 +446,20 @@
       "name": "实现原生 Task Center Window",
       "description": "在 App scene 层增加独立 Task Center，使用原生 Table/List、Toolbar、搜索/筛选入口、选中任务详情和汇总条投影真实 BatchQueueModel。",
       "module": [
-        "apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
-        "apps/macos/Sources/SubLiftMac/App/TaskCenterCommands.swift",
-        "apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift",
-        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskCenterView.swift",
-        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskTableView.swift",
-        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskDetailView.swift",
-        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskCenterToolbar.swift",
-        "apps/macos/Tests/SubLiftMacTests/TaskCenterPresentationTests.swift",
-        "apps/macos/Tests/SubLiftMacTests/TaskCenterCommandTests.swift",
+        "App/SubLiftMacApp.swift",
+        "App/TaskCenterCommands.swift",
+        "App/EvidenceShot.swift",
+        "UI/TaskCenter/BatchQueueModel.swift",
+        "UI/TaskCenter/TaskCenterView.swift",
+        "UI/TaskCenter/TaskTableView.swift",
+        "UI/TaskCenter/TaskDetailView.swift",
+        "UI/TaskCenter/TaskCenterToolbar.swift",
+        "UI/TaskCenter/TaskCenterPresentation.swift",
+        "Core/Batch/BatchQueueScheduler.swift",
+        "Core/Batch/BatchQueueRepository.swift",
+        "UI/Workspace/WorkspaceRootView.swift",
+        "Tests/TaskCenterPresentationTests.swift",
+        "Tests/BatchQueueSchedulerTests.swift",
         "docs/design_ui/evidence/08308/",
         "docs/plans/features/08308.md"
       ],
@@ -483,7 +488,7 @@
           "name": "计划 Scene/布局/命令并写 RED 测试",
           "description": "冻结窗口所有权、列优先级、详情和 command availability 纯逻辑。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08308.02",
@@ -492,7 +497,7 @@
           "dependencies": [
             "08308.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08308.03",
@@ -501,11 +506,11 @@
           "dependencies": [
             "08308.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12~13 完成 08308 实现原生 Task Center Window。\n\n实际修改文件：\n- 新增 App/TaskCenterCommands.swift（@Environment(\\.openWindow) + openWindow(id: \"task-center\")；⌘⇧T 冷启动创建+聚焦；删除死代码 TaskCenterWindowOpener）\n- 新增 UI/TaskCenter/BatchQueueModel.swift（@MainActor ObservableObject：启动恢复 repository.load（损坏/未知版本 → 可展示错误 + 空队列，不覆盖原文件）；命令转发 Scheduler；addTasks；订阅 scheduler.onStateChange 实现 live 更新；DEBUG-only installFixture）\n- 新增 UI/TaskCenter/TaskCenterPresentation.swift（Summary 真实计数/statusDisplayName/progressText（仅活动态真实 progress）/engineDisplayName/durationText 恒占位/detailRows（配置/runtime/错误/输出/Task ID，无 ETA/置信度/下载）/队列级 availability）\n- 新增 UI/TaskCenter/TaskCenterView.swift（汇总条 + ZStack(表格+空态 overlay) + 详情 + Toolbar + fileImporter(多选) + 恢复错误 alert；空态：标题/添加文件 borderedProminent/添加文件夹 disabled(08309 接线)/本机处理说明）\n- 新增 UI/TaskCenter/TaskTableView.swift（原生 Table 7 列：文件/状态/进度/引擎/时长/输出/添加时间，长名 middle 截断）\n- 新增 UI/TaskCenter/TaskDetailView.swift（真实字段详情：文件/路径/配置/runtime/错误/输出/Task ID；文本可选）\n- 新增 UI/TaskCenter/TaskCenterToolbar.swift（添加文件占位/开始/暂停/恢复/停止按 availability disabled）\n- 修改 App/SubLiftMacApp.swift（唯一 @StateObject BatchQueueModel（BatchExtractionRunner + BatchQueueRepository）；WindowGroup(\"任务中心\", id: \"task-center\") 独立场景 minWidth 960/minHeight 600；TaskCenterCommands 挂主场景 + task-center 场景；主场景 onAppear 触发 fixture）\n- 修改 Core/Batch/BatchQueueScheduler.swift（onStateChange 回调：persist() 末尾 + applyUpdate 末尾（节流保持：progress 不持久化但通知）；addTasks）\n- 修改 Core/Batch/BatchQueueRepository.swift（convenience init 非 throw，回落临时目录）\n- 修改 App/EvidenceShot.swift（08308 fixture 扩展包 #if DEBUG：SUBLIFT_EVIDENCE_TASKCENTER=EMPTY/WAITING/RUNNING/PAUSED/MIXED/RESTORED/ERROR；隐藏主窗口避免非激活灰色；截图三方案：cacheDisplay（isMostlyBlack 黑屏检测）→ PDF → CGWindowListCreateImage；强制激活/重建窗口；COMPACT=1 → 960×600）\n- 修改 UI/Workspace/WorkspaceRootView.swift（10415 遗留基线修复：EvidenceShot.isDropTargetFixture 引用包 #if DEBUG——release 构建此前失败）\n- 新增 Tests/TaskCenterPresentationTests.swift（11 测试：汇总计数/状态投影/进度文本真实/引擎复用/detail 无假字段/队列级 availability/任务级复用真源）\n- 修改 Tests/BatchQueueSchedulerTests.swift（新增 2 测试：onStateChange 命令+进度+终态触发、无订阅不受影响）\n- 新增 docs/design_ui/evidence/08308/（8 张截图）、docs/plans/features/08308.md\n\n审核（三路并行只读 + 复核）：\n- deleg_4102f416（Scene 所有权/展示真实性/availability/fixture 安全）：2×P1（⌘⇧T 冷启动失效——openWindow 死注释+NSApp 查找永不匹配场景窗口 identifier；fixture 越出 #if DEBUG）+ P2（时长列条目数冒充、B10 错误详情行空——recordFailure 在 transition 后被守卫拒绝）\n- deleg_0e08d999（测试真实性/台账）：3×P1（UI 无 live 更新——scheduler 非 ObservableObject、model 从不订阅、进度冻结；⌘⇧T 破损；空态缺添加动作）+ P2（窗口最小 720×420 < 设计 960×600 等）\n- deleg_66b760d6（SwiftUI/macOS 语义）：2×P1（同 ⌘⇧T/UI live 更新——探针实测场景窗口 identifier 为 SwiftUI.Text-1-AppWindow-1；openWindow 规范路径建议）+ 6×P2；release 构建新增错误（EvidenceShot:150 越界——已修）与基线 WorkspaceRootView 错误（已修）\n- 复核 deleg_8f71a5d1：P1/P2 修复全部通过（4/4 P1 + 全部 P2），无新问题；299 XCTest + 140 Swift Testing 0 失败；release 构建通过（0 个 EvidenceShot 符号，#if DEBUG 边界有效）；8/8 截图 vision 逐张核验 fixture 语义正确；实测启动仅主窗口（task-center 场景不自动开，⌘⇧T 唯一入口）\n\nP1/P2 修复（主 Agent）：\n1. openWindow(id:) 规范路径 + 挂主场景（Workspace 菜单入口合同）\n2. scheduler.onStateChange + model 订阅（命令/applyUpdate/finishRun 全触发；applyUpdate 不持久化只通知——节流保持）\n3. fixture 包 #if DEBUG + WorkspaceRootView 基线修复（release 构建恢复）\n4. 空态添加动作（fileImporter 多选 movie/video/mpeg4Movie → BatchTask.make 默认配置归一化 → addTasks）+ Toolbar 占位\n5. durationText 恒 \"—\"（不编造/不用条目数冒充）；minWidth 960/minHeight 600\n6. B10/ERROR fixture recordFailure（活动态）→ transition(.failed)；task() 辅助同修 + 删重复\n7. 截图黑屏修复：SwiftUI if/else 分支在 NSWindow hosting 离屏渲染（cacheDisplay/PDF/CGWindowList）全黑——TaskCenterView 改 ZStack（表格恒渲染 + 空态 overlay）→ B01 恢复；isMostlyBlack 黑屏检测 + PDF/CGWindowList 兜底\n\n真实验收（截图 + 测试）：\n- 8 张截图（Light 模式）：docs/design_ui/evidence/08308/B01-empty.png（空态：图标/标题/添加文件/添加文件夹/本机处理说明）、B03-waiting（3×等待中）、B04-running（提取中 42% + 输出 interview_01.srt）、B05-paused、B06-mixed（已完成/失败/已跳过/等待中 并存）、B07-restored（已中断）、B10-error（失败+等待中）、taskcenter-960.png（960×600 无横向裁切，右缘 8px 无文本）\n- vision 逐张核验（复核 deleg_8f71a5d1 + 主 Agent 早期验证）：B04 提取中 42% + Apple Vision + 输出列；B06 4 状态并存 + 时长列全部 —；B03 3 行等待中；B01 空态完整\n- 完整 swift test：299 XCTest + 140 Swift Testing 全绿（RC=0）；swift build（DEBUG）与 swift build -c release 均通过；git diff --check 干净；jq empty phases.json docs/phases/phase8.json 通过\n\n偏差与未执行项：\n1. B10 错误详情行无法在截图呈现——fixture 不注入 Table selection（@State 私有），详情面板在所有截图不渲染；代码修复正确（recordFailure 活动态守卫）且有单测覆盖（testDetailShowsFailureMessageWhenPresent），截图像征性证据缺失（沿用技能已记录 selection 注入坑）\n2. \"添加文件\"按钮在截图中呈灰色——窗口非激活时 macOS 标准行为（borderedProminent 控件去色），功能完整（激活后变蓝）\n3. 测试类合并：module 声明的 TaskCenterCommandTests.swift 实际合并在 TaskCenterPresentationTests.swift（类名 TaskCenterCommandTests 正确，filter 不空跑）——module 已对齐\n4. 文件夹导入（Scanner 拒绝摘要）由 08309 接线；本 Feature 文件夹按钮 disabled 占位（诚实标注）\n5. 系统外观：截图期间 Light；验证完成后恢复 Dark\n6. 审核期间发现并行会话创建 /Volumes/lab/pp/SubLift-llm-correction 工作副本并切换终端 cwd——主仓库工作区未受影响（已核对 git status 一致）"
     },
     {
       "id": "08309",
