@@ -119,7 +119,7 @@
           "name": "计划并写领域模型 RED 测试",
           "description": "冻结字段、状态转换、Codable 与配置锁定测试，先确认缺失类型/行为导致真实失败。",
           "dependencies": [],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08102.02",
@@ -128,7 +128,7 @@
           "dependencies": [
             "08102.01"
           ],
-          "status": "not-started"
+          "status": "done"
         },
         {
           "id": "08102.03",
@@ -137,11 +137,11 @@
           "dependencies": [
             "08102.02"
           ],
-          "status": "not-started"
+          "status": "done"
         }
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-12 完成 08102 建立批量任务领域模型。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchTask.swift：BatchTaskStatus 纯状态机（waiting→preparing→extracting→exporting→completed；活动态可 failed/cancelled/interrupted；waiting 可 cancelled/skipped/interrupted；终态不可转）；BatchTaskResult（entryCount/outputURL/runtimeIdentity）；BatchTask 值类型（id/sourceURL/configuration/outputURL/status/progress/result/failureMessage/createdAt；runToken 瞬态——CodingKeys 排除且自定义 == 排除，持久化往返相等保真）；make() 创建时经 EngineCapability.normalizedSelection 归一化（隐藏 Mock 最终归一化入口）；replaceConfiguration 仅 waiting；transition 非法返回 false 不改变状态；setProgress clamp 0–1；recordFailure 仅活动态守卫；recordResult 仅 completed 守卫。\n- 新增 apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueState.swift：BatchQueueStatus（idle/running/paused/interrupted）；BatchQueueState（status/tasks/runningTaskID + activeTasks/pendingTasks 派生）。\n- 修改 apps/macos/Sources/SubLiftMac/Core/ExtractionConfiguration.swift：补最小 Codable（批量持久化复用同一真源）。\n- 确认无改动：Core/Messages.swift（OcrEngineName 已 String Codable CaseIterable）、Core/SamplingQuality.swift（已 String Codable）——08102.module 声明但 diff 未触及，仅确认。\n- 新增 apps/macos/Tests/SubLiftMacTests/BatchTaskModelTests.swift：20 个测试（BatchTaskStatusTests 6：正向链/非法回退/跳级拒绝/活动态失败取消/终态封闭；BatchTaskTests 11：创建/转换/非法不突变/配置锁定（合法链前进）/进度 clamp/Mock 归一化/id 稳定/守卫×2/队列派生；BatchTaskCodableTests 3：task 往返（含 runToken 排除与往返相等）/queue 往返/config 往返）。\n- 新增 docs/plans/features/08102.md：字段/状态转换表/允许文件/测试类（类名全称防空跑）/验收/停止条件。\n- docs/phases/phase8.json（08102 in-progress→done）、phases.json（phase8 in-progress→done）。\n\n验收标准落实（5 条全满足）：\n1. 状态覆盖 9 状态，非法转换被纯状态机拒绝（canTransition 表 + 6 个状态机测试 + 终态封闭测试）。\n2. BatchTask 具有稳定 UUID、标准化源 URL（契约：绝对 file URL，Scanner 08103 标准化）、配置、输出计划（outputURL 占位，08104 填充）、状态、进度（0–1 clamp）、结果、失败摘要与添加时间；运行 token 不进入持久化值（CodingKeys 排除 + 往返测试断言 decode 后 nil + == 排除）。\n3. ExtractionConfiguration 补 Codable；OcrEngineName/SamplingQuality 复用既有 Codable 真源，无复制第二套字符串枚举。\n4. waiting 显式替换配置（replaceConfiguration）、preparing 及以后锁定（合法链前进后断言拒绝）；非开发模式 Mock 归一化入口可测（make + normalizedSelection：mock+dev-off→vision、dev 保留）。\n5. TDD RED：BatchTaskModelTests 写好后编译失败（cannot find type 'BatchTask'/'BatchTaskStatus' in scope 等，已保存）；GREEN：完整 swift test 221 XCTest + 140 Swift Testing 全绿。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（Domain 状态机/归一化/依赖方向）：PASS，无 P0/P1；P2：计划 filter 类名空跑；P3×7（module 未改动文件、subtask 滞后、恒真 id 断言、recordFailure 零覆盖、派生属性零覆盖、progress 注释漂移、Core→UI 依赖方向、recordFailure 注释无守卫）。\n- Agent 2（文件系统/持久化）：PASS，无 P0/P1；P2：合成 Equatable 计入瞬态 runToken 致往返相等破坏（持久化快照比对陷阱）；P3×6（progress 终态不清理、recordResult/recordFailure 无守卫、EngineCapability 层级倒置、runningTaskID 悬垂引用待 08207 防御、架构文档命名不一致待 08103 前回写、日期策略信息性）。\n- Agent 3（测试真实性/台账）：PASS，无 P0/P1；P2：计划文档测试类 token 不匹配（filter 空跑）；P3×4（RED 已用 git archive HEAD 独立复现、台账滞后、module 对齐、字符串断言局限）。\n- 三路确认：357 测试全绿、RED 真实、无假绿、无字符串断言替代。\n\n主 Agent 修改（全部经重新测试 221+140 全绿）：\n- P2-1：计划文档 filter 修正为 'BatchTaskStatusTests|BatchTaskTests|BatchTaskCodableTests'。\n- P2-2：BatchTask 自定义 == 排除 runToken（9 字段逐比较，与 CodingKeys 一致）；测试补 XCTAssertEqual(decoded, task) 往返相等。\n- P3：recordFailure（活动态）/recordResult（completed）加守卫 + 2 个守卫测试；progress 注释与行为对齐；make() sourceURL 契约注释；补 testStableIdentityAcrossCreationAndTransition、testQueueStateDerivedCollections。\n- 复核 Agent（deleg_215d49e4）：P2 修复通过（== 字段与 CodingKeys 一致、往返相等实证、守卫不破坏合法路径、filter 类名正确、完整测试全绿）。\n\n记录决策（P3 级，非阻塞）：\n- Core→UI 依赖方向：BatchTask.make 引用 UI/Settings/EngineCapability.swift 的 normalizedSelection（同 target 可编译）。计划冻结为\"最终归一化入口\"，属有意耦合；后续 Feature（08103 Scheduler 等）继承该依赖，收口时可评估将纯逻辑下沉 Core。\n- runningTaskID 悬垂引用：08207 恢复时防御（不自动启动、校验任务存在）。\n- 架构文档 phase8-batch-task-center.md 的 outputPlan/BatchTaskFailure/addedAt 命名与 08102 冻结合同（outputURL/failureMessage/createdAt）不一致——以 08102 计划/实现为准，08103 前回写架构文档。\n- 日期策略：createdAt 默认 .deferredToDate（Double），往返精确（测试实证）；08207 持久化显式钉住同一策略。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 完整 swift test：221 XCTest（201 基线 + 20 新增 BatchTask）+ 140 Swift Testing 全绿。\n- jq empty phases.json docs/phases/phase8.json：通过；git diff --check：通过。\n- 完整 JSON Schema 校验：jsonschema 模块在 /usr/bin/python3 不可用（未新增第三方依赖），结构级核验通过（canonical 11 键、deps、subtask 链、状态）。\n- 既有回归：Settings/QuickExtraction/Workspace 等全部通过。\n\n未执行项（如实记录）：\n- 无（本 Feature 纯领域模型，无文件系统/IPC/UI 验收要求）。\n\n后续 Feature 边界：\n- 08103 Scanner（不递归/稳定排序/跳过 hidden/package/symlink/标准化去重，复用 VideoImportPolicy）待启动。"
     },
     {
       "id": "08103",
