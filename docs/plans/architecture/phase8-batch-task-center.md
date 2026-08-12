@@ -5,7 +5,7 @@ status: ready
 planning_level: L2
 source: "用户要求在当前分支规划 Phase 8，实现任务队列与文件夹支持"
 created: 2026-08-12
-tracking: "08001 已完成设计与架构基线；08102–08410 待顺序实施"
+tracking: "Phase 8 已全部完成（08001–08410，2026-08-13 综合验收收口）"
 ---
 
 # 架构计划：Phase 8 批量任务队列与文件夹导入
