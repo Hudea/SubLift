@@ -25,5 +25,6 @@
 ## 当前状态
 
 - 设计基线：已整理并冻结。
-- Phase 10：已登记，等待按 Feature 顺序进入实际开发。
-- 当前产品：仍是 Phase 2/6 已交付的 SwiftUI 开发者 GUI；本目录不宣称视觉升级已经实现。
+- Phase 10：Native Workbench 已按 10001–10415 实施并完成代码、截图与项目门验收；10416 负责最终文档收口。
+- 当前产品：单视频 Native Workbench，包含 Welcome/导入、Video/Transcript Split、Context Inspector、Region Editing、只读 Processing、可编辑 Review、Timeline、分层 Settings 与快速提取设置栏。
+- 验收边界：V01–V09、960 紧凑和 Light/Dark 已有实际渲染证据；V10 系统辅助功能设置切换、完整 VoiceOver 会话和部分真实点击受权限限制，详见 10412–10415 evidence。

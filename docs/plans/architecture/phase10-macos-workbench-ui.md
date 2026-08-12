@@ -1,14 +1,17 @@
 ---
 route: architecture-first
 plan_type: architecture
-status: ready
+status: done
 planning_level: L2
 source: "用户提供外部 SubLift vNext 设计说明与 8 张参考图，要求整理设计并拆解 Phase 10"
 created: 2026-08-11
-tracking: "设计基线 10001 已完成；产品实施从 10102 开始，必须一次只启动一个 Feature"
+tracking: "10001–10415 已实施；10416 完成当前文档与合入准备收口"
 ---
 
 # 架构计划：Phase 10 macOS Native Workbench UI
+
+> 完成说明（2026-08-12）：本文的“当前证据”和停止条件保留规划时快照；实际实施已推进到
+> 10415，最终状态与证据以 [`phase10.json`](../../phases/phase10.json) 为准。
 
 ## 目标
 
@@ -56,8 +59,12 @@ processing/finalizing 的 Live Transcript 是只读投影；final entries 完成
 11. **10311 Settings 分层**：General/Recognition/Advanced、Mock/Oracle 隔离、可用性状态。
 12. **10412 适配与辅助功能**：960×600、Dark、Contrast、Transparency、VoiceOver、Keyboard。
 13. **10413 Phase 收口**：全量 Swift/项目门、视觉证据矩阵、文档和状态同步。
+14. **10414 独立审计修复**：修复引擎安全、响应式、真实 Esc、搜索编号和视觉细节并复验。
+15. **10415 快速提取设置栏**：增加紧凑引擎/采样设置、active/final 快照和重新提取确认。
+16. **10416 最终文档收口**：同步当前文档、计划状态、验收边界并准备合入提交。
 
-Feature 的逐项 acceptance、subtask、依赖和 evidence 格式见 [`phase10.json`](../../phases/phase10.json)。计划 ready 不代表 10102–10413 已实施或授权批量推进。
+Feature 的逐项 acceptance、subtask、依赖和 evidence 见 [`phase10.json`](../../phases/phase10.json)；
+本计划已完成，历史实施顺序不再表示待执行授权。
 
 ## 验证策略
 
@@ -93,4 +100,4 @@ Feature 的逐项 acceptance、subtask、依赖和 evidence 格式见 [`phase10.
 - [x] 当前能力与参考图未来能力已分离
 - [x] Workspace 协调层与 focused Core 依赖方向明确
 - [x] Feature 顺序、验证证据和停止条件明确
-- [x] Phase 10 已可从 10102 开始逐项开发
+- [x] Phase 10 已按顺序实施并完成最终文档收口

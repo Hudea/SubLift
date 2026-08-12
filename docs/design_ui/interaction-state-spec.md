@@ -77,6 +77,8 @@ review --new video--> loading
 - 完成后，有选中字幕则 Subtitle，无选择则 Video。
 - 选择字幕时可自动切到 Subtitle，但不得强制打开已被用户关闭的 Inspector。
 - 设置是独立 Window，不占用 Workspace Inspector。
+- 视频区快速提取设置栏与 Settings 共用引擎/采样偏好；运行中与区域编辑中禁用但保持值可读，
+  不进入 Inspector，也不自动触发重新提取。
 
 ## 6. 错误层级
 
@@ -113,7 +115,8 @@ Phase 10 不再支持把全部功能塞进 800 × 480；SwiftUI window minimum �
 | V06 | review + Subtitle Inspector，1280×800 | 可编辑切换、confidence、Export 主动作 |
 | V07 | Settings Recognition，Light | Vision/Paddle 状态与 Mock 隔离 |
 | V08 | ready，960×600 | Inspector 收起后的最小布局无裁切 |
-| V09 | ready/review，Dark | 系统语义色、视频黑底和选择状态可辨 |
+| V09 | review + 快速提取设置栏，1280/960 | 引擎/采样、待生效提示、重新提取与紧凑布局无溢出 |
+| Light/Dark | V01/V03/V06/V07 | 系统语义色、视频黑底、选择状态与 Settings 在两种外观下可辨 |
 | V10 | Increase Contrast + Reduce Transparency | 轮廓、选择、进度和浮层仍可辨 |
 | A01 | 键盘 | Open、Space、Inspector、Region、字幕前后定位、Export 可达 |
 | A02 | VoiceOver | Toolbar、Region、Progress、Transcript、Timeline 有名称和值 |

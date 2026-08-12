@@ -159,6 +159,14 @@ Inspector 根据上下文切换，而不是成为永久参数面板：
 
 Inspector 关闭时完全释放内容空间。切换视频、开始处理、结束处理、取消和选择字幕时必须有确定的模式转换，详见交互状态规范。
 
+### 8.1 快速提取设置栏（10415 实施补充）
+
+- 位于视频工作区的提取状态区下方，使用约 52–64 pt 的两行紧凑布局，不进入 Toolbar 或 Inspector。
+- 与 Settings 共用 OCR 引擎、采样质量和 Developer Mode 偏好；WorkspaceModel 只保存任务启动时的 active 快照和最近成功结果的 final 快照。
+- starting/processing/finalizing 与 Region Editing 中控件禁用但值可读；偏好变化不追溯当前任务，也不自动启动提取。
+- 已有最终结果且偏好变化时显示文字化待生效提示与“重新提取”；Toolbar 和该按钮共用同一替换确认入口。
+- 非开发模式隐藏并归一化 Mock；不增加 Automatic、Whisper、ETA、平均置信度或模型下载入口。
+
 ## 9. Settings
 
 ![Recognition Settings 参考](assets/07-settings-recognition.png)

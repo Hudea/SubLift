@@ -925,6 +925,74 @@
       ],
       "status": "done",
       "evidence": "2026-08-12 完成 10415 快速提取设置栏。\n\n实际修改文件：\n- 新增 apps/macos/Sources/SubLiftMac/Core/ExtractionConfiguration.swift：ExtractionConfiguration 值类型（engine+quality，Equatable/Sendable）。\n- 修改 apps/macos/Sources/SubLiftMac/Core/WorkspaceModel.swift：activeExtractionConfiguration 启动时冻结、成功/失败/取消清空；finalExtractionConfiguration 只在 handleExtractionFinalEntries 落地时更新；失败/取消恢复旧字幕保留旧 final 快照（restore 不触碰快照）；openVideo 清空两种快照；不复制 UserDefaults 进模型。\n- 新增 apps/macos/Sources/SubLiftMac/UI/Extraction/QuickExtractionSettingsBar.swift：QuickExtractionSettingsPresentation 纯逻辑（showsPendingNotice/showsReextractButton/isLocked（含 regionEditing）/pendingNoticeText）；ExtractionInspectorConfiguration.displayConfiguration（active→final→preferences）；ExtractionRequestPolicy（requiresReplacementConfirmation/message/normalizedConfiguration 归一化配置冻结）；QuickExtractionSettingsBar View（标题行+控件行，高度 52–64pt，引擎 Popup+ViewThatFits 采样分段/菜单降级，待生效提示 Label（图标+文字），重新提取 Button，运行中 disabled，全控件 accessibility label/value/hint）。\n- 重写 apps/macos/Sources/SubLiftMac/UI/Extraction/ExtractionInspector.swift：删除可编辑 RadioGroup（Settings 与快速设置栏为仅有的偏好编辑入口）；只读展示 displayConfiguration 解析的引擎/质量 + runtime + 状态 + 编辑入口说明；偏好 fallback 归一化（陈旧 Mock + dev-off 展示 Vision）。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceInspector.swift：传递 active/final 配置快照。\n- 修改 apps/macos/Sources/SubLiftMac/UI/Workspace/WorkspaceRootView.swift：videoPane 接入 QuickExtractionSettingsBar（ExtractionProgressView 下方，无多余 Divider）；Toolbar'提取字幕'与设置栏'重新提取'共用 requestExtraction（Mock 归一化 + hasFinalEntries 时替换确认 alert，取消仅清 pending 不改字幕/配置）。\n- 修改 apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift：新增 DEBUG-only SUBLIFT_EVIDENCE_COMPACT（主窗口缩放 960×600）与 SUBLIFT_EVIDENCE_PENDING（提取后改写采样偏好显示待生效状态）fixture，仅截图用并标注。\n- 新增 apps/macos/Tests/SubLiftMacTests/QuickExtractionSettingsTests.swift：25 个测试（ExtractionConfiguration 相等性 3；Workspace 快照生命周期 9：active 启动设置/成功/失败/取消清空、final 只在成功更新、重提取失败/取消保留旧 final 快照、openVideo 清空；展示纯逻辑 7：pending notice（含运行中抑制）/reextract 按钮/isLocked（含 regionEditing）/提示文案；Inspector 配置优先级 3；请求策略 3：确认条件/normalizedConfiguration 归一化（requestExtraction 路径））。\n- 新增 docs/plans/features/10415.md：产品合同（位置/高度/控件/文案/快照生命周期/确认语义/ViewThatFits 降级/审核安排/修正后的定向测试 filter 类名）。\n- docs/phases/phase10.json（10415 canonical，module 对齐实际改动）、phases.json（phase10 in-progress→done）、progress.md。\n\n产品合同落实：\n- 快速设置栏位于 ExtractionProgressView 下方；高度约 52–64pt（VStack spacing 4 + vertical padding 6 + 两行，实测无裁切）；不使用大卡片/渐变。\n- 常规宽度：标题'提取设置'、OCR 引擎 Popup（visibleEngines + normalizedSelection）、'快速/平衡/精细'分段控件、'配置已更改，重新提取后生效'（info.circle 图标+文字）、仅已有最终结果且配置变化时显示'重新提取'按钮。\n- 960pt 紧凑：ViewThatFits 无参（macOS 13）分段→菜单降级；V09b 实测 960 宽下分段控件保持完整、无横向溢出。\n- 与 Settings 共用 default_engine/sampling_quality/developer_mode @AppStorage（同一真源）；WorkspaceModel 不复制 UserDefaults。\n- Extraction Inspector 不再提供可编辑引擎/采样控件，只读展示 active 优先、final 其次、偏好最后的实际运行配置；偏好 fallback 归一化。\n- 运行中（starting/processing/finalizing）与区域编辑中控件禁用但值可读；当前任务使用启动时快照，运行途中偏好变化不追溯（active 快照）。\n- 配置变化不自动启动提取。\n- 已有最终结果时 Toolbar 与设置栏两个入口均弹替换确认；取消确认不改变字幕与配置（仅清 pending）。\n- 非开发模式 Mock 归一化回落 Vision：requestExtraction（normalizedConfiguration）与快速设置栏 engineBinding 双重归一化，提取入口不能运行隐藏 Mock。\n- 不显示 Automatic/Whisper/ETA/平均置信度/模型下载入口。\n\nTDD 红灯输出（保存于会话记录）：\n- 测试先行：QuickExtractionSettingsTests.swift 24 个测试写好后 swift test 编译错误（cannot find 'ExtractionConfiguration' in scope 等 8+ 行）——RED 确认后实现。\n- 实现后 GREEN：201 XCTest（177 基线 + 24 新增）+ 140 Swift Testing 全绿。\n\n独立审核（3 个只读子 Agent 并行，未修改文件）：\n- Agent 1（状态模型/快照/失败取消恢复）：无 P0/P1；P2×2（regionEditing 下重新提取按钮静默 no-op——isLocked 补 .regionEditing；设置栏自然高度超 64pt——压缩 padding/spacing）；P3×7（Inspector 偏好 fallback 未归一化、死代码 disabled、运行中提示语态、DEBUG fixture 可接受、module 表漂移、确认弹窗链路 UI 验收覆盖、连续 alert）。\n- Agent 2（SwiftUI 响应式/辅助功能）：无 P0/P1；P2×2（Inspector 偏好回退丢失 10414 归一化；计划文档定向测试 filter 类名错误致假绿）；P3×5（运行中提示语态、多余 Divider、冗余 accessibilityLabel、死代码、文档滞后）。\n- Agent 3（测试覆盖/台账一致性）：无 P0/P1；P2×2（Inspector 展示回退归一化；testMockNormalizedInRequestPath 名不副实且与 SettingsTests 重复——抽 normalizedConfiguration 纯函数并测 requestExtraction 路径）；P3×4（module 列表漂移、字符串合同锁局限、运行中提示语态、subtask 状态滞后、makeModel 偏离注释）。\n- 三份报告一致确认：快照三态（偏好/active/final）不混淆、stale jobToken guard 先于快照写入、取消确认不触碰字幕配置、200+140 全绿、无 10414 混入、无新依赖、不改 Python/C++/OCR。\n\n主 Agent 修改（全部经重新测试）：\n- ExtractionInspector preferences 归一化（补回 developer_mode @AppStorage + normalizedSelection）。\n- QuickExtractionSettingsBar：isLocked 含 .regionEditing；showsPendingNotice/showsReextractButton 增加 state 参数（运行中抑制提示）；垂直 padding 8→6、spacing 6→4（高度合同）；重新提取死代码加注释；WorkspaceRootView 移除设置栏下方多余 Divider。\n- ExtractionRequestPolicy.normalizedConfiguration 纯函数 + requestExtraction 使用 + testMockNormalizedInRequestPath 改为覆盖请求路径。\n- 计划文档定向测试 filter 修正为 5 个新测试类全名。\n- phase10.json module 列表对齐实际改动。\n- 修复后完整 swift test 201 XCTest + 140 Swift Testing 全绿。\n\n真实 UI 验收（Computer Use / EvidenceShot app 内渲染，Light）：\n- V09-quick-settings-1280.png（1280×771 逻辑窗口）：auto-open sample-text + mock 提取 + PENDING fixture（8s 后改写 sampling_quality=fine）。vision 核验：'提取设置'标题 ✓、信息图标+'配置已更改，重新提取后生效'提示 ✓、'重新提取'按钮（右上）✓、OCR 引擎下拉'Apple Vision' ✓、三分段控件'快速/平衡/精细'且'精细'蓝色选中（pendingFixture 生效）✓、布局紧凑无大卡片无裁切 ✓。\n- V09b-quick-settings-compact.png（960×652 逻辑窗口，COMPACT fixture）：vision 核验：960 宽下'提取设置'标题 ✓、引擎下拉'Apple Vision' ✓、三分段控件保持（空间足够未降级）✓、无横向溢出/裁切/重叠 ✓、控件完整可操作 ✓、右侧'尚未提取字幕'空态 ✓。\n- 待生效状态（review + 偏好≠final）由 V09 实测（fixture 明确标注为 DEBUG 注入，非真实 OCR 结果）。\n- 未执行（如实记录）：真实鼠标点击引擎/采样控件改值、Processing 状态真实点击禁用控件、替换确认弹窗的真实点击（取消/确认）、AX 树逐项检查——系统'辅助功能访问（事件）'权限警告持续存在（CGEvent 被丢弃、cua-driver 对多数窗口捕获 0x0）；等价覆盖：isLocked/normalizedConfiguration/requiresReplacementConfirmation 单测 + 三份代码审核 + V09/V09b 渲染核验。\n\n验证（最终代码状态，全部退出码 0）：\n- ./init.sh：OK。\n- 定向测试（修正 filter，5 个新测试类全名 + 既有相关类）：59 项通过，0 失败（新测试真实执行，无空跑）。\n- 完整 swift test：201 XCTest（177 基线 + 24 新增）+ 140 Swift Testing 全绿，退出码 0。\n- ./scripts/verify-standard.sh：10/10 通过。\n- jq -e . phases.json docs/phases/phase10.json：通过；phases.json phase10 → done；phase10.json 10415 status done、subtasks 全 done、evidence 非空。\n- 截图文件存在性：V09/V09b 均存在。\n- Markdown 本地链接扫描：OK。\n- git diff --check：通过。\n\n截图证据：\n- docs/design_ui/evidence/10415/V09-quick-settings-1280.png（1280 常规 + 待生效状态）\n- docs/design_ui/evidence/10415/V09b-quick-settings-compact.png（960 紧凑）\n\n与设计参考的实际偏差：\n- 参考截图为 Dark 紧凑条形设置区；实现遵循文字合同（Light 截图，位置/高度/控件一致）。\n- ViewThatFits 无参（macOS 13 无 in: 参数）；960 实测空间足够保持分段（降级路径由 ViewThatFits 保证，未强制）。\n\n未执行验证（如实记录）：\n- 真实 UI 交互（点击/键盘/VoiceOver）受系统权限限制未执行（见上）。\n- 完整 JSON Schema 校验未执行（仓库无 validator，结构级核验通过）。\n\n后续 Feature 边界：\n- 不实现 Automatic/Whisper/模型下载/批量队列/质检台/新格式（non-goals 保持）。\n- Phase 10 恢复 done。"
-    }
-  ]
+    },
+    {
+      "id": "10416",
+      "name": "收口 Phase 10 当前文档与合入准备",
+      "description": "修正 Phase 10 实施完成后的当前文档、架构图景、Feature 计划状态与验收表述，保留历史 evidence 的当时事实，并将 Phase 7/原 Phase 9 台账合并改动纳入同一次最终文档提交。",
+      "module": [
+        "README.md",
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md",
+        "docs/REQUIREMENTS.md",
+        "docs/design/macos-gui.md",
+        "docs/design_ui/README.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md",
+        "docs/plans/features/",
+        "docs/phases/phase10.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": [
+        "10415"
+      ],
+      "acceptance_criteria": [
+        "README、ARCHITECTURE、REQUIREMENTS、macOS GUI 与 design_ui 入口一致描述 Phase 10 已实施到 10415，不再出现当前界面尚未升级或等待开发的陈述。",
+        "Phase 10 架构计划与所有 Feature 计划的当前状态和 phase10.json 一致；历史 evidence 中的当时状态、测试数字和限制不追溯改写。",
+        "当前验收文档如实区分已完成的代码/自动测试/截图证据与仍受系统权限限制的真实 VoiceOver、系统辅助功能设置和部分点击路径，不把未执行项写成通过。",
+        "07002 的 Phase 7/原 Phase 9 台账迁移与本 Feature 的 Phase 10 文档收口共同组成用户明确指定的最终文档提交；不混入产品代码或构建产物。",
+        "Swift 完整测试、标准验证、JSON Schema、Feature 状态/依赖、Markdown 链接、git diff --check 与 init 全部通过，evidence 非空。"
+      ],
+      "non_goals": [
+        "不修改 Swift、Python、C++ 产品行为或新增依赖。",
+        "不追溯改写 10001–10415 与 09001–09006 的历史 evidence。",
+        "不创建新 Phase 9 范围，不推送或合并分支。"
+      ],
+      "architecture_refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/REQUIREMENTS.md",
+        "docs/design/macos-gui.md",
+        "docs/plans/architecture/phase10-macos-workbench-ui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "10416.01",
+          "name": "盘点当前文档状态漂移",
+          "description": "扫描实施状态、测试数字、旧组件和 Feature 计划状态，区分当前文档与历史 evidence。",
+          "dependencies": [],
+          "status": "done"
+        },
+      {
+        "id": "10416.02",
+          "name": "同步当前产品与 Phase 文档",
+          "description": "更新入口、需求、架构、GUI/UI 设计、计划状态和导航，不改历史证据。",
+          "dependencies": [
+            "10416.01"
+          ],
+        "status": "done"
+        },
+      {
+        "id": "10416.03",
+          "name": "验证并准备最终文档提交",
+          "description": "运行完整验证，审计 staged 范围并通过项目 commit skill 创建文档提交。",
+          "dependencies": [
+            "10416.02"
+          ],
+        "status": "done"
+      }
+    ],
+    "status": "done",
+    "evidence": "2026-08-12 完成 10416 Phase 10 最终文档收口与合入准备。\n\n文档收口：\n- README、REQUIREMENTS、ARCHITECTURE、macOS GUI 设计入口、design_ui 入口与 Phase 10 架构计划已统一到 10415 最终产品状态，不再把 Native Workbench 写成待开发或旧 ContentView/SubtitleList 组合。\n- Requirements 与交互状态规范如实区分已完成的 V01–V09、Light/Dark、自动测试和截图证据，以及仍受系统权限限制而未执行的 V10 系统设置、真实 VoiceOver 和部分真实点击路径。\n- 10103–10416 的现有 Feature 计划状态与 phase10.json 对齐；历史 Feature evidence 保留当时测试数字、实现状态和限制，没有追溯改写。\n- 同一纯文档提交范围包含用户明确指定的 07002：原 Phase 9 的 09001–09006 已无损吸收到 Phase 7 项目辅助架构，Phase 9 索引与详情路径释放，未来新 Phase 9 可从 09101 登记。\n- 本 Feature 未修改 Swift、Python、C++ 产品代码，未新增依赖、构建产物或新 Phase 9 范围。\n\n最终验证（全部退出码 0）：\n- `env -u PYTHONPATH swift test`（apps/macos）：201 XCTest + 140 Swift Testing 全部通过；Worker UDS/Paddle/Python 集成测试实际执行。\n- `env -u PYTHONPATH ./scripts/verify-standard.sh`：10/10 通过（uv sync、Ruff、mypy、CMake/CTest、pytest、parity）；标准入口按默认策略跳过需要外部资源的 runtime 与 GT release gates。\n- Draft 2020-12 JSON Schema：phases.json 与 10 个 Phase detail 全部通过；135 个 Feature ID 全局唯一且依赖有效；14 个现有 Phase 10 Feature 计划状态一致；未来 Phase 9/09101 canonical 候选通过 schema。校验使用系统已有 jsonschema 4.25.1，未向项目新增依赖。\n- Markdown 本地链接扫描：318 个链接通过；当前状态漂移与非 10416 的 in-progress 计划扫描无命中。\n- 原 phase9.json 与 phase7.json 中 09001–09006 canonical 对象逐项 diff 为空，排序序列 SHA-256 均为 `172c689c721581f60ad71844e88d2e1b3807a009d2b490494eaf9ac6e876fb9a`。\n- `git diff --check`：通过；`./init.sh`：OK。\n\n未执行项（如实记录）：\n- 未补做 V10 系统辅助功能设置、真实 VoiceOver 或权限受限的鼠标/键盘交互；本次为文档收口，不伪造这些证据。\n- 未启用需要外部 runtime/GT 资源的发布门；标准门按仓库默认策略通过。\n- 未推送或执行分支合并；提交仅把当前分支准备到可合入状态。"
+  }
+]
 }

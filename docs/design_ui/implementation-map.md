@@ -2,6 +2,9 @@
 
 Phase 10 是 UI/状态编排升级，不重写提取算法。迁移应先建立 Session 状态与 Native Shell，再逐步搬移现有 View；每个 Feature 结束时应用仍可构建和运行。
 
+> 实施状态（2026-08-12）：迁移已完成到 10415；本表保留迁移前对象与目标映射，实际文件布局
+> 以 `apps/macos/Sources/SubLiftMac/` 和 `docs/design/macos-gui.md` 为准。
+
 ## 1. 现有能力保留
 
 | 现有对象 | 保留职责 | Phase 10 调整 |
@@ -13,7 +16,7 @@ Phase 10 是 UI/状态编排升级，不重写提取算法。迁移应先建立 
 | `RegionSelectionModel` | 候选、选择、merged region、重检 | 进入显式 Region Editing 状态；几何信息渐进披露 |
 | `RuntimePolicy` / `PipelineClient` | C++ 默认、Python 显式回滚、fail-closed | UI 只显示真实选择，不实现自动 fallback |
 | `SrtFormatter` / Save Panel | SRT 导出 | 移到 Toolbar/Menu command，保持单步导出 |
-| `SamplingQuality` | 快速/平衡/精细 → fps | Settings/Extraction Inspector 使用，普通 UI 不显示 raw fps |
+| `SamplingQuality` | 快速/平衡/精细 → fps | Settings 与 QuickExtractionSettingsBar 共用；Extraction Inspector 只读显示 active/final，普通 UI 不显示 raw fps |
 
 ## 2. 目标模块
 
@@ -25,6 +28,7 @@ apps/macos/Sources/SubLiftMac/
   Core/
     WorkspaceModel.swift
     WorkspaceState.swift
+    ExtractionConfiguration.swift
     (existing focused models remain)
   UI/
     Workspace/
@@ -47,6 +51,7 @@ apps/macos/Sources/SubLiftMac/
       SubtitleInspector.swift
     Extraction/
       ExtractionProgressView.swift
+      QuickExtractionSettingsBar.swift
       ExtractionInspector.swift
     Settings/
       SettingsRootView.swift

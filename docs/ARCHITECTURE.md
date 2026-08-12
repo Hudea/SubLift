@@ -213,30 +213,30 @@ SubLift/
 
 | 层 | 文件示例 | 职责 |
 |---|---|---|
-| App | `SubLiftMacApp.swift` | `@main` 入口、`ContentView` 组合、状态管理 |
-| Core | `PipelineClient.swift`、`FrameSampler.swift`、`SubtitleExtractor.swift`、`SubtitleEditor.swift`、`SrtFormatter.swift` | IPC 客户端、抽帧、提取协调、编辑模型、导出格式化 |
-| UI | `VideoPreview.swift`、`SubtitleList.swift`、`RegionOverlay.swift`、`SettingsView.swift` | 视频预览、字幕列表、区域候选框、设置 |
+| App | `SubLiftMacApp.swift`、`WorkspaceCommands.swift` | `@main` 入口、Workspace 生命周期、系统菜单与快捷键 |
+| Core | `WorkspaceModel.swift`、`WorkspaceState.swift`、`PipelineClient.swift`、`SubtitleExtractor.swift`、`SubtitleEditor.swift`、`SrtFormatter.swift` | Session/命令真源、IPC、提取协调、最终编辑模型与导出 |
+| UI | `WorkspaceRootView.swift`、`TranscriptPanel.swift`、`RegionOverlay.swift`、`QuickExtractionSettingsBar.swift`、`Settings/SettingsView.swift` | Native Shell、只读/可编辑 Transcript、区域、快速设置和分层偏好 |
 
 ### 10.4 GUI 数据流
 
 ```
-用户拖入视频
+用户 Open 或拖入视频
   ↓
-DropZone → VideoMetadata.load(url)
+VideoImportPolicy 校验 → WorkspaceModel 创建/替换 Session
   ↓
 AVFoundation ──→ 预览与 Vision 候选框（不参与默认打轴采样）
   ↓
-PipelineClient.start_job(video_path, region_box, SubtitleProfile)
+requestExtraction 冻结 active 配置 → PipelineClient.start_job(video_path, region_box, SubtitleProfile)
   ↓ UDS + JSON
 默认 C++ Worker（或显式 Python Worker）path mode
   ↓
 Worker-owned FfmpegExtractor ──逐帧推进──→ Pipeline.feed(frame)
   ↓
-[段闭合时触发] push_entry 增量推送 → SubtitleEditor 实时追加展示
+[段闭合时触发] push_entry 增量推送 → 只读 Live Transcript
   ↓
-[全片结束] entries 最终批量合并推送 → SubtitleEditor.load(entries)
+[全片结束] entries 最终批量合并推送 → SubtitleEditor.load(entries) + final 配置快照
   ↓
-SubtitleList 显示 / 编辑 / SrtFormatter.format() → NSSavePanel 写文件
+Review 中 TranscriptPanel 编辑 / Timeline 定位 / SrtFormatter.format() → NSSavePanel 写文件
 ```
 
 默认 GUI 与 Native CLI 使用 C++ extractor；Python Oracle / benchmark 使用 Python extractor。
@@ -331,13 +331,14 @@ parent 的约 99%，而输入准备、request 设置与 observation 映射合计
 ## 15. Phase 10 macOS Native Workbench UI（已实施）
 
 Phase 10 保留 SwiftUI + UDS + 默认 C++ Worker 架构，只重组单窗口 Session 的状态所有权与
-原生 macOS Surface。目标新增 `WorkspaceModel/WorkspaceState` 作为组合层：负责 video、
+原生 macOS Surface。`WorkspaceModel/WorkspaceState` 作为组合层：负责 video、
 metadata、player、region、extraction、transcript、selection 和 command availability；
 现有 focused Core models 继续拥有 IPC、播放、坐标、编辑与导出逻辑，View 不复制业务实现。
 
 主窗口采用 Video Workspace + Transcript Panel + 可选 Context Inspector，不增加永久左侧
-Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings 只存放跨 Session
-偏好。processing/finalizing 的 Live Transcript 必须只读，只有最终 `entries` 替换完成后才进入
+Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings 与视频区快速设置栏
+编辑同一组跨 Session 偏好，Extraction Inspector 只读展示 active/final 配置。processing/finalizing
+的 Live Transcript 必须只读，只有最终 `entries` 替换完成后才进入
 可编辑 Review，从结构上消除最终结果覆盖处理中用户修改的风险。
 
 本 Phase 不改变 runtime fail-closed、Worker path mode、ROI/坐标、算法或 UDS framing；也不
@@ -346,11 +347,13 @@ Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings
 [Phase 10 macOS Workbench UI](plans/architecture/phase10-macos-workbench-ui.md)，跟踪见
 [phase10.json](phases/phase10.json)。
 
-**实施状态（2026-08-12）**：Phase 10 全部 12 个实施 Feature（10103–10412）已完成并逐 Feature
-原子提交（Welcome 导入、Workspace Shell、Context Inspector、Region Editing、Transcript Panel、
-Processing 安全、Review/Export、Timeline、Settings、响应式与辅助功能硬化），10413 收口审计通过；
-完整 `swift test`（158 XCTest + 140 Swift Testing）全绿，V01–V10/A01–A02 证据与各 Feature
-evidence 见 `docs/phases/phase10.json` 与 `docs/design_ui/evidence/`。
+**实施状态（2026-08-12）**：Phase 10 已推进到 10415，完成 Session 状态模型、Welcome/导入、
+Workspace Shell、Context Inspector、Region Editing、Transcript、Processing/Review、Timeline、
+Settings、响应式/辅助功能、独立审计修复与快速提取设置栏；10416 负责最终文档收口。
+完整 `swift test`（201 XCTest + 140 Swift Testing）与标准门 10/10 全绿。V01–V09、960 紧凑、
+Light/Dark、A01/A02 代码与自动测试证据见 `docs/phases/phase10.json` 和
+`docs/design_ui/evidence/`；V10 系统设置切换、完整 VoiceOver 会话及部分真实点击受系统权限限制，
+未伪装为已执行。
 
 ## 16. 架构决策
 
@@ -389,4 +392,6 @@ session bootstrap/handoff 与提交辅助；复杂能力编排已经从活跃 Ha
 `./init.sh` 只检查 `AGENTS.md`、`progress.md`、`phases.json` 与其 `detail_file` JSON 链；
 不安装依赖、不构建、不运行产品测试。完整产品日常门由 `scripts/verify-standard.sh` 承担。
 此 Agent Harness 与 C++ parity/golden harness 是不同概念，后者仍是产品正确性测试契约。
-Phase 7 初次迁移是历史记录；当前精简边界见 ADR-0033。
+Phase 7 现统一承载项目辅助架构：07001 记录初次 Harness 迁移，原 Phase 9 的
+09001–09006 记录后续稳定化与仓库治理；吸收式迁移和 Phase 9 复用规则见 ADR-0036，
+当前精简边界见 ADR-0033。

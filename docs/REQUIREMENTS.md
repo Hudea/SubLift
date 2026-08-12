@@ -69,7 +69,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - **F27 独立 `.app` 分发** ❌：按 ADR-0009 跳过；当前通过 SwiftPM 构建运行。
 - **F28 Native Workbench UI** ✅：Phase 10 已实施完成（2026-08-12）：单视频 Workspace、
   Context Inspector（Video/Region/Extraction/Subtitle）、只读 Live Transcript、可编辑 Review、
-  轻量字幕时间线与分层 Settings；不含 F10 自动引擎或 F24 批量队列（non-goals）。
+  轻量字幕时间线、分层 Settings 与快速提取设置栏；不含 F10 自动引擎或 F24 批量队列（non-goals）。
 
 ## 4. 非功能需求
 
@@ -82,7 +82,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
 | **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ macOS 开发者环境可构建运行；PaddleOCR 是不依赖 Vision 的可选 OCR 引擎 |
 | **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
-| **GUI 可用性 / 可访问性** | macOS 原生状态、960×600 最小布局、键盘/VoiceOver、浅深色与系统 Accent 可用 | ✅ Phase 10 已实施（V01–V10/A01–A02 矩阵与证据见 `docs/phases/phase10.json`、`docs/design_ui/evidence/`；真实 VoiceOver 会话与系统辅助功能设置切换受环境权限限制，记录于 10412 evidence） |
+| **GUI 可用性 / 可访问性** | macOS 原生状态、960×600 最小布局、键盘/VoiceOver、浅深色与系统 Accent 可用 | ✅ 代码与自动测试已实施；V01–V09、960 紧凑及 Light/Dark 证据见 `docs/phases/phase10.json`、`docs/design_ui/evidence/`。V10 系统设置切换、真实 VoiceOver 会话和部分真实点击仍受系统权限限制，未伪装为已执行。 |
 
 ## 5. 输入输出规范
 
@@ -173,9 +173,10 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] Native target、Ports/Adapters、ResourceLocator 与开发期构建边界收口
 - [ ] 独立 `.app`、依赖随包、签名、公证与最终发布 artifact Python-free 门后置到未来发布阶段
 
-### Phase 10 — macOS Native Workbench UI（已规划，待开发）
+### Phase 10 — macOS Native Workbench UI（已完成）
 
 - [x] 外部设计说明与 8 张参考图已整理为 `docs/design_ui/` 设计、状态、实现映射和资产基线
 - [x] Task Center/批量队列、Automatic/Whisper、ASS/VTT、模型下载与分发已从本 Phase 排除
-- [ ] Workspace Session、Native Shell、Inspector、Region、Transcript、Processing/Review、Timeline 与 Settings 按 Feature 顺序实施
-- [ ] V01–V10 视觉状态、A01–A02 辅助功能、Swift 测试与项目标准门全部通过
+- [x] Workspace Session、Native Shell、Inspector、Region、Transcript、Processing/Review、Timeline、Settings 与快速提取设置栏已按 Feature 顺序实施
+- [x] 完整 Swift 测试（201 XCTest + 140 Swift Testing）、项目标准门 10/10、V01–V09/960 紧凑/Light-Dark 截图及 A01/A02 代码与自动测试证据通过
+- [ ] V10 Increase Contrast/Reduce Transparency 实际切换、完整 VoiceOver 朗读会话和部分真实点击路径仍受系统权限限制；替代覆盖与边界记录于 10412–10415 evidence

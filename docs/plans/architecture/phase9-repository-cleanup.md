@@ -1,14 +1,19 @@
 ---
 route: architecture-first
 plan_type: architecture
-status: ready
+status: done
 planning_level: L2
 source: "用户请求：提交文档/Harness 清理后，开始规划 Phase 9 后续仓库清理优化"
 created: 2026-08-10
-tracking: "架构决策已确认；后续切片登记于 docs/phases/phase9.json，均尚未启动"
+tracking: "原 Phase 9 批次已完成；09001–09006 现归档于 docs/phases/phase7.json"
 ---
 
 # 架构计划：Phase 9 仓库清理与可恢复性
+
+> 历史归档说明（2026-08-12）：本文记录原 Phase 9 批次的计划与当时命名；该批次已按
+> ADR-0036 吸收到 Phase 7 项目辅助架构，Feature `09001–09006` 的当前真源为
+> [`docs/phases/phase7.json`](../../phases/phase7.json)。`phase9` 与
+> `docs/phases/phase9.json` 已释放，可用于未来新的 Phase 9。
 
 ## 目标
 

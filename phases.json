@@ -60,16 +60,9 @@
     },
     {
       "id": "phase7",
-      "name": "Phase 7 - Harness Migration",
-      "description": "将项目协作、Phase 索引和会话基线迁移到新 Harness；不改变产品运行时。",
+      "name": "Phase 7 - Project Auxiliary Architecture",
+      "description": "统一承载 Harness 迁移、仓库稳定化、验证入口、诊断与 benchmark 兼容、本地产物卫生等项目辅助架构；不改变产品运行时。",
       "detail_file": "docs/phases/phase7.json",
-      "status": "done"
-    },
-    {
-      "id": "phase9",
-      "name": "Phase 9 - Repository Stabilization and Cleanup",
-      "description": "对齐精简 Harness，校正文档真源，并分阶段收口验证命名、手工脚本、benchmark 兼容边界与本地产物卫生；Phase 8 保留给未合入 main 的 UI 分支实验。",
-      "detail_file": "docs/phases/phase9.json",
       "status": "done"
     },
     {

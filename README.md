@@ -30,6 +30,7 @@
 - **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.8 已完成；Paddle Native 已正式 cutover）
 - **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
+- [项目辅助架构](docs/phases/phase7.json) — Phase 7 统一保存 Harness 迁移及原 Phase 9 仓库治理记录；Phase 9 已释放
 - [Harness 迁移架构（历史）](docs/plans/architecture/harness-migration.md) — Phase 7 初次迁移记录；当前精简边界见 AGENTS 与 ADR-0033
 
 ## 安装
@@ -174,14 +175,15 @@ swift run SubLiftMac
 - **字幕区域选择**：Vision 自动检测文字候选框，多选字幕框后提取（无选择时回退下部裁剪）
 - **实时反馈**：段闭合后增量显示字幕，处理阶段、百分比和相对实时处理倍速均来自真实帧进度
 - **快速取消**：提取中可终止 ffmpeg 与后台任务，取消后可重新开始
-- **字幕编辑**：双击文本修改、合并/拆分条目
-- **引擎切换**：工具栏/设置中切换 vision / paddle / mock
+- **原生工作台**：Video / Transcript Split、可选 Context Inspector、系统 Toolbar 与菜单命令
+- **字幕审阅**：处理期只读 Live Transcript；完成后搜索、选择、修改、合并/拆分并通过时间线定位
+- **提取设置**：视频区快速设置栏与分层 Settings 共用 vision / paddle / mock（开发者模式）和采样质量偏好
 - **SRT 导出**：点击「导出 SRT」选择保存路径
 
 > 处理 mkv 需要系统已安装 ffmpeg，否则 UI 会提示 `brew install ffmpeg`。
 >
-> Phase 10 已完成 Native Workbench 设计与 Feature 拆解，但产品界面尚未升级；
-> 实施真源见 [UI 设计入口](docs/design_ui/README.md)。
+> Phase 10 Native Workbench 已实施并收口；当前能力、视觉证据与已知交互限制见
+> [UI 设计入口](docs/design_ui/README.md) 和 [Phase 10 跟踪](docs/phases/phase10.json)。
 
 ## 开发
 
