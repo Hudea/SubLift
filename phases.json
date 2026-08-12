@@ -66,6 +66,13 @@
       "status": "done"
     },
     {
+      "id": "phase8",
+      "name": "Phase 8 - Batch Task Center and Folder Intake",
+      "description": "为 macOS GUI 增加多文件/文件夹发现、可靠的串行任务队列、安全 SRT 输出与本地恢复；08001 已冻结设计和架构，产品实现从 08102 开始。",
+      "detail_file": "docs/phases/phase8.json",
+      "status": "in-progress"
+    },
+    {
       "id": "phase10",
       "name": "Phase 10 - macOS Native Workbench UI",
       "description": "按已冻结的 vNext 设计基线，将现有 SwiftUI GUI 分阶段升级为原生 macOS 字幕工作台；不扩张到批量队列、自动引擎、新格式或分发。",

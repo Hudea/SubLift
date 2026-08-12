@@ -91,7 +91,7 @@ Focused Core model 仍保留自身业务逻辑。`WorkspaceModel` 不复制 OCR�
 |---|---|---|
 | “自动（推荐）”引擎 | F10 尚未实现多引擎自动路由 | Phase 10 不提供虚假 Automatic；保留未来位置 |
 | Whisper 引擎 | 当前只有 Vision/Paddle/Mock | 不展示，不加入数据模型 |
-| Task Center | F24 未实现 | 第 8 图仅未来参考，不建入口 |
+| Task Center | F24 未实现；Phase 8 的 08001 已完成规划 | Phase 10 不建入口；08102–08410 按独立合同实施后才启用 |
 | 剩余时间/平均置信度 | 当前提取状态不能可靠提供全部值 | 只显示 progress、frame count、processingRate、runtimeIdentity 等真实数据 |
 | Settings 中安装模型 | 当前没有产品化下载器 | 只显示 capability/缺失错误，不做假按钮 |
 | ASS/VTT | 仅接口占位 | Export 只提供 SRT |

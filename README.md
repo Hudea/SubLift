@@ -14,6 +14,7 @@
 - **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
 - **真实进度与快速取消**：CLI/GUI 展示处理阶段和百分比，GUI 可中途取消并重新开始
 - **macOS GUI**：SwiftUI 界面，拖拽导入、视频预览、增量字幕、字幕编辑、SRT 导出
+- **批量任务中心（规划中）**：Phase 8 已冻结多文件/文件夹、串行队列、安全输出与恢复架构；产品实现从 08102 开始
 
 ## 环境要求
 
@@ -31,6 +32,7 @@
 - **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
 - [项目辅助架构](docs/phases/phase7.json) — Phase 7 统一保存 Harness 迁移及原 Phase 9 仓库治理记录；Phase 9 已释放
+- [Phase 8 批量任务中心计划](docs/plans/architecture/phase8-batch-task-center.md) — Task Center、文件夹扫描、串行调度、输出与恢复合同
 - [Harness 迁移架构（历史）](docs/plans/architecture/harness-migration.md) — Phase 7 初次迁移记录；当前精简边界见 AGENTS 与 ADR-0033
 
 ## 安装
@@ -184,6 +186,9 @@ swift run SubLiftMac
 >
 > Phase 10 Native Workbench 已实施并收口；当前能力、视觉证据与已知交互限制见
 > [UI 设计入口](docs/design_ui/README.md) 和 [Phase 10 跟踪](docs/phases/phase10.json)。
+>
+> Phase 8 Task Center 已完成设计与架构规划，但 F24 尚未实现；实施计划和状态见
+> [批量任务中心设计合同](docs/design_ui/batch-task-center.md) 与 [Phase 8 跟踪](docs/phases/phase8.json)。
 
 ## 开发
 

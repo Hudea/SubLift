@@ -8,6 +8,10 @@
 > **当前实现：** Phase 10 Native Workbench 已实施；视觉、交互状态和验收边界见
 > [`docs/design_ui/`](../design_ui/README.md)，逐 Feature 证据见
 > [`docs/phases/phase10.json`](../phases/phase10.json)。
+>
+> **已规划、尚未实现：** Phase 8 将增加独立 Task Center、多文件/文件夹、串行队列、安全
+> SRT 与本地恢复；合同见 [`batch-task-center.md`](../design_ui/batch-task-center.md)，跟踪见
+> [`phase8.json`](../phases/phase8.json)。
 
 ## 运行时边界
 
@@ -123,6 +127,26 @@ TranscriptPanel 编辑/搜索/定位 → SrtFormatter → NSSavePanel 写文件
 C++ 与 Python extractor 是两套实现，其时间戳、ROI、像素和取消行为由冻结 parity/golden
 契约约束。
 
+## Phase 8 计划中的批量数据流（尚未实现）
+
+```text
+Task Center 添加文件/文件夹
+  ↓
+BatchInputScanner → 接受/跳过/拒绝摘要 → BatchTask waiting
+  ↓ 用户开始
+BatchQueueScheduler（maxActive=1）
+  ↓
+BatchExtractionRunner → 每任务独占 PipelineClient/Worker
+  ↓ progress/final entries
+SrtFormatter → AtomicSrtWriter → completed 摘要
+  ↓
+BatchQueueRepository → versioned JSON；重启 active → interrupted/paused
+```
+
+该计划不修改上面的单视频 Workspace 数据流。批量 Runner 使用 `region_box=nil` 的 Worker 默认
+底部区域，不共享 Workspace 的 Region/Editor/Extractor；Task Center 和 Workspace 只共享
+`ExtractionConfiguration`、`VideoImportPolicy`、`SrtFormatter` 等值类型或无状态能力。
+
 ## 预览、选区与 legacy frame mode
 
 - AVFoundation 负责播放预览和常见容器代表帧。
@@ -169,6 +193,6 @@ starting/processing/finalizing 阶段只暴露只读 Transcript，最终 entries
 - 当前只支持 SwiftPM 开发者运行；独立 `.app`、依赖随包、签名和公证后置。
 - Python runtime 是显式开发回滚，不代表未来发布 artifact 会携带 Python。
 - legacy frame mode 仍是协议兼容面，移除前必须先审计测试与外部消费者。
-- 一次只处理一个视频；批量队列和精细时间码拖动尚未实现。
+- 当前发布态仍一次只处理一个视频；批量队列已完成 Phase 8 的 08001 规划、从 08102 开始实施，精细时间码拖动仍未规划。
 - 长视频交互已有历史手工验收，但尚未形成持续运行的跨片源 GUI 回归套件。
 - V10 系统辅助功能设置切换、完整 VoiceOver 会话及部分真实点击受当前系统权限限制；自动测试、代码审核和 EvidenceShot 渲染覆盖边界见 Phase 10 evidence。

@@ -11,7 +11,7 @@
 | [05-workspace-processing.png](assets/05-workspace-processing.png) | Processing、Stop、只读实时字幕 | Phase 10 状态基线；只显示真实数据 | `23bbec59c1c9bae0492c5e7007556a370c68d2c52b503d6f9301746116faddc3` |
 | [06-workspace-review.png](assets/06-workspace-review.png) | Review、Subtitle Inspector、Export | Phase 10 状态基线 | `21302ca9505c5b4ff245d48c0bcbde38759a2cb6bd3bd3ed6b4d7cebfefbd48b` |
 | [07-settings-recognition.png](assets/07-settings-recognition.png) | Recognition Settings | Phase 10 视觉参考；Automatic 不在当前范围 | `293cdf86647dd3bc84873c5856a57d423200c30d8e266a0fd4f37e86af4e9ac0` |
-| [08-task-center-future.png](assets/08-task-center-future.png) | Task Center | 未来 F24 参考，Phase 10 不实现 | `5ec8714ce8aeccf5da2df3906e36e4ed255eb295875b0ddd71653c2983aa9724` |
+| [08-task-center-future.png](assets/08-task-center-future.png) | Task Center | Phase 8 信息层级参考；Whisper/ETA 等不构成能力合同 | `5ec8714ce8aeccf5da2df3906e36e4ed255eb295875b0ddd71653c2983aa9724` |
 
 ## 使用规则
 

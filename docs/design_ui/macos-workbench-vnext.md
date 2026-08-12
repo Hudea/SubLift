@@ -37,7 +37,7 @@ SubLift 应呈现为一个 **Native macOS Subtitle Workbench**，而不是 AI Sa
 | Main Workspace Window | 一个视频 Session 的导入、区域、提取、校对与导出 | 实施范围 |
 | Context Inspector | 当前视频、区域、提取或字幕的上下文 | 实施范围 |
 | Settings Window | 跨 Session 的质量、引擎与开发者偏好 | 实施范围 |
-| Task Center Window | 未来批量任务与队列 | 仅未来参考 |
+| Task Center Window | Phase 8 批量任务与队列 | Phase 10 不实现；Phase 8 已规划、尚未交付 |
 
 Export 继续使用 `NSSavePanel`；依赖错误和阻断错误使用 inline、sheet 或 alert，不新增 Web 式页面。
 
@@ -245,4 +245,5 @@ Phase 10 不包含：
 - 独立 `.app` 分发、签名、公证；
 - 修改 C++/Python Pipeline 算法、UDS framing 或默认 runtime/fail-closed 策略。
 
-第 8 张 Task Center 参考图保留在资产目录，等 F24 被独立登记并具备真实队列模型后再启用。
+第 8 张 Task Center 参考图已由 Phase 8 的 08001 转化为独立设计/架构合同；Phase 10 的非目标
+保持不变。只有 08102–08410 建立真实队列模型并通过验收后，产品才启用入口。

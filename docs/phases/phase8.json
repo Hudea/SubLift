@@ -1,0 +1,643 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 8 - Batch Task Center and Folder Intake",
+  "description": "为 macOS GUI 增加独立 Task Center：支持多文件/文件夹发现、可靠的串行任务队列、安全 SRT 输出与本地恢复；不改变 OCR 算法、Worker/IPC、默认 runtime 或单视频 Workspace 的精修职责。",
+  "features": [
+    {
+      "id": "08001",
+      "name": "冻结 Phase 8 设计与实施基线",
+      "description": "把 F24 批量处理登记为独立 Phase，冻结 Task Center、输入扫描、任务状态、串行调度、配置快照、输出安全、持久化恢复、视觉验收和非目标，并拆解可顺序实施的 Feature。",
+      "module": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/plans/features/08001.md",
+        "docs/phases/phase8.json",
+        "phases.json",
+        "progress.md",
+        "docs/REQUIREMENTS.md",
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md",
+        "docs/design/macos-gui.md",
+        "docs/design_ui/README.md",
+        "docs/design_ui/implementation-map.md",
+        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/reference-index.md",
+        "README.md"
+      ],
+      "dependencies": [],
+      "acceptance_criteria": [
+        "主设计合同明确文件/文件夹入口、默认非递归、去重/拒绝报告、Task/Queue 状态、配置快照、输出冲突、持久化恢复、响应式/辅助功能与 B01–B10，不从参考图伪造能力。",
+        "架构计划明确 BatchQueueModel 与 WorkspaceModel 双组合根、Domain/Ports/Adapters 依赖方向、单并发调度、run token、Worker teardown、内存有界和停止条件。",
+        "Phase 8 使用 08001–08410 五位 ID、canonical 字段、显式依赖、逐 Feature acceptance/subtask/evidence，并可由 phaseN.schema.json 接受。",
+        "Requirements、Architecture、Decisions、README、macOS GUI 与 design_ui 入口一致描述 F24 已规划但尚未实现，Phase 10 历史非目标保持真实。",
+        "JSON/schema、Feature 依赖与状态、Markdown 本地链接、git diff --check 和 ./init.sh 通过，结果写入本 Feature evidence。"
+      ],
+      "non_goals": [
+        "本 Feature 不修改 Swift、C++、ObjC++、Python 产品代码或测试，也不创建 Task Center 占位入口。",
+        "不实现并行 OCR、目录监听、Automatic/Whisper、新格式、数据库、Worker/IPC 变更或独立分发。",
+        "不提交或推送，除非用户另行明确授权。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/design/macos-gui.md",
+        "docs/DECISIONS.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08001.01",
+          "name": "盘点批量能力输入与当前边界",
+          "description": "对照 F24、Task Center 参考图、Phase 10 Workspace、现有 Swift Core/测试和 runtime policy，区分可复用能力、必需新层与非目标。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "08001.02",
+          "name": "冻结产品与架构合同",
+          "description": "写入文件夹扫描、状态机、配置、输出、恢复、UI、双组合根、Ports/Adapters、调度不变量和停止条件。",
+          "dependencies": [
+            "08001.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "08001.03",
+          "name": "拆解 Phase 8 Feature 与验收",
+          "description": "登记 08102–08410 的顺序依赖、细 subtask、二元验收、真实证据和范围限制。",
+          "dependencies": [
+            "08001.02"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "08001.04",
+          "name": "同步文档并验证基线",
+          "description": "同步产品/架构/决策/导航，运行 JSON/schema、依赖、链接、格式和 init 验证并写入 evidence。",
+          "dependencies": [
+            "08001.03"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-12 完成 Phase 8 的 08001 设计与实施基线；本 Feature 只修改文档、Phase 跟踪和导航，未修改 Swift、C++、ObjC++、Python 产品代码或测试，未创建 Task Center 占位入口，未提交或推送。\n\n范围结果：\n- 新增 docs/design_ui/batch-task-center.md：冻结文件/文件夹统一入口、默认非递归、隐藏/package/symlink 过滤、标准化去重与拒绝摘要；waiting/preparing/extracting/exporting/completed/failed/cancelled/interrupted/skipped Task 状态；idle/running/pauseRequested/paused Queue 状态；入队配置快照、默认底部区域、sidecar/公共输出、skip/rename/replace、同卷临时文件原子写入、versioned JSON 恢复、响应式/键盘/辅助功能和 B01–B10。\n- 新增 docs/plans/architecture/phase8-batch-task-center.md：冻结 WorkspaceModel + BatchQueueModel 双组合根；BatchInputScanner/BatchOutputPlanner/BatchQueueScheduler/BatchExtractionRunner/BatchQueueRepository 的 Domain/Ports/Adapters 依赖；单并发、taskID+runToken、Worker teardown、失败继续、内存有界和停止条件。\n- 新增 docs/phases/phase8.json：10 个 canonical Feature（08001–08410）和 31 个顺序 subtask；实现顺序为 Domain → Scanner/Output → Scheduler → Runner → Repository → Task Center → Interaction/A11y → 综合验收。每个实现 Feature 均包含 RED/GREEN、独立审核、修改复核、真实验收、evidence 和回归门。\n- 新增 docs/plans/features/08001.md，并同步 phases.json、progress、README、REQUIREMENTS、ARCHITECTURE、DECISIONS（ADR-0037）、macOS GUI 与 design_ui 入口/参考边界。F24 明确为“已规划、尚未实现”；Phase 10 历史非目标不被追溯改写。\n- 明确排除并行 OCR、目录监听、Automatic/Whisper、新格式、数据库、Worker/IPC/算法、App Sandbox 与分发；参考图中的 Whisper/ETA 不构成产品能力。\n\n验证（最终文档状态，全部退出码 0）：\n- ./init.sh：OK。\n- jq -e . phases.json docs/phases/phase8.json：通过。\n- /usr/bin/python3 -m jsonschema：phases.json 对 phases.schema.json、phase8.json 对 phaseN.schema.json 均通过（系统 jsonschema 4.25.1，仅出现 CLI deprecation warning，未新增项目依赖）。\n- 定向结构检查：11 个 Phase detail 均存在；全局 145 个 Feature ID 唯一；Phase 8 恰为 08001–08410、10 个 Feature/31 个 subtask，依赖只指向已出现 ID；08001 done/evidence/subtask 一致，其余 Feature 全部 not-started。\n- Markdown 本地链接扫描：113 个 Markdown 文件、340 个本地链接全部存在。\n- Task Center/F24 当前状态扫描：现行文档一致标记 08001 已规划、08102–08410 未实现；Phase 10 计划/ADR 中的非目标保留历史语义。\n- git diff --check：通过。\n\n未执行项（如实记录）：\n- 08001 为纯文档 Feature，未运行 swift test 或 scripts/verify-standard.sh；产品 TDD、真实 IPC、文件系统和 UI 验收从 08102 起按 Feature 执行。\n- 未创建 B01–B10 截图或产品运行证据；这些属于 08308–08410。"
+    },
+    {
+      "id": "08102",
+      "name": "建立批量任务领域模型",
+      "description": "新增可持久化的 BatchTask/BatchTaskStatus/BatchQueueState/Result/Failure/Progress 值类型、合法状态转换和配置快照，为 Scanner、Scheduler、Repository 与 UI 提供唯一业务真源。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchTask.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueState.swift",
+        "apps/macos/Sources/SubLiftMac/Core/ExtractionConfiguration.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Messages.swift",
+        "apps/macos/Sources/SubLiftMac/Core/SamplingQuality.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchTaskModelTests.swift",
+        "docs/plans/features/08102.md"
+      ],
+      "dependencies": [
+        "08001"
+      ],
+      "acceptance_criteria": [
+        "Task 状态覆盖 waiting/preparing/extracting/exporting/completed/failed/cancelled/interrupted/skipped，非法转换被纯状态机拒绝。",
+        "BatchTask 具有稳定 UUID、标准化源 URL、配置、输出计划、状态、进度、结果、失败摘要与添加时间；运行 token 不进入持久化值。",
+        "ExtractionConfiguration、OcrEngineName、SamplingQuality 使用同一 Codable 真源往返，不复制第二套字符串枚举。",
+        "waiting 任务可通过显式 intent 替换配置，preparing 及以后配置锁定；非开发模式 Mock 的最终归一化入口可测。",
+        "先写失败测试并观察 RED；BatchTaskModelTests 与相关 Settings/QuickExtraction/Workspace 回归测试 GREEN，完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不扫描文件夹、不启动 Worker、不写 SRT、不创建 SwiftUI View。",
+        "不修改 C++/Python、UDS schema 或 runtime 路由。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08102.01",
+          "name": "计划并写领域模型 RED 测试",
+          "description": "冻结字段、状态转换、Codable 与配置锁定测试，先确认缺失类型/行为导致真实失败。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08102.02",
+          "name": "实现值类型与状态转换",
+          "description": "新增 Batch domain 文件并为既有配置类型补最小 Codable，不接 UI/Runner。",
+          "dependencies": [
+            "08102.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08102.03",
+          "name": "审核、修复并验收领域模型",
+          "description": "独立审核状态不变量、兼容性和测试真实性；修改后跑定向/完整 Swift 并写 evidence。",
+          "dependencies": [
+            "08102.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08103",
+      "name": "实现多文件与文件夹发现",
+      "description": "建立 BatchInputScanner 与扫描摘要，统一文件选择、文件夹选择和拖拽的格式校验、递归、隐藏/package/symlink、去重与拒绝原因。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchInputScanner.swift",
+        "apps/macos/Sources/SubLiftMac/Core/VideoImportPolicy.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchInputScannerTests.swift",
+        "docs/plans/features/08103.md"
+      ],
+      "dependencies": [
+        "08102"
+      ],
+      "acceptance_criteria": [
+        "文件和文件夹输入进入同一 scanner；默认不递归，显式递归后按稳定相对路径顺序枚举。",
+        "MP4/MOV/MKV 大小写扩展名复用 VideoImportPolicy；MKV 缺 ffmpeg、无权限、空目录、不支持格式均产生结构化拒绝原因。",
+        "隐藏项、package 与 symlink 不进入扫描；标准化 URL 对本批与已有队列双重去重。",
+        "扫描不启动 metadata、Worker 或 OCR；1000 个混合目录项的扫描结果有界且不会向 UI 逐文件同步阻塞。",
+        "临时目录 TDD 覆盖递归开关、嵌套、重复、大小写、隐藏、package、symlink、空目录和拒绝摘要；完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不实现目录监听、security-scoped bookmark、网络卷重连或自动开始队列。",
+        "不在 View 中复制扩展名、递归或去重规则。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08103.01",
+          "name": "计划扫描合同并写临时目录 RED 测试",
+          "description": "先用真实临时目录覆盖直接/递归、过滤、去重和拒绝报告。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08103.02",
+          "name": "实现可注入的 BatchInputScanner",
+          "description": "使用 Foundation URL/resource values 实现纯扫描服务，复用 VideoImportPolicy。",
+          "dependencies": [
+            "08103.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08103.03",
+          "name": "审核、修复并验收扫描边界",
+          "description": "复核路径安全、确定顺序和大目录行为；修复后跑定向/完整 Swift 并写 evidence。",
+          "dependencies": [
+            "08103.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08104",
+      "name": "实现输出规划与冲突保护",
+      "description": "建立 sidecar/公共输出目录路径规划、相对目录保持、skip/rename/replace 冲突策略与同卷临时文件原子写入，确保批量输出不静默覆盖。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchOutputPlanner.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/AtomicSrtWriter.swift",
+        "apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchOutputPlannerTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/AtomicSrtWriterTests.swift",
+        "docs/plans/features/08104.md"
+      ],
+      "dependencies": [
+        "08102"
+      ],
+      "acceptance_criteria": [
+        "默认 sidecar 生成同 basename 的 .srt；公共输出目录对文件夹输入保持相对目录，对独立文件使用 basename。",
+        "目标标准化后必须仍在公共 output root 内；异常相对路径、不可写目录和同批目标碰撞 fail-closed。",
+        "冲突默认 skipped；rename 选择首个稳定可用的 name (N).srt；replace 必须携带已确认策略。",
+        "SRT 在目标同卷写临时文件并原子移动/替换；失败时旧文件字节不变且临时文件清理。",
+        "临时目录 TDD 覆盖三策略、多来源同名、路径逃逸、不可写和故障注入；SrtFormatter 回归与完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不新增 ASS/VTT、命名模板语言、云目录或数据库。",
+        "不通过 shell、glob 或未验证字符串拼接生成目标路径。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08104.01",
+          "name": "计划路径/冲突/原子写入并写 RED 测试",
+          "description": "冻结 sidecar、公共根、相对路径、三冲突策略和故障注入测试。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08104.02",
+          "name": "实现 OutputPlanner 与 AtomicSrtWriter",
+          "description": "实现纯路径规划和可注入文件系统写入，不接队列调度。",
+          "dependencies": [
+            "08104.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08104.03",
+          "name": "审核、修复并验收输出安全",
+          "description": "独立复核覆盖、路径边界和失败原文件保护；修改后跑定向/完整 Swift 并写 evidence。",
+          "dependencies": [
+            "08104.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08205",
+      "name": "实现可靠的串行队列调度器",
+      "description": "新增只依赖 Runner/Repository ports 的 BatchQueueScheduler，固定单并发，处理开始、完成当前项后暂停、停止、取消、失败继续、重试、重排和迟到事件隔离。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueScheduler.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchTaskRunning.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueuePersisting.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchQueueSchedulerTests.swift",
+        "docs/plans/features/08205.md"
+      ],
+      "dependencies": [
+        "08103",
+        "08104"
+      ],
+      "acceptance_criteria": [
+        "Fake Runner 记录证明任意时刻最多一个 preparing/extracting/exporting，前项 teardown 完成后才启动下一项。",
+        "pauseRequested 让当前任务完成后进入 paused；stop/cancel 失效 run token 并停止继续调度，等待项保持顺序。",
+        "单任务 failed 默认继续下一项；failed/cancelled/interrupted 可显式 retry 回 waiting，completed 不可重跑除非复制为新任务。",
+        "只有 waiting 任务可删除、重排或修改配置；运行项与终态项的非法命令由同一 availability 真源拒绝。",
+        "TDD 覆盖成功链、失败继续、暂停/恢复、停止/取消、迟到 progress/final、重排和大量等待任务；完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不实现并发数设置、多个 Worker、进程 suspend/resume 或 UI。",
+        "不让 Scheduler 解析 IPC 消息或直接操作文件系统。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08205.01",
+          "name": "计划调度不变量并写 Fake Runner RED 测试",
+          "description": "先固定单并发、控制语义、token、失败继续和 availability 的可观察测试。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08205.02",
+          "name": "实现 Scheduler 与命令策略",
+          "description": "以依赖注入实现串行调度和状态更新，不接真实 PipelineClient。",
+          "dependencies": [
+            "08205.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08205.03",
+          "name": "审核、修复并验收竞态边界",
+          "description": "独立审核 Actor/MainActor、取消、迟到事件与资源所有权；修改后跑定向/完整 Swift 并写 evidence。",
+          "dependencies": [
+            "08205.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08206",
+      "name": "接入真实提取 Runner 与自动导出",
+      "description": "为 Scheduler 实现生产 BatchExtractionRunner：每任务独占 PipelineClient，映射真实 progress/final/cancel/runtime，使用 SrtFormatter 与原子 writer 输出并在完成后释放 entries。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchExtractionRunner.swift",
+        "apps/macos/Sources/SubLiftMac/Core/SubtitleExtractor.swift",
+        "apps/macos/Sources/SubLiftMac/Core/PipelineClient.swift",
+        "apps/macos/Sources/SubLiftMac/Core/SrtFormatter.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchExtractionRunnerTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/PipelineClientIntegrationTests.swift",
+        "docs/plans/features/08206.md"
+      ],
+      "dependencies": [
+        "08205"
+      ],
+      "acceptance_criteria": [
+        "每任务创建并回收独占 PipelineClient/Worker/socket；Workspace 与 Batch 不共享可变 SubtitleExtractor。",
+        "Runner 事件包含真实 starting/processing/finalizing/final entries/runtime/error，Scheduler 不解析 UDS；隐藏 Mock 在启动前再次归一化。",
+        "final entries 只有成功原子写出后才产生 completed；写出后释放完整 entries，只保留 count/output/runtime 摘要。",
+        "取消关闭当前 Worker 且无迟到事件；资源回收后下一任务可启动，失败/空结果按冻结合同处理。",
+        "Fake IPC 测试和至少两个小视频的真实串行 IPC smoke 通过；WorkspaceModel/SubtitleExtractor/PipelineClient 回归及完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不修改 Worker/UDS/算法/ROI 语义，不并行 OCR，不把批量 entries 注入 Workspace Editor。",
+        "不以 DEBUG fixture 冒充真实 Runner teardown/restart 验收。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/design/macos-gui.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08206.01",
+          "name": "计划 Runner 事件合同并写 RED 测试",
+          "description": "固定 progress/final/cancel/runtime/export/teardown 测试，先以 fake client/runner 观察失败。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08206.02",
+          "name": "实现生产 Runner 与导出接线",
+          "description": "复用 PipelineClient 生命周期和 SrtFormatter，不改变 IPC；成功后主动释放 entries。",
+          "dependencies": [
+            "08206.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08206.03",
+          "name": "审核、修复并验收真实串行生命周期",
+          "description": "独立审核 cancel/teardown/restart 和 Workspace 回归；修复后跑 fake、integration、两个视频 smoke 与完整 Swift。",
+          "dependencies": [
+            "08206.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08207",
+      "name": "实现队列持久化与异常恢复",
+      "description": "新增 versioned Codable JSON Repository，以原子保存恢复队列摘要；活动任务重启后变为 interrupted 且队列 paused，损坏/未知版本 fail-closed。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueRepository.swift",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueSnapshot.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchQueueRepositoryTests.swift",
+        "docs/plans/features/08207.md"
+      ],
+      "dependencies": [
+        "08206"
+      ],
+      "acceptance_criteria": [
+        "schemaVersion=1 的 JSON 保存任务摘要、顺序、配置、输出、状态、计数、错误和时间，不保存帧、字幕全文、无限日志或 run token。",
+        "保存使用同目录临时文件与原子替换；结构/状态变化立即保存，progress 按可测试节流策略 checkpoint。",
+        "恢复时 preparing/extracting/exporting 统一为 interrupted、queue 为 paused，且不自动创建 Worker。",
+        "未知版本或损坏 JSON 不部分加载、不覆盖原文件，返回可展示错误并允许显式创建新清单。",
+        "临时目录 TDD 覆盖 round-trip、原子故障、损坏、未知版本、active 恢复和 100 task 清单体积/恢复时间；完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不新增 SQLite/Core Data/第三方依赖、云同步、日志数据库或 App Sandbox bookmark。",
+        "不自动恢复执行、不尝试恢复 Worker 进程或部分 OCR 状态。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08207.01",
+          "name": "计划 snapshot/schema/recovery 并写 RED 测试",
+          "description": "先固定版本、原子故障、active 归一化和损坏文件测试。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08207.02",
+          "name": "实现 Repository 与节流保存",
+          "description": "实现 Application Support 路径、Codable snapshot、原子写入和显式恢复错误。",
+          "dependencies": [
+            "08207.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08207.03",
+          "name": "审核、修复并验收恢复安全",
+          "description": "独立审核数据丢失、无限增长和启动副作用；修改后跑定向/完整 Swift 并写 evidence。",
+          "dependencies": [
+            "08207.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08308",
+      "name": "实现原生 Task Center Window",
+      "description": "在 App scene 层增加独立 Task Center，使用原生 Table/List、Toolbar、搜索/筛选入口、选中任务详情和汇总条投影真实 BatchQueueModel。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/App/SubLiftMacApp.swift",
+        "apps/macos/Sources/SubLiftMac/App/TaskCenterCommands.swift",
+        "apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift",
+        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskCenterView.swift",
+        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskTableView.swift",
+        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskDetailView.swift",
+        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/TaskCenterToolbar.swift",
+        "apps/macos/Tests/SubLiftMacTests/TaskCenterPresentationTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/TaskCenterCommandTests.swift",
+        "docs/design_ui/evidence/08308/",
+        "docs/plans/features/08308.md"
+      ],
+      "dependencies": [
+        "08207"
+      ],
+      "acceptance_criteria": [
+        "Task Center 是独立 Window/Scene；Workspace 只增加显示入口，不增加永久 Sidebar，两个组合根状态互不清空。",
+        "Table/List 展示文件、时长、引擎、状态、真实进度、输出和添加时间；选中详情展示源/配置/runtime/error/output/task ID。",
+        "Toolbar/Menu 复用统一 command availability，只有真实动作可用；不显示 Whisper、Automatic、虚假 ETA/平均置信度或模型下载。",
+        "B01 Empty、B03 Waiting、B04 Running、B05 Paused、B06 Mixed Result、B07 Restored、B10 Error 有确定性 fixture 和截图。",
+        "1280×800 与 960×600 无主控制裁切/横向溢出，长文件名/路径安全截断；presentation/command、完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "本 Feature 不实现拖入、批量多选编辑、最终键盘/VoiceOver 矩阵或真实文件夹综合验收。",
+        "不复制 Scheduler/Scanner/Writer 逻辑到 View。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/design_ui/assets/08-task-center-future.png"
+      ],
+      "subtasks": [
+        {
+          "id": "08308.01",
+          "name": "计划 Scene/布局/命令并写 RED 测试",
+          "description": "冻结窗口所有权、列优先级、详情和 command availability 纯逻辑。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08308.02",
+          "name": "实现 Task Center 原生 Surface",
+          "description": "接入 App scene、Table/List、Toolbar、详情与汇总，不复制业务状态。",
+          "dependencies": [
+            "08308.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08308.03",
+          "name": "审核、修复并验收视觉状态",
+          "description": "独立审核状态真实性、响应式和 macOS 语义；修复后跑测试并采集 B01/B03–B07/B10 截图。",
+          "dependencies": [
+            "08308.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08309",
+      "name": "完善批量交互、键盘与辅助功能",
+      "description": "将文件/文件夹选择、拖拽、扫描摘要、搜索筛选、多选、waiting 重排/配置、Finder 定位与危险操作确认接入 Task Center，并完成键盘/VoiceOver/紧凑/Dark 验收。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/App/TaskCenterCommands.swift",
+        "apps/macos/Sources/SubLiftMac/App/EvidenceShot.swift",
+        "apps/macos/Sources/SubLiftMac/UI/TaskCenter/",
+        "apps/macos/Sources/SubLiftMac/Core/Batch/BatchQueueModel.swift",
+        "apps/macos/Tests/SubLiftMacTests/TaskCenterInteractionTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/TaskCenterAccessibilityTests.swift",
+        "apps/macos/Tests/SubLiftMacTests/BatchQueueModelTests.swift",
+        "docs/design_ui/evidence/08309/",
+        "docs/plans/features/08309.md"
+      ],
+      "dependencies": [
+        "08308"
+      ],
+      "acceptance_criteria": [
+        "添加文件、添加文件夹和 drop 走同一 scanner；B02 展示接受/跳过/拒绝数量与逐项原因，不自动开始。",
+        "搜索/状态筛选只改变投影；waiting 可多选删除、显式改配置和重排，活动/终态任务的非法操作被统一 availability 拒绝。",
+        "已有文件 replace 在开始前集中确认；取消确认不启动任务、不删除或覆盖现有输出。",
+        "Finder 可定位存在的源/输出，不存在时显示错误；破坏性删除/取消有确认且键盘焦点安全。",
+        "B08 960×600、B09 Dark/Accent、组合 AX label/value、菜单快捷键和实际拖入/点击验收有真实证据；完整 swift test 通过。"
+      ],
+      "non_goals": [
+        "不实现并行、文件夹监听、逐文件 Region、批量字幕编辑或输出格式 Wizard。",
+        "不以源码字符串断言或只有截图替代交互和状态测试。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08309.01",
+          "name": "计划批量交互并写 ViewModel/command RED 测试",
+          "description": "固定统一入口、投影不变序、waiting 操作、确认和 Finder 错误测试。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08309.02",
+          "name": "实现批量操作与辅助功能接线",
+          "description": "接入 scanner/model/commands/drop/search/filter/multiselect/reorder/配置/Finder/AX。",
+          "dependencies": [
+            "08309.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08309.03",
+          "name": "审核、修复并验收真实交互",
+          "description": "独立审核键盘、VoiceOver、确认和紧凑/Dark；修复后跑测试并采集 B02/B08/B09 及真实交互证据。",
+          "dependencies": [
+            "08309.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "08410",
+      "name": "完成 Phase 8 综合审核与验收",
+      "description": "以真实混合文件夹、串行 IPC、失败/取消/恢复、输出安全、长队列资源和 B01–B10 视觉矩阵完成独立审核、修改复核、项目门与文档收口。",
+      "module": [
+        "apps/macos/Sources/SubLiftMac/",
+        "apps/macos/Tests/SubLiftMacTests/",
+        "docs/design_ui/evidence/08410/",
+        "docs/REQUIREMENTS.md",
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md",
+        "docs/design/macos-gui.md",
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/phases/phase8.json",
+        "phases.json",
+        "progress.md",
+        "docs/plans/features/08410.md"
+      ],
+      "dependencies": [
+        "08309"
+      ],
+      "acceptance_criteria": [
+        "真实混合目录含支持/无效/重复/嵌套/已有 SRT；默认非递归与显式递归结果、拒绝摘要、三冲突策略均与合同一致。",
+        "至少三个实际任务串行闭环，包含 completed、failed 或 cancelled 后继续、retry 和输出定位；记录 Worker teardown 后下一项才启动。",
+        "应用恢复将活动项标为 interrupted 且不自动启动；损坏清单 fail-closed；100 Fake tasks 的清单体积/恢复时间与运行后内存/残留 Worker 检查有真实数据。",
+        "独立审核覆盖 Domain/调度与取消、路径/持久化安全、SwiftUI/辅助功能/测试证据；所有 P0/P1/P2 修复并经原审核方向复核，无阻断项。",
+        "B01–B10、1280/960、Light/Dark/Accent 证据齐全；完整 swift test、verify-standard、JSON Schema、依赖/状态、链接、diff-check 与 init 通过，Phase 8/Requirements/Architecture/README 状态同步。"
+      ],
+      "non_goals": [
+        "不以 fake/DEBUG fixture 冒充真实 IPC、文件写入、取消恢复或文件夹组合验收。",
+        "不在收口 Feature 扩张到并行、监听、新引擎/格式、数据库、分发或 Worker/IPC 改造。"
+      ],
+      "architecture_refs": [
+        "docs/design_ui/batch-task-center.md",
+        "docs/plans/architecture/phase8-batch-task-center.md",
+        "docs/design/macos-gui.md",
+        "docs/DECISIONS.md"
+      ],
+      "subtasks": [
+        {
+          "id": "08410.01",
+          "name": "冻结综合验收矩阵并执行首次全量测试",
+          "description": "核对全部 acceptance/evidence，运行混合文件夹、真实串行、恢复、资源、B01–B10 与项目门并记录失败。",
+          "dependencies": [],
+          "status": "not-started"
+        },
+        {
+          "id": "08410.02",
+          "name": "独立审核、修改与复核",
+          "description": "最多三个只读子 Agent 分别审核状态/并发、路径/持久化、UI/测试；主 Agent 修复并交回同方向复核。",
+          "dependencies": [
+            "08410.01"
+          ],
+          "status": "not-started"
+        },
+        {
+          "id": "08410.03",
+          "name": "复跑验收并同步最终文档",
+          "description": "复跑定向/完整/标准门与真实 UI，写最终 evidence，更新 Requirements/Architecture/README/progress 和 Phase 状态。",
+          "dependencies": [
+            "08410.02"
+          ],
+          "status": "not-started"
+        }
+      ],
+      "status": "not-started",
+      "evidence": ""
+    }
+  ]
+}

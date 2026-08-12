@@ -5,6 +5,36 @@
 
 ---
 
+## ADR-0037 Phase 8 采用独立 Task Center 与可靠串行队列（2026-08-12）
+
+- **状态**：已确认；08001 完成设计/架构基线，产品实现从 08102 开始。
+- **背景**：Phase 10 已把单视频 Workspace 的状态所有权、提取安全、编辑和导出收口。F24
+  仍一次只能处理一个视频；外部第 8 张参考图提出 Task Center，但同时包含 Whisper、ETA 和
+  多任务图景，不能直接当作当前能力。长批量任务还必须解决目录扫描、配置漂移、输出覆盖、
+  单项失败、取消 teardown、内存增长和应用重启恢复，而不应继续膨胀 `WorkspaceModel`。
+- **决策**：
+  1. 新增独立 `BatchQueueModel` 组合根；Workspace 继续拥有单视频预览、交互区域、校对与手动
+     导出。两者只共享值类型、无状态策略和 Runner port，不共享可变 `SubtitleExtractor`。
+  2. Phase 8 固定单并发。暂停是“完成当前任务后暂停”；取消必须等当前 Worker/socket 完全
+     teardown 后才能启动下一项。task ID + run token 拒绝迟到事件。
+  3. 文件/文件夹统一进入 `BatchInputScanner`；默认不递归、不跟随 symlink，复用
+     `VideoImportPolicy`，扫描阶段不启动 OCR。任务复制入队配置，preparing 后锁定；批量区域
+     使用 Worker 默认底部区域。
+  4. 输出默认 sidecar SRT，冲突默认跳过，也可稳定重命名或明确确认替换；`SrtFormatter` 的
+     结果通过同卷临时文件原子落地，completed 后不持有完整字幕数组。
+  5. 队列使用 Application Support 下 versioned Codable JSON 原子保存。重启时活动任务变为
+     interrupted、队列 paused，用户显式继续前不拉起 Worker；损坏/未知版本 fail-closed。
+  6. 本 Phase 不新增数据库、并行 OCR、目录监听、Automatic/Whisper、新格式、Worker/IPC、
+     App Sandbox 或分发范围。
+- **理由**：批量编排与单视频编辑是两个生命周期。独立组合根和可注入 ports 让 Scanner、
+  Scheduler、Writer、Repository 可确定性 TDD；固定串行则复用已经验收的单任务资源与取消边界，
+  不在缺少资源/质量证据时引入并发风险。安全输出和显式恢复避免长任务产生不可逆覆盖或假续跑。
+- **影响**：产品与视觉合同在 `docs/design_ui/batch-task-center.md`，架构和 Feature 顺序在
+  `docs/plans/architecture/phase8-batch-task-center.md`，操作跟踪在 `docs/phases/phase8.json`。
+  08001 只完成规划，F24 在 08102–08410 实施并通过最终门前仍标为未实现。
+
+---
+
 ## ADR-0036 合并项目辅助架构记录并释放 Phase 9（2026-08-12）
 
 - **状态**：已确认，由 07002 实施。

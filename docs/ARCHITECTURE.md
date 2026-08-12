@@ -342,20 +342,53 @@ Sidebar。Inspector 按 Video / Region / Extraction / Subtitle 切换；Settings
 可编辑 Review，从结构上消除最终结果覆盖处理中用户修改的风险。
 
 本 Phase 不改变 runtime fail-closed、Worker path mode、ROI/坐标、算法或 UDS framing；也不
-实现 Task Center/批量队列、自动引擎、Whisper、ASS/VTT、模型下载与独立分发。设计入口见
+实现 Task Center/批量队列、自动引擎、Whisper、ASS/VTT、模型下载与独立分发。Task Center
+已在后续 Phase 8 独立规划，不追溯改变 Phase 10 的范围。设计入口见
 [docs/design_ui](design_ui/README.md)，实施计划见
 [Phase 10 macOS Workbench UI](plans/architecture/phase10-macos-workbench-ui.md)，跟踪见
 [phase10.json](phases/phase10.json)。
 
-**实施状态（2026-08-12）**：Phase 10 已推进到 10415，完成 Session 状态模型、Welcome/导入、
+**实施状态（2026-08-12）**：Phase 10 已完成到 10416；产品实现止于 10415，完成 Session 状态模型、Welcome/导入、
 Workspace Shell、Context Inspector、Region Editing、Transcript、Processing/Review、Timeline、
-Settings、响应式/辅助功能、独立审计修复与快速提取设置栏；10416 负责最终文档收口。
+Settings、响应式/辅助功能、独立审计修复与快速提取设置栏；10416 已完成最终文档收口。
 完整 `swift test`（201 XCTest + 140 Swift Testing）与标准门 10/10 全绿。V01–V09、960 紧凑、
 Light/Dark、A01/A02 代码与自动测试证据见 `docs/phases/phase10.json` 和
 `docs/design_ui/evidence/`；V10 系统设置切换、完整 VoiceOver 会话及部分真实点击受系统权限限制，
 未伪装为已执行。
 
-## 16. 架构决策
+## 16. Phase 8 批量任务中心与文件夹导入（已规划）
+
+Phase 8 在单视频 Workspace 之外增加独立 `BatchQueueModel` 组合根；它拥有多任务清单、输入
+扫描、输出规划、串行调度、任务 Runner 与本地持久化，不把队列状态塞入 `WorkspaceModel`，
+也不共享可变 `SubtitleExtractor`。
+
+```text
+SubLiftMacApp
+├── WorkspaceModel          # 单视频预览、区域、提取、校对、手动导出
+└── BatchQueueModel         # 多文件/文件夹、队列、自动 SRT、恢复
+      ├── BatchInputScanner
+      ├── BatchOutputPlanner + AtomicSrtWriter
+      ├── BatchQueueScheduler (maxActive = 1)
+      ├── BatchExtractionRunner → per-task PipelineClient
+      └── BatchQueueRepository → versioned atomic JSON
+```
+
+首版固定单并发；暂停表示完成当前任务后停止调度，不 suspend Worker。任务在入队时复制
+`ExtractionConfiguration`，waiting 可显式修改，preparing 后锁定；Settings 改动不追溯。
+批量任务使用 `region_box=nil` 的 Worker 默认底部区域，逐文件 Region Editing 仍属于 Workspace。
+
+输出默认是源视频同目录 sidecar SRT；公共输出目录保留文件夹相对结构。已有目标默认跳过，
+也可稳定自动重命名或经集中确认后替换。最终 entries 经 `SrtFormatter` 写同卷临时文件并原子
+落地；completed 后只保留字幕数量、输出和 runtime 摘要，避免长队列线性持有字幕。
+
+队列清单使用 Application Support 下 versioned Codable JSON 原子保存；恢复时活动任务变为
+interrupted、队列 paused，用户显式继续前不启动 Worker。Phase 8 不新增数据库、并行 OCR、
+目录监听、Automatic/Whisper、新格式、Worker/IPC 或分发范围。产品合同见
+[批量任务中心设计](design_ui/batch-task-center.md)，架构计划见
+[Phase 8 计划](plans/architecture/phase8-batch-task-center.md)，跟踪见
+[phase8.json](phases/phase8.json)。当前只完成 08001 规划，F24 尚未实现。
+
+## 17. 架构决策
 
 完整决策记录见 [DECISIONS.md](DECISIONS.md)，要点：
 
@@ -380,8 +413,9 @@ Light/Dark、A01/A02 代码与自动测试证据见 `docs/phases/phase10.json` �
 - **ADR-0024**：在去 Python/打包前插入 Phase 6.8，先完成 Paddle Native stage parity、多源质量门、性能与安全 cutover
 - **ADR-0029**：Paddle Native 全门通过后正式默认 C++；ORT 以已验收 SHA 和相对 rpath 固化，Python 保留回滚
 - **ADR-0035**：Phase 10 采用单视频 Native Workbench + Context Inspector；Live Transcript 在 final entries 前只读，未来能力不做假入口
+- **ADR-0037**：Phase 8 采用独立 Task Center + 单并发队列；配置快照、安全 SRT 与显式 JSON 恢复不扩张 Workspace/Worker
 
-## 17. Harness 协作与验证边界
+## 18. Harness 协作与验证边界
 
 项目的操作性进度索引为 `phases.json`，每个 `detail_file` 指向
 `docs/phases/phase*.json` 的唯一 feature 记录。`.agent/` 当前只提供轻量规则、
