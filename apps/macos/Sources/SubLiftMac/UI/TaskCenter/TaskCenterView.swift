@@ -1,12 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// 08511：导入种类——单一 fileImporter 分发。
+private enum TaskCenterImportKind { case files, folder }
+
 /// 08308/08309：Task Center 主视图（Table/筛选/多选操作/统一导入/确认/Finder）。
 struct TaskCenterView: View {
     @ObservedObject var model: BatchQueueModel
     @State private var selection: Set<UUID> = []
-    @State private var isImportingFiles = false
-    @State private var isImportingFolder = false
+    @State private var importKind: TaskCenterImportKind = .files
+    @State private var isImporting = false
     @State private var isDropTargeted = false
 
     // 确认/错误状态
@@ -26,38 +29,39 @@ struct TaskCenterView: View {
     }
 
     var body: some View {
-        let summary = TaskCenterPresentation.summary(for: model.state)
+        let emptyCanvas = TaskCenterPresentation.shouldShowEmptyCanvas(for: model.state)
         VStack(spacing: 0) {
             summaryBar
             Divider()
-            filterBar
+            if !emptyCanvas {
+                filterBar
+            }
             if model.lastScanSummary != nil {
                 Divider()
                 scanSummaryBanner
             }
-            Divider()
-            ZStack {
-                TaskTableView(tasks: model.filteredTasks, selection: $selection)
-                    .contextMenu(forSelectionType: UUID.self) { ids in
-                        if let id = ids.first,
-                           let task = model.state.tasks.first(where: { $0.id == id }) {
-                            Button("在 Finder 中显示源文件") { revealSource(task) }
-                            if task.outputURL != nil {
-                                Button("在 Finder 中显示字幕") { revealOutput(task) }
-                            }
-                            if BatchTaskCommandAvailability.canCancel(task.status) {
-                                Button("取消任务") { _ = model.cancel(task.id) }
-                            }
-                            if BatchTaskCommandAvailability.canRetry(task.status) {
-                                Button("重试任务") { _ = model.retry(task.id) }
+            if emptyCanvas {
+                emptyCanvasDropZone
+            } else {
+                Divider()
+                ZStack {
+                    TaskTableView(tasks: model.filteredTasks, selection: $selection)
+                        .contextMenu(forSelectionType: UUID.self) { ids in
+                            if let id = ids.first,
+                               let task = model.state.tasks.first(where: { $0.id == id }) {
+                                Button("在 Finder 中显示源文件") { revealSource(task) }
+                                if task.outputURL != nil {
+                                    Button("在 Finder 中显示字幕") { revealOutput(task) }
+                                }
+                                if BatchTaskCommandAvailability.canCancel(task.status) {
+                                    Button("取消任务") { _ = model.cancel(task.id) }
+                                }
+                                if BatchTaskCommandAvailability.canRetry(task.status) {
+                                    Button("重试任务") { _ = model.retry(task.id) }
+                                }
                             }
                         }
-                    }
-                if summary.total == 0 {
-                    emptyState
                 }
-            }
-            if summary.total > 0 {
                 Divider()
                 selectionActionBar
                 if let selectedID = selection.count == 1 ? selection.first : nil,
@@ -79,8 +83,8 @@ struct TaskCenterView: View {
         .toolbar {
             TaskCenterToolbar(
                 model: model,
-                onAddFiles: { isImportingFiles = true },
-                onAddFolder: { isImportingFolder = true },
+                onAddFiles: { importKind = .files; isImporting = true },
+                onAddFolder: { importKind = .folder; isImporting = true },
                 onStart: requestStart
             )
         }
@@ -89,18 +93,9 @@ struct TaskCenterView: View {
             importDroppedProviders(providers)
         }
         .fileImporter(
-            isPresented: $isImportingFiles,
-            allowedContentTypes: VideoImportPolicy.openPanelContentTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
-                model.importInputs(urls)
-            }
-        }
-        .fileImporter(
-            isPresented: $isImportingFolder,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
+            isPresented: $isImporting,
+            allowedContentTypes: importKind == .folder ? [.folder] : VideoImportPolicy.openPanelContentTypes,
+            allowsMultipleSelection: importKind != .folder
         ) { result in
             if case .success(let urls) = result {
                 model.importInputs(urls)
@@ -188,9 +183,10 @@ struct TaskCenterView: View {
         .accessibilityElement(children: .combine)
     }
 
-    /// 筛选栏（08309：搜索/状态筛选只改变投影）。
+    /// 筛选栏（08309：搜索/状态筛选只改变投影；08511：空队列时 disabled）。
     private var filterBar: some View {
-        HStack(spacing: 8) {
+        let emptyCanvas = TaskCenterPresentation.shouldShowEmptyCanvas(for: model.state)
+        return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
             TextField("搜索文件", text: $model.searchText)
@@ -209,6 +205,7 @@ struct TaskCenterView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+        .disabled(emptyCanvas)
     }
 
     private func filterDisplayName(_ filter: BatchTaskStatusFilter) -> String {
@@ -367,25 +364,17 @@ struct TaskCenterView: View {
         model.outputConflicts.map { $0.outputURL.lastPathComponent }.joined(separator: "\n")
     }
 
-    // MARK: - 空态
+    // MARK: - 空态（08511：虚线 drop zone）
 
-    private var emptyState: some View {
-        VStack(spacing: 12) {
+    private var emptyCanvasDropZone: some View {
+        let targeted = isDropTargeted || fixtureForceDropHighlight
+        return VStack(spacing: 12) {
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 44))
                 .foregroundStyle(.secondary)
-            Text("添加视频开始批量提取")
+            Text("将视频拖到这里")
                 .font(.title3.weight(.medium))
-            Button("添加文件") {
-                isImportingFiles = true
-            }
-            .buttonStyle(.borderedProminent)
-            .accessibilityLabel("添加文件")
-            Button("添加文件夹") {
-                isImportingFolder = true
-            }
-            .accessibilityLabel("添加文件夹")
-            Text("也可以直接拖入视频或文件夹")
+            Text("拖入视频或文件夹，或使用工具栏添加")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text("视频在本机处理，不会上传。")
@@ -393,6 +382,25 @@ struct TaskCenterView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(
+                    targeted ? Color.accentColor : Color.secondary.opacity(0.35),
+                    style: StrokeStyle(lineWidth: 2, dash: [8, 4])
+                )
+                .padding(24)
+        )
+        .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
+        .animation(.easeInOut(duration: 0.15), value: targeted)
+    }
+
+    /// 08511：DEBUG fixture——SUBLIFT_EVIDENCE_TASKCENTER_DROP=1 强制 drop 高亮态。
+    private var fixtureForceDropHighlight: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_TASKCENTER_DROP"] == "1"
+        #else
+        return false
+        #endif
     }
 }
 

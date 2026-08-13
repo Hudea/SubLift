@@ -27,6 +27,11 @@ enum TaskCenterPresentation {
         )
     }
 
+    /// 08511：空画布判定——队列无任务时展示 drop zone（筛选结果为空 ≠ 空态）。
+    static func shouldShowEmptyCanvas(for queue: BatchQueueState) -> Bool {
+        queue.tasks.isEmpty
+    }
+
     // MARK: - 状态投影
 
     static func statusDisplayName(_ status: BatchTaskStatus) -> String {

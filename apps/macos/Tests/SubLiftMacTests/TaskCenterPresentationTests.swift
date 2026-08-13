@@ -205,4 +205,21 @@ final class TaskCenterCommandTests: XCTestCase {
         XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.waiting))
         XCTAssertFalse(BatchTaskCommandAvailability.canRemove(.extracting))
     }
+
+    // MARK: - 08511 空画布
+
+    func testShouldShowEmptyCanvasWhenNoTasks() {
+        XCTAssertTrue(TaskCenterPresentation.shouldShowEmptyCanvas(for: .empty))
+    }
+
+    func testShouldNotShowEmptyCanvasWhenTasksExist() {
+        let q = queue([makeTask("a.mp4")], status: .idle)
+        XCTAssertFalse(TaskCenterPresentation.shouldShowEmptyCanvas(for: q))
+    }
+
+    func testShouldNotShowEmptyCanvasWhenFilteredEmpty() {
+        // 筛选结果为空 ≠ 空态——队列有任务就不展示 drop zone。
+        let q = queue([makeTask("a.mp4", status: .completed)])
+        XCTAssertFalse(TaskCenterPresentation.shouldShowEmptyCanvas(for: q))
+    }
 }
