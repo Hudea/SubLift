@@ -9,6 +9,14 @@ import Foundation
 /// - 宽窗口不把 Transcript 无上限拉宽。
 enum WorkspaceLayout {
 
+    /// Welcome 紧凑窗（内容组约 520pt 宽，不套工作台 1280×800）。
+    static let welcomeWindowSize = CGSize(width: 720, height: 560)
+    static let welcomeWindowMinSize = CGSize(width: 640, height: 520)
+
+    /// 打开视频后的工作台窗。
+    static let workbenchWindowSize = CGSize(width: 1280, height: 800)
+    static let workbenchWindowMinSize = CGSize(width: 960, height: 600)
+
     /// Transcript 面板最小宽度（设计合同约 320pt）。
     static let transcriptMinWidth: CGFloat = 320
 

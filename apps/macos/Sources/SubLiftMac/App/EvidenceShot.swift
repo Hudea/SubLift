@@ -159,6 +159,11 @@ extension EvidenceShot {
         if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SCAN"] == "1" {
             scanFixtureIfRequested(model: model)
         }
+        if let root = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_OUTPUT_ROOT"], !root.isEmpty {
+            let url = URL(fileURLWithPath: root, isDirectory: true)
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            model.setOutputDestination(.publicRoot(url))
+        }
         openTaskCenterWindow(model: model)
         scheduleTaskCenterShotIfRequested()
     }
@@ -184,15 +189,22 @@ extension EvidenceShot {
             window.orderOut(nil)
         }
         if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "task-center" }) {
+            if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DARK"] == "1" {
+                window.appearance = NSAppearance(named: .darkAqua)
+            } else {
+                window.appearance = NSAppearance(named: .aqua)
+            }
             window.makeKeyAndOrderFront(nil)
         } else {
             let hosting = NSHostingController(rootView: TaskCenterView(model: model))
             let window = NSWindow(contentViewController: hosting)
             window.identifier = NSUserInterfaceItemIdentifier("task-center")
             window.title = "任务中心"
-            // B09 fixture：窗口级 Dark（不切系统外观）。
+            // 默认 Aqua，避免 Dark + cacheDisplay 把 Toolbar/筛选渲成白块。B09 才切 Dark。
             if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DARK"] == "1" {
                 window.appearance = NSAppearance(named: .darkAqua)
+            } else {
+                window.appearance = NSAppearance(named: .aqua)
             }
             // COMPACT=1 → 960×600（紧凑截图 fixture）。
             if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_COMPACT"] == "1" {
@@ -345,9 +357,14 @@ extension EvidenceShot {
             queue.status = .idle
         case "WAITING":
             let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")
-            queue.tasks = [task("Zootopia/interview_01.mp4", status: .waiting, importRoot: root),
-                           task("Zootopia/lecture_part2.mov", status: .waiting, importRoot: root),
-                           task("Zootopia/meeting_recording.mkv", status: .waiting, importRoot: root)]
+            queue.tasks = [
+                task("Zootopia/interview_01.mp4", status: .waiting,
+                     output: "/tmp/sample/Zootopia/interview_01.srt", importRoot: root),
+                task("Zootopia/lecture_part2.mov", status: .waiting,
+                     output: "/tmp/sample/Zootopia/lecture_part2.srt", importRoot: root),
+                task("Zootopia/meeting_recording.mkv", status: .waiting,
+                     output: "/tmp/sample/Zootopia/meeting_recording.srt", importRoot: root)
+            ]
             queue.status = .idle
         case "RUNNING":
             let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")

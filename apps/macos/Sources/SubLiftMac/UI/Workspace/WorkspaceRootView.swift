@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -5,7 +6,7 @@ import UniformTypeIdentifiers
 ///
 /// 组合 Welcome / Video / Transcript Split、系统 Toolbar 与统一拖拽导入；
 /// 命令 availability 与 action 全部来自 WorkspaceModel（View 只投影状态、发送 intent）。
-/// 窗口尺寸合同：最小 960×600（设计合同）；理想 1280×800（defaultSize）。
+/// 窗口尺寸：Welcome 720×560（最小 640×520）；打开视频后升到工作台 1280×800（最小 960×600）。
 struct WorkspaceRootView: View {
     @ObservedObject var workspace: WorkspaceModel
     @Environment(\.openWindow) private var openWindow
@@ -47,7 +48,14 @@ struct WorkspaceRootView: View {
                     )
                 }
             }
-            .frame(minWidth: 960, minHeight: 600)
+            .frame(
+                minWidth: workspace.currentVideoURL == nil
+                    ? WorkspaceLayout.welcomeWindowMinSize.width
+                    : WorkspaceLayout.workbenchWindowMinSize.width,
+                minHeight: workspace.currentVideoURL == nil
+                    ? WorkspaceLayout.welcomeWindowMinSize.height
+                    : WorkspaceLayout.workbenchWindowMinSize.height
+            )
             .background {
                 WorkspaceEscapeKeyMonitorView(workspace: workspace)
                     .frame(width: 0, height: 0)
@@ -117,6 +125,7 @@ struct WorkspaceRootView: View {
                 exportSRT()
             }
             .onAppear {
+                applyWindowMetrics(hasVideo: workspace.currentVideoURL != nil)
                 #if DEBUG
                 EvidenceShot.settingsFixtureIfRequested()
                 EvidenceShot.compactFixtureIfRequested()
@@ -129,6 +138,9 @@ struct WorkspaceRootView: View {
                 EvidenceShot.pendingFixtureIfRequested()
                 EvidenceShot.scheduleIfRequested()
                 #endif
+            }
+            .onChange(of: workspace.currentVideoURL) { url in
+                applyWindowMetrics(hasVideo: url != nil)
             }
         }
     }
@@ -225,50 +237,52 @@ struct WorkspaceRootView: View {
         }
 
         ToolbarItemGroup(placement: .automatic) {
-            Button {
-                if workspace.state == .regionEditing {
-                    workspace.exitRegionEditing()
-                } else {
-                    workspace.enterRegionEditing()
-                }
-            } label: {
-                Label(workspace.state == .regionEditing ? "完成区域编辑" : "字幕区域", systemImage: "viewfinder")
-                    .labelStyle(.titleAndIcon)
-            }
-            .disabled(!workspace.commandAvailability.canEditRegion && !workspace.commandAvailability.isRegionActive)
-            .help(workspace.state == .regionEditing ? "完成区域编辑" : "进入字幕区域编辑")
-
-            if workspace.commandAvailability.canExtract {
-                Button(action: requestExtraction) {
-                    Label("提取字幕", systemImage: "text.viewfinder")
-                        .labelStyle(.titleAndIcon)
-                }
-                .help("开始提取字幕")
-            }
-
-            if workspace.commandAvailability.canStop {
+            if workspace.currentVideoURL != nil {
                 Button {
-                    workspace.cancelExtraction()
+                    if workspace.state == .regionEditing {
+                        workspace.exitRegionEditing()
+                    } else {
+                        workspace.enterRegionEditing()
+                    }
                 } label: {
-                    Label("停止", systemImage: "stop.fill")
+                    Label(workspace.state == .regionEditing ? "完成区域编辑" : "字幕区域", systemImage: "viewfinder")
                         .labelStyle(.titleAndIcon)
                 }
-                .help("停止当前提取")
-            }
+                .disabled(!workspace.commandAvailability.canEditRegion && !workspace.commandAvailability.isRegionActive)
+                .help(workspace.state == .regionEditing ? "完成区域编辑" : "进入字幕区域编辑")
 
-            Button(action: exportSRT) {
-                Label("导出 SRT", systemImage: "square.and.arrow.down")
-            }
-            .disabled(!workspace.commandAvailability.canExport)
-            .help("导出 SRT 字幕文件")
+                if workspace.commandAvailability.canExtract {
+                    Button(action: requestExtraction) {
+                        Label("提取字幕", systemImage: "text.viewfinder")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .help("开始提取字幕")
+                }
 
-            Button {
-                workspace.toggleInspector()
-            } label: {
-                Label("Inspector", systemImage: "sidebar.trailing")
+                if workspace.commandAvailability.canStop {
+                    Button {
+                        workspace.cancelExtraction()
+                    } label: {
+                        Label("停止", systemImage: "stop.fill")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .help("停止当前提取")
+                }
+
+                Button(action: exportSRT) {
+                    Label("导出 SRT", systemImage: "square.and.arrow.down")
+                }
+                .disabled(!workspace.commandAvailability.canExport)
+                .help("导出 SRT 字幕文件")
+
+                Button {
+                    workspace.toggleInspector()
+                } label: {
+                    Label("Inspector", systemImage: "sidebar.trailing")
+                }
+                .disabled(!workspace.commandAvailability.canShowInspector)
+                .help("显示或隐藏 Inspector")
             }
-            .disabled(!workspace.commandAvailability.canShowInspector)
-            .help("显示或隐藏 Inspector")
         }
     }
 
@@ -473,5 +487,25 @@ struct WorkspaceRootView: View {
     private func defaultSRTFilename() -> String {
         guard let videoURL = workspace.currentVideoURL else { return "subtitle.srt" }
         return videoURL.deletingPathExtension().appendingPathExtension("srt").lastPathComponent
+    }
+
+    /// Welcome 用紧凑窗；打开视频后升到工作台尺寸（已更大则不缩小）。
+    private func applyWindowMetrics(hasVideo: Bool) {
+        DispatchQueue.main.async {
+            guard let window = NSApp.windows.first(where: {
+                $0.isVisible && $0.identifier?.rawValue != "task-center"
+            }) else { return }
+            if hasVideo {
+                window.contentMinSize = WorkspaceLayout.workbenchWindowMinSize
+                let size = window.contentView?.bounds.size ?? .zero
+                if size.width + 1 < WorkspaceLayout.workbenchWindowSize.width
+                    || size.height + 1 < WorkspaceLayout.workbenchWindowSize.height {
+                    window.setContentSize(WorkspaceLayout.workbenchWindowSize)
+                }
+            } else {
+                window.contentMinSize = WorkspaceLayout.welcomeWindowMinSize
+                window.setContentSize(WorkspaceLayout.welcomeWindowSize)
+            }
+        }
     }
 }

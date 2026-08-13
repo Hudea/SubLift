@@ -128,6 +128,34 @@ final class BatchQueueModel: ObservableObject {
         syncState()
     }
 
+    /// 只跑指定 waiting 任务。该项若在输出冲突里，返回 false，由 View 走确认。
+    @discardableResult
+    func startSingle(_ taskID: UUID) -> Bool {
+        prepareOutputPlan()
+        if planningErrors[taskID] != nil {
+            syncState()
+            return false
+        }
+        if pendingConflicts.contains(where: { $0.taskID == taskID }) {
+            pendingConflicts = pendingConflicts.filter { $0.taskID == taskID }
+            syncState()
+            return false
+        }
+        let result = scheduler.startSingle(taskID)
+        syncState()
+        return result
+    }
+
+    /// 确认选中任务的输出冲突后只启动该项。
+    func confirmOutputConflictsAndStartSingle(_ taskID: UUID) {
+        if let conflict = pendingConflicts.first(where: { $0.taskID == taskID }) {
+            _ = scheduler.setOutputURL(conflict.outputURL, for: taskID)
+        }
+        pendingConflicts = []
+        _ = scheduler.startSingle(taskID)
+        syncState()
+    }
+
     func pauseAfterCurrent() {
         scheduler.pauseAfterCurrent()
         syncState()

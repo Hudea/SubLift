@@ -203,6 +203,7 @@ final class TaskCenterCommandTests: XCTestCase {
         XCTAssertTrue(BatchTaskCommandAvailability.canRetry(.failed))
         XCTAssertFalse(BatchTaskCommandAvailability.canRetry(.completed))
         XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.waiting))
+        XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.failed))
         XCTAssertFalse(BatchTaskCommandAvailability.canRemove(.extracting))
     }
 
@@ -258,6 +259,15 @@ final class TaskCenterCommandTests: XCTestCase {
         )
         let display = TaskCenterPresentation.locationDisplay(for: task)
         XCTAssertEqual(display, "Zootopia/")
+    }
+
+    func testLocationDisplayNestedFolderKeepsRelativeDirectory() {
+        let task = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/Videos/Zootopia/Season1/E02.mp4"),
+            engine: .vision, quality: .fast, developerMode: false,
+            importRootURL: URL(fileURLWithPath: "/tmp/Videos/Zootopia")
+        )
+        XCTAssertEqual(TaskCenterPresentation.locationDisplay(for: task), "Season1/")
     }
 
     func testLocationDisplayWithNilImportRoot() {
@@ -326,5 +336,21 @@ final class TaskCenterCommandTests: XCTestCase {
         let cm = TaskCenterPresentation.inspectorModel(for: completedTask, fileExists: false, planningError: nil)
         XCTAssertFalse(cm.canCancel, "completed 不可取消")
         XCTAssertFalse(cm.canEditConfiguration, "completed 不可编辑配置")
+        XCTAssertTrue(cm.canRemove, "completed 可移出队列")
+        XCTAssertFalse(cm.canStartSingle)
+    }
+
+    func testStatusSymbolMarksCompletedAndFailed() {
+        XCTAssertEqual(TaskCenterPresentation.statusSymbolName(.completed), "checkmark.circle.fill")
+        XCTAssertEqual(TaskCenterPresentation.statusSymbolName(.failed), "xmark.circle.fill")
+    }
+
+    func testCanStartSingleOnlyWaitingWhenQueueIdle() {
+        let waiting = makeTask("a.mp4")
+        var queue = BatchQueueState.empty
+        queue.tasks = [waiting]
+        XCTAssertTrue(TaskCenterPresentation.canStartSingle(queue, taskID: waiting.id))
+        queue.status = .running
+        XCTAssertFalse(TaskCenterPresentation.canStartSingle(queue, taskID: waiting.id))
     }
 }

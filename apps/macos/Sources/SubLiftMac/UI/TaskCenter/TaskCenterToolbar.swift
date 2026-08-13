@@ -9,7 +9,6 @@ struct TaskCenterToolbar: View {
 
     var body: some View {
         let queue = model.state
-        let summary = TaskCenterPresentation.summary(for: queue)
 
         Button(action: onAddFiles) {
             Label("添加文件", systemImage: "plus")
@@ -58,13 +57,6 @@ struct TaskCenterToolbar: View {
         .help("停止调度")
         .disabled(!TaskCenterPresentation.canStop(queue))
         .accessibilityLabel("停止")
-
-        Spacer()
-
-        Text("\(summary.total) 个任务")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("任务总数 \(summary.total)")
     }
 
     // MARK: - 08511 输出位置菜单
@@ -90,16 +82,17 @@ struct TaskCenterToolbar: View {
                 }
             }
         } label: {
-            Label(outputLocationLabel, systemImage: "folder")
+            Label(outputLocationLabel, systemImage: "square.and.arrow.down")
+                .labelStyle(.titleAndIcon)
         }
-        .help("设置输出字幕的保存位置")
-        .accessibilityLabel("输出位置")
+        .help("字幕默认写在每个视频旁边，也可改到指定文件夹")
+        .accessibilityLabel(outputLocationLabel)
     }
 
     private var outputLocationLabel: String {
         switch model.state.outputDestination {
-        case .sidecar: "输出位置：视频旁边"
-        case .publicRoot(let url): "输出位置：\(url.lastPathComponent)"
+        case .sidecar: "导出位置"
+        case .publicRoot(let url): "导出位置：\(url.lastPathComponent)"
         }
     }
 

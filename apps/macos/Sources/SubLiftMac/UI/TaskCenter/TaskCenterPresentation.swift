@@ -177,6 +177,7 @@ enum TaskCenterPresentation {
         let canRetry: Bool
         let canRemove: Bool
         let canReorder: Bool
+        let canStartSingle: Bool
     }
 
     static func inspectorModel(
@@ -205,8 +206,26 @@ enum TaskCenterPresentation {
             canCancel: BatchTaskCommandAvailability.canCancel(task.status),
             canRetry: BatchTaskCommandAvailability.canRetry(task.status),
             canRemove: BatchTaskCommandAvailability.canRemove(task.status),
-            canReorder: BatchTaskCommandAvailability.canRemove(task.status)
+            canReorder: BatchTaskCommandAvailability.canReorder(task.status),
+            canStartSingle: BatchTaskCommandAvailability.canStartSingle(task.status)
         )
+    }
+
+    static func statusSymbolName(_ status: BatchTaskStatus) -> String {
+        switch status {
+        case .waiting: "circle"
+        case .preparing, .extracting, .exporting: "ellipsis.circle"
+        case .completed: "checkmark.circle.fill"
+        case .failed: "xmark.circle.fill"
+        case .cancelled: "minus.circle"
+        case .interrupted: "pause.circle"
+        case .skipped: "forward.circle"
+        }
+    }
+
+    static func canStartSingle(_ queue: BatchQueueState, taskID: UUID) -> Bool {
+        queue.status != .running
+            && queue.tasks.contains { $0.id == taskID && BatchTaskCommandAvailability.canStartSingle($0.status) }
     }
 
     // MARK: - 队列级命令 availability

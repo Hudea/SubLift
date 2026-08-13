@@ -9,6 +9,14 @@ import XCTest
 /// - 1280×800 与 960×600 均不得把主动作挤出。
 final class WorkspaceLayoutTests: XCTestCase {
 
+    func testWelcomeWindowIsCompactVersusWorkbench() {
+        XCTAssertLessThan(WorkspaceLayout.welcomeWindowSize.width, WorkspaceLayout.workbenchWindowMinSize.width)
+        XCTAssertLessThan(WorkspaceLayout.welcomeWindowSize.height, WorkspaceLayout.workbenchWindowMinSize.height)
+        XCTAssertGreaterThanOrEqual(WorkspaceLayout.welcomeWindowSize.width, WorkspaceLayout.welcomeWindowMinSize.width)
+        XCTAssertEqual(WorkspaceLayout.workbenchWindowSize, CGSize(width: 1280, height: 800))
+        XCTAssertEqual(WorkspaceLayout.workbenchWindowMinSize, CGSize(width: 960, height: 600))
+    }
+
     func testIdealWidth1280SplitsWithinContract() {
         let split = WorkspaceLayout.splitWidths(containerWidth: 1280)
         let ratio = split.video / split.total

@@ -11,7 +11,7 @@ struct SubLiftMacApp: App {
     )
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("SubLift") {
             WorkspaceRootView(workspace: workspace)
                 .onAppear {
                     #if DEBUG
@@ -19,7 +19,10 @@ struct SubLiftMacApp: App {
                     #endif
                 }
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(
+            width: WorkspaceLayout.welcomeWindowSize.width,
+            height: WorkspaceLayout.welcomeWindowSize.height
+        )
         .commands {
             WorkspaceCommands(workspace: workspace)
             // 08308：Task Center 入口挂主场景（Workspace 菜单），⌘⇧T 冷启动可用。

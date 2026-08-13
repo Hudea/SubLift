@@ -42,9 +42,11 @@ final class TaskCenterInteractionTests: XCTestCase {
         let done = makeTask("d.mp4", status: .completed)
 
         let removable = TaskCenterInteraction.removableTaskIDs(from: [waiting1, waiting2, running, done])
-        XCTAssertEqual(removable.count, 2, "仅 waiting 可删")
+        XCTAssertEqual(removable.count, 3, "非活动态可删，进行中不可删")
         XCTAssertTrue(removable.contains(waiting1.id))
         XCTAssertTrue(removable.contains(waiting2.id))
+        XCTAssertTrue(removable.contains(done.id))
+        XCTAssertFalse(removable.contains(running.id))
     }
 
     // MARK: - 重排（waiting 槽位保留）
@@ -90,6 +92,10 @@ final class TaskCenterInteractionTests: XCTestCase {
     func testFinderRevealMissingFileReturnsNil() {
         let missing = URL(fileURLWithPath: "/tmp/definitely-missing-\(UUID().uuidString).mp4")
         XCTAssertNil(TaskCenterInteraction.revealCandidate(for: missing))
+    }
+
+    func testImportKindDistinguishesFilesAndFolder() {
+        XCTAssertNotEqual(TaskCenterImportKind.files, TaskCenterImportKind.folder)
     }
 }
 

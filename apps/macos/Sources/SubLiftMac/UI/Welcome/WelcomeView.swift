@@ -62,7 +62,7 @@ struct WelcomeView: View {
                             .accessibilityLabel("支持格式：MP4、MOV、MKV")
                     }
                 }
-                .padding(.vertical, verticalInset)
+                .frame(maxWidth: WelcomeLayout.contentMaxWidth)
 
                 VStack {
                     Spacer(minLength: 0)
@@ -71,11 +71,10 @@ struct WelcomeView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityLabel("所有处理均在本机完成")
                 }
-                .padding(.vertical, verticalInset)
             }
+            .padding(.vertical, verticalInset)
+            .frame(width: geometry.size.width, height: geometry.size.height)
         }
-        .frame(maxWidth: WelcomeLayout.contentMaxWidth)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     /// 装饰性应用图标（SF Symbol 替代参考图的品牌图形，不复制外部资产）。

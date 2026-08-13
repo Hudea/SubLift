@@ -1,9 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 08511：导入种类——单一 fileImporter 分发。
-private enum TaskCenterImportKind { case files, folder }
-
 /// 08308/08309：Task Center 主视图（Table/筛选/多选操作/统一导入/确认/Finder）。
 struct TaskCenterView: View {
     @ObservedObject var model: BatchQueueModel
@@ -18,6 +15,8 @@ struct TaskCenterView: View {
     @State private var showFinderError = false
     @State private var revealErrorURL: URL?
     @State private var scanReasonsExpanded = false
+    /// 冲突确认后走 startSingle 而不是整队 start。
+    @State private var startSinglePendingID: UUID?
     /// 08511：窗口级宽度（EvidenceShot fixture 通过环境变量注入；真实窗口由 onAppear 采样）。
     @State private var windowWidth: CGFloat = 1280
 
@@ -70,10 +69,26 @@ struct TaskCenterView: View {
                             if BatchTaskCommandAvailability.canRetry(task.status) {
                                 Button("重试任务") { _ = model.retry(task.id) }
                             }
+                            if BatchTaskCommandAvailability.canStartSingle(task.status) {
+                                Button("启动此任务") { requestStartSingle(task.id) }
+                            }
+                            if BatchTaskCommandAvailability.canRemove(task.status) {
+                                Button("删除任务", role: .destructive) {
+                                    selection = [task.id]
+                                    showDeleteConfirmation = true
+                                }
+                            }
+                        }
+                    }
+                    .onDeleteCommand {
+                        if removableSelectionCount > 0 {
+                            showDeleteConfirmation = true
                         }
                     }
                 Divider()
-                selectionActionBar
+                if selection.count > 1 {
+                    selectionActionBar
+                }
                 if let selectedID = selection.count == 1 ? selection.first : nil,
                    let task = model.state.tasks.first(where: { $0.id == selectedID }) {
                     Divider()
@@ -93,7 +108,8 @@ struct TaskCenterView: View {
                         onRetry: { _ = model.retry(task.id) },
                         onRemove: { _ = model.remove(task.id) },
                         onMoveUp: { moveSingleTask(.up, id: task.id) },
-                        onMoveDown: { moveSingleTask(.down, id: task.id) }
+                        onMoveDown: { moveSingleTask(.down, id: task.id) },
+                        onStartSingle: { requestStartSingle(task.id) }
                     )
                     .id(task.id)
                 }
@@ -102,8 +118,8 @@ struct TaskCenterView: View {
         .toolbar {
             TaskCenterToolbar(
                 model: model,
-                onAddFiles: { importKind = .files; isImporting = true },
-                onAddFolder: { importKind = .folder; isImporting = true },
+                onAddFiles: { beginImport(.files) },
+                onAddFolder: { beginImport(.folder) },
                 onStart: requestStart
             )
         }
@@ -125,12 +141,22 @@ struct TaskCenterView: View {
             Button("取消", role: .cancel) {}
             Button("删除", role: .destructive) { performDeleteSelection() }
         } message: {
-            Text("将从队列移除 \(removableSelectionCount) 个等待任务。字幕文件不会被删除。")
+            Text("将从队列移除 \(removableSelectionCount) 个任务。已写出的字幕文件不会被删除。")
         }
         // 输出冲突集中确认（开始前；取消不启动、不覆盖任何输出）。
         .alert("替换现有字幕？", isPresented: $showConflictConfirmation) {
-            Button("取消", role: .cancel) { model.cancelStart() }
-            Button("替换并开始", role: .destructive) { model.confirmOutputConflictsAndStart() }
+            Button("取消", role: .cancel) {
+                startSinglePendingID = nil
+                model.cancelStart()
+            }
+            Button("替换并开始", role: .destructive) {
+                if let id = startSinglePendingID {
+                    model.confirmOutputConflictsAndStartSingle(id)
+                    startSinglePendingID = nil
+                } else {
+                    model.confirmOutputConflictsAndStart()
+                }
+            }
         } message: {
             Text("以下字幕文件已存在，将被覆盖：\n\(conflictMessage)")
         }
@@ -148,6 +174,22 @@ struct TaskCenterView: View {
         } message: {
             Text(model.recoveryErrorMessage ?? "")
         }
+        .background {
+            Button("删除选中任务") {
+                if removableSelectionCount > 0 { showDeleteConfirmation = true }
+            }
+            .keyboardShortcut(.delete, modifiers: [])
+            .opacity(0)
+            .accessibilityHidden(true)
+            Button("启动选中任务") {
+                if let id = selection.count == 1 ? selection.first : nil {
+                    requestStartSingle(id)
+                }
+            }
+            .keyboardShortcut(.return, modifiers: [])
+            .opacity(0)
+            .accessibilityHidden(true)
+        }
         .onAppear {
             // 真实窗口：采样实际宽度（fixture 通过 SUBLIFT_EVIDENCE_WINDOW_WIDTH 注入）。
             #if DEBUG
@@ -157,14 +199,34 @@ struct TaskCenterView: View {
             } else if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
                 windowWidth = window.frame.width
             }
+            if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SELECT"] == "1",
+               let first = model.state.tasks.first {
+                selection = [first.id]
+            }
             #endif
         }
     }
 
     // MARK: - 顶部栏
 
+    /// 回车 / 右键：只跑选中的 waiting 任务。
+    private func requestStartSingle(_ taskID: UUID) {
+        guard TaskCenterPresentation.canStartSingle(model.state, taskID: taskID) else { return }
+        startSinglePendingID = taskID
+        if model.startSingle(taskID) {
+            startSinglePendingID = nil
+            return
+        }
+        if !model.outputConflicts.isEmpty {
+            showConflictConfirmation = true
+        } else {
+            startSinglePendingID = nil
+        }
+    }
+
     /// 开始请求：先规划输出（08309）——有冲突 → 集中确认（消费 TaskCenterInteraction.replaceDecision）；无冲突直接启动。
     private func requestStart() {
+        startSinglePendingID = nil
         model.prepareOutputPlan()
         let decision = TaskCenterInteraction.replaceDecision(
             confirming: model.outputConflicts.isEmpty,
@@ -377,6 +439,14 @@ struct TaskCenterView: View {
 
     // MARK: - 导入（文件/文件夹/drop 同一 scanner）
 
+    /// 先写入 kind，下一拍再 present，避免 fileImporter 用到旧的 allowedContentTypes。
+    private func beginImport(_ kind: TaskCenterImportKind) {
+        importKind = kind
+        DispatchQueue.main.async {
+            isImporting = true
+        }
+    }
+
     private func importDroppedProviders(_ providers: [NSItemProvider]) -> Bool {
         var urls: [URL] = []
         let lock = NSLock()
@@ -420,16 +490,16 @@ struct TaskCenterView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .background(
+        .padding(28)
+        .background(targeted ? Color.accentColor.opacity(0.12) : Color(nsColor: .windowBackgroundColor))
+        .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(
-                    targeted ? Color.accentColor : Color.secondary.opacity(0.35),
-                    style: StrokeStyle(lineWidth: 2, dash: [8, 4])
+                    targeted ? Color.accentColor : Color.secondary.opacity(0.55),
+                    style: StrokeStyle(lineWidth: targeted ? 3 : 2, dash: [8, 4])
                 )
-                .padding(24)
         )
-        .background(targeted ? Color.accentColor.opacity(0.12) : Color.clear)
+        .padding(16)
         .animation(.easeInOut(duration: 0.15), value: targeted)
     }
 
@@ -441,12 +511,6 @@ struct TaskCenterView: View {
         return false
         #endif
     }
-}
-
-/// 08511：用于 GeometryReader 向下传递表格宽度。
-private struct TableWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 1280
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 extension BatchInputRejectionReason {

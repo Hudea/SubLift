@@ -763,11 +763,11 @@
             "08511.05"
           ],
           "status": "done",
-          "evidence": "EvidenceShot WAITING fixture 已更新（importRootURL + sidecar outputURL）；evidence/08511/README.md 索引已创建；截图待人工采集（无 Computer Use）"
+          "evidence": "T01–T07 已重拍（docs/design_ui/evidence/08511/），七张 MD5 互不相同；README 记录读图结果与未执行项。脚本 scripts/capture-08511-evidence.sh。"
         }
       ],
       "status": "done",
-      "evidence": "C1 commit 051269d（importRoot + BatchPath + 扫描接受项）；C2 commit d073ae7（previewTarget + planOutputsForWaitingTasks + outputDestination 持久化 + 碰撞检测）；C3 commit 93343d8（空画布 drop zone + 单一 fileImporter）；C4 commit 9eb98cc（位置列 + 搜索 + 四档列宽）；C5 commit 2a14e87（Inspector 卡片 + 输出位置菜单）；C6 EvidenceShot fixture 更新 + evidence/08511/README.md 索引。截图待人工采集。"
+      "evidence": "2026-08-13 收口 08511 交付（补齐证据与合同缺口，非重开 Feature）。\n\n代码补齐：\n- beginImport 先写 TaskCenterImportKind，下一拍再 present 单一 fileImporter。\n- TaskTableView 改为四档真实 Table 变体（不再 width=0 留列）。\n- 单选时隐藏孤立 selectionActionBar，操作只在 Inspector 页眉。\n- 空态虚线改为 overlay（原先 stroke 画在 windowBackground 后面，截图看不见）。\n- EvidenceShot：WAITING 带 sidecar outputURL；SELECT=1 选中首条；OUTPUT_ROOT 切公共根；默认 Aqua。\n- 截图脚本禁止 open -g，直接 env 启动 DEBUG 二进制。\n\nT01–T07 已重拍且 MD5 互不相同，读图核验：\n- T01 空态虚线 drop zone，无 Table/无蓝按钮。\n- T02 DROP fixture 蓝色高亮，与 T01 不同文件。\n- T03 真实 SCAN：接受 2 / 跳过 0 / 拒绝 1；位置 sublift-b02-fixture/；输出列 interview_clip.srt。\n- T04 提取中 42% + interview_01.srt。\n- T05 Inspector 卡片：位置 Zootopia/、输出 Zootopia / interview_01.srt、labelsHidden Picker、无 Task ID。\n- T06 960：无位置列，Zootopia/ 折进文件单元格；文件/状态/进度/输出仍在。\n- T07 Inspector 输出 SubLiftSRT / interview_01.srt（公共根已生效）。\n\n验证：./init.sh OK；完整 swift test 371 XCTest + 140 Swift Testing exit 0（PYTHONPATH=）。\n\n未执行（如实）：无 Computer Use，未实地点击 Toolbar/NSOpenPanel/VoiceOver；contentView 截图不含窗口 Toolbar，「输出位置」菜单本身不可见，T07 用 Inspector 公共根路径证明。"
     }
   ]
 }

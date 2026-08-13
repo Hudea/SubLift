@@ -10,6 +10,7 @@ struct TaskDetailView: View {
     var onRemove: () -> Void
     var onMoveUp: () -> Void
     var onMoveDown: () -> Void
+    var onStartSingle: () -> Void
 
     /// 编辑中的引擎/质量（仅 waiting 可改；初始为任务当前配置）。
     @State private var editingEngine: OcrEngineName?
@@ -47,12 +48,22 @@ struct TaskDetailView: View {
                     .font(.headline)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                Text(inspectorModel.statusName)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: TaskCenterPresentation.statusSymbolName(task.status))
+                    Text(inspectorModel.statusName)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
             Spacer()
             HStack(spacing: 6) {
+                if inspectorModel.canStartSingle {
+                    Button(action: onStartSingle) {
+                        Label("启动", systemImage: "play.fill")
+                    }
+                    .help("只运行这一项（回车）")
+                    .accessibilityLabel("启动此任务")
+                }
                 if inspectorModel.canRemove {
                     Button { onRemove() } label: {
                         Label("删除", systemImage: "trash")

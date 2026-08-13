@@ -3,16 +3,16 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-13
-- **当前 Phase：** Phase 8 后续 UX 改进 08511 已完成（C1–C6 六刀全部交付）；08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
+- **当前 Phase：** Phase 8 后续 08511 已收口（C1–C6 + 证据重拍）。08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- 完成 08511 Task Center 信息层级与导出可见性（C1–C6），登记在 Phase 8 后续范围，不占用 09101。
+- 08511 已收口；后续范围另登。不占用 09101。
 
 ## 近期完成
 
-- [x] 08511-C6：证据与文档——EvidenceShot WAITING fixture 更新（importRootURL + sidecar outputURL）、evidence/08511/README.md 索引、phase8.json 全 subtask 标 done。commit `4fe4490`。
+- [x] 08511 收口：重拍 T01–T07（七张 MD5 不同）；修虚线 overlay、四档 Table 变体、beginImport 异步 present、单选隐藏底栏、WAITING/SELECT/OUTPUT_ROOT fixture。完整 swift test 371 XCTest + 140 Swift Testing。
 - [x] 08511-C5：Inspector 卡片——TaskInspectorModel + inspectorModel、TaskDetailView 重写为卡片布局（页眉含删除/上移/下移/取消/重试）、输出位置 Toolbar 菜单 + NSOpenPanel、labelsHidden Picker。commit `2a14e87`。
 - [x] 08511-C4：位置列——TaskTableColumn 枚举 + visibleColumns 四档列宽、locationDisplay/locationFullPath/locationTooltip/matchesSearch、搜索扩展到位置+路径、位置不可见时折进文件单元格。commit `9eb98cc`。
 - [x] 08511-C3：空画布——shouldShowEmptyCanvas、虚线 drop zone、单一 fileImporter + TaskCenterImportKind、NSOpenPanel 文件夹选择、isDropTargeted 高亮、筛选栏空队列禁用、DROP fixture。commit `93343d8`。

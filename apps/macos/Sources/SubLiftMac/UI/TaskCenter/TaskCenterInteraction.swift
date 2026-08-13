@@ -1,5 +1,11 @@
 import Foundation
 
+/// 08511：单一 fileImporter 的选择器种类。
+enum TaskCenterImportKind: Equatable {
+    case files
+    case folder
+}
+
 /// 08309：Task Center 批量交互纯逻辑（多选删除/重排/替换确认/Finder）。
 enum TaskCenterInteraction {
 

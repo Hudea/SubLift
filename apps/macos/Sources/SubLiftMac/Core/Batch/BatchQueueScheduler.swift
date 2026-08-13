@@ -6,13 +6,17 @@ enum BatchTaskCommandAvailability {
         status == .preparing || status == .extracting || status == .exporting
     }
 
-    static func canRemove(_ status: BatchTaskStatus) -> Bool { status == .waiting }
+    static func canRemove(_ status: BatchTaskStatus) -> Bool {
+        // 活动态不可删（会拆掉正在跑的 Worker）；waiting 与全部终态可移出队列。
+        !isActive(status)
+    }
     static func canReorder(_ status: BatchTaskStatus) -> Bool { status == .waiting }
     static func canReplaceConfiguration(_ status: BatchTaskStatus) -> Bool { status == .waiting }
     static func canCancel(_ status: BatchTaskStatus) -> Bool { status == .waiting || isActive(status) }
     static func canRetry(_ status: BatchTaskStatus) -> Bool {
         status == .failed || status == .cancelled || status == .interrupted
     }
+    static func canStartSingle(_ status: BatchTaskStatus) -> Bool { status == .waiting }
 }
 
 /// 08205：串行队列调度器。
@@ -24,7 +28,8 @@ enum BatchTaskCommandAvailability {
 /// - pauseAfterCurrent：当前任务完成后 paused（不启动下一项）；resume 恢复。
 /// - stop：当前任务取消 + 不再调度；等待项保持顺序。
 /// - 单任务 failed 默认继续下一项；failed/cancelled/interrupted 可 retry 回 waiting。
-/// - remove/reorder/replaceConfiguration 仅 waiting；由 BatchTaskCommandAvailability 拒绝非法命令。
+/// - remove：非活动态（waiting 与终态）；reorder/replaceConfiguration 仅 waiting。
+/// - startSingle：只跑指定 waiting 任务，完成后暂停，不继续队列。
 /// - Scheduler 只依赖 Runner/Repository ports；不解析 IPC、不操作文件系统。
 @MainActor
 final class BatchQueueScheduler {
@@ -42,6 +47,8 @@ final class BatchQueueScheduler {
     private var currentRunTask: Task<Void, Never>?
 
     private var pauseRequested = false
+    /// 下一次 schedule 优先这项（startSingle）；用完即清。
+    private var preferredNextTaskID: UUID?
 
     init(runner: any BatchTaskRunning, repository: any BatchQueuePersisting, initialState: BatchQueueState = .empty) {
         self.runner = runner
@@ -71,6 +78,21 @@ final class BatchQueueScheduler {
     /// 恢复调度。
     func resume() {
         start()
+    }
+
+    /// 只启动指定 waiting 任务；该项结束后暂停，不继续后续 waiting。
+    @discardableResult
+    func startSingle(_ taskID: UUID) -> Bool {
+        guard currentRunToken == nil, state.status != .running else { return false }
+        guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { return false }
+        guard BatchTaskCommandAvailability.canStartSingle(state.tasks[index].status) else { return false }
+        pauseRequested = false
+        preferredNextTaskID = taskID
+        state.status = .running
+        scheduleNextIfPossible()
+        // 当前项已经占住 token 后再请求暂停，避免 schedule 入口直接 return。
+        pauseRequested = true
+        return currentTaskID == taskID
     }
 
     /// 停止：取消当前任务 + 不再调度；等待项保持顺序。
@@ -119,7 +141,7 @@ final class BatchQueueScheduler {
         return true
     }
 
-    /// 删除任务（仅 waiting）。
+    /// 删除任务（非活动态）。
     @discardableResult
     func remove(_ taskID: UUID) -> Bool {
         guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { return false }
@@ -214,7 +236,16 @@ final class BatchQueueScheduler {
             return
         }
         guard currentRunToken == nil else { return }
-        guard let nextIndex = state.tasks.firstIndex(where: { $0.status == .waiting }) else {
+        let nextIndex: Int
+        if let preferred = preferredNextTaskID,
+           let preferredIndex = state.tasks.firstIndex(where: { $0.id == preferred && $0.status == .waiting }) {
+            nextIndex = preferredIndex
+            preferredNextTaskID = nil
+        } else if let firstWaiting = state.tasks.firstIndex(where: { $0.status == .waiting }) {
+            preferredNextTaskID = nil
+            nextIndex = firstWaiting
+        } else {
+            preferredNextTaskID = nil
             state.status = .idle
             persist()
             return

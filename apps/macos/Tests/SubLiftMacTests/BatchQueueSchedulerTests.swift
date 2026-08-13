@@ -341,7 +341,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
         _ = task.transition(to: .completed)
         let scheduler = makeScheduler(tasks: [task])
         XCTAssertFalse(scheduler.retry(t1.id), "completed 不可重跑")
-        XCTAssertFalse(scheduler.remove(t1.id), "终态不可删除")
+        XCTAssertTrue(scheduler.remove(t1.id), "已完成可移出队列")
     }
 
     func testRetryFailedTaskClearsFailureAndResult() async {
@@ -386,17 +386,44 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertTrue(scheduler.remove(t2.id))
         XCTAssertEqual(scheduler.state.tasks.map(\.id), [t1.id])
 
-        // 运行/终态不可。
+        // 活动态不可删；失败终态可移出队列。
         var running = makeTask("r.mp4")
         _ = running.transition(to: .preparing)
-        var done = makeTask("d.mp4")
-        _ = done.transition(to: .preparing)
-        _ = done.transition(to: .failed)
-        let s2 = makeScheduler(tasks: [running, done])
+        var failed = makeTask("d.mp4")
+        _ = failed.transition(to: .preparing)
+        failed.recordFailure("x")
+        _ = failed.transition(to: .failed)
+        let s2 = makeScheduler(tasks: [running, failed])
         XCTAssertFalse(s2.remove(running.id))
-        XCTAssertFalse(s2.remove(done.id))
-        XCTAssertFalse(s2.reorder([done.id, running.id]))
+        XCTAssertTrue(s2.remove(failed.id))
+        XCTAssertEqual(s2.state.tasks.map(\.id), [running.id])
+        XCTAssertFalse(s2.reorder([failed.id, running.id]))
         XCTAssertFalse(s2.replaceConfiguration(running.id, .init(engine: .vision, quality: .fast)))
+    }
+
+    func testStartSingleRunsOnlySelectedTaskThenPauses() async {
+        let first = makeTask("a.mp4")
+        let second = makeTask("b.mp4")
+        let selected = makeTask("c.mp4")
+        let scheduler = makeScheduler(tasks: [first, second, selected])
+        XCTAssertTrue(scheduler.startSingle(selected.id))
+        await waitUntil {
+            scheduler.state.tasks[2].status == .completed && scheduler.state.status == .paused
+        }
+        XCTAssertEqual(runner.recordedRunOrder, [selected.id], "只应启动选中项")
+        XCTAssertEqual(scheduler.state.status, .paused)
+        XCTAssertEqual(scheduler.state.tasks[0].status, .waiting)
+        XCTAssertEqual(scheduler.state.tasks[1].status, .waiting)
+        XCTAssertEqual(scheduler.state.tasks[2].status, .completed)
+    }
+
+    func testStartSingleRejectedWhenNotWaiting() {
+        var failed = makeTask("f.mp4")
+        _ = failed.transition(to: .preparing)
+        failed.recordFailure("x")
+        _ = failed.transition(to: .failed)
+        let scheduler = makeScheduler(tasks: [failed])
+        XCTAssertFalse(scheduler.startSingle(failed.id))
     }
 
     func testAvailabilitySingleSourceOfTruth() {
@@ -407,7 +434,11 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertFalse(BatchTaskCommandAvailability.canRetry(.completed))
         XCTAssertFalse(BatchTaskCommandAvailability.canRetry(.waiting))
         XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.waiting))
+        XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.failed))
+        XCTAssertTrue(BatchTaskCommandAvailability.canRemove(.completed))
         XCTAssertFalse(BatchTaskCommandAvailability.canRemove(.preparing))
+        XCTAssertTrue(BatchTaskCommandAvailability.canStartSingle(.waiting))
+        XCTAssertFalse(BatchTaskCommandAvailability.canStartSingle(.failed))
         XCTAssertTrue(BatchTaskCommandAvailability.canCancel(.preparing))
         XCTAssertTrue(BatchTaskCommandAvailability.canCancel(.waiting))
         XCTAssertTrue(BatchTaskCommandAvailability.isActive(.extracting))
