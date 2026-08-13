@@ -167,6 +167,48 @@ final class BatchOutputPlannerTests: XCTestCase {
             }
         }
     }
+
+    // MARK: - 08511 previewTarget 与 BatchPath
+
+    func testPreviewTargetComputesPathWithoutWritabilityOrConflictCheck() throws {
+        let source = try makeFile("movie.mp4")
+        // 故意让 sidecar 目标已存在：previewTarget 不读冲突。
+        _ = try makeFile("movie.srt")
+        let target = try BatchOutputPlanner().previewTarget(source: source, sourceRoot: nil)
+        XCTAssertEqual(target.lastPathComponent, "movie.srt")
+        XCTAssertEqual(target.deletingLastPathComponent(), tempDir.standardizedFileURL)
+    }
+
+    func testPreviewTargetRejectsEscapeFromPublicRoot() throws {
+        let root = tempDir.appendingPathComponent("out", isDirectory: true)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        let outside = tempDir.appendingPathComponent("outside", isDirectory: true)
+        try fileManager.createDirectory(at: outside, withIntermediateDirectories: true)
+        let source = try makeFile("movie.mp4", in: outside)
+        let planner = BatchOutputPlanner(outputRoot: root)
+        XCTAssertThrowsError(try planner.previewTarget(
+            source: source,
+            sourceRoot: tempDir.appendingPathComponent("elsewhere", isDirectory: true)
+        )) { error in
+            guard case BatchOutputPlannerError.targetOutsideRoot = error else {
+                return XCTFail("previewTarget 应拒绝 sourceRoot 外的源，实际 \(error)")
+            }
+        }
+    }
+
+    func testBatchPathRelativePathDoesNotCollapseRepeatedRootComponent() throws {
+        // 反例：/data/v + /data/v/show/data/v → show/data/v（不是 show）。
+        let root = URL(fileURLWithPath: "/data/v")
+        let dir = URL(fileURLWithPath: "/data/v/show/data/v")
+        XCTAssertEqual(BatchPath.relativePath(from: root, to: dir), "show/data/v")
+    }
+
+    func testBatchPathRelativePathUsesStrongPrefixGuard() throws {
+        // /data/video 不是 /data/video2 的前缀 → nil。
+        let root = URL(fileURLWithPath: "/data/video")
+        let dir = URL(fileURLWithPath: "/data/video2/show")
+        XCTAssertNil(BatchPath.relativePath(from: root, to: dir))
+    }
 }
 
 // MARK: - 原子写入（08104）

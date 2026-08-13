@@ -250,6 +250,50 @@ final class BatchQueueRepositoryTests: XCTestCase {
         XCTAssertTrue(BatchQueueRepositoryError.unknownSchemaVersion(9).errorDescription?.contains("1") == true)
     }
 
+    // MARK: - 08511 outputDestination 持久化
+
+    func testPublicRootDestinationRoundTripViaNewRepository() throws {
+        let publicRoot = tempDir.appendingPathComponent("PublicOut", isDirectory: true)
+        try fileManager.createDirectory(at: publicRoot, withIntermediateDirectories: true)
+        var queue = BatchQueueState.empty
+        queue.tasks = [makeTask("1.mp4")]
+        queue.outputDestination = .publicRoot(publicRoot)
+
+        try repository.save(queue)
+        // 用新 repository 实例加载（避免内存缓存）。
+        let newRepository = BatchQueueRepository(fileURL: fileURL)
+        let loaded = try newRepository.load()
+        XCTAssertEqual(loaded.outputDestination, .publicRoot(publicRoot))
+    }
+
+    func testOldSnapshotWithoutDestinationLoadsAsSidecar() throws {
+        // 旧清单没有 outputDestination 键，应加载为 sidecar。
+        let oldJSON = """
+        {
+            "schemaVersion": 1,
+            "savedAt": 600000000,
+            "tasks": [],
+            "runningTaskID": null,
+            "status": "idle"
+        }
+        """.data(using: .utf8)!
+        try oldJSON.write(to: fileURL)
+        let loaded = try repository.load()
+        XCTAssertEqual(loaded.outputDestination, .sidecar)
+    }
+
+    func testQueueStateDecodeMissingDestinationDefaultsToSidecar() throws {
+        let json = """
+        {
+            "status": "idle",
+            "tasks": [],
+            "runningTaskID": null
+        }
+        """.data(using: .utf8)!
+        let decoded = try decoder.decode(BatchQueueState.self, from: json)
+        XCTAssertEqual(decoded.outputDestination, .sidecar)
+    }
+
     // MARK: - 100 task 体积与恢复时间
 
     func testHundredTaskManifestSizeAndRecoveryTime() throws {

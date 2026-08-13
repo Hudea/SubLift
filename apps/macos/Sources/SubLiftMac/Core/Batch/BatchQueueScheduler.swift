@@ -171,14 +171,36 @@ final class BatchQueueScheduler {
         persist()
     }
 
-    /// 设置等待任务的输出计划（08309：开始前规划/替换确认；仅 waiting 可写）。
+    /// 设置任务的预览输出路径（waiting 或 retryable；只改 outputURL）。
     @discardableResult
     func setOutputURL(_ url: URL?, for taskID: UUID) -> Bool {
         guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { return false }
-        guard state.tasks[index].status == .waiting else { return false }
+        let taskStatus = state.tasks[index].status
+        guard taskStatus == .waiting || BatchTaskCommandAvailability.canRetry(taskStatus) else { return false }
         state.tasks[index].outputURL = url
         persist()
         return true
+    }
+
+    /// 批量设置预览输出路径（避免 N 次原子保存）。
+    @discardableResult
+    func setOutputURLs(_ urls: [UUID: URL]) -> Bool {
+        var changed = false
+        for (taskID, url) in urls {
+            guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { continue }
+            let taskStatus = state.tasks[index].status
+            guard taskStatus == .waiting || BatchTaskCommandAvailability.canRetry(taskStatus) else { continue }
+            state.tasks[index].outputURL = url
+            changed = true
+        }
+        if changed { persist() }
+        return changed
+    }
+
+    /// 设置队列级输出目的地并持久化。
+    func setOutputDestination(_ destination: BatchOutputDestination) {
+        state.outputDestination = destination
+        persist()
     }
 
     // MARK: - 内部

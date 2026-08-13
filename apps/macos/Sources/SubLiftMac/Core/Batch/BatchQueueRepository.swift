@@ -101,7 +101,8 @@ final class BatchQueueRepository: BatchQueuePersisting, @unchecked Sendable {
         return BatchQueueState(
             status: recoveredStatus,
             tasks: tasks,
-            runningTaskID: nil
+            runningTaskID: nil,
+            outputDestination: snapshot.outputDestination ?? .sidecar
         )
     }
 
@@ -110,7 +111,8 @@ final class BatchQueueRepository: BatchQueuePersisting, @unchecked Sendable {
             savedAt: Date(),
             tasks: state.tasks,
             runningTaskID: state.runningTaskID,
-            status: state.status
+            status: state.status,
+            outputDestination: state.outputDestination
         )
         let data: Data
         do {

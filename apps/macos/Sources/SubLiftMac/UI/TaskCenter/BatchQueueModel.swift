@@ -34,17 +34,28 @@ final class BatchQueueModel: ObservableObject {
     @Published var searchText: String = ""
     @Published var statusFilter: BatchTaskStatusFilter = .all
     @Published private(set) var lastScanSummary: BatchScanSummary?
+    /// 08511：规划失败文案（瞬时，不进 JSON / failureMessage）。
+    @Published private(set) var planningErrors: [UUID: String] = [:]
 
     private(set) var scheduler: BatchQueueScheduler
     private let runner: any BatchTaskRunning
     private let repository: any BatchQueuePersisting
-    private let planner = BatchOutputPlanner()
     private var pendingConflicts: [TaskCenterInteraction.OutputConflict] = []
 
     /// 输出冲突（开始前集中确认）——真源在 TaskCenterInteraction。
     typealias OutputConflict = TaskCenterInteraction.OutputConflict
 
     var outputConflicts: [OutputConflict] { pendingConflicts }
+
+    /// 08511：按当前队列目的地构造规划器。
+    private var planner: BatchOutputPlanner {
+        switch state.outputDestination {
+        case .sidecar:
+            return BatchOutputPlanner()
+        case .publicRoot(let url):
+            return BatchOutputPlanner(outputRoot: url, conflictPolicy: .skip)
+        }
+    }
 
     /// 投影：搜索 + 状态筛选只改变投影，不触碰真实队列。
     var filteredTasks: [BatchTask] {
@@ -144,6 +155,9 @@ final class BatchQueueModel: ObservableObject {
     func retry(_ taskID: UUID) -> Bool {
         let result = scheduler.retry(taskID)
         syncState()
+        if result {
+            planOutputsForWaitingTasks()
+        }
         return result
     }
 
@@ -177,6 +191,7 @@ final class BatchQueueModel: ObservableObject {
 
     /// 统一导入入口：全部走 BatchInputScanner（existingURLs 取当前队列，批间去重）——
     /// accepted 构造任务入队，rejected 记录到 lastScanSummary（B02 摘要），不自动开始。
+    /// 08511：入队后立即规划预览输出路径。
     func importInputs(_ urls: [URL]) {
         let existing = Set(state.tasks.map(\.sourceURL))
         let summary = BatchInputScanner(existingURLs: existing).scan(inputs: urls, recursive: false)
@@ -192,6 +207,7 @@ final class BatchQueueModel: ObservableObject {
         }
         scheduler.addTasks(tasks)
         syncState()
+        planOutputsForWaitingTasks()
     }
 
     /// 清除扫描摘要（alert 关闭后）。
@@ -199,42 +215,119 @@ final class BatchQueueModel: ObservableObject {
         lastScanSummary = nil
     }
 
-    // MARK: - 08309 输出规划（开始前集中确认）
+    // MARK: - 08511 输出规划（导入即预览 + 开始前确认）
 
-    /// 预规划全部 waiting 任务的输出（sidecar 默认 + skip 策略）：
-    /// 无冲突任务经 scheduler 写入 outputURL；目标已存在 → pendingConflicts（集中确认）。
-    func prepareOutputPlan() {
-        pendingConflicts = []
-        let waitingTasks = state.tasks.filter { $0.status == .waiting }
-        for task in waitingTasks {
-            guard let plan = try? planner.plan(source: task.sourceURL, sourceRoot: nil) else { continue }
-            switch plan.conflict {
-            case .none, .renamed, .replaced:
-                scheduler.setOutputURL(plan.targetURL, for: task.id)
-            case .skipped:
-                pendingConflicts.append(OutputConflict(taskID: task.id, outputURL: plan.targetURL))
+    /// 规划用的 sourceRoot：扫描出处。零散文件为 nil → basename。
+    static func sourceRootForPlanning(_ task: BatchTask) -> URL? {
+        task.importRootURL
+    }
+
+    /// 导入/改目的地后：给 waiting + retryable 任务写预览 outputURL。
+    /// 同批目标碰撞先到先得；单任务失败只记 planningErrors，不阻断整批。
+    func planOutputsForWaitingTasks() {
+        var newErrors: [UUID: String] = [:]
+        var urls: [UUID: URL] = [:]
+        var seenTargets = Set<String>()
+        let replannable = state.tasks.filter { $0.status == .waiting || BatchTaskCommandAvailability.canRetry($0.status) }
+
+        for task in replannable {
+            do {
+                let target = try planner.previewTarget(
+                    source: task.sourceURL,
+                    sourceRoot: Self.sourceRootForPlanning(task)
+                )
+                let key = target.standardizedFileURL.path.lowercased()
+                if seenTargets.contains(key) {
+                    newErrors[task.id] = "目标与队列中另一任务相同"
+                    continue
+                }
+                seenTargets.insert(key)
+                urls[task.id] = target
+            } catch {
+                let message: String
+                switch error {
+                case BatchOutputPlannerError.targetOutsideRoot:
+                    message = "目标在输出根之外"
+                default:
+                    message = "无法规划输出路径"
+                }
+                newErrors[task.id] = message
             }
         }
+
+        planningErrors = newErrors
+        scheduler.setOutputURLs(urls)
+        syncState()
+    }
+
+    /// 预规划全部 waiting 任务的输出（开始前集中确认）：
+    /// 不可写/逃逸/同批碰撞 → 收集错误、不启动；已存在目标 → pendingConflicts。
+    func prepareOutputPlan() {
+        pendingConflicts = []
+        var newErrors: [UUID: String] = [:]
+        var seenTargets = Set<String>()
+        let waitingTasks = state.tasks.filter { $0.status == .waiting }
+
+        for task in waitingTasks {
+            do {
+                let plan = try planner.plan(
+                    source: task.sourceURL,
+                    sourceRoot: Self.sourceRootForPlanning(task)
+                )
+                let key = plan.targetURL.standardizedFileURL.path.lowercased()
+                if seenTargets.contains(key) {
+                    newErrors[task.id] = "目标与队列中另一任务相同"
+                    continue
+                }
+                seenTargets.insert(key)
+                switch plan.conflict {
+                case .none, .renamed, .replaced:
+                    scheduler.setOutputURL(plan.targetURL, for: task.id)
+                case .skipped:
+                    pendingConflicts.append(OutputConflict(taskID: task.id, outputURL: plan.targetURL))
+                }
+            } catch {
+                let message: String
+                switch error {
+                case BatchOutputPlannerError.targetOutsideRoot:
+                    message = "目标在输出根之外"
+                case BatchOutputPlannerError.unwritableDirectory:
+                    message = "输出目录不可写"
+                case BatchOutputPlannerError.duplicateTarget:
+                    message = "目标与队列中另一任务相同"
+                default:
+                    message = "无法规划输出路径"
+                }
+                newErrors[task.id] = message
+            }
+        }
+
+        planningErrors = newErrors
         syncState()
     }
 
     /// 确认替换冲突：冲突任务经 scheduler 写入原目标（原子替换语义=显式确认覆盖）→ 启动。
+    /// 有 planningError 时 fail-closed：不启动。
     func confirmOutputConflictsAndStart() {
-        for conflict in pendingConflicts {
-            scheduler.setOutputURL(conflict.outputURL, for: conflict.taskID)
-        }
+        guard planningErrors.isEmpty else { return }
+        let urls = Dictionary(uniqueKeysWithValues: pendingConflicts.map { ($0.taskID, $0.outputURL) })
+        scheduler.setOutputURLs(urls)
         pendingConflicts = []
         scheduler.start()
         syncState()
     }
 
-    /// 取消开始：清空冲突与已规划的输出（不启动、不删除/覆盖任何输出）。
+    /// 取消开始：只清空冲突（不启动、不删预览 outputURL、不触碰任何文件）。
     func cancelStart() {
         pendingConflicts = []
-        for task in state.tasks where task.status == .waiting {
-            scheduler.setOutputURL(nil, for: task.id)
-        }
         syncState()
+    }
+
+    /// 设置队列级输出目的地并重规划 waiting + retryable。
+    func setOutputDestination(_ destination: BatchOutputDestination) {
+        scheduler.setOutputDestination(destination)
+        syncState()
+        planOutputsForWaitingTasks()
     }
 
     private func syncState() {

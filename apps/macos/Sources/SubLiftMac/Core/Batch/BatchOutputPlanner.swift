@@ -48,14 +48,20 @@ struct BatchOutputPlanner: Sendable {
         self.conflictPolicy = conflictPolicy
     }
 
-    /// 规划单个源。公共根模式下 source 不在 sourceRoot 之下（无法保持相对目录）→ fail-closed。
-    func plan(source: URL, sourceRoot: URL?) throws -> BatchOutputPlan {
-        let baseTarget = try computeBaseTarget(source: source, sourceRoot: sourceRoot)
-        let normalizedTarget = baseTarget.standardizedFileURL
-
+    /// 只算标准化目标路径。做公共根逃逸检查，不查可写、不读冲突、不写文件。
+    func previewTarget(source: URL, sourceRoot: URL?) throws -> URL {
+        let target = try computeBaseTarget(source: source, sourceRoot: sourceRoot)
+        let normalizedTarget = target.standardizedFileURL
         if let outputRoot, !isWithinRoot(normalizedTarget, root: outputRoot) {
             throw BatchOutputPlannerError.targetOutsideRoot
         }
+        return normalizedTarget
+    }
+
+    /// 规划单个源。公共根模式下 source 不在 sourceRoot 之下（无法保持相对目录）→ fail-closed。
+    func plan(source: URL, sourceRoot: URL?) throws -> BatchOutputPlan {
+        let normalizedTarget = try previewTarget(source: source, sourceRoot: sourceRoot)
+
         guard isWritableTargetDirectory(normalizedTarget) else {
             throw BatchOutputPlannerError.unwritableDirectory
         }
@@ -112,12 +118,9 @@ struct BatchOutputPlanner: Sendable {
             // source 必须在 sourceRoot 之下，否则无法保持相对目录（fail-closed）。
             let sourceDir = source.deletingLastPathComponent().standardizedFileURL
             let rootNorm = sourceRoot.standardizedFileURL
-            let sourceDirPath = sourceDir.path
-            let rootPath = rootNorm.path
-            guard sourceDirPath == rootPath || sourceDirPath.hasPrefix(rootPath + "/") else {
+            guard let relativeDir = BatchPath.relativePath(from: rootNorm, to: sourceDir) else {
                 throw BatchOutputPlannerError.targetOutsideRoot
             }
-            let relativeDir = sourceDirPath.replacingOccurrences(of: rootPath, with: "")
             return outputRoot
                 .appendingPathComponent(relativeDir, isDirectory: true)
                 .appendingPathComponent(base.lastPathComponent)

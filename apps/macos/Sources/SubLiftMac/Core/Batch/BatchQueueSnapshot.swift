@@ -10,6 +10,7 @@ struct BatchQueueSnapshot: Codable, Equatable, Sendable {
     let tasks: [BatchTask]
     let runningTaskID: UUID?
     let status: BatchQueueStatus
+    let outputDestination: BatchOutputDestination?
 
     static let currentSchemaVersion = 1
 
@@ -18,12 +19,14 @@ struct BatchQueueSnapshot: Codable, Equatable, Sendable {
         savedAt: Date = Date(),
         tasks: [BatchTask],
         runningTaskID: UUID?,
-        status: BatchQueueStatus
+        status: BatchQueueStatus,
+        outputDestination: BatchOutputDestination? = nil
     ) {
         self.schemaVersion = schemaVersion
         self.savedAt = savedAt
         self.tasks = tasks
         self.runningTaskID = runningTaskID
         self.status = status
+        self.outputDestination = outputDestination
     }
 }

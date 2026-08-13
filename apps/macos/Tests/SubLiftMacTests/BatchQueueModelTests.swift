@@ -159,13 +159,137 @@ final class BatchQueueModelTests: XCTestCase {
         try Data("existing srt bytes".utf8).write(to: existingSRT)
         let model = makeModel()
         model.importInputs([a])
+        let previewedURL = model.state.tasks.first?.outputURL
+        XCTAssertNotNil(previewedURL, "导入后应已有预览 outputURL")
         model.prepareOutputPlan()
         model.cancelStart()
         XCTAssertEqual(model.state.status, .idle, "取消不启动")
-        XCTAssertNil(model.state.tasks.first?.outputURL, "取消不写入输出计划")
+        XCTAssertEqual(model.state.tasks.first?.outputURL, previewedURL, "取消开始保留预览 outputURL")
         // 现有输出文件字节不变（取消路径零文件触碰）。
         let after = try Data(contentsOf: existingSRT)
         XCTAssertEqual(after, Data("existing srt bytes".utf8))
+    }
+
+    func testImportPlansPreviewOutputURL() throws {
+        let a = try makeVideo("a.mp4")
+        let model = makeModel()
+        model.importInputs([a])
+
+        XCTAssertEqual(model.state.tasks.count, 1)
+        XCTAssertEqual(model.state.tasks[0].outputURL?.lastPathComponent, "a.srt")
+        XCTAssertEqual(model.state.tasks[0].status, .waiting, "导入后仍是 waiting")
+        XCTAssertNil(model.state.tasks[0].failureMessage)
+        // 磁盘上无新 SRT（仅预览）。
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tempDir.appendingPathComponent("a.srt").path))
+    }
+
+    func testImportWithExistingSRTKeepsWaitingAndSetsOutputURL() throws {
+        let a = try makeVideo("a.mp4")
+        let existingSRT = tempDir.appendingPathComponent("a.srt")
+        try Data("existing".utf8).write(to: existingSRT)
+        let model = makeModel()
+        model.importInputs([a])
+
+        XCTAssertEqual(model.state.tasks[0].status, .waiting, "目标已存在也不 skipped")
+        XCTAssertEqual(model.state.tasks[0].outputURL, existingSRT.standardizedFileURL)
+        XCTAssertNil(model.state.tasks[0].failureMessage)
+        XCTAssertFalse(model.planningErrors.keys.contains(model.state.tasks[0].id))
+    }
+
+    func testPublicRootPreviewMatchesPreparePlanForSameBasenameFolders() throws {
+        let publicRoot = tempDir.appendingPathComponent("Out", isDirectory: true)
+        try fileManager.createDirectory(at: publicRoot, withIntermediateDirectories: true)
+        let folderA = tempDir.appendingPathComponent("A", isDirectory: true)
+        let folderB = tempDir.appendingPathComponent("B", isDirectory: true)
+        try fileManager.createDirectory(at: folderA, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: folderB, withIntermediateDirectories: true)
+        let videoA = try makeVideo("A/movie.mp4")
+        let videoB = try makeVideo("B/movie.mp4")
+
+        let model = makeModel()
+        model.setOutputDestination(.publicRoot(publicRoot))
+        model.importInputs([folderA, folderB])
+
+        let taskA = model.state.tasks.first { $0.sourceURL == videoA.standardizedFileURL }!
+        let taskB = model.state.tasks.first { $0.sourceURL == videoB.standardizedFileURL }!
+        // 两文件夹分别作为 sourceRoot，basename 相同 → 预览目标相同 → 同批碰撞。
+        let previewedTargets = [taskA.outputURL, taskB.outputURL].compactMap { $0 }
+        XCTAssertEqual(Set(previewedTargets).count, 1, "两个 movie.mp4 的预览目标应相同")
+        XCTAssertNotNil(model.planningErrors[taskA.id] ?? model.planningErrors[taskB.id], "后者应有 planningError")
+
+        // 再跑 prepareOutputPlan：目标应与 preview 一致（sourceRootForPlanning 相同）。
+        model.prepareOutputPlan()
+        let preparedTargets = [taskA.outputURL, taskB.outputURL].compactMap { $0 }
+        XCTAssertEqual(Set(preparedTargets).count, 1, "prepare 目标与 preview 一致")
+        XCTAssertNotNil(model.planningErrors[taskA.id] ?? model.planningErrors[taskB.id])
+        XCTAssertEqual(model.state.status, .idle, "有碰撞不启动")
+    }
+
+    func testBatchCollisionFirstComeFirstServed() throws {
+        let publicRoot = tempDir.appendingPathComponent("Out", isDirectory: true)
+        try fileManager.createDirectory(at: publicRoot, withIntermediateDirectories: true)
+        // 两个独立文件同 basename、nil sourceRoot → 公共根下目标相同 → 同批碰撞。
+        let dirA = tempDir.appendingPathComponent("A", isDirectory: true)
+        let dirB = tempDir.appendingPathComponent("B", isDirectory: true)
+        try fileManager.createDirectory(at: dirA, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: dirB, withIntermediateDirectories: true)
+        let a = try makeVideo("A/movie.mp4")
+        let b = try makeVideo("B/movie.mp4")
+
+        let model = makeModel()
+        model.setOutputDestination(.publicRoot(publicRoot))
+        model.importInputs([a, b])
+
+        let taskA = model.state.tasks.first { $0.sourceURL == a.standardizedFileURL }!
+        let taskB = model.state.tasks.first { $0.sourceURL == b.standardizedFileURL }!
+        // 直接文件输入 sourceRoot == nil，公共根下都用 basename → 同名碰撞。
+        XCTAssertEqual(taskA.outputURL, publicRoot.appendingPathComponent("movie.srt"))
+        // 先到先得：taskA 有 outputURL，taskB 被跳过（outputURL 保持 nil）。
+        XCTAssertNil(taskB.outputURL)
+        // 后者 planningError，没有 failureMessage，保持 waiting。
+        XCTAssertNotNil(model.planningErrors[taskB.id])
+        XCTAssertNil(taskA.failureMessage)
+        XCTAssertNil(taskB.failureMessage)
+        XCTAssertEqual(taskA.status, .waiting)
+        XCTAssertEqual(taskB.status, .waiting)
+        // prepareOutputPlan 也不启动。
+        model.prepareOutputPlan()
+        XCTAssertEqual(model.state.status, .idle)
+    }
+
+    func testRetryableTaskThenChangePublicRootUpdatesOutputURLBeforeRetry() throws {
+        let publicRoot = tempDir.appendingPathComponent("Out", isDirectory: true)
+        try fileManager.createDirectory(at: publicRoot, withIntermediateDirectories: true)
+        let a = try makeVideo("a.mp4")
+        let model = makeModel()
+        model.importInputs([a])
+        let sidecarURL = model.state.tasks[0].outputURL
+        XCTAssertEqual(sidecarURL?.deletingLastPathComponent(), tempDir.standardizedFileURL)
+
+        // 模拟任务进入可重试状态（cancelled）。
+        _ = model.cancel(model.state.tasks[0].id)
+        XCTAssertEqual(model.state.tasks[0].status, .cancelled)
+
+        // 切换公共根（不重试）——outputURL 应已更新到新根。
+        model.setOutputDestination(.publicRoot(publicRoot))
+        let publicURL = model.state.tasks[0].outputURL
+        XCTAssertEqual(publicURL?.deletingLastPathComponent(), publicRoot.standardizedFileURL)
+        XCTAssertEqual(model.state.tasks[0].status, .cancelled, "只改预览路径，不改 status")
+    }
+
+    func testPrepareOutputPlanWithUnwritableDirectoryDoesNotStart() throws {
+        let lockedDir = tempDir.appendingPathComponent("locked", isDirectory: true)
+        try fileManager.createDirectory(at: lockedDir, withIntermediateDirectories: true)
+        let a = try makeVideo("locked/a.mp4")
+        try fileManager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: lockedDir.path)
+        defer { try? fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: lockedDir.path) }
+
+        let model = makeModel()
+        model.importInputs([a])
+        model.prepareOutputPlan()
+
+        XCTAssertEqual(model.state.status, .idle, "不可写目录不应启动")
+        XCTAssertNotNil(model.planningErrors[model.state.tasks[0].id])
     }
 
     func testStartWithoutConflicts() throws {

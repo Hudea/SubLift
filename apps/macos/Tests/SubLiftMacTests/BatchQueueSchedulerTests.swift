@@ -414,6 +414,60 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertFalse(BatchTaskCommandAvailability.isActive(.waiting))
     }
 
+    // MARK: - 08511 输出目的地与 outputURL 写入
+
+    func testSetOutputURLAllowedForRetryableStates() {
+        var failed = makeTask("f.mp4")
+        _ = failed.transition(to: .preparing)
+        failed.recordFailure("error")
+        _ = failed.transition(to: .failed)
+        var cancelled = makeTask("c.mp4")
+        _ = cancelled.transition(to: .cancelled)
+        var interrupted = makeTask("i.mp4")
+        _ = interrupted.transition(to: .preparing)
+        _ = interrupted.transition(to: .interrupted)
+
+        let scheduler = makeScheduler(tasks: [failed, cancelled, interrupted])
+        let newURL = URL(fileURLWithPath: "/tmp/new.srt")
+        XCTAssertTrue(scheduler.setOutputURL(newURL, for: failed.id))
+        XCTAssertTrue(scheduler.setOutputURL(newURL, for: cancelled.id))
+        XCTAssertTrue(scheduler.setOutputURL(newURL, for: interrupted.id))
+        XCTAssertEqual(scheduler.state.tasks[0].outputURL, newURL)
+        XCTAssertEqual(scheduler.state.tasks[1].outputURL, newURL)
+        XCTAssertEqual(scheduler.state.tasks[2].outputURL, newURL)
+        XCTAssertEqual(scheduler.state.tasks[0].status, .failed, "只改 outputURL，不改状态")
+    }
+
+    func testSetOutputURLRejectedForCompleted() {
+        var completed = makeTask("d.mp4")
+        _ = completed.transition(to: .preparing)
+        _ = completed.transition(to: .extracting)
+        _ = completed.transition(to: .exporting)
+        _ = completed.transition(to: .completed)
+        let scheduler = makeScheduler(tasks: [completed])
+        XCTAssertFalse(scheduler.setOutputURL(URL(fileURLWithPath: "/tmp/x.srt"), for: completed.id))
+    }
+
+    func testSetOutputURLsBatchPersistsOnce() {
+        let t1 = makeTask("1.mp4")
+        let t2 = makeTask("2.mp4")
+        let scheduler = makeScheduler(tasks: [t1, t2])
+        let url1 = URL(fileURLWithPath: "/tmp/1.srt")
+        let url2 = URL(fileURLWithPath: "/tmp/2.srt")
+        XCTAssertTrue(scheduler.setOutputURLs([t1.id: url1, t2.id: url2]))
+        XCTAssertEqual(scheduler.state.tasks[0].outputURL, url1)
+        XCTAssertEqual(scheduler.state.tasks[1].outputURL, url2)
+    }
+
+    func testSetOutputDestinationPersistsToRepository() {
+        let scheduler = makeScheduler()
+        let publicRoot = URL(fileURLWithPath: "/tmp/PublicOut")
+        scheduler.setOutputDestination(.publicRoot(publicRoot))
+        XCTAssertEqual(scheduler.state.outputDestination, .publicRoot(publicRoot))
+        let loaded = (try? repository.load()) ?? .empty
+        XCTAssertEqual(loaded.outputDestination, .publicRoot(publicRoot))
+    }
+
     // MARK: - 大量等待任务
 
     func testManyWaitingTasksRunSequentially() async {
