@@ -345,14 +345,15 @@ extension EvidenceShot {
             queue.status = .idle
         case "WAITING":
             let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")
-            queue.tasks = [task("interview_01.mp4", status: .waiting, importRoot: root),
-                           task("lecture_part2.mov", status: .waiting, importRoot: root),
-                           task("meeting_recording.mkv", status: .waiting, importRoot: root)]
+            queue.tasks = [task("Zootopia/interview_01.mp4", status: .waiting, importRoot: root),
+                           task("Zootopia/lecture_part2.mov", status: .waiting, importRoot: root),
+                           task("Zootopia/meeting_recording.mkv", status: .waiting, importRoot: root)]
             queue.status = .idle
         case "RUNNING":
-            queue.tasks = [task("interview_01.mp4", status: .extracting, progress: 0.42, output: "/tmp/sample/interview_01.srt"),
-                           task("lecture_part2.mov", status: .waiting),
-                           task("meeting_recording.mkv", status: .waiting)]
+            let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")
+            queue.tasks = [task("Zootopia/interview_01.mp4", status: .extracting, progress: 0.42, output: "/tmp/sample/Zootopia/interview_01.srt", importRoot: root),
+                           task("Zootopia/lecture_part2.mov", status: .waiting, importRoot: root),
+                           task("Zootopia/meeting_recording.mkv", status: .waiting, importRoot: root)]
             queue.status = .running
             queue.runningTaskID = queue.tasks[0].id
         case "PAUSED":
@@ -361,10 +362,11 @@ extension EvidenceShot {
                            task("meeting_recording.mkv", status: .waiting)]
             queue.status = .paused
         case "MIXED":
-            queue.tasks = [task("a.mp4", status: .completed, output: "/tmp/sample/a.srt"),
-                           task("b.mov", status: .failed),
-                           task("c.mp4", status: .skipped),
-                           task("d.mp4", status: .waiting)]
+            let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")
+            queue.tasks = [task("Zootopia/a.mp4", status: .completed, output: "/tmp/sample/Zootopia/a.srt", importRoot: root),
+                           task("Zootopia/b.mov", status: .failed, importRoot: root),
+                           task("Zootopia/c.mp4", status: .skipped, importRoot: root),
+                           task("Zootopia/d.mp4", status: .waiting, importRoot: root)]
             queue.status = .idle
         case "RESTORED":
             queue.tasks = [task("a.mp4", status: .interrupted),

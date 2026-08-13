@@ -18,6 +18,8 @@ struct TaskCenterView: View {
     @State private var showFinderError = false
     @State private var revealErrorURL: URL?
     @State private var scanReasonsExpanded = false
+    /// 08511：窗口级宽度（EvidenceShot fixture 通过环境变量注入；真实窗口由 onAppear 采样）。
+    @State private var windowWidth: CGFloat = 1280
 
     private var selectedTasks: [BatchTask] {
         model.state.tasks.filter { selection.contains($0.id) }
@@ -26,6 +28,16 @@ struct TaskCenterView: View {
     /// 选中中可删除（waiting）的数量——删除按钮与确认文案共用。
     private var removableSelectionCount: Int {
         selectedTasks.filter { BatchTaskCommandAvailability.canRemove($0.status) }.count
+    }
+
+    private var visibleColumnsForTable: [TaskTableColumn] {
+        #if DEBUG
+        if let envWidth = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_WINDOW_WIDTH"],
+           let w = Double(envWidth) {
+            return TaskCenterPresentation.visibleColumns(forWidth: CGFloat(w))
+        }
+        #endif
+        return TaskCenterPresentation.visibleColumns(forWidth: windowWidth)
     }
 
     var body: some View {
@@ -44,25 +56,22 @@ struct TaskCenterView: View {
                 emptyCanvasDropZone
             } else {
                 Divider()
-                GeometryReader { geo in
-                    let columns = TaskCenterPresentation.visibleColumns(forWidth: geo.size.width)
-                    TaskTableView(tasks: model.filteredTasks, selection: $selection, visibleColumns: columns)
-                        .contextMenu(forSelectionType: UUID.self) { ids in
-                            if let id = ids.first,
-                               let task = model.state.tasks.first(where: { $0.id == id }) {
-                                Button("在 Finder 中显示源文件") { revealSource(task) }
-                                if task.outputURL != nil {
-                                    Button("在 Finder 中显示字幕") { revealOutput(task) }
-                                }
-                                if BatchTaskCommandAvailability.canCancel(task.status) {
-                                    Button("取消任务") { _ = model.cancel(task.id) }
-                                }
-                                if BatchTaskCommandAvailability.canRetry(task.status) {
-                                    Button("重试任务") { _ = model.retry(task.id) }
-                                }
+                TaskTableView(tasks: model.filteredTasks, selection: $selection, visibleColumns: visibleColumnsForTable)
+                    .contextMenu(forSelectionType: UUID.self) { ids in
+                        if let id = ids.first,
+                           let task = model.state.tasks.first(where: { $0.id == id }) {
+                            Button("在 Finder 中显示源文件") { revealSource(task) }
+                            if task.outputURL != nil {
+                                Button("在 Finder 中显示字幕") { revealOutput(task) }
+                            }
+                            if BatchTaskCommandAvailability.canCancel(task.status) {
+                                Button("取消任务") { _ = model.cancel(task.id) }
+                            }
+                            if BatchTaskCommandAvailability.canRetry(task.status) {
+                                Button("重试任务") { _ = model.retry(task.id) }
                             }
                         }
-                }
+                    }
                 Divider()
                 selectionActionBar
                 if let selectedID = selection.count == 1 ? selection.first : nil,
@@ -138,6 +147,17 @@ struct TaskCenterView: View {
             Button("确定", role: .cancel) { model.dismissRecoveryError() }
         } message: {
             Text(model.recoveryErrorMessage ?? "")
+        }
+        .onAppear {
+            // 真实窗口：采样实际宽度（fixture 通过 SUBLIFT_EVIDENCE_WINDOW_WIDTH 注入）。
+            #if DEBUG
+            if let envWidth = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_WINDOW_WIDTH"],
+               let w = Double(envWidth) {
+                windowWidth = CGFloat(w)
+            } else if let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }) {
+                windowWidth = window.frame.width
+            }
+            #endif
         }
     }
 
@@ -400,6 +420,7 @@ struct TaskCenterView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(
@@ -420,6 +441,12 @@ struct TaskCenterView: View {
         return false
         #endif
     }
+}
+
+/// 08511：用于 GeometryReader 向下传递表格宽度。
+private struct TableWidthKey: PreferenceKey {
+    static let defaultValue: CGFloat = 1280
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 extension BatchInputRejectionReason {

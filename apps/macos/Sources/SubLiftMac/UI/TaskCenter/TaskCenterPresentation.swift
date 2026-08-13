@@ -118,8 +118,9 @@ enum TaskCenterPresentation {
         guard let importRoot = task.importRootURL else {
             return task.sourceURL.deletingLastPathComponent().lastPathComponent
         }
-        let sourceDirPath = task.sourceURL.deletingLastPathComponent().standardizedFileURL.path
-        let rootPath = importRoot.standardizedFileURL.path
+        // deletingLastPathComponent() 会加尾部 /，需要统一 trim 后再比较。
+        let sourceDirPath = task.sourceURL.deletingLastPathComponent().standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let rootPath = importRoot.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         if sourceDirPath == rootPath {
             return importRoot.lastPathComponent + "/"
         }
