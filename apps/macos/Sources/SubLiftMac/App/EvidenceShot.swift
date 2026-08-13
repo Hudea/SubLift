@@ -296,13 +296,14 @@ extension EvidenceShot {
     @MainActor
     static func makeFixtureState(_ raw: String) -> BatchQueueState {
         let now = Date()
-        func task(_ name: String, status: BatchTaskStatus, progress: Double? = nil, output: String? = nil) -> BatchTask {
+        func task(_ name: String, status: BatchTaskStatus, progress: Double? = nil, output: String? = nil, importRoot: URL? = nil) -> BatchTask {
             var t = BatchTask.make(
                 sourceURL: URL(fileURLWithPath: "/tmp/sample/\(name)"),
                 engine: .vision,
                 quality: .fast,
                 developerMode: false,
-                createdAt: now
+                createdAt: now,
+                importRootURL: importRoot
             )
             switch status {
             case .preparing: _ = t.transition(to: .preparing)
@@ -343,9 +344,10 @@ extension EvidenceShot {
         case "EMPTY":
             queue.status = .idle
         case "WAITING":
-            queue.tasks = [task("interview_01.mp4", status: .waiting),
-                           task("lecture_part2.mov", status: .waiting),
-                           task("meeting_recording.mkv", status: .waiting)]
+            let root = URL(fileURLWithPath: "/tmp/sample/Zootopia")
+            queue.tasks = [task("interview_01.mp4", status: .waiting, importRoot: root),
+                           task("lecture_part2.mov", status: .waiting, importRoot: root),
+                           task("meeting_recording.mkv", status: .waiting, importRoot: root)]
             queue.status = .idle
         case "RUNNING":
             queue.tasks = [task("interview_01.mp4", status: .extracting, progress: 0.42, output: "/tmp/sample/interview_01.srt"),

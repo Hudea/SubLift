@@ -732,7 +732,8 @@
           "dependencies": [
             "08511.02"
           ],
-          "status": "pending"
+          "status": "done",
+          "evidence": "commit 93343d8"
         },
         {
           "id": "08511.04",
@@ -741,7 +742,8 @@
           "dependencies": [
             "08511.03"
           ],
-          "status": "pending"
+          "status": "done",
+          "evidence": "commit 9eb98cc"
         },
         {
           "id": "08511.05",
@@ -750,7 +752,8 @@
           "dependencies": [
             "08511.04"
           ],
-          "status": "pending"
+          "status": "done",
+          "evidence": "commit 2a14e87"
         },
         {
           "id": "08511.06",
@@ -759,11 +762,12 @@
           "dependencies": [
             "08511.05"
           ],
-          "status": "pending"
+          "status": "done",
+          "evidence": "EvidenceShot WAITING fixture 已更新（importRootURL + sidecar outputURL）；evidence/08511/README.md 索引已创建；截图待人工采集（无 Computer Use）"
         }
       ],
       "status": "in-progress",
-      "evidence": "C1 commit 051269d（importRoot + BatchPath + 扫描接受项）；C2 commit d073ae7（previewTarget + planOutputsForWaitingTasks + outputDestination 持久化 + 碰撞检测）。C3–C6 待做。"
+      "evidence": "C1 commit 051269d（importRoot + BatchPath + 扫描接受项）；C2 commit d073ae7（previewTarget + planOutputsForWaitingTasks + outputDestination 持久化 + 碰撞检测）；C3 commit 93343d8（空画布 drop zone + 单一 fileImporter）；C4 commit 9eb98cc（位置列 + 搜索 + 四档列宽）；C5 commit 2a14e87（Inspector 卡片 + 输出位置菜单）；C6 EvidenceShot fixture 更新 + evidence/08511/README.md 索引。截图待人工采集。"
     }
   ]
 }
