@@ -140,6 +140,22 @@ final class TaskCenterPresentationTests: XCTestCase {
         XCTAssertFalse(detail.contains { $0.label.contains("置信度") })
         XCTAssertFalse(detail.contains { $0.label.contains("下载") })
     }
+
+    func testDetailAfterRequeueHidesOldFailure() {
+        // requeue 清除旧失败元数据后，详情不应再展示上一轮的「错误」行。
+        var task = makeTask("a.mp4")
+        _ = task.transition(to: .preparing)
+        task.recordFailure("worker error: timeout")
+        _ = task.transition(to: .failed)
+        XCTAssertTrue(TaskCenterPresentation.detailRows(for: task).contains { $0.label == "错误" })
+
+        task.requeue()
+
+        let detail = TaskCenterPresentation.detailRows(for: task)
+        XCTAssertEqual(task.status, .waiting)
+        XCTAssertFalse(detail.contains { $0.label == "错误" }, "重试后详情不应残留旧错误")
+        XCTAssertFalse(detail.contains { $0.label == "输出" && $0.value.contains("Result") }, "重试后详情不应残留旧结果")
+    }
 }
 
 // MARK: - Task Center 命令 availability（08308）

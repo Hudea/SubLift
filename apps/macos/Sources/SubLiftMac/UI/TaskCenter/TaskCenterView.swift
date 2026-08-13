@@ -45,6 +45,12 @@ struct TaskCenterView: View {
                             if task.outputURL != nil {
                                 Button("在 Finder 中显示字幕") { revealOutput(task) }
                             }
+                            if BatchTaskCommandAvailability.canCancel(task.status) {
+                                Button("取消任务") { _ = model.cancel(task.id) }
+                            }
+                            if BatchTaskCommandAvailability.canRetry(task.status) {
+                                Button("重试任务") { _ = model.retry(task.id) }
+                            }
                         }
                     }
                 if summary.total == 0 {
@@ -58,9 +64,14 @@ struct TaskCenterView: View {
                    let task = model.state.tasks.first(where: { $0.id == selectedID }) {
                     Divider()
                     // .id(task.id)：切换选中时重建详情（避免 @State 编辑态跨任务残留）。
-                    TaskDetailView(task: task) { configuration in
-                        _ = model.replaceTaskConfiguration(task.id, configuration)
-                    }
+                    TaskDetailView(
+                        task: task,
+                        onReplaceConfiguration: { configuration in
+                            _ = model.replaceTaskConfiguration(task.id, configuration)
+                        },
+                        onCancel: { _ = model.cancel(task.id) },
+                        onRetry: { _ = model.retry(task.id) }
+                    )
                     .id(task.id)
                 }
             }
@@ -337,7 +348,7 @@ struct TaskCenterView: View {
         let group = DispatchGroup()
         for provider in providers {
             group.enter()
-            _ = provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
                 if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
                     lock.lock(); urls.append(url); lock.unlock()
                 }

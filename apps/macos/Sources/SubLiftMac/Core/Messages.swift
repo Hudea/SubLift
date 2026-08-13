@@ -27,7 +27,7 @@ public enum MessageType: String, Codable {
 
 /// OCR 引擎标识，与 Python `ENGINES` 集合对齐。
 /// paddle: Phase 5.0 跨平台引擎已实现（rapidocr PP-OCRv6）。
-public enum OcrEngineName: String, Codable, CaseIterable {
+public enum OcrEngineName: String, Codable, CaseIterable, Sendable {
     case vision
     case mock
     case paddle

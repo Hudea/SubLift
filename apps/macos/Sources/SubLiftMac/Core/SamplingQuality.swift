@@ -6,7 +6,7 @@ import Foundation
 /// - 快速 → 5（当前默认与固定 GT 回归锚点）
 /// - 平衡 → 8
 /// - 精细 → 12（用户可选上限）
-public enum SamplingQuality: String, CaseIterable, Identifiable, Codable {
+public enum SamplingQuality: String, CaseIterable, Identifiable, Codable, Sendable {
     case fast
     case balanced
     case fine

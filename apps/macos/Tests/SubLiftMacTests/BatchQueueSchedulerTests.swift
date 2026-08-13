@@ -333,7 +333,7 @@ final class BatchQueueSchedulerTests: XCTestCase {
     }
 
     func testCompletedCannotRetry() {
-        let t1 = makeTask("1.mp4")
+        let t1 = makeTask("d.mp4")
         var task = t1
         _ = task.transition(to: .preparing)
         _ = task.transition(to: .extracting)
@@ -342,6 +342,33 @@ final class BatchQueueSchedulerTests: XCTestCase {
         let scheduler = makeScheduler(tasks: [task])
         XCTAssertFalse(scheduler.retry(t1.id), "completed 不可重跑")
         XCTAssertFalse(scheduler.remove(t1.id), "终态不可删除")
+    }
+
+    func testRetryFailedTaskClearsFailureAndResult() async {
+        let t1 = makeTask("1.mp4")
+        runner.setBehavior(t1.id) { _ in .failed("first try") }
+
+        let scheduler = makeScheduler(tasks: [t1])
+        scheduler.start()
+        await waitForIdle(scheduler)
+
+        XCTAssertEqual(scheduler.state.tasks[0].status, .failed)
+        XCTAssertEqual(scheduler.state.tasks[0].failureMessage, "first try")
+
+        runner.setBehavior(t1.id) { _ in
+            .completed(entryCount: 5, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
+        }
+        XCTAssertTrue(scheduler.retry(t1.id))
+        XCTAssertEqual(scheduler.state.tasks[0].status, .waiting)
+        XCTAssertNil(scheduler.state.tasks[0].failureMessage, "retry 应清除旧失败摘要")
+        XCTAssertNil(scheduler.state.tasks[0].result, "retry 应清除旧结果")
+
+        scheduler.start()
+        await waitForIdle(scheduler)
+
+        XCTAssertEqual(scheduler.state.tasks[0].status, .completed)
+        XCTAssertEqual(scheduler.state.tasks[0].result?.entryCount, 5)
+        XCTAssertEqual(runner.recordedRunOrder, [t1.id, t1.id])
     }
 
     // MARK: - 仅 waiting 的命令

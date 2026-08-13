@@ -4,6 +4,8 @@ import SwiftUI
 struct TaskDetailView: View {
     let task: BatchTask
     var onReplaceConfiguration: (ExtractionConfiguration) -> Void
+    var onCancel: () -> Void
+    var onRetry: () -> Void
 
     /// 编辑中的引擎/质量（仅 waiting 可改；初始为任务当前配置）。
     @State private var editingEngine: OcrEngineName?
@@ -11,6 +13,14 @@ struct TaskDetailView: View {
 
     private var canEdit: Bool {
         BatchTaskCommandAvailability.canReplaceConfiguration(task.status)
+    }
+
+    private var canCancel: Bool {
+        BatchTaskCommandAvailability.canCancel(task.status)
+    }
+
+    private var canRetry: Bool {
+        BatchTaskCommandAvailability.canRetry(task.status)
     }
 
     var body: some View {
@@ -33,10 +43,11 @@ struct TaskDetailView: View {
             if canEdit {
                 configurationEditor
             }
+            actionButtons
         }
         .padding(10)
         .background(Color(nsColor: .controlBackgroundColor))
-        .frame(maxHeight: 160, alignment: .top)
+        .frame(maxHeight: 180, alignment: .top)
         .onAppear {
             if editingEngine == nil {
                 // 归一化：持久化旧选择可能含 mock（关闭开发者模式后）——回落到可见引擎。
@@ -90,6 +101,31 @@ struct TaskDetailView: View {
         let current = task.configuration
         if engine != current.engine || quality != current.quality {
             onReplaceConfiguration(ExtractionConfiguration(engine: engine, quality: quality))
+        }
+    }
+
+    /// 单任务操作按钮（按 availability 启用；waiting/活动态可取消，failed/cancelled/interrupted 可重试）。
+    private var actionButtons: some View {
+        HStack(spacing: 10) {
+            if canCancel {
+                Button {
+                    onCancel()
+                } label: {
+                    Label("取消任务", systemImage: "xmark")
+                }
+                .help("取消该任务")
+                .accessibilityLabel("取消任务")
+            }
+            if canRetry {
+                Button {
+                    onRetry()
+                } label: {
+                    Label("重试", systemImage: "arrow.counterclockwise")
+                }
+                .help("重新排队该任务")
+                .accessibilityLabel("重试任务")
+            }
+            Spacer()
         }
     }
 }

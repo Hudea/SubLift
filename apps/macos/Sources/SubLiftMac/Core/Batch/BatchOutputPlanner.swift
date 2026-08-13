@@ -103,8 +103,6 @@ struct BatchOutputPlanner: Sendable {
 
     // MARK: - Private
 
-    private let fileManager = FileManager.default
-
     private func computeBaseTarget(source: URL, sourceRoot: URL?) throws -> URL {
         let base = source.deletingPathExtension().appendingPathExtension("srt")
         guard let outputRoot else { return base }  // sidecar
@@ -135,19 +133,19 @@ struct BatchOutputPlanner: Sendable {
     }
 
     private func fileExists(_ url: URL) -> Bool {
-        fileManager.fileExists(atPath: url.path)
+        FileManager.default.fileExists(atPath: url.path)
     }
 
     /// 目标目录可写：目录存在且可写，或最近存在的祖先可写（新建路径）。
     private func isWritableTargetDirectory(_ target: URL) -> Bool {
         let dir = target.deletingLastPathComponent()
         var probe = dir
-        while !fileManager.fileExists(atPath: probe.path) {
+        while !FileManager.default.fileExists(atPath: probe.path) {
             let parent = probe.deletingLastPathComponent()
             guard parent.path != probe.path else { break }
             probe = parent
         }
-        return fileManager.isWritableFile(atPath: probe.path)
+        return FileManager.default.isWritableFile(atPath: probe.path)
     }
 
     /// 首个稳定可用 `name (N).srt`。

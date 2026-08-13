@@ -127,11 +127,14 @@ struct BatchTask: Identifiable, Equatable, Codable, Sendable {
     }
 
     /// retry 专用：failed/cancelled/interrupted → waiting（绕过状态机终态限制），
-    /// 清除瞬态 run token（重新排队语义）。方法内守卫防止非法 requeue。
+    /// 清除瞬态 run token 与上一轮失败元数据（重新排队语义）。方法内守卫防止非法 requeue。
     mutating func requeue() {
         guard BatchTaskCommandAvailability.canRetry(status) else { return }
         status = .waiting
         runToken = nil
+        failureMessage = nil
+        progress = nil
+        result = nil
     }
 
     /// 设置进度（clamp 到 0–1）。

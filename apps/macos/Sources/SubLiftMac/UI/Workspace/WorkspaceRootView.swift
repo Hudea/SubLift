@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 /// 窗口尺寸合同：最小 960×600（设计合同）；理想 1280×800（defaultSize）。
 struct WorkspaceRootView: View {
     @ObservedObject var workspace: WorkspaceModel
+    @Environment(\.openWindow) private var openWindow
 
     @AppStorage("default_engine") private var defaultEngine: OcrEngineName = .vision
     @AppStorage("sampling_quality") private var samplingQuality: SamplingQuality = .fast
@@ -203,6 +204,14 @@ struct WorkspaceRootView: View {
             .disabled(!workspace.commandAvailability.canOpen)
             .help("打开 MP4、MOV 或 MKV 视频")
             .accessibilityLabel("打开视频")
+
+            Button {
+                openWindow(id: "task-center")
+            } label: {
+                Label("任务中心", systemImage: "rectangle.stack.badge.plus")
+            }
+            .help("打开批量任务中心（⌘⇧T）")
+            .accessibilityLabel("任务中心")
         }
 
         ToolbarItem(placement: .principal) {

@@ -202,6 +202,44 @@ final class BatchTaskTests: XCTestCase {
         XCTAssertEqual(queue.activeTasks.count, 1)
         XCTAssertEqual(queue.activeTasks.first?.id, active.id)
     }
+
+    func testRequeueClearsFailureProgressAndResult() {
+        // failed 任务含失败元数据；requeue 后应回到 waiting 并清除旧失败痕迹，
+        // 但保留 outputURL（输出规划是用户意图，不应随重试丢失）。
+        var task = makeTask()
+        task.outputURL = URL(fileURLWithPath: "/tmp/output.srt")
+        _ = task.transition(to: .preparing)
+        task.setProgress(0.5)
+        task.recordFailure("worker crashed")
+        _ = task.transition(to: .failed)
+        XCTAssertNotNil(task.failureMessage)
+        XCTAssertNotNil(task.progress)
+
+        task.requeue()
+
+        XCTAssertEqual(task.status, .waiting)
+        XCTAssertNil(task.failureMessage, "重试后旧错误摘要应清除")
+        XCTAssertNil(task.progress, "重试后旧进度应清除")
+        XCTAssertNil(task.result, "重试后旧结果应清除")
+        XCTAssertNil(task.runToken, "重试后旧 run token 应清除")
+        XCTAssertEqual(task.outputURL?.lastPathComponent, "output.srt", "重试应保留输出规划")
+    }
+
+    func testRequeueRejectedForCompletedAndWaiting() {
+        var completed = makeTask()
+        _ = completed.transition(to: .preparing)
+        _ = completed.transition(to: .extracting)
+        _ = completed.transition(to: .exporting)
+        _ = completed.transition(to: .completed)
+        completed.recordResult(BatchTaskResult(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/output.srt"), runtimeIdentity: nil))
+        completed.requeue()
+        XCTAssertEqual(completed.status, .completed, "completed 不可 requeue")
+        XCTAssertNotNil(completed.result, "completed 的 result 不应被 requeue 清除")
+
+        var waiting = makeTask()
+        waiting.requeue()
+        XCTAssertEqual(waiting.status, .waiting, "waiting 不可 requeue")
+    }
 }
 
 // MARK: - Codable 往返（08102）

@@ -12,6 +12,7 @@
 
 ## 近期完成
 
+- [x] 08410-fix：修复 Phase 8 综合审核发现的两个合入前缺口——`BatchTask.requeue()` 现在清除 `failureMessage`/`progress`/`result`（保留 `outputURL`）；Task Center 在 `TaskDetailView` 与 Table contextMenu 接入单任务「取消/重试」按钮，按 `BatchTaskCommandAvailability` 启用；另补 Workspace Toolbar「任务中心」入口按钮（原入口仅在菜单/⌘⇧T，主窗口不可见）。新增 4 个回归测试。本轮另清理了 Swift 6 Sendable 前置 warning（`BatchOutputPlanner` 移除 `FileManager` 存储属性、`OcrEngineName`/`SamplingQuality` 显式 `Sendable`、移除 TaskCenterView 冗余 `_ =`）。完整 Swift 测试 331 XCTest + 140 Swift Testing 全绿，`swift build` 无 warning。
 - [x] 08410：Phase 8 综合审核与验收——真实混合目录（支持/无效/重复/嵌套/已有 SRT）、真实串行 IPC 闭环（2 视频 completed + 不存在文件 fail-closed failed + retry 回 waiting + 输出定位）、恢复/资源（100 任务 41.7KB/0.001s、损坏 fail-closed、运行后零残留 Worker）、B01–B10 证据索引、项目门与文档收口（REQUIREMENTS/ARCHITECTURE/macos-gui/phases.json 同步）。
 - [x] 08309：Task Center 批量交互——统一导入（文件/文件夹/drop 同一 Scanner + B02 三类别摘要）、搜索/状态筛选投影、waiting 多选删除/重排/显式改配置、输出冲突开始前集中确认（取消零文件触碰）、Finder 定位、B02/B03/B08/B09 截图。
 - [x] 08308：原生 Task Center Window——独立 WindowGroup + ⌘⇧T（openWindow 规范路径）、原生 Table 7 列/详情/Toolbar/汇总条、scheduler.onStateChange live 更新、恢复 fail-closed、B01–B10 截图。
