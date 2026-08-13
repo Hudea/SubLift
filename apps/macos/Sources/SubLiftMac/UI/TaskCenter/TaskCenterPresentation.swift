@@ -1,5 +1,10 @@
 import Foundation
 
+/// 08511：表格列枚举——用于 visibleColumns 四档宽度。
+enum TaskTableColumn: Equatable, CaseIterable {
+    case file, location, status, progress, engine, duration, output, added
+}
+
 /// 08308：Task Center 展示纯逻辑（真实字段投影，不编造）。
 enum TaskCenterPresentation {
 
@@ -95,6 +100,58 @@ enum TaskCenterPresentation {
         case .balanced: "平衡"
         case .fine: "精细"
         }
+    }
+
+    // MARK: - 08511 位置列与搜索
+
+    /// 四档列宽：文件/状态/进度 → +输出 → +位置 → +引擎/时长/添加时间。
+    static func visibleColumns(forWidth width: CGFloat) -> [TaskTableColumn] {
+        var cols: [TaskTableColumn] = [.file, .status, .progress]
+        if width >= 960 { cols.append(.output) }
+        if width >= 1100 { cols.insert(.location, at: 1) }
+        if width >= 1280 { cols.append(contentsOf: [.engine, .duration, .added]) }
+        return cols
+    }
+
+    /// 位置列显示规则（末尾 `/` 表示从文件夹导入）。
+    static func locationDisplay(for task: BatchTask) -> String {
+        guard let importRoot = task.importRootURL else {
+            return task.sourceURL.deletingLastPathComponent().lastPathComponent
+        }
+        let sourceDirPath = task.sourceURL.deletingLastPathComponent().standardizedFileURL.path
+        let rootPath = importRoot.standardizedFileURL.path
+        if sourceDirPath == rootPath {
+            return importRoot.lastPathComponent + "/"
+        }
+        if let rel = BatchPath.relativePath(
+            from: importRoot.standardizedFileURL,
+            to: task.sourceURL.deletingLastPathComponent().standardizedFileURL
+        ), !rel.isEmpty {
+            return rel.hasSuffix("/") ? rel : rel + "/"
+        }
+        return task.sourceURL.deletingLastPathComponent().lastPathComponent
+    }
+
+    /// 位置列完整路径（tooltip / AX）。
+    static func locationFullPath(for task: BatchTask) -> String {
+        task.sourceURL.deletingLastPathComponent().standardizedFileURL.path
+    }
+
+    /// 位置列 tooltip 文案。
+    static func locationTooltip(for task: BatchTask) -> String {
+        if task.importRootURL != nil {
+            return "从「\(task.importRootURL!.lastPathComponent)」导入 · \(locationFullPath(for: task))"
+        }
+        return "所在文件夹 · \(locationFullPath(for: task))"
+    }
+
+    /// 搜索：匹配文件名 + 位置展示串 + 完整目录 path。
+    static func matchesSearch(_ task: BatchTask, query: String) -> Bool {
+        guard !query.isEmpty else { return true }
+        let q = query.localizedLowercase
+        return task.sourceURL.lastPathComponent.localizedCaseInsensitiveContains(q)
+            || locationDisplay(for: task).localizedCaseInsensitiveContains(q)
+            || locationFullPath(for: task).localizedCaseInsensitiveContains(q)
     }
 
     // MARK: - 队列级命令 availability

@@ -60,9 +60,8 @@ final class BatchQueueModel: ObservableObject {
     /// 投影：搜索 + 状态筛选只改变投影，不触碰真实队列。
     var filteredTasks: [BatchTask] {
         state.tasks.filter { task in
-            let matchesSearch = searchText.isEmpty
-                || task.sourceURL.lastPathComponent.localizedCaseInsensitiveContains(searchText)
-            return matchesSearch && statusFilter.matches(task.status)
+            TaskCenterPresentation.matchesSearch(task, query: searchText)
+                && statusFilter.matches(task.status)
         }
     }
 

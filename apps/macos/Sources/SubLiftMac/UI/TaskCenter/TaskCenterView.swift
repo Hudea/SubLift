@@ -44,8 +44,9 @@ struct TaskCenterView: View {
                 emptyCanvasDropZone
             } else {
                 Divider()
-                ZStack {
-                    TaskTableView(tasks: model.filteredTasks, selection: $selection)
+                GeometryReader { geo in
+                    let columns = TaskCenterPresentation.visibleColumns(forWidth: geo.size.width)
+                    TaskTableView(tasks: model.filteredTasks, selection: $selection, visibleColumns: columns)
                         .contextMenu(forSelectionType: UUID.self) { ids in
                             if let id = ids.first,
                                let task = model.state.tasks.first(where: { $0.id == id }) {
@@ -189,7 +190,7 @@ struct TaskCenterView: View {
         return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("搜索文件", text: $model.searchText)
+            TextField("搜索文件或位置", text: $model.searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 240)
                 .accessibilityLabel("搜索文件")

@@ -222,4 +222,62 @@ final class TaskCenterCommandTests: XCTestCase {
         let q = queue([makeTask("a.mp4", status: .completed)])
         XCTAssertFalse(TaskCenterPresentation.shouldShowEmptyCanvas(for: q))
     }
+
+    // MARK: - 08511 位置列与四档列宽
+
+    func testVisibleColumnsNarrowShowsFileStatusProgress() {
+        let cols = TaskCenterPresentation.visibleColumns(forWidth: 800)
+        XCTAssertEqual(cols, [.file, .status, .progress])
+    }
+
+    func testVisibleColumnsMediumAddsOutput() {
+        let cols = TaskCenterPresentation.visibleColumns(forWidth: 1000)
+        XCTAssertTrue(cols.contains(.output))
+        XCTAssertFalse(cols.contains(.location))
+    }
+
+    func testVisibleColumnsWideAddsLocation() {
+        let cols = TaskCenterPresentation.visibleColumns(forWidth: 1150)
+        XCTAssertEqual(cols[1], .location, "位置应插在文件与状态之间")
+    }
+
+    func testVisibleColumnsFullAddsEngineDurationAdded() {
+        let cols = TaskCenterPresentation.visibleColumns(forWidth: 1300)
+        XCTAssertTrue(cols.contains(.engine))
+        XCTAssertTrue(cols.contains(.duration))
+        XCTAssertTrue(cols.contains(.added))
+    }
+
+    func testLocationDisplayWithImportRoot() {
+        var task = makeTask("movie.mp4")
+        let root = URL(fileURLWithPath: "/tmp/Videos/Zootopia")
+        task = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/Videos/Zootopia/movie.mp4"),
+            engine: .vision, quality: .fast, developerMode: false,
+            importRootURL: root
+        )
+        let display = TaskCenterPresentation.locationDisplay(for: task)
+        XCTAssertEqual(display, "Zootopia/")
+    }
+
+    func testLocationDisplayWithNilImportRoot() {
+        let task = makeTask("movie.mp4")
+        // importRootURL 默认为 nil
+        let display = TaskCenterPresentation.locationDisplay(for: task)
+        XCTAssertEqual(display, "tmp")
+    }
+
+    func testMatchesSearchMatchesFilename() {
+        let task = makeTask("Zootopia.mp4")
+        XCTAssertTrue(TaskCenterPresentation.matchesSearch(task, query: "zoo"))
+        XCTAssertFalse(TaskCenterPresentation.matchesSearch(task, query: "nonexistent"))
+    }
+
+    func testMatchesSearchMatchesFullPath() {
+        let task = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/Movies/Zootopia/movie.mp4"),
+            engine: .vision, quality: .fast, developerMode: false
+        )
+        XCTAssertTrue(TaskCenterPresentation.matchesSearch(task, query: "Movies"))
+    }
 }
