@@ -3,7 +3,7 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-13
-- **当前 Phase：** Phase 8 后续 UX 改进 08511 进行中（C1–C2 已完成：importRoot + BatchPath、导入即预览 + outputDestination 持久化；C3–C6 待做）；08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
+- **当前 Phase：** Phase 8 后续 UX 改进 08511 已完成（C1–C6 六刀全部交付）；08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
@@ -12,6 +12,10 @@
 
 ## 近期完成
 
+- [x] 08511-C6：证据与文档——EvidenceShot WAITING fixture 更新（importRootURL + sidecar outputURL）、evidence/08511/README.md 索引、phase8.json 全 subtask 标 done。commit `4fe4490`。
+- [x] 08511-C5：Inspector 卡片——TaskInspectorModel + inspectorModel、TaskDetailView 重写为卡片布局（页眉含删除/上移/下移/取消/重试）、输出位置 Toolbar 菜单 + NSOpenPanel、labelsHidden Picker。commit `2a14e87`。
+- [x] 08511-C4：位置列——TaskTableColumn 枚举 + visibleColumns 四档列宽、locationDisplay/locationFullPath/locationTooltip/matchesSearch、搜索扩展到位置+路径、位置不可见时折进文件单元格。commit `9eb98cc`。
+- [x] 08511-C3：空画布——shouldShowEmptyCanvas、虚线 drop zone、单一 fileImporter + TaskCenterImportKind、NSOpenPanel 文件夹选择、isDropTargeted 高亮、筛选栏空队列禁用、DROP fixture。commit `93343d8`。
 - [x] 08511-C2：输出规划可见性——`BatchOutputDestination` 显式 Codable、`previewTarget` 纯路径、`BatchOutputPlanner` 迁移到 `BatchPath.relativePath`、`planOutputsForWaitingTasks` 导入即预览 + 同批碰撞先到先得、`confirmOutputConflictsAndStart` guard planningErrors、`cancelStart` 保留预览 outputURL、`retry` 后 replan、Scheduler `setOutputURLs` 批量 + `setOutputDestination` 持久化、`outputDestination` 三级持久化（State→Snapshot→Repository）、354 XCTest + 140 Swift Testing 全绿。commit `d073ae7`。
 - [x] 08511-C1：Domain 基础——`BatchAcceptedItem`、`BatchPath.relativePath`、`BatchTask.importRootURL`（decodeIfPresent 兼容旧 JSON）、Scanner set importRoot、Model importInputs 接线。commit `051269d`。
 - [x] 08410-fix：修复 Phase 8 综合审核发现的两个合入前缺口——`BatchTask.requeue()` 现在清除 `failureMessage`/`progress`/`result`（保留 `outputURL`）；Task Center 在 `TaskDetailView` 与 Table contextMenu 接入单任务「取消/重试」按钮，按 `BatchTaskCommandAvailability` 启用；另补 Workspace Toolbar「任务中心」入口按钮（原入口仅在菜单/⌘⇧T，主窗口不可见）。新增 4 个回归测试。本轮另清理了 Swift 6 Sendable 前置 warning（`BatchOutputPlanner` 移除 `FileManager` 存储属性、`OcrEngineName`/`SamplingQuality` 显式 `Sendable`、移除 TaskCenterView 冗余 `_ =`）。完整 Swift 测试 331 XCTest + 140 Swift Testing 全绿，`swift build` 无 warning。
