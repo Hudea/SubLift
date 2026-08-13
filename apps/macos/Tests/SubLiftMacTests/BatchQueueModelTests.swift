@@ -68,6 +68,19 @@ final class BatchQueueModelTests: XCTestCase {
         XCTAssertEqual(model.state.tasks.count, 2)
     }
 
+    func testImportInputsPreservesImportRootURL() throws {
+        let folder = try makeSubdir("Zootopia")
+        let folderVideo = try makeVideo("Zootopia/movie.mp4")
+        let looseVideo = try makeVideo("bonus.mp4")
+        let model = makeModel()
+        model.importInputs([folder, looseVideo])
+
+        let folderTask = model.state.tasks.first { $0.sourceURL == folderVideo.standardizedFileURL }
+        let looseTask = model.state.tasks.first { $0.sourceURL == looseVideo.standardizedFileURL }
+        XCTAssertEqual(folderTask?.importRootURL, folder.standardizedFileURL)
+        XCTAssertNil(looseTask?.importRootURL)
+    }
+
     func testImportDuplicateWithinBatchRejected() throws {
         let a = try makeVideo("a.mp4")
         let model = makeModel()

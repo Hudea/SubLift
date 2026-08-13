@@ -58,6 +58,8 @@ struct BatchTaskResult: Codable, Equatable, Sendable {
 struct BatchTask: Identifiable, Equatable, Codable, Sendable {
     let id: UUID
     let sourceURL: URL
+    /// 08511：扫描出处（目录输入 → 该目录；零散文件 → nil）。
+    let importRootURL: URL?
     var configuration: ExtractionConfiguration
     /// 输出计划目标（由 08104 OutputPlanner 填充）。
     var outputURL: URL?
@@ -71,13 +73,14 @@ struct BatchTask: Identifiable, Equatable, Codable, Sendable {
     var runToken: UUID?
 
     private enum CodingKeys: String, CodingKey {
-        case id, sourceURL, configuration, outputURL, status, progress, result, failureMessage, createdAt
+        case id, sourceURL, importRootURL, configuration, outputURL, status, progress, result, failureMessage, createdAt
     }
 
     /// 相等性排除瞬态 runToken（持久化往返保真）。
     static func == (lhs: BatchTask, rhs: BatchTask) -> Bool {
         lhs.id == rhs.id
             && lhs.sourceURL == rhs.sourceURL
+            && lhs.importRootURL == rhs.importRootURL
             && lhs.configuration == rhs.configuration
             && lhs.outputURL == rhs.outputURL
             && lhs.status == rhs.status
@@ -90,17 +93,20 @@ struct BatchTask: Identifiable, Equatable, Codable, Sendable {
     /// 创建任务（waiting）。引擎经归一化入口处理：
     /// 非开发模式的隐藏 Mock 回落 Vision（与提取请求路径同一策略）。
     /// `sourceURL` 契约：绝对 file URL（标准化由 08103 Scanner 负责）。
+    /// `importRootURL` 契约：目录输入 → 该目录；零散文件 → nil。
     static func make(
         id: UUID = UUID(),
         sourceURL: URL,
         engine: OcrEngineName,
         quality: SamplingQuality,
         developerMode: Bool,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        importRootURL: URL? = nil
     ) -> BatchTask {
         BatchTask(
             id: id,
             sourceURL: sourceURL,
+            importRootURL: importRootURL,
             configuration: ExtractionConfiguration(
                 engine: EngineCapability.normalizedSelection(engine, developerMode: developerMode),
                 quality: quality

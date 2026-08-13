@@ -181,12 +181,13 @@ final class BatchQueueModel: ObservableObject {
         let existing = Set(state.tasks.map(\.sourceURL))
         let summary = BatchInputScanner(existingURLs: existing).scan(inputs: urls, recursive: false)
         lastScanSummary = summary
-        let tasks = summary.accepted.map { url in
+        let tasks = summary.accepted.map { item in
             BatchTask.make(
-                sourceURL: url,
+                sourceURL: item.url,
                 engine: .vision,
                 quality: .fast,
-                developerMode: false
+                developerMode: false,
+                importRootURL: item.importRootURL
             )
         }
         scheduler.addTasks(tasks)

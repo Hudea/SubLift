@@ -41,7 +41,7 @@ final class BatchInputScannerTests: XCTestCase {
         let a = try makeFile("a.mp4")
         let b = try makeFile("b.mov")
         let summary = makeScanner().scan(inputs: [a, b], recursive: false)
-        XCTAssertEqual(summary.accepted.map(\.lastPathComponent).sorted(), ["a.mp4", "b.mov"])
+        XCTAssertEqual(summary.accepted.map { $0.url.lastPathComponent }.sorted(), ["a.mp4", "b.mov"])
         XCTAssertTrue(summary.rejected.isEmpty)
     }
 
@@ -49,7 +49,7 @@ final class BatchInputScannerTests: XCTestCase {
         let txt = try makeFile("notes.txt")
         let mp4 = try makeFile("ok.mp4")
         let summary = makeScanner().scan(inputs: [txt, mp4], recursive: false)
-        XCTAssertEqual(summary.accepted, [mp4.standardizedFileURL])
+        XCTAssertEqual(summary.acceptedURLs, [mp4.standardizedFileURL])
         XCTAssertEqual(summary.rejected.count, 1)
         XCTAssertEqual(summary.rejected[0].reason, .unsupportedFormat("txt"))
     }
@@ -58,7 +58,7 @@ final class BatchInputScannerTests: XCTestCase {
         let mkv = try makeFile("clip.mkv")
         // ffmpeg 可用：MKV 接受。
         let withFfmpeg = makeScanner(ffmpeg: true).scan(inputs: [mkv], recursive: false)
-        XCTAssertEqual(withFfmpeg.accepted, [mkv.standardizedFileURL])
+        XCTAssertEqual(withFfmpeg.acceptedURLs, [mkv.standardizedFileURL])
         // ffmpeg 缺失：结构化拒绝。
         let withoutFfmpeg = makeScanner(ffmpeg: false).scan(inputs: [mkv], recursive: false)
         XCTAssertTrue(withoutFfmpeg.accepted.isEmpty)
@@ -131,7 +131,7 @@ final class BatchInputScannerTests: XCTestCase {
         try makeFile("root.mp4")
         try makeFile("sub/inner.mp4", in: tempDir.appendingPathComponent("sub", isDirectory: true))
         let summary = makeScanner().scan(inputs: [tempDir], recursive: false)
-        XCTAssertEqual(summary.accepted.map(\.lastPathComponent), ["root.mp4"], "默认不递归")
+        XCTAssertEqual(summary.accepted.map { $0.url.lastPathComponent }, ["root.mp4"], "默认不递归")
     }
 
     func testRecursiveEnumerationStableOrder() throws {
@@ -141,7 +141,7 @@ final class BatchInputScannerTests: XCTestCase {
         try makeFile("sub/deep/d.mp4")
         let summary = makeScanner().scan(inputs: [tempDir], recursive: true)
         // 相对路径稳定排序：a.mp4, b.mp4, sub/c.mp4, sub/deep/d.mp4
-        let paths = summary.accepted.map { $0.path.replacingOccurrences(of: tempDir.path + "/", with: "") }
+        let paths = summary.accepted.map { $0.url.path.replacingOccurrences(of: tempDir.path + "/", with: "") }
         XCTAssertEqual(paths, ["a.mp4", "b.mp4", "sub/c.mp4", "sub/deep/d.mp4"])
     }
 
@@ -158,7 +158,7 @@ final class BatchInputScannerTests: XCTestCase {
         try fileManager.createSymbolicLink(at: link, withDestinationURL: real)
 
         let summary = makeScanner().scan(inputs: [tempDir], recursive: true)
-        let accepted = summary.accepted.map(\.lastPathComponent)
+        let accepted = summary.accepted.map { $0.url.lastPathComponent }
         XCTAssertFalse(accepted.contains(".hidden.mp4"), "隐藏文件不进入扫描")
         XCTAssertFalse(accepted.contains("inside.mp4"), "package 内容不进入扫描")
         XCTAssertFalse(accepted.contains("link.mp4"), "symlink 不进入扫描")
@@ -174,6 +174,41 @@ final class BatchInputScannerTests: XCTestCase {
         let summary = makeScanner().scan(inputs: [empty], recursive: false)
         XCTAssertTrue(summary.accepted.isEmpty)
         XCTAssertEqual(summary.rejected.first?.reason, .emptyDirectory)
+    }
+
+    // MARK: - 08511 文件夹归属
+
+    func testFolderInputCarriesImportRoot() throws {
+        let folder = tempDir.appendingPathComponent("Zootopia", isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let video = try makeFile("movie.mp4", in: folder)
+        let summary = makeScanner().scan(inputs: [folder], recursive: false)
+        XCTAssertEqual(summary.accepted.count, 1)
+        let item = summary.accepted.first!
+        XCTAssertEqual(item.url, video.standardizedFileURL)
+        XCTAssertEqual(item.importRootURL, folder.standardizedFileURL, "目录输入的 importRootURL 应为该目录")
+    }
+
+    func testLooseFileHasNoImportRoot() throws {
+        let video = try makeFile("movie.mp4")
+        let summary = makeScanner().scan(inputs: [video], recursive: false)
+        XCTAssertEqual(summary.accepted.count, 1)
+        let item = summary.accepted.first!
+        XCTAssertEqual(item.url, video.standardizedFileURL)
+        XCTAssertNil(item.importRootURL, "零散文件没有 importRootURL")
+    }
+
+    func testMixedInputsCarryRespectiveRoots() throws {
+        let folder = tempDir.appendingPathComponent("Season1", isDirectory: true)
+        try fileManager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let folderVideo = try makeFile("e01.mp4", in: folder)
+        let looseVideo = try makeFile("bonus.mp4")
+        let summary = makeScanner().scan(inputs: [folder, looseVideo], recursive: false)
+        XCTAssertEqual(summary.accepted.count, 2)
+        let folderItem = summary.accepted.first { $0.url == folderVideo.standardizedFileURL }
+        let looseItem = summary.accepted.first { $0.url == looseVideo.standardizedFileURL }
+        XCTAssertEqual(folderItem?.importRootURL, folder.standardizedFileURL)
+        XCTAssertNil(looseItem?.importRootURL)
     }
 
     // MARK: - 有界性
@@ -200,7 +235,7 @@ final class BatchInputScannerTests: XCTestCase {
         let summary = makeScanner().scan(inputs: [good, txt, tempDir], recursive: true)
         // good.mp4 直接输入 + 目录内同文件：去重后 accepted 1；bad.txt 拒绝。
         XCTAssertEqual(summary.accepted.count, 1)
-        XCTAssertEqual(summary.accepted.first?.lastPathComponent, "good.mp4")
+        XCTAssertEqual(summary.accepted.first?.url.lastPathComponent, "good.mp4")
         XCTAssertTrue(summary.rejected.contains { $0.reason == .unsupportedFormat("txt") })
         XCTAssertTrue(summary.rejected.contains { $0.reason == .duplicate }, "目录内重叠文件应记为重复")
     }

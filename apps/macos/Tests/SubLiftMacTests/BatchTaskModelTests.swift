@@ -56,13 +56,15 @@ final class BatchTaskTests: XCTestCase {
     private func makeTask(
         engine: OcrEngineName = .vision,
         quality: SamplingQuality = .fast,
-        developerMode: Bool = false
+        developerMode: Bool = false,
+        importRootURL: URL? = nil
     ) -> BatchTask {
         BatchTask.make(
             sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
             engine: engine,
             quality: quality,
-            developerMode: developerMode
+            developerMode: developerMode,
+            importRootURL: importRootURL
         )
     }
 
@@ -74,7 +76,14 @@ final class BatchTaskTests: XCTestCase {
         XCTAssertNil(task.result)
         XCTAssertNil(task.failureMessage)
         XCTAssertNil(task.runToken)
+        XCTAssertNil(task.importRootURL)
         XCTAssertEqual(task.id, task.id)
+    }
+
+    func testImportRootURLPreservedAtCreation() {
+        let root = URL(fileURLWithPath: "/tmp/Zootopia")
+        let task = makeTask(importRootURL: root)
+        XCTAssertEqual(task.importRootURL, root)
     }
 
     func testTransitionUpdatesStatus() {
@@ -250,11 +259,13 @@ final class BatchTaskCodableTests: XCTestCase {
     private let decoder = JSONDecoder()
 
     func testTaskCodableRoundTripPreservesFields() throws {
+        let root = URL(fileURLWithPath: "/tmp/Zootopia")
         var task = BatchTask.make(
             sourceURL: URL(fileURLWithPath: "/tmp/input.mp4"),
             engine: .vision,
             quality: .balanced,
-            developerMode: false
+            developerMode: false,
+            importRootURL: root
         )
         task.runToken = UUID()  // transient，不应持久化
         _ = task.transition(to: .preparing)
@@ -269,6 +280,7 @@ final class BatchTaskCodableTests: XCTestCase {
 
         XCTAssertEqual(decoded.id, task.id)
         XCTAssertEqual(decoded.sourceURL, task.sourceURL)
+        XCTAssertEqual(decoded.importRootURL, root)
         XCTAssertEqual(decoded.configuration, task.configuration)
         XCTAssertEqual(decoded.outputURL, task.outputURL)
         XCTAssertEqual(decoded.status, task.status)
@@ -277,6 +289,23 @@ final class BatchTaskCodableTests: XCTestCase {
         XCTAssertEqual(decoded.createdAt, task.createdAt)
         XCTAssertNil(decoded.runToken, "run token 不得进入持久化值")
         XCTAssertEqual(decoded, task, "相等性排除 runToken，持久化往返应相等")
+    }
+
+    func testTaskCodableMissingImportRootURLDecodesToNil() throws {
+        // 旧清单（08102–08410）没有 importRootURL 键，应能加载且值为 nil。
+        let oldJSON = """
+        {
+            "id": "550E8400-E29B-41D4-A716-446655440000",
+            "sourceURL": "file:///tmp/input.mp4",
+            "configuration": {"engine": "vision", "quality": "fast"},
+            "status": "waiting",
+            "createdAt": 600000000
+        }
+        """.data(using: .utf8)!
+        let decoded = try decoder.decode(BatchTask.self, from: oldJSON)
+        XCTAssertNil(decoded.importRootURL)
+        XCTAssertEqual(decoded.sourceURL, URL(fileURLWithPath: "/tmp/input.mp4"))
+        XCTAssertEqual(decoded.status, .waiting)
     }
 
     func testQueueStateCodableRoundTrip() throws {

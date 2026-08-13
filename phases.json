@@ -68,9 +68,9 @@
     {
       "id": "phase8",
       "name": "Phase 8 - Batch Task Center and Folder Intake",
-      "description": "为 macOS GUI 增加多文件/文件夹发现、可靠的串行任务队列、安全 SRT 输出与本地恢复；08001 冻结设计，08102–08410 已实现并通过综合验收。",
+      "description": "为 macOS GUI 增加多文件/文件夹发现、可靠的串行任务队列、安全 SRT 输出与本地恢复；08001 冻结设计，08102–08410 已实现并通过综合验收；08511 为后续 UX 改进（信息层级、导出可见性、Inspector 与输出位置）。",
       "detail_file": "docs/phases/phase8.json",
-      "status": "done"
+      "status": "in-progress"
     },
     {
       "id": "phase10",

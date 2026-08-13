@@ -15,12 +15,21 @@ struct BatchScanRejection: Equatable, Sendable {
     let reason: BatchInputRejectionReason
 }
 
+/// 08511：被扫描器接受的输入项，携带扫描出处（目录输入 → 该目录；零散文件 → nil）。
+struct BatchAcceptedItem: Equatable, Sendable {
+    let url: URL
+    let importRootURL: URL?
+}
+
 /// 08103：扫描摘要（一次性返回，不逐文件向 UI 同步）。
 /// 08309：skipped 记录静默排除项（hidden/package/symlink）计数——B02 摘要三类别。
+/// 08511：accepted 改为带 importRootURL 的项。
 struct BatchScanSummary: Equatable, Sendable {
-    let accepted: [URL]
+    let accepted: [BatchAcceptedItem]
     let skipped: Int
     let rejected: [BatchScanRejection]
+
+    var acceptedURLs: [URL] { accepted.map(\.url) }
 }
 
 /// 08103：统一文件/文件夹输入扫描服务。
@@ -44,12 +53,12 @@ struct BatchInputScanner: @unchecked Sendable {
     }
 
     func scan(inputs: [URL], recursive: Bool) -> BatchScanSummary {
-        var accepted: [URL] = []
+        var accepted: [BatchAcceptedItem] = []
         var skipped = 0
         var rejected: [BatchScanRejection] = []
         var seen = existingURLs
 
-        func consider(_ url: URL) {
+        func consider(_ url: URL, importRoot: URL?) {
             let standardized = url.standardizedFileURL
             guard isScanable(standardized) else {
                 skipped += 1  // hidden/package/symlink 静默排除（08309：计入跳过）
@@ -67,7 +76,7 @@ struct BatchInputScanner: @unchecked Sendable {
             switch policy.validate(url: standardized) {
             case .valid:
                 seen.insert(key)
-                accepted.append(standardized)
+                accepted.append(BatchAcceptedItem(url: standardized, importRootURL: importRoot))
             case .unsupportedFormat(let ext):
                 rejected.append(BatchScanRejection(url: standardized, reason: .unsupportedFormat(ext)))
             case .mkvRequiresFfmpeg:
@@ -100,11 +109,11 @@ struct BatchInputScanner: @unchecked Sendable {
                     rejected.append(BatchScanRejection(url: standardizedInput, reason: .emptyDirectory))
                 } else {
                     for file in files {
-                        consider(file)
+                        consider(file, importRoot: standardizedInput)
                     }
                 }
             } else {
-                consider(standardizedInput)
+                consider(standardizedInput, importRoot: nil)
             }
         }
 
