@@ -1,98 +1,188 @@
 import SwiftUI
 
-/// 08308/08309：选中任务详情（真实字段；08309：waiting 可显式改配置）。
+/// 08511：Inspector 卡片（单任务详情；删除/上移/下移并入页眉）。
 struct TaskDetailView: View {
     let task: BatchTask
+    let inspectorModel: TaskCenterPresentation.TaskInspectorModel
     var onReplaceConfiguration: (ExtractionConfiguration) -> Void
     var onCancel: () -> Void
     var onRetry: () -> Void
+    var onRemove: () -> Void
+    var onMoveUp: () -> Void
+    var onMoveDown: () -> Void
 
     /// 编辑中的引擎/质量（仅 waiting 可改；初始为任务当前配置）。
     @State private var editingEngine: OcrEngineName?
     @State private var editingQuality: SamplingQuality?
 
-    private var canEdit: Bool {
-        BatchTaskCommandAvailability.canReplaceConfiguration(task.status)
-    }
-
-    private var canCancel: Bool {
-        BatchTaskCommandAvailability.canCancel(task.status)
-    }
-
-    private var canRetry: Bool {
-        BatchTaskCommandAvailability.canRetry(task.status)
-    }
+    private var canEdit: Bool { inspectorModel.canEditConfiguration }
 
     var body: some View {
-        let rows = TaskCenterPresentation.detailRows(for: task)
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(rows, id: \.label) { row in
-                HStack(alignment: .top, spacing: 8) {
-                    Text(row.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 72, alignment: .trailing)
-                    Text(row.value)
-                        .font(.caption)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel("\(row.label)：\(row.value)")
-            }
-            if canEdit {
-                configurationEditor
-            }
-            actionButtons
+        VStack(alignment: .leading, spacing: 0) {
+            cardHeader
+            Divider()
+            cardContent
         }
-        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxHeight: 240, alignment: .top)
         .background(Color(nsColor: .controlBackgroundColor))
-        .frame(maxHeight: 180, alignment: .top)
         .onAppear {
             if editingEngine == nil {
-                // 归一化：持久化旧选择可能含 mock（关闭开发者模式后）——回落到可见引擎。
                 editingEngine = EngineCapability.normalizedSelection(
                     task.configuration.engine, developerMode: false
                 )
             }
             if editingQuality == nil { editingQuality = task.configuration.quality }
         }
-        .onChange(of: editingEngine) { newValue in
-            commitEditIfNeeded()
+        .onChange(of: editingEngine) { _ in commitEditIfNeeded() }
+        .onChange(of: editingQuality) { _ in commitEditIfNeeded() }
+    }
+
+    // MARK: - 页眉（文件名 + 状态 + 操作按钮）
+
+    private var cardHeader: some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(inspectorModel.filename)
+                    .font(.headline)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(inspectorModel.statusName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            HStack(spacing: 6) {
+                if inspectorModel.canRemove {
+                    Button { onRemove() } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                    .help("删除该任务")
+                }
+                if inspectorModel.canReorder {
+                    Button { onMoveUp() } label: {
+                        Label("上移", systemImage: "arrow.up")
+                    }
+                    .help("上移该任务")
+                    Button { onMoveDown() } label: {
+                        Label("下移", systemImage: "arrow.down")
+                    }
+                    .help("下移该任务")
+                }
+                if inspectorModel.canCancel {
+                    Button { onCancel() } label: {
+                        Label("取消", systemImage: "xmark")
+                    }
+                    .help("取消该任务")
+                }
+                if inspectorModel.canRetry {
+                    Button { onRetry() } label: {
+                        Label("重试", systemImage: "arrow.counterclockwise")
+                    }
+                    .help("重试该任务")
+                }
+            }
+            .labelStyle(.iconOnly)
+            .buttonStyle(.borderless)
         }
-        .onChange(of: editingQuality) { newValue in
-            commitEditIfNeeded()
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: - 卡片内容
+
+    private var cardContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // 位置
+            inspectorRow(label: "位置", value: inspectorModel.locationDisplay)
+                .help(inspectorModel.locationFullPath)
+
+            // 输出
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("输出").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        .frame(width: 48, alignment: .trailing)
+                    Text("\(inspectorModel.outputFolderDisplay) / \(inspectorModel.outputFilename)")
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                if let warning = inspectorModel.outputExistsWarning {
+                    Text(warning)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .padding(.leading, 56)
+                }
+                if let error = inspectorModel.planningError {
+                    Text(error)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .padding(.leading, 56)
+                }
+            }
+
+            // 提取配置
+            if canEdit {
+                configurationRow
+            } else {
+                inspectorRow(label: "提取", value: "\(inspectorModel.engineDisplay) / \(inspectorModel.qualityDisplay)")
+            }
+
+            // 错误
+            if let failure = inspectorModel.failureMessage {
+                inspectorRow(label: "错误", value: failure)
+                    .foregroundStyle(.red)
+            }
+
+            // Runtime
+            if let runtime = inspectorModel.runtimeIdentity {
+                inspectorRow(label: "Runtime", value: runtime)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - 辅助
+
+    private func inspectorRow(label: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .trailing)
+            Text(value)
+                .font(.caption)
+                .textSelection(.enabled)
+                .lineLimit(2)
+                .truncationMode(.middle)
         }
     }
 
-    /// 08309：显式改配置（仅 waiting；活动/终态只读）。
-    private var configurationEditor: some View {
-        HStack(spacing: 10) {
-            Text("引擎")
+    private var configurationRow: some View {
+        HStack(spacing: 8) {
+            Text("提取")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .trailing)
             Picker("引擎", selection: $editingEngine) {
-                // Mock 仅开发者模式可见（app-wide 合同；普通 UI 不泄漏 Mock）。
                 ForEach(EngineCapability.visibleEngines(developerMode: false), id: \.self) { engine in
                     Text(engine.displayName).tag(Optional(engine))
                 }
             }
             .pickerStyle(.menu)
-            .frame(maxWidth: 180)
-            .accessibilityLabel("引擎")
+            .labelsHidden()
+            .frame(maxWidth: 140)
 
-            Text("质量")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
             Picker("质量", selection: $editingQuality) {
                 ForEach(SamplingQuality.allCases, id: \.self) { quality in
                     Text(TaskCenterPresentation.qualityDisplayName(quality)).tag(Optional(quality))
                 }
             }
             .pickerStyle(.menu)
-            .frame(maxWidth: 120)
-            .accessibilityLabel("质量")
-            Spacer()
+            .labelsHidden()
+            .frame(maxWidth: 100)
         }
     }
 
@@ -101,31 +191,6 @@ struct TaskDetailView: View {
         let current = task.configuration
         if engine != current.engine || quality != current.quality {
             onReplaceConfiguration(ExtractionConfiguration(engine: engine, quality: quality))
-        }
-    }
-
-    /// 单任务操作按钮（按 availability 启用；waiting/活动态可取消，failed/cancelled/interrupted 可重试）。
-    private var actionButtons: some View {
-        HStack(spacing: 10) {
-            if canCancel {
-                Button {
-                    onCancel()
-                } label: {
-                    Label("取消任务", systemImage: "xmark")
-                }
-                .help("取消该任务")
-                .accessibilityLabel("取消任务")
-            }
-            if canRetry {
-                Button {
-                    onRetry()
-                } label: {
-                    Label("重试", systemImage: "arrow.counterclockwise")
-                }
-                .help("重新排队该任务")
-                .accessibilityLabel("重试任务")
-            }
-            Spacer()
         }
     }
 }

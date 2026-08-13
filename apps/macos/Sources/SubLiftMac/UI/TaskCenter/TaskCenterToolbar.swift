@@ -23,6 +23,8 @@ struct TaskCenterToolbar: View {
         .help("添加文件夹（扫描其中视频）")
         .accessibilityLabel("添加文件夹")
 
+        outputLocationMenu
+
         Button(action: onStart) {
             Label("开始", systemImage: "play.fill")
         }
@@ -63,5 +65,52 @@ struct TaskCenterToolbar: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .accessibilityLabel("任务总数 \(summary.total)")
+    }
+
+    // MARK: - 08511 输出位置菜单
+
+    private var outputLocationMenu: some View {
+        Menu {
+            Button {
+                model.setOutputDestination(.sidecar)
+            } label: {
+                if case .sidecar = model.state.outputDestination {
+                    Label("视频旁边", systemImage: "checkmark")
+                } else {
+                    Text("视频旁边")
+                }
+            }
+            Button {
+                choosePublicRootFolder()
+            } label: {
+                if case .publicRoot = model.state.outputDestination {
+                    Label("选择文件夹…", systemImage: "checkmark")
+                } else {
+                    Text("选择文件夹…")
+                }
+            }
+        } label: {
+            Label(outputLocationLabel, systemImage: "folder")
+        }
+        .help("设置输出字幕的保存位置")
+        .accessibilityLabel("输出位置")
+    }
+
+    private var outputLocationLabel: String {
+        switch model.state.outputDestination {
+        case .sidecar: "输出位置：视频旁边"
+        case .publicRoot(let url): "输出位置：\(url.lastPathComponent)"
+        }
+    }
+
+    private func choosePublicRootFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "选择字幕输出文件夹"
+        panel.prompt = "选择"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        model.setOutputDestination(.publicRoot(url))
     }
 }

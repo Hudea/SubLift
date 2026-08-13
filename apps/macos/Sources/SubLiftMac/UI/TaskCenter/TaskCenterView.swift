@@ -68,14 +68,23 @@ struct TaskCenterView: View {
                 if let selectedID = selection.count == 1 ? selection.first : nil,
                    let task = model.state.tasks.first(where: { $0.id == selectedID }) {
                     Divider()
+                    let inspector = TaskCenterPresentation.inspectorModel(
+                        for: task,
+                        fileExists: task.outputURL.map { FileManager.default.fileExists(atPath: $0.path) } ?? false,
+                        planningError: model.planningErrors[task.id]
+                    )
                     // .id(task.id)：切换选中时重建详情（避免 @State 编辑态跨任务残留）。
                     TaskDetailView(
                         task: task,
+                        inspectorModel: inspector,
                         onReplaceConfiguration: { configuration in
                             _ = model.replaceTaskConfiguration(task.id, configuration)
                         },
                         onCancel: { _ = model.cancel(task.id) },
-                        onRetry: { _ = model.retry(task.id) }
+                        onRetry: { _ = model.retry(task.id) },
+                        onRemove: { _ = model.remove(task.id) },
+                        onMoveUp: { moveSingleTask(.up, id: task.id) },
+                        onMoveDown: { moveSingleTask(.down, id: task.id) }
                     )
                     .id(task.id)
                 }
@@ -303,6 +312,14 @@ struct TaskCenterView: View {
         var tasks = model.state.tasks
         TaskCenterInteraction.moveTask(id: id, in: &tasks, direction: direction)
         // reorder 参数 = 全部 waiting 任务的新顺序（槽位保留由 reorder 处理）。
+        let waitingIDs = tasks.filter { $0.status == .waiting }.map(\.id)
+        _ = model.scheduler.reorder(waitingIDs)
+    }
+
+    /// 08511：Inspector 卡片页眉的单任务移动（不依赖 selection）。
+    private func moveSingleTask(_ direction: TaskCenterInteraction.MoveDirection, id: UUID) {
+        var tasks = model.state.tasks
+        TaskCenterInteraction.moveTask(id: id, in: &tasks, direction: direction)
         let waitingIDs = tasks.filter { $0.status == .waiting }.map(\.id)
         _ = model.scheduler.reorder(waitingIDs)
     }

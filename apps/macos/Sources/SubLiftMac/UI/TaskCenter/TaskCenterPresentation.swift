@@ -154,6 +154,60 @@ enum TaskCenterPresentation {
             || locationFullPath(for: task).localizedCaseInsensitiveContains(q)
     }
 
+    // MARK: - 08511 Inspector 模型
+
+    struct TaskInspectorModel: Equatable {
+        let filename: String
+        let statusName: String
+        let locationDisplay: String
+        let locationFullPath: String
+        let outputFolderDisplay: String
+        let outputFilename: String
+        let outputFullPath: String?
+        let outputFileExists: Bool
+        let planningError: String?
+        let outputExistsWarning: String?
+        let engineDisplay: String
+        let qualityDisplay: String
+        let canEditConfiguration: Bool
+        let failureMessage: String?
+        let runtimeIdentity: String?
+        let canCancel: Bool
+        let canRetry: Bool
+        let canRemove: Bool
+        let canReorder: Bool
+    }
+
+    static func inspectorModel(
+        for task: BatchTask,
+        fileExists: Bool,
+        planningError: String?
+    ) -> TaskInspectorModel {
+        let outputURL = task.outputURL
+        let outputExists = fileExists && outputURL != nil
+        return TaskInspectorModel(
+            filename: task.sourceURL.lastPathComponent,
+            statusName: statusDisplayName(task.status),
+            locationDisplay: locationDisplay(for: task),
+            locationFullPath: locationFullPath(for: task),
+            outputFolderDisplay: outputURL?.deletingLastPathComponent().lastPathComponent ?? "—",
+            outputFilename: outputURL?.lastPathComponent ?? "—",
+            outputFullPath: outputURL?.standardizedFileURL.path,
+            outputFileExists: outputExists,
+            planningError: planningError,
+            outputExistsWarning: outputExists ? "该字幕已存在，开始时将确认是否替换" : nil,
+            engineDisplay: task.configuration.engine.displayName,
+            qualityDisplay: qualityDisplayName(task.configuration.quality),
+            canEditConfiguration: BatchTaskCommandAvailability.canReplaceConfiguration(task.status),
+            failureMessage: task.failureMessage,
+            runtimeIdentity: task.result?.runtimeIdentity,
+            canCancel: BatchTaskCommandAvailability.canCancel(task.status),
+            canRetry: BatchTaskCommandAvailability.canRetry(task.status),
+            canRemove: BatchTaskCommandAvailability.canRemove(task.status),
+            canReorder: BatchTaskCommandAvailability.canRemove(task.status)
+        )
+    }
+
     // MARK: - 队列级命令 availability
 
     static func canStart(_ queue: BatchQueueState) -> Bool {

@@ -280,4 +280,51 @@ final class TaskCenterCommandTests: XCTestCase {
         )
         XCTAssertTrue(TaskCenterPresentation.matchesSearch(task, query: "Movies"))
     }
+
+    // MARK: - 08511 Inspector 模型
+
+    func testInspectorModelBasicFields() {
+        let task = makeTask("Zootopia.mp4")
+        let model = TaskCenterPresentation.inspectorModel(for: task, fileExists: false, planningError: nil)
+        XCTAssertEqual(model.filename, "Zootopia.mp4")
+        XCTAssertEqual(model.statusName, "等待中")
+        XCTAssertNil(model.outputExistsWarning)
+        XCTAssertNil(model.planningError)
+    }
+
+    func testInspectorModelOutputExistsWarning() {
+        var task = makeTask("movie.mp4")
+        task.outputURL = URL(fileURLWithPath: "/tmp/movie.srt")
+        let model = TaskCenterPresentation.inspectorModel(for: task, fileExists: true, planningError: nil)
+        XCTAssertEqual(model.outputExistsWarning, "该字幕已存在，开始时将确认是否替换")
+    }
+
+    func testInspectorModelPlanningError() {
+        let task = makeTask("movie.mp4")
+        let model = TaskCenterPresentation.inspectorModel(for: task, fileExists: false, planningError: "目标与队列中另一任务相同")
+        XCTAssertEqual(model.planningError, "目标与队列中另一任务相同")
+        XCTAssertNil(model.outputExistsWarning)
+    }
+
+    func testInspectorModelAvailabilityFlags() {
+        let waiting = makeTask("a.mp4", status: .waiting)
+        let wm = TaskCenterPresentation.inspectorModel(for: waiting, fileExists: false, planningError: nil)
+        XCTAssertTrue(wm.canCancel)
+        XCTAssertTrue(wm.canRemove)
+        XCTAssertTrue(wm.canEditConfiguration)
+
+        // 直接构造 completed 状态的任务（避免 advance helper 的潜在问题）。
+        var completedTask = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/b.mp4"),
+            engine: .vision, quality: .fast, developerMode: false
+        )
+        _ = completedTask.transition(to: .preparing)
+        _ = completedTask.transition(to: .extracting)
+        _ = completedTask.transition(to: .exporting)
+        _ = completedTask.transition(to: .completed)
+        XCTAssertEqual(completedTask.status, .completed, "任务应已到达 completed 状态")
+        let cm = TaskCenterPresentation.inspectorModel(for: completedTask, fileExists: false, planningError: nil)
+        XCTAssertFalse(cm.canCancel, "completed 不可取消")
+        XCTAssertFalse(cm.canEditConfiguration, "completed 不可编辑配置")
+    }
 }
