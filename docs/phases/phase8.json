@@ -712,7 +712,8 @@
           "name": "C1 Domain：importRootURL + 扫描接受项 + importInputs",
           "description": "新增 BatchAcceptedItem / BatchPath.relativePath；BatchTask 加 importRootURL（decodeIfPresent）并改 importInputs 写入 root；本刀不规划输出、不改 UI。",
           "dependencies": [],
-          "status": "in-progress"
+          "status": "done",
+          "evidence": "commit 051269d"
         },
         {
           "id": "08511.02",
@@ -721,7 +722,8 @@
           "dependencies": [
             "08511.01"
           ],
-          "status": "pending"
+          "status": "done",
+          "evidence": "commit d073ae7"
         },
         {
           "id": "08511.03",
@@ -761,7 +763,7 @@
         }
       ],
       "status": "in-progress",
-      "evidence": "08511 已登记为 Phase 8 后续 UX 改进；实施中。"
+      "evidence": "C1 commit 051269d（importRoot + BatchPath + 扫描接受项）；C2 commit d073ae7（previewTarget + planOutputsForWaitingTasks + outputDestination 持久化 + 碰撞检测）。C3–C6 待做。"
     }
   ]
 }

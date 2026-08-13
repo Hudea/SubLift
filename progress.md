@@ -3,7 +3,7 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-13
-- **当前 Phase：** Phase 8 后续 UX 改进 08511 进行中（信息层级、导出可见性、Inspector 与输出位置）；08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
+- **当前 Phase：** Phase 8 后续 UX 改进 08511 进行中（C1–C2 已完成：importRoot + BatchPath、导入即预览 + outputDestination 持久化；C3–C6 待做）；08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口，Phase 9 编号仍可供其他新范围使用。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
@@ -12,6 +12,8 @@
 
 ## 近期完成
 
+- [x] 08511-C2：输出规划可见性——`BatchOutputDestination` 显式 Codable、`previewTarget` 纯路径、`BatchOutputPlanner` 迁移到 `BatchPath.relativePath`、`planOutputsForWaitingTasks` 导入即预览 + 同批碰撞先到先得、`confirmOutputConflictsAndStart` guard planningErrors、`cancelStart` 保留预览 outputURL、`retry` 后 replan、Scheduler `setOutputURLs` 批量 + `setOutputDestination` 持久化、`outputDestination` 三级持久化（State→Snapshot→Repository）、354 XCTest + 140 Swift Testing 全绿。commit `d073ae7`。
+- [x] 08511-C1：Domain 基础——`BatchAcceptedItem`、`BatchPath.relativePath`、`BatchTask.importRootURL`（decodeIfPresent 兼容旧 JSON）、Scanner set importRoot、Model importInputs 接线。commit `051269d`。
 - [x] 08410-fix：修复 Phase 8 综合审核发现的两个合入前缺口——`BatchTask.requeue()` 现在清除 `failureMessage`/`progress`/`result`（保留 `outputURL`）；Task Center 在 `TaskDetailView` 与 Table contextMenu 接入单任务「取消/重试」按钮，按 `BatchTaskCommandAvailability` 启用；另补 Workspace Toolbar「任务中心」入口按钮（原入口仅在菜单/⌘⇧T，主窗口不可见）。新增 4 个回归测试。本轮另清理了 Swift 6 Sendable 前置 warning（`BatchOutputPlanner` 移除 `FileManager` 存储属性、`OcrEngineName`/`SamplingQuality` 显式 `Sendable`、移除 TaskCenterView 冗余 `_ =`）。完整 Swift 测试 331 XCTest + 140 Swift Testing 全绿，`swift build` 无 warning。
 - [x] 08410：Phase 8 综合审核与验收——真实混合目录（支持/无效/重复/嵌套/已有 SRT）、真实串行 IPC 闭环（2 视频 completed + 不存在文件 fail-closed failed + retry 回 waiting + 输出定位）、恢复/资源（100 任务 41.7KB/0.001s、损坏 fail-closed、运行后零残留 Worker）、B01–B10 证据索引、项目门与文档收口（REQUIREMENTS/ARCHITECTURE/macos-gui/phases.json 同步）。
 - [x] 08309：Task Center 批量交互——统一导入（文件/文件夹/drop 同一 Scanner + B02 三类别摘要）、搜索/状态筛选投影、waiting 多选删除/重排/显式改配置、输出冲突开始前集中确认（取消零文件触碰）、Finder 定位、B02/B03/B08/B09 截图。
