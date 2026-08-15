@@ -1,0 +1,184 @@
+{
+  "project": "SubLift",
+  "phase": "Phase 12 - Cross-Platform Web UI & Native Server",
+  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：首期对齐 Phase 10 单视频工作台（视频播放、Canvas ROI 框选、SSE 实时出字、双向联动、行内编辑与 SRT 导出），为 Linux 服务器与 Docker 环境提供零 Python 依赖的硬字幕提取服务。",
+  "features": [
+    {
+      "id": "12001",
+      "name": "冻结 Phase 12 设计与实施基线",
+      "description": "登记 Cross-Platform Web UI & Native Server 为独立 Phase 12，冻结 C++ 原生服务线程模型、HTTP 206 视频流、SSE 实时事件流、Web 工作台交互规范与 12101–12401 实施顺序。",
+      "module": [
+        "docs/plans/architecture/phase12-cross-platform-web-ui.md",
+        "docs/plans/features/12001.md",
+        "docs/phases/phase12.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": [],
+      "acceptance_criteria": [
+        "架构设计明确 0 Python 运行时依赖、0 IPC 进程内调用、HTTP 206 视频分片传输与 Server-Sent Events (SSE) 实时事件广播协议。",
+        "Web 前端交互规范严格对齐 Phase 10 单视频工作台（播放器、Canvas ROI 框选、实时打轴表格、双向音画联动、行内编辑与 SRT 导出）。",
+        "Phase 12 使用 12001–12401 五位 Canonical ID，并通过 phaseN.schema.json 与 phases.schema.json 约束。",
+        "JSON 语法校验、Markdown 链接扫描、git diff --check 与 ./init.sh 全部通过。"
+      ],
+      "non_goals": [
+        "本 Feature 不修改 C++ 算法核心代码或测试。",
+        "不引入外部 Python Web 运行时依赖。"
+      ],
+      "architecture_refs": [
+        "docs/plans/architecture/phase12-cross-platform-web-ui.md",
+        "docs/plans/features/12001.md"
+      ],
+      "subtasks": [
+        {
+          "id": "12001.01",
+          "name": "盘点 Web UI 与 C++ 服务端输入与技术选型",
+          "description": "完成 C++ BridgeHandler 复用分析、HTTP/SSE 协议选型与 Web 前端组件规划。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12001.02",
+          "name": "编写架构设计与实施计划",
+          "description": "撰写 phase12-cross-platform-web-ui.md 与 12001.md 规划文档。",
+          "dependencies": ["12001.01"],
+          "status": "done"
+        },
+        {
+          "id": "12001.03",
+          "name": "登记 Phase 12 与同步项目导航",
+          "description": "在 phases.json 与 progress.md 中登记 Phase 12 与当前状态。",
+          "dependencies": ["12001.02"],
+          "status": "done"
+        },
+        {
+          "id": "12001.04",
+          "name": "运行基准门禁验证",
+          "description": "运行 JSON Schema 校验、diff 检查与 ./init.sh 并归档证据。",
+          "dependencies": ["12001.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-15 完成 Phase 12 设计与实施基线冻结；通过 docs/phases/phaseN.schema.json 与 ./init.sh 校验。"
+    },
+    {
+      "id": "12101",
+      "name": "实现 C++ Native Web Server 基座与 HTTP 206 视频流",
+      "description": "在 cpp/src/server/ 下基于 cpp-httplib 实现轻量高性能 Web 服务端，支持静态资源托管、/api/system/info 能力查询与 HTTP 206 Range 视频分片流式传输。",
+      "module": [
+        "cpp/src/server/main.cpp",
+        "cpp/src/server/http_server.hpp",
+        "cpp/src/server/http_server.cpp",
+        "cpp/CMakeLists.txt"
+      ],
+      "dependencies": ["12001"],
+      "acceptance_criteria": [
+        "编译生成独立可执行文件 sublift_server，支持 --port、--host、--static-dir 启动参数。",
+        "/api/system/info 返回正确的运行时与当前平台可用引擎列表。",
+        "/api/video/stream 正确响应 Range: bytes=... 请求并返回 206 Partial Content，浏览器播放器可任意拖拽时间轴。",
+        "/api/video/frame 可快速截取指定秒数的 JPEG 代表帧供前端选区使用。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12102",
+      "name": "实现 SSE 实时事件流与 C++ Pipeline 任务调度",
+      "description": "在 C++ 服务端封装 JobManager，直接在后台线程驱动 BridgeHandler 运行 Pipeline，并通过 Server-Sent Events (SSE) 实时广播 progress、push_entry 与 done 事件。",
+      "module": [
+        "cpp/src/server/job_manager.hpp",
+        "cpp/src/server/job_manager.cpp"
+      ],
+      "dependencies": ["12101"],
+      "acceptance_criteria": [
+        "POST /api/jobs 正确接收路径、ROI 坐标、引擎与采样配置并启动任务。",
+        "GET /api/jobs/{id}/events 建立 SSE 长连接，流式推送 progress 百分比与 push_entry 单条字幕。",
+        "POST /api/jobs/{id}/cancel 协作式安全终止 ffmpeg 与 Pipeline 并回收资源。",
+        "GET /api/jobs/{id}/export 返回标准格式化的 UTF-8 SRT 内容。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12201",
+      "name": "构建 Web 单视频工作台基础 UI (Workbench Shell & Player)",
+      "description": "在 apps/web/ 下搭建现代轻量 SPA，实现单视频工作台主体布局、HTML5 视频播放器、10Hz 时码同步与状态机管理。",
+      "module": [
+        "apps/web/package.json",
+        "apps/web/vite.config.ts",
+        "apps/web/src/views/WorkbenchView.vue",
+        "apps/web/src/components/VideoPlayer.vue"
+      ],
+      "dependencies": ["12001"],
+      "acceptance_criteria": [
+        "支持视频文件选择/拖拽导入，视频可平滑播放、暂停与进度拖动。",
+        "时码显示精确到毫秒 (HH:MM:SS.mmm)，与播放进度实时同步。",
+        "严格遵循 empty/ready/processing/review 状态机展示对应按钮可用性。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12202",
+      "name": "实现 Canvas ROI 选区交互与坐标映射",
+      "description": "在视频播放器上方构建 Canvas 透明交互层，支持底部预设与鼠标自由拖拽框选，并自动完成 Letterboxing 视口与真实像素归一化换算。",
+      "module": [
+        "apps/web/src/components/RoiOverlay.vue",
+        "apps/web/src/utils/coordinate_mapper.ts"
+      ],
+      "dependencies": ["12201", "12101"],
+      "acceptance_criteria": [
+        "Canvas 覆盖层跟随视频视口尺寸自适应重绘，提供手柄支持拖拽调整大小与位置。",
+        "提供底部 30% 快速重置按钮与自定义选区切换。",
+        "换算出的归一化 region_box (x, y, w, h) 在各种视频长宽比下均能与底层 C++ 裁剪完美对齐。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12203",
+      "name": "实现双向音画联动、字幕行内编辑与 SRT 导出",
+      "description": "实现实时 Transcript 表格，接收 SSE 事件流逐行出字，支持点击字幕秒跳视频、双击行内修改字幕内容与时间轴，并一键下载 SRT。",
+      "module": [
+        "apps/web/src/components/LiveTranscript.vue",
+        "apps/web/src/components/SettingsBar.vue"
+      ],
+      "dependencies": ["12202", "12102"],
+      "acceptance_criteria": [
+        "提取中收到 push_entry 立即在表格追加新行并平滑滚动。",
+        "点击任意字幕行，播放器瞬间 Seek 到该句 start_ms；播放视频时当前发音字幕行自动高亮。",
+        "支持直接双击文本编辑修改字幕，修改后一键导出下载标准 .srt 文件。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12301",
+      "name": "实现批量任务中心 (Task Center UI & Queue)",
+      "description": "对齐 Phase 8 批量处理能力，支持多视频拖拽排队、串行调度、状态卡片监控与一键批量打包导出。",
+      "module": [
+        "apps/web/src/views/TaskCenterView.vue",
+        "apps/web/src/components/BatchQueue.vue"
+      ],
+      "dependencies": ["12203"],
+      "acceptance_criteria": [
+        "支持多文件拖拽批量导入，展示待处理、进行中、已完成、失败状态。",
+        "服务端按单并发串行排队执行，支持单任务取消与重试。",
+        "支持一键打包下载所有完成任务的 SRT 文件。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12401",
+      "name": "Linux 容器化与端到端自动化验收",
+      "description": "编写 Linux Dockerfile，集成 C++ Native Server、PaddleOCR 与 FFmpeg，完成 Linux 环境下的端到端自动化回归与质量验证。",
+      "module": [
+        "Dockerfile",
+        "docker-compose.yml",
+        "scripts/verify-web-server.sh"
+      ],
+      "dependencies": ["12301"],
+      "acceptance_criteria": [
+        "Dockerfile 可成功构建轻量 Linux 镜像并在无头服务器上正常启动服务。",
+        "自动化脚本在 Linux 容器内跑通单视频与批量提取全流程，SRT 结果比对 exact pass。"
+      ],
+      "status": "not-started"
+    }
+  ]
+}

@@ -78,6 +78,13 @@
       "description": "按已冻结的 vNext 设计基线，将现有 SwiftUI GUI 分阶段升级为原生 macOS 字幕工作台；不扩张到批量队列、自动引擎、新格式或分发。",
       "detail_file": "docs/phases/phase10.json",
       "status": "done"
+    },
+    {
+      "id": "phase12",
+      "name": "Phase 12 - Cross-Platform Web UI & Native Server",
+      "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：首期对齐 Phase 10 单视频工作台，为 Linux 服务器与 Docker 环境提供零 Python 依赖的硬字幕提取服务。",
+      "detail_file": "docs/phases/phase12.json",
+      "status": "in-progress"
     }
   ]
 }

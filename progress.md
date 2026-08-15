@@ -2,16 +2,17 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-13
-- **当前 Phase：** Phase 8 后续 08511 已收口（C1–C6 + 证据重拍）。08001–08410 综合验收已收口。Phase 7 与 Phase 10 已收口。
+- **最后更新：** 2026-08-15
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。12001（设计与实施基线冻结）已完成，下一步推进 12101（C++ Native Web Server 基座）与 12201（Web Workbench UI）。Phase 8、Phase 7、Phase 10 已收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- 08511 已收口；后续范围另登。不占用 09101。
+- [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台。
 
 ## 近期完成
 
+- [x] 12001：Phase 12 架构设计与实施基线冻结（C++ 零 Python 依赖/零 IPC 开销、HTTP 206 视频流、SSE 实时事件流与 Web 单视频工作台交互规范），通过 schema 与 ./init.sh 门禁。
 - [x] 08511 收口：重拍 T01–T07（七张 MD5 不同）；修虚线 overlay、四档 Table 变体、beginImport 异步 present、单选隐藏底栏、WAITING/SELECT/OUTPUT_ROOT fixture。完整 swift test 371 XCTest + 140 Swift Testing。
 - [x] 08511-C5：Inspector 卡片——TaskInspectorModel + inspectorModel、TaskDetailView 重写为卡片布局（页眉含删除/上移/下移/取消/重试）、输出位置 Toolbar 菜单 + NSOpenPanel、labelsHidden Picker。commit `2a14e87`。
 - [x] 08511-C4：位置列——TaskTableColumn 枚举 + visibleColumns 四档列宽、locationDisplay/locationFullPath/locationTooltip/matchesSearch、搜索扩展到位置+路径、位置不可见时折进文件单元格。commit `9eb98cc`。
