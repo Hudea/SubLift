@@ -80,7 +80,7 @@ struct JobEvent {
     nlohmann::json payload = data;
     payload["job_id"] = job_id;
     payload["seq"] = seq_id;
-    return "event: " + event_type + "\ndata: " + payload.dump() + "\n\n";
+    return "id: " + std::to_string(seq_id) + "\nevent: " + event_type + "\ndata: " + payload.dump() + "\n\n";
   }
 };
 

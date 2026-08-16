@@ -210,7 +210,8 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
         job->event_stream->publish("progress", {
             {"stage", p.stage},
             {"pct", p.pct},
-            {"eta_ms", p.eta_ms}
+            {"eta_ms", p.eta_ms},
+            {"fps", job->config.fps}
         });
       } else if (std::holds_alternative<sublift::ipc::PushEntryMsg>(msg)) {
         const auto& pe = std::get<sublift::ipc::PushEntryMsg>(msg);
@@ -279,7 +280,22 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
     }
 
     // Start job in BridgeHandler
-    (void)bridge->handle(start_msg, push_cb);
+    auto sync_res = bridge->handle(start_msg, push_cb);
+    if (sync_res.has_value()) {
+      if (std::holds_alternative<sublift::ipc::DoneMsg>(*sync_res)) {
+        const auto& done_msg = std::get<sublift::ipc::DoneMsg>(*sync_res);
+        if (!done_msg.ok) {
+          is_error = true;
+          error_msg = done_msg.error.value_or("Job start returned failure");
+          finished = true;
+        }
+      } else if (std::holds_alternative<sublift::ipc::ErrorMsg>(*sync_res)) {
+        const auto& err_msg = std::get<sublift::ipc::ErrorMsg>(*sync_res);
+        is_error = true;
+        error_msg = err_msg.message;
+        finished = true;
+      }
+    }
 
     // Wait for completion, cancellation, or error
     {
@@ -294,13 +310,14 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
       bridge->cancel_job();
     }
 
-    // BridgeHandler destructor safely waits for its background worker thread to finish
-    bridge.reset();
-
+    // Remove from active_bridges_ BEFORE destroying bridge to prevent UAF in cancel_job
     {
       std::lock_guard<std::mutex> lk(bridge_mutex_);
       active_bridges_.erase(job->job_id);
     }
+
+    // BridgeHandler destructor safely waits for its background worker thread to finish
+    bridge.reset();
 
     auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - start_time).count();

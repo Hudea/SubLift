@@ -110,10 +110,14 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
     REQUIRE(res->status == 400);
   }
 
-  SECTION("Nonexistent path returns 404 Not Found") {
+  SECTION("Nonexistent or non-media path returns 400 Path Security Error") {
     auto res = cli.Get("/api/video/stream?path=/nonexistent/path/test.mp4");
     REQUIRE(res != nullptr);
-    REQUIRE(res->status == 404);
+    REQUIRE(res->status == 400);
+
+    auto res_sec = cli.Get("/api/video/stream?path=/etc/shadow");
+    REQUIRE(res_sec != nullptr);
+    REQUIRE(res_sec->status == 400);
   }
 
   SECTION("Full video request returns 200 with Accept-Ranges") {
@@ -240,10 +244,14 @@ TEST_CASE("Server Video Frame Extraction", "[server][video_frame]") {
     REQUIRE(res->status == 400);
   }
 
-  SECTION("Nonexistent video returns 404 Not Found") {
+  SECTION("Nonexistent or non-media path returns 400 Path Security Error") {
     auto res = cli.Get("/api/video/frame?path=/nonexistent/dummy.mp4");
     REQUIRE(res != nullptr);
-    REQUIRE(res->status == 404);
+    REQUIRE(res->status == 400);
+
+    auto res_sec = cli.Get("/api/video/frame?path=/etc/passwd");
+    REQUIRE(res_sec != nullptr);
+    REQUIRE(res_sec->status == 400);
   }
 
   if (sublift::ffmpeg::available()) {
@@ -358,11 +366,29 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
     REQUIRE(res2 != nullptr);
     REQUIRE(res2->status == 400);
 
-    // Non-existent video file
+    // Non-existent video file (fails path sandbox check)
     nlohmann::json req_nonexist = {{"video_path", "/nonexistent/video.mp4"}};
     auto res3 = cli.Post("/api/jobs", req_nonexist.dump(), "application/json");
     REQUIRE(res3 != nullptr);
-    REQUIRE(res3->status == 404);
+    REQUIRE(res3->status == 400);
+
+    // Forbidden non-media file (LFI protection)
+    nlohmann::json req_lfi = {{"video_path", "/etc/hosts"}};
+    auto res_lfi = cli.Post("/api/jobs", req_lfi.dump(), "application/json");
+    REQUIRE(res_lfi != nullptr);
+    REQUIRE(res_lfi->status == 400);
+
+    // Create a temporary valid media file for valid path checks
+    TempTestFile temp_job_video("sublift_synth_job_dummy.mp4", {0x00, 0x00, 0x00, 0x18, 'f', 't', 'y', 'p'});
+
+    // Unsupported engine
+    nlohmann::json req_bad_engine = {
+        {"video_path", temp_job_video.path.string()},
+        {"engine", "unsupported_fake_ocr_engine"}
+    };
+    auto res_bad_eng = cli.Post("/api/jobs", req_bad_engine.dump(), "application/json");
+    REQUIRE(res_bad_eng != nullptr);
+    REQUIRE(res_bad_eng->status == 400);
   }
 
   SECTION("POST /api/jobs/:id/cancel returns 404 for unknown job") {

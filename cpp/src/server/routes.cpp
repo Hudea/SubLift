@@ -22,6 +22,7 @@
 #include "sublift/adapters/paddle.hpp"
 #include "sublift/adapters/vision.hpp"
 #include "sublift/models/resource_locator.hpp"
+#include "sublift/server/path_sandbox.hpp"
 #include "sublift/version.hpp"
 
 namespace sublift::server {
@@ -214,11 +215,12 @@ void register_routes(httplib::Server& server,
       return;
     }
 
-    std::filesystem::path video_path = req.get_param_value("path");
-    std::error_code ec;
-    if (!std::filesystem::exists(video_path, ec) || !std::filesystem::is_regular_file(video_path, ec)) {
-      res.status = 404;
-      nlohmann::json err = {{"error", "Video file not found: " + video_path.string()}};
+    std::filesystem::path video_path;
+    try {
+      video_path = resolve_and_validate_media_path(req.get_param_value("path"));
+    } catch (const PathSecurityException& se) {
+      res.status = 400;
+      nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
       res.set_content(err.dump(), "application/json; charset=utf-8");
       return;
     }
@@ -252,11 +254,12 @@ void register_routes(httplib::Server& server,
       return;
     }
 
-    std::filesystem::path video_path = req.get_param_value("path");
-    std::error_code ec;
-    if (!std::filesystem::exists(video_path, ec) || !std::filesystem::is_regular_file(video_path, ec)) {
-      res.status = 404;
-      nlohmann::json err = {{"error", "Video file not found: " + video_path.string()}};
+    std::filesystem::path video_path;
+    try {
+      video_path = resolve_and_validate_media_path(req.get_param_value("path"));
+    } catch (const PathSecurityException& se) {
+      res.status = 400;
+      nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
       res.set_content(err.dump(), "application/json; charset=utf-8");
       return;
     }
@@ -279,7 +282,7 @@ void register_routes(httplib::Server& server,
       }
     }
 
-    const std::uint64_t total_size = std::filesystem::file_size(stream_path, ec);
+    const std::uint64_t total_size = std::filesystem::file_size(stream_path);
     if (total_size == 0) {
       res.status = 200;
       res.set_header("Content-Length", "0");
@@ -345,7 +348,16 @@ void register_routes(httplib::Server& server,
       }
 
       JobConfig cfg;
-      cfg.video_path = body_json["video_path"].get<std::string>();
+      std::string raw_path = body_json["video_path"].get<std::string>();
+      try {
+        cfg.video_path = resolve_and_validate_media_path(raw_path).string();
+      } catch (const PathSecurityException& se) {
+        res.status = 400;
+        nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
+        res.set_content(err.dump(), "application/json; charset=utf-8");
+        return;
+      }
+
       if (body_json.contains("engine") && body_json["engine"].is_string()) {
         cfg.engine = body_json["engine"].get<std::string>();
       }
@@ -359,12 +371,22 @@ void register_routes(httplib::Server& server,
         cfg.region_box = RegionBox::from_json(body_json["region_box"]);
       }
 
-      std::error_code ec;
-      if (!std::filesystem::exists(cfg.video_path, ec) || !std::filesystem::is_regular_file(cfg.video_path, ec)) {
-        res.status = 404;
-        nlohmann::json err = {{"error", "Video file not found: " + cfg.video_path}};
-        res.set_content(err.dump(), "application/json; charset=utf-8");
-        return;
+      // Pre-validate OCR Engine
+      auto sys_info = collect_system_info();
+      if (cfg.engine != "mock") {
+        bool engine_available = false;
+        for (const auto& eng : sys_info.engines) {
+          if (eng.name == cfg.engine && eng.available) {
+            engine_available = true;
+            break;
+          }
+        }
+        if (!engine_available) {
+          res.status = 400;
+          nlohmann::json err = {{"error", "Unsupported or unavailable OCR engine: '" + cfg.engine + "'"}};
+          res.set_content(err.dump(), "application/json; charset=utf-8");
+          return;
+        }
       }
 
       auto job = job_manager->create_job(cfg);

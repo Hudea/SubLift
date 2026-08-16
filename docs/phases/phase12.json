@@ -421,7 +421,8 @@
         "传入非法 engine 参数时路由层前置拦截返回 400，后台 Worker 线程无死锁挂起。",
         "并发 cancel 无 UAF 悬垂指针与 std::terminate 崩溃。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 完成 path_sandbox.hpp 媒体白名单与 canonical 安全沙箱校验，封堵 LFI 漏洞；路由层前置校验 OCR 引擎可用性并补齐 SSE id: 序号与 progress.fps 契约；调整 job_manager 析构时序先从 active_bridges_ 擦除再 reset，bridge.cpp 中采用 std::move(worker_thread_) 消除并发 Join 崩溃与 UAF；server_test.cpp 补充安全沙箱与引擎校验测试全绿（161 assertions 全绿）；verify-standard 10/10 门禁全绿；双子 Agent 审计通过。"
     },
     {
       "id": "12503",

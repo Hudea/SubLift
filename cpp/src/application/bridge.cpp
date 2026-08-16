@@ -203,16 +203,20 @@ void BridgeHandler::cancel_job() {
   cancelled_ = true;
   std::shared_ptr<sublift::application::IStreamingExtractor> extractor;
   std::shared_ptr<sublift::Pipeline> pipeline;
+  std::thread th;
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
     extractor = current_extractor_;
     pipeline = current_pipeline_;
+    if (worker_thread_.joinable()) {
+      th = std::move(worker_thread_);
+    }
   }
   if (extractor) extractor->cancel();
   if (pipeline) pipeline->cancel();
 
-  if (worker_thread_.joinable()) {
-    worker_thread_.join();
+  if (th.joinable()) {
+    th.join();
   }
 
   release_job_resources();
