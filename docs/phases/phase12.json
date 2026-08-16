@@ -184,7 +184,38 @@
         "时码显示精确到毫秒 (HH:MM:SS.mmm)，与播放进度实时同步。",
         "严格遵循 empty/ready/processing/review 状态机展示对应按钮可用性。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12201.01",
+          "name": "构建 Vue 3 + TypeScript + Vite 前端工程骨架与 Apple/Notion 设计系统",
+          "description": "搭建 apps/web 工程，实现 design-tokens.css 磨砂毛玻璃、微发光边框与暗炭黑深色排版体系。",
+          "dependencies": ["12001"],
+          "status": "done"
+        },
+        {
+          "id": "12201.02",
+          "name": "实现 HTML5 播放器与 10Hz 毫秒级时码同步引擎",
+          "description": "对接 /api/video/stream HTTP 206 流，基于 useVideoPlayer 实现 10Hz 时码时钟 (HH:MM:SS.mmm) 与平滑 Scrubbing。",
+          "dependencies": ["12201.01"],
+          "status": "done"
+        },
+        {
+          "id": "12201.03",
+          "name": "实现工作台四态状态机与组件交互编排",
+          "description": "实现 Empty/Ready/Processing/Review 状态机驱动，封装 Navbar、DropZone、SidebarControls 与 LiveTranscript 组件。",
+          "dependencies": ["12201.02"],
+          "status": "done"
+        },
+        {
+          "id": "12201.04",
+          "name": "静态托管集成与全量端到端验证",
+          "description": "完成 npm run build 打包产物至 apps/web/dist，sublift_server --static-dir 挂载验证，E2E 29/29 测试全绿。",
+          "dependencies": ["12201.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成 Web 单视频工作台基础 UI (Workbench Shell & Player)；Vue 3 + TS 严格构建通过 (apps/web/dist)；sublift_server 静态托管验证通过；E2E 测试 29/29 全绿；verify-standard 10/10 门禁全绿。"
     },
     {
       "id": "12202",

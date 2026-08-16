@@ -27,10 +27,17 @@ def find_free_port() -> int:
 class SubLiftServerProcess:
     """Manages lifecycle of a temporary sublift_server process."""
 
-    def __init__(self, binary_path: str, port: int, host: str = "127.0.0.1") -> None:
+    def __init__(
+        self,
+        binary_path: str,
+        port: int,
+        host: str = "127.0.0.1",
+        static_dir: str | None = None,
+    ) -> None:
         self.binary_path = binary_path
         self.port = port
         self.host = host
+        self.static_dir = static_dir
         self.process: subprocess.Popen[str] | None = None
 
     def start(self, timeout_sec: float = 5.0) -> None:
@@ -38,6 +45,9 @@ class SubLiftServerProcess:
             raise FileNotFoundError(f"sublift_server binary not found at: {self.binary_path}")
 
         cmd = [self.binary_path, "--host", self.host, "-p", str(self.port)]
+        if self.static_dir:
+            cmd.extend(["--static-dir", self.static_dir])
+
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -109,9 +119,15 @@ class TestSubLiftServerE2E(unittest.TestCase):
     def setUpClass(cls) -> None:
         project_root = Path(__file__).resolve().parents[1]
         binary_path = str(project_root / "build" / "cpp" / "bin" / "sublift_server")
+        static_dir = str(project_root / "apps" / "web" / "dist")
 
         cls.server_port = find_free_port()
-        cls.server_proc = SubLiftServerProcess(binary_path, cls.server_port, cls.server_host)
+        cls.server_proc = SubLiftServerProcess(
+            binary_path,
+            cls.server_port,
+            cls.server_host,
+            static_dir=static_dir if os.path.exists(static_dir) else None,
+        )
         cls.server_proc.start()
 
         # Create temporary working directory and test assets
@@ -611,6 +627,19 @@ class TestSubLiftServerE2E(unittest.TestCase):
             self.assertEqual(cancel_data["status"], "cancelled")
         finally:
             conn.close()
+
+    # -------------------------------------------------------------------------
+    # 5. Static Web Assets & Workbench Shell Hosting Tests
+    # -------------------------------------------------------------------------
+
+    def test_static_01_workbench_html_and_assets(self) -> None:
+        """TC-WEB-01: Verify GET / serves index.html with SubLift Workbench shell."""
+        status, headers, body = self.req("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", headers.get("Content-Type", ""))
+        html = body.decode("utf-8", errors="replace")
+        self.assertIn("SubLift", html)
+        self.assertIn('<div id="app"></div>', html)
 
 
 def print_banner(text: str) -> None:

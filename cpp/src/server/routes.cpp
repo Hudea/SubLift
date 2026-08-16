@@ -490,6 +490,20 @@ void register_routes(httplib::Server& server,
     std::error_code ec;
     if (std::filesystem::exists(static_dir, ec) && std::filesystem::is_directory(static_dir, ec)) {
       server.set_mount_point("/", static_dir);
+
+      std::filesystem::path index_path = std::filesystem::path(static_dir) / "index.html";
+      if (std::filesystem::exists(index_path, ec)) {
+        server.Get("/", [index_path](const httplib::Request&, httplib::Response& res) {
+          std::ifstream ifs(index_path, std::ios::binary);
+          if (ifs) {
+            std::string content((std::istreambuf_iterator<char>(ifs)),
+                                std::istreambuf_iterator<char>());
+            res.set_content(content, "text/html; charset=utf-8");
+          } else {
+            res.status = 404;
+          }
+        });
+      }
     }
   }
 }

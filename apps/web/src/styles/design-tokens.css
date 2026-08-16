@@ -1,0 +1,83 @@
+/**
+ * SubLift Web Design System Tokens
+ * Apple macOS Sequoia & Notion Aesthetic (Dark Theme)
+ */
+
+:root {
+  /* Surface & Background */
+  --sl-surface-ground: #0a0a0c;
+  --sl-surface-base: #111114;
+  --sl-surface-panel: #16161a;
+  --sl-surface-card: #1c1c22;
+  --sl-surface-card-hover: #23232b;
+  --sl-surface-elevated: #282832;
+  --sl-surface-active: #323240;
+
+  /* Frosted Glass */
+  --sl-glass-nav: rgba(18, 18, 22, 0.82);
+  --sl-glass-bar: rgba(22, 22, 28, 0.78);
+  --sl-glass-card: rgba(28, 28, 34, 0.65);
+  --sl-glass-blur: blur(24px) saturate(180%);
+  --sl-glass-blur-sm: blur(12px) saturate(160%);
+
+  /* Borders & Hairlines */
+  --sl-border-subtle: rgba(255, 255, 255, 0.06);
+  --sl-border-standard: rgba(255, 255, 255, 0.1);
+  --sl-border-focus: rgba(255, 255, 255, 0.2);
+  --sl-border-accent: rgba(10, 132, 255, 0.5);
+
+  --sl-inner-highlight: inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+  --sl-inner-shadow: inset 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+
+  /* Typography */
+  --sl-text-primary: #ffffff;
+  --sl-text-secondary: rgba(235, 235, 245, 0.75);
+  --sl-text-tertiary: rgba(235, 235, 245, 0.45);
+  --sl-text-disabled: rgba(235, 235, 245, 0.25);
+
+  --sl-font-family-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --sl-font-family-mono: "SF Mono", Monaco, "Cascadia Code", "JetBrains Mono",
+    Menlo, Consolas, monospace;
+
+  --sl-font-size-xs: 11px;
+  --sl-font-size-sm: 12px;
+  --sl-font-size-base: 13px;
+  --sl-font-size-md: 14px;
+  --sl-font-size-lg: 16px;
+  --sl-font-size-xl: 18px;
+
+  /* Accent & Status Colors */
+  --sl-color-accent: #0a84ff;
+  --sl-color-accent-hover: #409cff;
+  --sl-color-accent-active: #0071e3;
+  --sl-color-accent-muted: rgba(10, 132, 255, 0.15);
+
+  --sl-color-ready: #0a84ff;
+  --sl-color-ready-bg: rgba(10, 132, 255, 0.12);
+
+  --sl-color-processing: #ff9f0a;
+  --sl-color-processing-bg: rgba(255, 159, 10, 0.12);
+
+  --sl-color-success: #30d158;
+  --sl-color-success-bg: rgba(48, 209, 88, 0.12);
+
+  --sl-color-error: #ff453a;
+  --sl-color-error-bg: rgba(255, 69, 58, 0.14);
+
+  /* Shadows */
+  --sl-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--sl-border-subtle);
+  --sl-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--sl-border-standard);
+  --sl-shadow-floating: 0 12px 32px rgba(0, 0, 0, 0.65), 0 0 0 1px var(--sl-border-focus);
+  --sl-shadow-glow-accent: 0 0 20px rgba(10, 132, 255, 0.25);
+
+  /* Radii & Transitions */
+  --sl-radius-xs: 4px;
+  --sl-radius-sm: 6px;
+  --sl-radius-md: 10px;
+  --sl-radius-lg: 14px;
+  --sl-radius-pill: 9999px;
+
+  --sl-transition-snappy: all 120ms cubic-bezier(0, 0, 0.2, 1);
+  --sl-transition-smooth: all 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}

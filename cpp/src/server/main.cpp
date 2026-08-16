@@ -67,6 +67,22 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  // Auto-discover web assets if --static-dir was not explicitly provided
+  if (static_dir.empty()) {
+    std::vector<std::string> search_candidates = {
+        "apps/web/dist",
+        "../apps/web/dist",
+        "../../apps/web/dist",
+    };
+    for (const auto& candidate : search_candidates) {
+      std::error_code ec;
+      if (std::filesystem::exists(candidate, ec) && std::filesystem::is_directory(candidate, ec)) {
+        static_dir = candidate;
+        break;
+      }
+    }
+  }
+
   sublift::server::ServerConfig config{
       .host = host,
       .port = port,
