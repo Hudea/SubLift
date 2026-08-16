@@ -3,7 +3,7 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-16
-- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。12001（设计基线）与 12101（C++ Native Web Server 基座与视频流）已完成，下一步推进 12102（SSE 实时流与 Pipeline 调度）或 12201（Web 工作台 UI）。Phase 8、Phase 7、Phase 10 已收口。
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。12001（设计基线）、12101（C++ Web Server 与视频流）与 12102（SSE 实时流与 Pipeline 调度）已完成，下一步推进 12201（Web 单视频工作台基础 UI）。Phase 8、Phase 7、Phase 10 已收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
@@ -12,6 +12,7 @@
 
 ## 近期完成
 
+- [x] 12102：实现 SSE 实时事件流与 C++ Pipeline 任务调度（`JobManager` 任务状态机与 UUID v4、`BridgeHandler` 进程内流水线驱动、`GET /api/jobs/{id}/events` SSE 流式推送、`POST /api/jobs/{id}/cancel` 协作取消、`GET /api/jobs/{id}/export` SRT 导出下载），Catch2 147 组断言与 Python E2E 28 组测试全绿通过。
 - [x] 12101：C++ Native Web Server 基座与 HTTP 206 视频流实现（`sublift_server` 单二进制、vendored `cpp-httplib`、`/api/system/info` 运行时与引擎探活、`/api/video/stream` 206 Partial Content 分片流、`/api/video/frame` 快速 JPEG 截帧），Catch2 60 组断言与 curl 完整验证通过。
 - [x] 12001：Phase 12 架构设计与实施基线冻结（C++ 零 Python 依赖/零 IPC 开销、HTTP 206 视频流、SSE 实时事件流与 Web 单视频工作台交互规范），通过 schema 与 ./init.sh 门禁。
 - [x] 08511 收口：重拍 T01–T07（七张 MD5 不同）；修虚线 overlay、四档 Table 变体、beginImport 异步 present、单选隐藏底栏、WAITING/SELECT/OUTPUT_ROOT fixture。完整 swift test 371 XCTest + 140 Swift Testing。

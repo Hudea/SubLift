@@ -3,6 +3,7 @@
 add_library(sublift_server_runtime STATIC
   routes.cpp
   http_server.cpp
+  job_manager.cpp
 )
 add_library(sublift::server_runtime ALIAS sublift_server_runtime)
 
@@ -12,6 +13,9 @@ target_include_directories(sublift_server_runtime PUBLIC
 )
 
 target_link_libraries(sublift_server_runtime PUBLIC
+  sublift_application
+  sublift_worker_runtime
+  sublift_protocol
   sublift_core
   sublift_models
   sublift_ffmpeg

@@ -455,6 +455,163 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertEqual(body[0:2], b"\xff\xd8")
         self.assertEqual(body[-2:], b"\xff\xd9")
 
+    # -------------------------------------------------------------------------
+    # 4. /api/jobs Management, SSE Event Streaming & SRT Export Tests
+    # -------------------------------------------------------------------------
+
+    def test_jobs_01_missing_body_or_path(self) -> None:
+        """TC-JOB-01: POST /api/jobs returns 400 when body or video_path is missing."""
+        conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=5.0)
+        try:
+            # Invalid JSON
+            conn.request(
+                "POST",
+                "/api/jobs",
+                body="not-json",
+                headers={"Content-Type": "application/json"},
+            )
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 400)
+            resp.read()
+
+            # Empty object
+            conn.request(
+                "POST",
+                "/api/jobs",
+                body="{}",
+                headers={"Content-Type": "application/json"},
+            )
+            resp2 = conn.getresponse()
+            self.assertEqual(resp2.status, 400)
+            resp2.read()
+        finally:
+            conn.close()
+
+    def test_jobs_02_nonexistent_video_path(self) -> None:
+        """TC-JOB-02: POST /api/jobs returns 404 when video_path does not exist."""
+        conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=5.0)
+        try:
+            req_body = json.dumps({"video_path": "/path/to/nonexistent/video.mp4"})
+            conn.request(
+                "POST",
+                "/api/jobs",
+                body=req_body,
+                headers={"Content-Type": "application/json"},
+            )
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 404)
+            resp.read()
+        finally:
+            conn.close()
+
+    def test_jobs_03_unknown_job_endpoints(self) -> None:
+        """TC-JOB-03: Unknown job ID returns 404 across cancel, export, and events."""
+        for ep, method in [
+            ("/api/jobs/unknown-id-12345/cancel", "POST"),
+            ("/api/jobs/unknown-id-12345/export", "GET"),
+            ("/api/jobs/unknown-id-12345/events", "GET"),
+        ]:
+            with self.subTest(endpoint=ep, method=method):
+                status, _, _ = self.req(method, ep)
+                self.assertEqual(status, 404)
+
+    def test_jobs_04_create_job_sse_events_and_srt_export(self) -> None:
+        """TC-JOB-04: Full lifecycle: create job with mock engine, consume SSE, export SRT."""
+        if not self.ffmpeg_available:
+            self.skipTest("FFmpeg toolchain not available for video extraction test")
+
+        conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=10.0)
+        try:
+            job_payload = {
+                "video_path": self.synth_mp4_path,
+                "engine": "mock",
+                "fps": 5.0,
+                "confidence_threshold": 0.0,
+                "region_box": {"x": 0.0, "y": 0.5, "width": 1.0, "height": 0.5},
+            }
+            conn.request(
+                "POST",
+                "/api/jobs",
+                body=json.dumps(job_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 201)
+            create_data = json.loads(resp.read().decode("utf-8"))
+            self.assertIn("job_id", create_data)
+            self.assertIn("status", create_data)
+            job_id = create_data["job_id"]
+            self.assertTrue(len(job_id) > 10)
+
+            # Test SSE Stream
+            conn.request("GET", f"/api/jobs/{job_id}/events")
+            sse_resp = conn.getresponse()
+            self.assertEqual(sse_resp.status, 200)
+            self.assertIn("text/event-stream", sse_resp.getheader("Content-Type", ""))
+
+            # Read stream until done or timeout
+            raw_stream = b""
+            start_t = time.time()
+            while time.time() - start_t < 6.0:
+                chunk = sse_resp.read(1024)
+                if not chunk:
+                    break
+                raw_stream += chunk
+                if b"event: done" in raw_stream or b"event: error" in raw_stream:
+                    break
+
+            self.assertTrue(len(raw_stream) > 0)
+            stream_text = raw_stream.decode("utf-8", errors="replace")
+            # Verify event framing
+            self.assertIn("event: ", stream_text)
+            self.assertIn("data: ", stream_text)
+
+            # Test SRT Export
+            time.sleep(0.2)
+            exp_status, exp_headers, exp_body = self.req("GET", f"/api/jobs/{job_id}/export")
+            self.assertEqual(exp_status, 200)
+            self.assertIn("text/plain", exp_headers.get("Content-Type", ""))
+            disp = exp_headers.get("Content-Disposition", "")
+            self.assertIn("attachment;", disp)
+            srt_body = exp_body.decode("utf-8")
+            self.assertIsInstance(srt_body, str)
+
+        finally:
+            conn.close()
+
+    def test_jobs_05_cancel_job(self) -> None:
+        """TC-JOB-05: POST /api/jobs/:id/cancel returns 200 and cancelled status."""
+        if not self.ffmpeg_available:
+            self.skipTest("FFmpeg toolchain not available for video extraction test")
+
+        conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=10.0)
+        try:
+            job_payload = {
+                "video_path": self.synth_mp4_path,
+                "engine": "mock",
+                "fps": 5.0,
+            }
+            conn.request(
+                "POST",
+                "/api/jobs",
+                body=json.dumps(job_payload),
+                headers={"Content-Type": "application/json"},
+            )
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 201)
+            create_data = json.loads(resp.read().decode("utf-8"))
+            job_id = create_data["job_id"]
+
+            # Trigger Cancel
+            conn.request("POST", f"/api/jobs/{job_id}/cancel")
+            cancel_resp = conn.getresponse()
+            self.assertEqual(cancel_resp.status, 200)
+            cancel_data = json.loads(cancel_resp.read().decode("utf-8"))
+            self.assertEqual(cancel_data["job_id"], job_id)
+            self.assertEqual(cancel_data["status"], "cancelled")
+        finally:
+            conn.close()
+
 
 def print_banner(text: str) -> None:
     line = "=" * 70

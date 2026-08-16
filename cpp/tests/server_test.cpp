@@ -270,3 +270,153 @@ TEST_CASE("Server Video Frame Extraction", "[server][video_frame]") {
     server_thread.join();
   }
 }
+
+TEST_CASE("SRT Time and Formatting Utilities", "[server][srt]") {
+  SECTION("format_srt_timestamp converts milliseconds correctly") {
+    REQUIRE(sublift::server::format_srt_timestamp(0) == "00:00:00,000");
+    REQUIRE(sublift::server::format_srt_timestamp(1500) == "00:00:01,500");
+    REQUIRE(sublift::server::format_srt_timestamp(65432) == "00:01:05,432");
+    REQUIRE(sublift::server::format_srt_timestamp(3661005) == "01:01:01,005");
+    REQUIRE(sublift::server::format_srt_timestamp(-500) == "00:00:00,000");
+  }
+
+  SECTION("format_entries_to_srt produces valid standard SRT structure") {
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 1000, .end_ms = 3000, .text = "Hello world", .confidence = 0.95},
+        {.start_ms = 3500, .end_ms = 5000, .text = "Second line", .confidence = 0.98},
+    };
+
+    std::string srt = sublift::server::format_entries_to_srt(entries);
+    std::string expected =
+        "1\n"
+        "00:00:01,000 --> 00:00:03,000\n"
+        "Hello world\n\n"
+        "2\n"
+        "00:00:03,500 --> 00:00:05,000\n"
+        "Second line\n\n";
+
+    REQUIRE(srt == expected);
+  }
+
+  SECTION("format_entries_to_srt skips blank text entries") {
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 1000, .end_ms = 3000, .text = "   \n\t", .confidence = 0.5},
+        {.start_ms = 4000, .end_ms = 6000, .text = "Valid text", .confidence = 0.99},
+    };
+
+    std::string srt = sublift::server::format_entries_to_srt(entries);
+    std::string expected =
+        "1\n"
+        "00:00:04,000 --> 00:00:06,000\n"
+        "Valid text\n\n";
+
+    REQUIRE(srt == expected);
+  }
+}
+
+TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
+  sublift::server::HttpServer server;
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(5));
+
+  SECTION("POST /api/jobs validates request body") {
+    // Missing body
+    auto res1 = cli.Post("/api/jobs", "invalid json", "application/json");
+    REQUIRE(res1 != nullptr);
+    REQUIRE(res1->status == 400);
+
+    // Missing video_path
+    auto res2 = cli.Post("/api/jobs", "{}", "application/json");
+    REQUIRE(res2 != nullptr);
+    REQUIRE(res2->status == 400);
+
+    // Non-existent video file
+    nlohmann::json req_nonexist = {{"video_path", "/nonexistent/video.mp4"}};
+    auto res3 = cli.Post("/api/jobs", req_nonexist.dump(), "application/json");
+    REQUIRE(res3 != nullptr);
+    REQUIRE(res3->status == 404);
+  }
+
+  SECTION("POST /api/jobs/:id/cancel returns 404 for unknown job") {
+    auto res = cli.Post("/api/jobs/unknown-uuid-12345/cancel", "{}", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 404);
+  }
+
+  SECTION("GET /api/jobs/:id/export returns 404 for unknown job") {
+    auto res = cli.Get("/api/jobs/unknown-uuid-12345/export");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 404);
+  }
+
+  SECTION("GET /api/jobs/:id/events returns 404 for unknown job") {
+    auto res = cli.Get("/api/jobs/unknown-uuid-12345/events");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 404);
+  }
+
+  if (sublift::ffmpeg::available()) {
+    // Generate a temporary 0.4s synthetic video for end-to-end extraction with mock engine
+    std::filesystem::path test_mp4 = std::filesystem::temp_directory_path() / "sublift_synth_job_test.mp4";
+    std::string ffmpeg_bin = sublift::ffmpeg::resolve_ffmpeg_bin();
+    std::string cmd = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=0.4:size=128x128:rate=10 -pix_fmt yuv420p " + test_mp4.string() + " > /dev/null 2>&1";
+    int ret = std::system(cmd.c_str());
+
+    if (ret == 0 && std::filesystem::exists(test_mp4)) {
+      nlohmann::json job_req = {
+          {"video_path", test_mp4.string()},
+          {"engine", "mock"},
+          {"fps", 5.0},
+          {"confidence_threshold", 0.0},
+          {"region_box", {{"x", 0.0}, {"y", 0.6}, {"width", 1.0}, {"height", 0.4}}}
+      };
+
+      auto res = cli.Post("/api/jobs", job_req.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 201);
+
+      auto resp_json = nlohmann::json::parse(res->body);
+      REQUIRE(resp_json.contains("job_id"));
+      std::string job_id = resp_json["job_id"].get<std::string>();
+      REQUIRE(!job_id.empty());
+
+      // Wait up to 5 seconds for job completion
+      auto job_ctx = server.job_manager()->get_job(job_id);
+      REQUIRE(job_ctx != nullptr);
+
+      int wait_count = 0;
+      while (!job_ctx->is_terminal() && wait_count < 50) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        wait_count++;
+      }
+
+      REQUIRE(job_ctx->is_terminal());
+
+      // Verify SRT Export endpoint
+      auto exp_res = cli.Get(("/api/jobs/" + job_id + "/export").c_str());
+      REQUIRE(exp_res != nullptr);
+      if (job_ctx->status == sublift::server::JobStatus::Completed) {
+        REQUIRE(exp_res->status == 200);
+        REQUIRE(exp_res->get_header_value("Content-Type") == "text/plain; charset=utf-8");
+        REQUIRE(exp_res->get_header_value("Content-Disposition").find("attachment;") != std::string::npos);
+      }
+
+      std::error_code ec;
+      std::filesystem::remove(test_mp4, ec);
+    }
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}

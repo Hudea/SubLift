@@ -7,7 +7,9 @@
 namespace sublift::server {
 
 HttpServer::HttpServer(ServerConfig config)
-    : config_(std::move(config)), svr_(std::make_unique<httplib::Server>()) {
+    : config_(std::move(config)),
+      job_manager_(std::make_shared<JobManager>(1, 50)),
+      svr_(std::make_unique<httplib::Server>()) {
   // CORS Headers
   svr_->set_default_headers({
       {"Access-Control-Allow-Origin", "*"},
@@ -15,7 +17,7 @@ HttpServer::HttpServer(ServerConfig config)
       {"Access-Control-Allow-Headers", "*"},
   });
 
-  register_routes(*svr_, config_.static_dir);
+  register_routes(*svr_, job_manager_, config_.static_dir);
 }
 
 HttpServer::~HttpServer() {

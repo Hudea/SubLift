@@ -3,6 +3,8 @@
 #include <memory>
 #include <string>
 
+#include "sublift/server/job_manager.hpp"
+
 namespace httplib {
 class Server;
 }
@@ -56,8 +58,12 @@ class HttpServer {
   /// 获取底层 httplib::Server 引用（供扩展路由）
   [[nodiscard]] httplib::Server& raw_server();
 
+  /// 获取绑定的 JobManager 引用
+  [[nodiscard]] std::shared_ptr<JobManager> job_manager() const noexcept { return job_manager_; }
+
  private:
   ServerConfig config_;
+  std::shared_ptr<JobManager> job_manager_;
   std::unique_ptr<httplib::Server> svr_;
   bool bound_{false};
 };

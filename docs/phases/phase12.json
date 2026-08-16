@@ -135,7 +135,38 @@
         "POST /api/jobs/{id}/cancel 协作式安全终止 ffmpeg 与 Pipeline 并回收资源。",
         "GET /api/jobs/{id}/export 返回标准格式化的 UTF-8 SRT 内容。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12102.01",
+          "name": "JobContext 与 JobManager 任务调度中枢实现",
+          "description": "实现任务状态机 (Queued/Running/Completed/Failed/Cancelled)、UUID v4 分配、LRU 历史限制与多线程安全事件流 (JobEventStream)。",
+          "dependencies": ["12101.04"],
+          "status": "done"
+        },
+        {
+          "id": "12102.02",
+          "name": "BridgeHandler 进程内流水线驱动与 PushCallback 转发",
+          "description": "在后台工作线程驱动 BridgeHandler，将 ProgressMsg、PushEntryMsg、EntriesMsg、DoneMsg 转换为结构化 SSE 事件广播。",
+          "dependencies": ["12102.01"],
+          "status": "done"
+        },
+        {
+          "id": "12102.03",
+          "name": "SSE 长连接流式端点与优雅断开回收",
+          "description": "实现 GET /api/jobs/{id}/events chunked SSE 协议推送，支持历史回放、实时推流、15s 心跳保活与客户端断连感知。",
+          "dependencies": ["12102.02"],
+          "status": "done"
+        },
+        {
+          "id": "12102.04",
+          "name": "SRT 标准格式化与导出端点",
+          "description": "实现 format_srt_timestamp 与 format_entries_to_srt 工具，提供 GET /api/jobs/{id}/export 附件下载与 Catch2/E2E 全量测试。",
+          "dependencies": ["12102.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成 JobManager 任务调度、SSE 实时事件流与 SRT 导出；Catch2 147 组断言全绿 (server_test 147/147 通过)；Python E2E 自动化测试 28/28 全部通过；verify-standard 10/10 门禁全绿。"
     },
     {
       "id": "12201",

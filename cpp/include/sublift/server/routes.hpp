@@ -1,9 +1,14 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 #include <nlohmann/json.hpp>
+
+#include "sublift/models.hpp"
+#include "sublift/server/job_manager.hpp"
 
 namespace httplib {
 class Server;
@@ -36,7 +41,15 @@ struct SystemInfoDTO {
 /// 获取视频文件的 MIME 类型
 [[nodiscard]] std::string get_video_mime_type(const std::filesystem::path& path);
 
-/// 注册所有 Web API 路由及静态文件托管
-void register_routes(httplib::Server& server, const std::string& static_dir = "");
+/// 将毫秒时间戳格式化为 SRT 标准 HH:MM:SS,mmm
+[[nodiscard]] std::string format_srt_timestamp(std::int64_t ms);
+
+/// 将字幕条目列表格式化为标准 UTF-8 SRT 字符串
+[[nodiscard]] std::string format_entries_to_srt(const std::vector<sublift::SubtitleEntry>& entries);
+
+/// 注册所有 Web API 路由（REST + 视频流 + SSE + SRT 导出）及静态文件托管
+void register_routes(httplib::Server& server,
+                     std::shared_ptr<JobManager> job_manager,
+                     const std::string& static_dir = "");
 
 }  // namespace sublift::server
