@@ -263,15 +263,41 @@
       "description": "实现实时 Transcript 表格，接收 SSE 事件流逐行出字，支持点击字幕秒跳视频、双击行内修改字幕内容与时间轴，并一键下载 SRT。",
       "module": [
         "apps/web/src/components/LiveTranscript.vue",
-        "apps/web/src/components/SettingsBar.vue"
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/utils/subtitle_search.ts",
+        "apps/web/src/utils/srt_formatter.ts"
       ],
       "dependencies": ["12202", "12102"],
+      "subtasks": [
+        {
+          "id": "12203.01",
+          "name": "高精音画时钟与二分区间查找算法",
+          "description": "实现 SubtitleSearcher，支持 10Hz 单调顺播 O(1) 缓存命中与 O(log N) 二分快速定位，以及闭区间判定。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12203.02",
+          "name": "标准 UTF-8 SRT 格式化与弹性时码解析器",
+          "description": "实现 formatSrt、parseFlexibleTimecodeToMs、parseSrt 与 Blob 安全一键下载导出。",
+          "dependencies": ["12203.01"],
+          "status": "done"
+        },
+        {
+          "id": "12203.03",
+          "name": "实时打轴表格、双向音画联动与行内双模态编辑",
+          "description": "实现 LiveTranscript.vue 实时推流吸附、呼吸高亮与智能防打扰平滑滚动、双击就地文本/时码编辑与打轴操作。",
+          "dependencies": ["12203.02"],
+          "status": "done"
+        }
+      ],
       "acceptance_criteria": [
         "提取中收到 push_entry 立即在表格追加新行并平滑滚动。",
         "点击任意字幕行，播放器瞬间 Seek 到该句 start_ms；播放视频时当前发音字幕行自动高亮。",
         "支持直接双击文本编辑修改字幕，修改后一键导出下载标准 .srt 文件。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 完成双向音画联动、二分查找、弹性时码解析、双模态行内编辑与 SRT 导出；transcript_sync 单元测试全绿；Vue 3 严格打包 0 错误；E2E 29/29 测试全绿；verify-standard 10/10 门禁全绿。"
     },
     {
       "id": "12301",

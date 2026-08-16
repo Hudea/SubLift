@@ -1,14 +1,17 @@
 <template>
   <div class="sl-card sl-transcript-card">
-    <!-- 头部栏 -->
+    <!-- 1. 顶部操作栏 -->
     <div class="sl-card-header">
       <div class="sl-header-left">
         <span class="sl-card-title">字幕工作台 (SUBTITLE TRANSCRIPT)</span>
-        <span class="sl-badge">{{ filteredEntries.length }} / {{ workbenchStore.entries.length }} 条</span>
+        <span class="sl-badge">{{ filteredEntries.length }} / {{ workbenchStore.entries.length }} 句</span>
+        <span v-if="workbenchStore.state === 'Processing'" class="sl-live-tag">
+          <span class="sl-live-dot"></span> 实时打轴中
+        </span>
       </div>
 
       <div class="sl-header-right">
-        <!-- 搜索过滤条 -->
+        <!-- 搜索框 -->
         <div v-if="workbenchStore.entries.length > 0" class="sl-search-box">
           <svg class="sl-search-icon" viewBox="0 0 16 16" fill="currentColor">
             <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
@@ -16,23 +19,17 @@
           <input 
             v-model="searchQuery" 
             type="text" 
-            placeholder="搜索字幕文本..."
+            placeholder="搜索字幕内容..."
             class="sl-search-input"
           />
-          <button 
-            v-if="searchQuery" 
-            class="sl-search-clear"
-            @click="searchQuery = ''"
-          >
-            &times;
-          </button>
+          <button v-if="searchQuery" class="sl-search-clear" @click="searchQuery = ''">&times;</button>
         </div>
 
-        <!-- 顶部导出按钮 -->
+        <!-- 导出 SRT 按钮 -->
         <button 
           v-if="workbenchStore.canExport"
           class="sl-btn-header-export"
-          title="导出修改后的 SRT 字幕"
+          title="导出标准 UTF-8 SRT 字幕文件"
           @click="workbenchStore.downloadSrt()"
         >
           <svg class="sl-btn-icon" viewBox="0 0 16 16" fill="currentColor">
@@ -44,17 +41,23 @@
       </div>
     </div>
 
-    <!-- 表头导航 -->
+    <!-- 2. 表头导航 -->
     <div v-if="workbenchStore.entries.length > 0" class="sl-table-header">
       <span class="col-idx">#</span>
       <span class="col-time">时间区间 (Start → End)</span>
-      <span class="col-text">字幕文本内容 (双击行内校对)</span>
+      <span class="col-text">字幕文本内容 (双击就地校对)</span>
       <span class="col-conf">置信度</span>
       <span class="col-act">操作</span>
     </div>
 
-    <!-- 滚动内容区 -->
-    <div ref="scrollContainerRef" class="sl-transcript-body">
+    <!-- 3. 滚动内容区 -->
+    <div 
+      ref="scrollContainerRef" 
+      class="sl-transcript-body"
+      @scroll="handleScroll"
+      @wheel="handleUserWheel"
+      @pointerdown="handleUserWheel"
+    >
       <!-- 空状态 -->
       <div v-if="workbenchStore.entries.length === 0" class="sl-transcript-empty">
         <div class="sl-empty-icon-wrap">
@@ -65,20 +68,21 @@
         </div>
         <p class="sl-empty-primary">
           {{ 
-            workbenchStore.state === 'Empty' ? '暂无字幕数据 · 请在左侧载入视频' :
+            workbenchStore.state === 'Empty' ? '暂无字幕数据 · 请载入视频' :
             workbenchStore.state === 'Ready' ? '视频就绪 · 点击左侧“开始提取”实时生成字幕' :
             workbenchStore.state === 'Processing' ? '正在逐帧识别提取中，实时字幕将在此处流式展现...' :
             '未识别到字幕文本'
           }}
         </p>
-        <p class="sl-empty-secondary">支持实时双向音画联动、点击跳帧定位与双击原地校对</p>
+        <p class="sl-empty-secondary">支持实时双向音画联动、点击跳帧定位、双击行内校对与快捷打轴</p>
       </div>
 
-      <!-- 字幕条目大表格 -->
+      <!-- 字幕行列表 -->
       <div v-else class="sl-transcript-list">
         <div
           v-for="(entry, idx) in filteredEntries"
           :key="entry.index"
+          :ref="(el) => setRowRef(el as HTMLElement, entry.index)"
           class="sl-transcript-row"
           :class="{ 'is-active': workbenchStore.activeEntryIndex === entry.index }"
           @click="handleRowClick(entry.start_ms)"
@@ -86,30 +90,46 @@
           <!-- 序号 -->
           <span class="col-idx sl-row-num">{{ idx + 1 }}</span>
 
-          <!-- 时间轴 -->
-          <div class="col-time sl-time-cell">
-            <span class="sl-time-start">{{ formatMs(entry.start_ms) }}</span>
-            <span class="sl-time-arrow">→</span>
-            <span class="sl-time-end">{{ formatMs(entry.end_ms) }}</span>
+          <!-- 时间轴 (支持双击微调时码) -->
+          <div class="col-time sl-time-cell" @dblclick.stop="startEditTime(entry)">
+            <template v-if="editingTimeIndex === entry.index">
+              <input
+                v-model="draftTimeStr"
+                type="text"
+                class="sl-inline-input sl-inline-input--time"
+                placeholder="00:00.000 - 00:00.000"
+                autofocus
+                @click.stop
+                @blur="commitEditTime(entry)"
+                @keydown.enter="commitEditTime(entry)"
+                @keydown.esc="cancelEditTime"
+              />
+            </template>
+            <template v-else>
+              <span class="sl-time-start">{{ formatDisplayMs(entry.start_ms) }}</span>
+              <span class="sl-time-arrow">→</span>
+              <span class="sl-time-end">{{ formatDisplayMs(entry.end_ms) }}</span>
+            </template>
           </div>
 
-          <!-- 字幕内容 (双击编辑) -->
+          <!-- 字幕文本内容 (双击编辑) -->
           <div class="col-text sl-text-cell">
             <input
-              v-if="editingIndex === entry.index"
-              v-model="entry.text"
+              v-if="editingTextIndex === entry.index"
+              ref="textInputRef"
+              v-model="draftText"
               type="text"
               class="sl-inline-input"
-              autofocus
-              @blur="editingIndex = null"
-              @keydown.enter="editingIndex = null"
               @click.stop
+              @blur="commitEditText(entry)"
+              @keydown.enter="commitEditText(entry)"
+              @keydown.esc="cancelEditText"
             />
             <span 
               v-else 
               class="sl-row-text"
-              title="双击直接编辑字幕文本"
-              @dblclick.stop="editingIndex = entry.index"
+              title="双击直接编辑文本，回车保存"
+              @dblclick.stop="startEditText(entry)"
             >
               {{ entry.text }}
             </span>
@@ -122,20 +142,27 @@
             </span>
           </div>
 
-          <!-- 操作 -->
+          <!-- 打轴操作工具栏 -->
           <div class="col-act sl-act-cell" @click.stop>
-            <button 
-              class="sl-row-btn" 
-              title="点击跳转到该时码"
-              @click="handleRowClick(entry.start_ms)"
-            >
+            <button class="sl-row-btn" title="定位跳转" @click="handleRowClick(entry.start_ms)">
               <svg class="sl-icon-xs" viewBox="0 0 16 16" fill="currentColor">
                 <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
               </svg>
             </button>
+            <button class="sl-row-btn" title="向后插入新句" @click="workbenchStore.insertEntryAfter(entry.index)">
+              +
+            </button>
+            <button 
+              v-if="!isFiltered"
+              class="sl-row-btn" 
+              title="与下一句合并" 
+              @click="workbenchStore.mergeWithNext(entry.index)"
+            >
+              ↓
+            </button>
             <button 
               class="sl-row-btn sl-row-btn--delete" 
-              title="删除此行字幕"
+              title="删除此行"
               @click="workbenchStore.removeSubtitleEntry(entry.index)"
             >
               &times;
@@ -143,6 +170,20 @@
           </div>
         </div>
       </div>
+
+      <!-- 4. 脱离底部吸附时的返回悬浮胶囊 -->
+      <transition name="sl-fade">
+        <button 
+          v-if="!autoStickToBottom && workbenchStore.state === 'Processing'" 
+          class="sl-floating-bottom-btn"
+          @click="scrollToBottomManual"
+        >
+          <svg class="sl-icon-xs" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/>
+          </svg>
+          <span>实时滚动已暂停 · 点击回到底部</span>
+        </button>
+      </transition>
     </div>
   </div>
 </template>
@@ -150,6 +191,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue';
 import { useWorkbenchStore } from '../stores/workbench';
+import { parseFlexibleTimecodeToMs } from '../utils/srt_formatter';
+import type { SubtitleEntry } from '../types/api';
 
 const emit = defineEmits<{
   (e: 'seek', timeSec: number): void;
@@ -157,18 +200,40 @@ const emit = defineEmits<{
 
 const workbenchStore = useWorkbenchStore();
 const searchQuery = ref('');
-const editingIndex = ref<number | null>(null);
 const scrollContainerRef = ref<HTMLDivElement | null>(null);
+const rowRefs = new Map<number, HTMLElement>();
+
+// 编辑状态管理
+const editingTextIndex = ref<number | null>(null);
+const draftText = ref('');
+const textInputRef = ref<HTMLInputElement | null>(null);
+
+const editingTimeIndex = ref<number | null>(null);
+const draftTimeStr = ref('');
+
+// 底部吸附与智能平滑滚动状态
+const autoStickToBottom = ref(true);
+let userInteractingUntil = 0;
+
+const isFiltered = computed(() => !!searchQuery.value.trim());
 
 const filteredEntries = computed(() => {
-  if (!searchQuery.value.trim()) {
+  if (!isFiltered.value) {
     return workbenchStore.entries;
   }
   const q = searchQuery.value.toLowerCase().trim();
   return workbenchStore.entries.filter((e) => e.text.toLowerCase().includes(q));
 });
 
-function formatMs(ms: number): string {
+function setRowRef(el: HTMLElement | null, index: number) {
+  if (el) {
+    rowRefs.set(index, el);
+  } else {
+    rowRefs.delete(index);
+  }
+}
+
+function formatDisplayMs(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const s = totalSec % 60;
   const m = Math.floor(totalSec / 60) % 60;
@@ -187,11 +252,80 @@ function handleRowClick(startMs: number) {
   emit('seek', startMs / 1000);
 }
 
-// Auto-scroll when new entry arrives during processing
+// 文本编辑
+function startEditText(entry: SubtitleEntry) {
+  editingTimeIndex.value = null;
+  editingTextIndex.value = entry.index;
+  draftText.value = entry.text;
+  nextTick(() => {
+    textInputRef.value?.focus();
+    textInputRef.value?.select();
+  });
+}
+
+function commitEditText(entry: SubtitleEntry) {
+  if (editingTextIndex.value === entry.index) {
+    workbenchStore.updateSubtitleEntry(entry.index, { text: draftText.value.trim() });
+    editingTextIndex.value = null;
+  }
+}
+
+function cancelEditText() {
+  editingTextIndex.value = null;
+}
+
+// 时码编辑
+function startEditTime(entry: SubtitleEntry) {
+  editingTextIndex.value = null;
+  editingTimeIndex.value = entry.index;
+  draftTimeStr.value = `${formatDisplayMs(entry.start_ms)} - ${formatDisplayMs(entry.end_ms)}`;
+}
+
+function commitEditTime(entry: SubtitleEntry) {
+  if (editingTimeIndex.value === entry.index) {
+    const parts = draftTimeStr.value.split('-');
+    if (parts.length === 2) {
+      const s = parseFlexibleTimecodeToMs(parts[0]);
+      const e = parseFlexibleTimecodeToMs(parts[1]);
+      if (s < e) {
+        workbenchStore.updateSubtitleEntry(entry.index, { start_ms: s, end_ms: e });
+      }
+    }
+    editingTimeIndex.value = null;
+  }
+}
+
+function cancelEditTime() {
+  editingTimeIndex.value = null;
+}
+
+// 用户滚动感知
+function handleUserWheel() {
+  userInteractingUntil = performance.now() + 2500;
+}
+
+function handleScroll() {
+  if (!scrollContainerRef.value) return;
+  const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.value;
+  const dist = scrollHeight - scrollTop - clientHeight;
+  autoStickToBottom.value = dist <= 36;
+}
+
+function scrollToBottomManual() {
+  autoStickToBottom.value = true;
+  if (scrollContainerRef.value) {
+    scrollContainerRef.value.scrollTo({
+      top: scrollContainerRef.value.scrollHeight,
+      behavior: 'smooth',
+    });
+  }
+}
+
+// 监听新条目入表 (流式打轴吸附)
 watch(
   () => workbenchStore.entries.length,
   () => {
-    if (workbenchStore.state === 'Processing' && scrollContainerRef.value) {
+    if (workbenchStore.state === 'Processing' && autoStickToBottom.value && scrollContainerRef.value) {
       nextTick(() => {
         if (scrollContainerRef.value) {
           scrollContainerRef.value.scrollTop = scrollContainerRef.value.scrollHeight;
@@ -200,10 +334,31 @@ watch(
     }
   }
 );
+
+// 监听 10Hz 时钟更新下的 activeEntryIndex -> 智能平滑滚动
+watch(
+  () => workbenchStore.activeEntryIndex,
+  (newIdx) => {
+    if (newIdx === null || performance.now() < userInteractingUntil) return;
+    const targetEl = rowRefs.get(newIdx);
+    const container = scrollContainerRef.value;
+    if (targetEl && container) {
+      const containerRect = container.getBoundingClientRect();
+      const elRect = targetEl.getBoundingClientRect();
+
+      // 判断是否超出了舒适视口
+      const isOutside = elRect.top < containerRect.top + 30 || elRect.bottom > containerRect.bottom - 30;
+      if (isOutside) {
+        targetEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }
+);
 </script>
 
 <style scoped>
 .sl-transcript-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -247,6 +402,31 @@ watch(
   color: var(--sl-text-secondary);
 }
 
+.sl-live-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sl-color-processing);
+  background: var(--sl-color-processing-bg);
+  padding: 2px 8px;
+  border-radius: var(--sl-radius-pill);
+}
+
+.sl-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sl-color-processing);
+  animation: sl-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes sl-pulse {
+  0%, 100% { transform: scale(0.9); opacity: 0.5; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
 .sl-header-right {
   display: flex;
   align-items: center;
@@ -261,20 +441,19 @@ watch(
   border-radius: var(--sl-radius-sm);
   padding: 2px 8px;
   gap: 6px;
-  width: 120px;
+  width: 130px;
   transition: var(--sl-transition-snappy);
 }
 
 .sl-search-box:focus-within {
   border-color: var(--sl-color-accent);
-  width: 150px;
+  width: 170px;
 }
 
 .sl-search-icon {
   width: 12px;
   height: 12px;
   color: var(--sl-text-tertiary);
-  flex-shrink: 0;
 }
 
 .sl-search-input {
@@ -297,22 +476,22 @@ watch(
 .sl-btn-header-export {
   display: flex;
   align-items: center;
-  gap: 5px;
-  height: 26px;
-  padding: 0 10px;
-  border: 1px solid var(--sl-border-standard);
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(48, 209, 88, 0.4);
   border-radius: var(--sl-radius-sm);
-  background: var(--sl-surface-elevated);
+  background: var(--sl-color-success-bg);
   color: var(--sl-color-success);
   font-size: var(--sl-font-size-xs);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: var(--sl-transition-snappy);
 }
 
 .sl-btn-header-export:hover {
-  background: var(--sl-surface-card-hover);
-  border-color: rgba(48, 209, 88, 0.4);
+  background: rgba(48, 209, 88, 0.22);
+  border-color: var(--sl-color-success);
 }
 
 .sl-btn-icon {
@@ -320,10 +499,9 @@ watch(
   height: 12px;
 }
 
-/* 表头栏 */
 .sl-table-header {
   display: grid;
-  grid-template-columns: 28px 125px 1fr 52px 36px;
+  grid-template-columns: 28px 125px 1fr 52px 90px;
   gap: 8px;
   padding: 6px 12px;
   background: var(--sl-surface-base);
@@ -336,8 +514,8 @@ watch(
   flex-shrink: 0;
 }
 
-/* 滚动条目 */
 .sl-transcript-body {
+  position: relative;
   flex: 1;
   padding: 6px 8px;
   overflow-y: auto;
@@ -388,12 +566,13 @@ watch(
 .sl-transcript-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .sl-transcript-row {
+  position: relative;
   display: grid;
-  grid-template-columns: 28px 125px 1fr 52px 36px;
+  grid-template-columns: 28px 125px 1fr 52px 90px;
   gap: 8px;
   align-items: center;
   padding: 6px 10px;
@@ -401,7 +580,7 @@ watch(
   background: var(--sl-surface-base);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: var(--sl-transition-snappy);
+  transition: background 120ms ease, border-color 120ms ease;
 }
 
 .sl-transcript-row:hover {
@@ -409,9 +588,22 @@ watch(
   border-color: var(--sl-border-subtle);
 }
 
+/* 呼吸高亮态 */
 .sl-transcript-row.is-active {
-  background: var(--sl-color-accent-muted);
-  border-color: var(--sl-border-accent);
+  background: rgba(10, 132, 255, 0.16);
+  border-color: var(--sl-color-accent);
+  box-shadow: 0 0 12px rgba(10, 132, 255, 0.22);
+}
+
+.sl-transcript-row.is-active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  background: var(--sl-color-accent);
+  border-radius: 0 2px 2px 0;
 }
 
 .col-idx {
@@ -458,6 +650,7 @@ watch(
   color: var(--sl-text-primary);
   line-height: 1.4;
   word-break: break-word;
+  user-select: text;
 }
 
 .sl-inline-input {
@@ -469,6 +662,12 @@ watch(
   color: #ffffff;
   font-size: var(--sl-font-size-sm);
   outline: none;
+}
+
+.sl-inline-input--time {
+  font-family: var(--sl-font-family-mono);
+  font-size: 10px;
+  padding: 2px 4px;
 }
 
 .sl-conf-cell {
@@ -500,8 +699,8 @@ watch(
 .sl-act-cell {
   display: flex;
   align-items: center;
-  gap: 4px;
-  opacity: 0.3;
+  gap: 3px;
+  opacity: 0.35;
   transition: opacity 120ms ease;
 }
 
@@ -511,14 +710,16 @@ watch(
 
 .sl-row-btn {
   border: none;
-  background: transparent;
+  background: var(--sl-surface-card);
   color: var(--sl-text-secondary);
   cursor: pointer;
-  padding: 2px 4px;
+  padding: 2px 5px;
+  font-size: 11px;
   border-radius: 3px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: var(--sl-transition-snappy);
 }
 
 .sl-row-btn:hover {
@@ -527,11 +728,43 @@ watch(
 }
 
 .sl-row-btn--delete:hover {
+  background: rgba(255, 69, 58, 0.2);
   color: var(--sl-color-error);
 }
 
 .sl-icon-xs {
   width: 12px;
   height: 12px;
+}
+
+.sl-floating-bottom-btn {
+  position: sticky;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--sl-color-accent);
+  color: #ffffff;
+  border: none;
+  border-radius: var(--sl-radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.sl-fade-enter-active,
+.sl-fade-leave-active {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+
+.sl-fade-enter-from,
+.sl-fade-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 </style>

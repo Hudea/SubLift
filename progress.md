@@ -3,7 +3,7 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-16
-- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。12001（设计基线）、12101（C++ Web Server 与视频流）、12102（SSE 实时流与 Pipeline 调度）、12201（Web 单视频工作台基础 UI）与 12202（Canvas ROI 选区交互与坐标映射）已完成，下一步推进 12203（双向音画联动、字幕行内编辑与 SRT 导出）。Phase 8、Phase 7、Phase 10 已收口。
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。12001（设计基线）、12101（C++ Web Server 与视频流）、12102（SSE 实时流与 Pipeline 调度）、12201（Web 单视频工作台基础 UI）、12202（Canvas ROI 选区交互与坐标映射）与 12203（双向音画联动、字幕行内编辑与 SRT 导出）已完成，下一步推进 12301（批量任务中心 Task Center UI & Batch Queue）。Phase 8、Phase 7、Phase 10 已收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
@@ -12,6 +12,7 @@
 
 ## 近期完成
 
+- [x] 12203：实现双向音画联动、字幕行内编辑与 SRT 导出（`subtitle_search.ts` 10Hz 时钟 $O(1)$ 缓存命中与 $O(\log N)$ 二分快速定位、`srt_formatter.ts` 标准 UTF-8 导出与弹性时码解析、`LiveTranscript.vue` 实时推流吸附与呼吸高亮平滑滚动、双击就地文本/时码编辑与打轴操作），单元测试与 E2E 29 组全绿通过。
 - [x] 12202：实现 Canvas ROI 选区交互与坐标映射（`coordinate_mapper.ts` 消除 Letterbox 黑边、`RoiOverlay.vue` 8 控制手柄缩放/平移/画新框、浮动真实尺寸 Tooltip 胶囊、Retina 高清屏适配、与 `workbenchStore.regionBox` 双向响应），单元测试与 E2E 29 组全绿通过。
 - [x] 12201：构建 Web 单视频工作台基础 UI（`apps/web/` Vue 3 + TS + Vite SPA、Apple/Notion 磨砂深色设计系统、HTML5 播放器与 10Hz 时码同步 `HH:MM:SS.mmm`、4 态状态机与 DropZone/Navbar/SidebarControls/LiveTranscript 组件、`sublift_server --static-dir` 静态托管），E2E 29 组测试全绿通过。
 - [x] 12102：实现 SSE 实时事件流与 C++ Pipeline 任务调度（`JobManager` 任务状态机与 UUID v4、`BridgeHandler` 进程内流水线驱动、`GET /api/jobs/{id}/events` SSE 流式推送、`POST /api/jobs/{id}/cancel` 协作取消、`GET /api/jobs/{id}/export` SRT 导出下载），Catch2 147 组断言与 Python E2E 28 组测试全绿通过。
