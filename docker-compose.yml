@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  sublift-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sublift/web:latest
+    container_name: sublift-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data:ro
+      - ./output:/output:rw
+    environment:
+      - SUBLIFT_HOST=0.0.0.0
+      - SUBLIFT_PORT=8080
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/system/info"]
+      interval: 10s
+      timeout: 3s
+      retries: 3

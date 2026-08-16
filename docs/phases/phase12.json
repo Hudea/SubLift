@@ -349,6 +349,7 @@
       "description": "编写 Linux Dockerfile，集成 C++ Native Server、PaddleOCR 与 FFmpeg，完成 Linux 环境下的端到端自动化回归与质量验证。",
       "module": [
         "Dockerfile",
+        ".dockerignore",
         "docker-compose.yml",
         "scripts/verify-web-server.sh"
       ],
@@ -357,7 +358,31 @@
         "Dockerfile 可成功构建轻量 Linux 镜像并在无头服务器上正常启动服务。",
         "自动化脚本在 Linux 容器内跑通单视频与批量提取全流程，SRT 结果比对 exact pass。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12401.01",
+          "name": "编写多阶段构建 Dockerfile 与 docker-compose 编排",
+          "description": "实现 node:20 前端构建、ubuntu:22.04 C++ Ninja 构建与极简 runtime 镜像（裁剪 OpenCV/libgomp1/ffmpeg 并采用 non-root sublift 用户）。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12401.02",
+          "name": "C++ 环境变量支持与 .dockerignore 规则定义",
+          "description": "在 main.cpp 增加对 SUBLIFT_HOST、SUBLIFT_PORT 与 SUBLIFT_STATIC_DIR 环境变量读取；定义 .dockerignore 排除宿主机构建缓存。",
+          "dependencies": ["12401.01"],
+          "status": "done"
+        },
+        {
+          "id": "12401.03",
+          "name": "编写 verify-web-server.sh 自动化回归脚本并完成全量质量验收",
+          "description": "实现就绪探测、trap 优雅停机、静态托管校验、test_server_e2e 29 组全量接口与 Catch2 服务端回归通过。",
+          "dependencies": ["12401.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成多阶段 Dockerfile、docker-compose 与 verify-web-server.sh；通过 main.cpp 环境变量适配与 non-root 安全加固；test_server_e2e 29 组接口测试全绿；verify-web-server 6 阶段验收通过；verify-standard 10/10 门禁全绿。"
     }
   ]
 }

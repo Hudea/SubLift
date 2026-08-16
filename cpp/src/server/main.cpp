@@ -37,8 +37,22 @@ void print_help(std::string_view prog_name) {
 
 int main(int argc, char* argv[]) {
   std::string host = "127.0.0.1";
+  if (const char* env_host = std::getenv("SUBLIFT_HOST"); env_host && *env_host) {
+    host = env_host;
+  }
+
   int port = 8080;
+  if (const char* env_port = std::getenv("SUBLIFT_PORT"); env_port && *env_port) {
+    int p = std::atoi(env_port);
+    if (p > 0 && p <= 65535) {
+      port = p;
+    }
+  }
+
   std::string static_dir = "";
+  if (const char* env_dir = std::getenv("SUBLIFT_STATIC_DIR"); env_dir && *env_dir) {
+    static_dir = env_dir;
+  }
 
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];

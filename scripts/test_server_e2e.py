@@ -121,14 +121,22 @@ class TestSubLiftServerE2E(unittest.TestCase):
         binary_path = str(project_root / "build" / "cpp" / "bin" / "sublift_server")
         static_dir = str(project_root / "apps" / "web" / "dist")
 
-        cls.server_port = find_free_port()
-        cls.server_proc = SubLiftServerProcess(
-            binary_path,
-            cls.server_port,
-            cls.server_host,
-            static_dir=static_dir if os.path.exists(static_dir) else None,
-        )
-        cls.server_proc.start()
+        external_url = os.environ.get("SUBLIFT_SERVER_URL")
+        if external_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(external_url)
+            cls.server_host = parsed.hostname or "127.0.0.1"
+            cls.server_port = parsed.port or 8080
+            cls.server_proc = None
+        else:
+            cls.server_port = find_free_port()
+            cls.server_proc = SubLiftServerProcess(
+                binary_path,
+                cls.server_port,
+                cls.server_host,
+                static_dir=static_dir if os.path.exists(static_dir) else None,
+            )
+            cls.server_proc.start()
 
         # Create temporary working directory and test assets
         cls.temp_dir = tempfile.mkdtemp(prefix="sublift_e2e_")

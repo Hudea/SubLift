@@ -1,0 +1,14 @@
+.git
+.agent
+.venv
+build/
+debug/
+apps/web/node_modules/
+apps/web/dist/
+benchmark/datasets/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+*.swp
+*.log
