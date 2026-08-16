@@ -401,7 +401,8 @@
         "MKV, AVI 与 MP4 在前端工作台均可秒级正常播放，无 Format error 报错。",
         "转封装视频完整保留 HTTP 206 自由拖拽寻道、10Hz 时钟同步与 Canvas ROI 标注。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 完成 remux_to_faststart_mp4 智能极速转封装缓存（-map 0:v:0 -map 0:a? 与 ultrafast 降级）与 /api/video/stream 自动代理；前端 useVideoPlayer 增加 resetState 与 MediaError 友好中文诊断；server_test.cpp 增加 MKV 自动转封装 HTTP 206 流式测试通过（153 assertions 全绿）；verify-standard 10/10 门禁全绿；双子 Agent 审计通过。"
     },
     {
       "id": "12502",

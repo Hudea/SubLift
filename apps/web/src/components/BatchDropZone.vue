@@ -22,7 +22,7 @@
         ref="fileInputRef" 
         type="file" 
         multiple 
-        accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv"
+        accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo,.mp4,.mov,.webm,.mkv,.avi"
         style="display: none"
         @change="handleFileSelect"
       />

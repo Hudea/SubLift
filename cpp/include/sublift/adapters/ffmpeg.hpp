@@ -70,6 +70,12 @@ void validate_output_crop(const SourceBox& crop, std::int32_t source_width,
     const std::optional<SourceBox>& crop = std::nullopt,
     int quality = 2);
 
+/// 将非浏览器原生支持的视频（MKV, AVI, FLV, ProRes MOV 等）极速转封装/转码为带 faststart 的 MP4 预览缓存文件。
+/// 若输入已是兼容的 MP4 且无需转封装，或缓存中已有有效产物，直接返回路径。
+[[nodiscard]] std::filesystem::path remux_to_faststart_mp4(
+    const std::filesystem::path& video_path,
+    const std::optional<std::filesystem::path>& custom_cache_dir = std::nullopt);
+
 /// 纯规划：不调用 ffprobe。`source` 在 mode 为 auto|roi 且有 region_box 时必需。
 /// 与 Python plan_frame_io 在已 mock probe 时的分支语义一致（测试 / golden 用）。
 [[nodiscard]] FrameIOPlan plan_frame_io_pure(

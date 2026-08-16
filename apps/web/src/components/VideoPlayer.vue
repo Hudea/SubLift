@@ -129,12 +129,21 @@ const {
   onSeekInput,
   onSeekChange,
   stepFrame,
+  resetState,
 } = useVideoPlayer();
 
 const streamUrl = computed(() => {
   if (!props.videoPath) return '';
   return SubLiftApiClient.getVideoStreamUrl(props.videoPath);
 });
+
+// 切源时清理上一个视频的状态与错误
+watch(
+  () => props.videoPath,
+  () => {
+    resetState();
+  }
+);
 
 // 10Hz 时码同步到 Workbench Store
 watch(currentTime, (t) => {

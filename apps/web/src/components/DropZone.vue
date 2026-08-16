@@ -16,12 +16,12 @@
       </div>
       
       <p class="sl-dropzone-title">拖拽视频到此处，或点击浏览文件</p>
-      <p class="sl-dropzone-hint">支持 MP4, MOV, WebM, MKV (基于本地 Native 分片直出)</p>
+      <p class="sl-dropzone-hint">支持 MP4, MOV, WebM, MKV, AVI (智能极速转封装与分片直出)</p>
 
       <input 
         ref="fileInputRef"
         type="file" 
-        accept="video/mp4,video/quicktime,video/webm,video/x-matroska,.mp4,.mov,.webm,.mkv" 
+        accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo,.mp4,.mov,.webm,.mkv,.avi" 
         style="display: none"
         @change="handleFileSelected"
       />

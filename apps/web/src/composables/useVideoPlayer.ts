@@ -104,9 +104,52 @@ export function useVideoPlayer() {
     el.addEventListener('error', () => {
       isBuffering.value = false;
       isPlaying.value = false;
+      isReady.value = false;
       stopClock();
-      error.value = el.error ? `Video Error: ${el.error.message || 'Media source error'}` : '无法加载视频流';
+      if (el.error) {
+        let detail = el.error.message || '';
+        switch (el.error.code) {
+          case 1:
+            detail = '视频加载被中止 (MEDIA_ERR_ABORTED)';
+            break;
+          case 2:
+            detail = '网络错误导致视频下载失败 (MEDIA_ERR_NETWORK)';
+            break;
+          case 3:
+            detail = '视频解码失败，数据损坏 (MEDIA_ERR_DECODE)';
+            break;
+          case 4:
+            detail = `当前视频封装/编码不受浏览器内核直接支持 (${detail || 'Format error'})，服务端正在转封装处理中...`;
+            break;
+          default:
+            detail = detail || '未知媒体源错误';
+        }
+        error.value = `视频播放异常: ${detail}`;
+      } else {
+        error.value = '无法加载视频流';
+      }
     });
+  };
+
+  const resetState = () => {
+    stopClock();
+    if (seekDebounceTimer !== null) {
+      window.clearTimeout(seekDebounceTimer);
+      seekDebounceTimer = null;
+    }
+    isPlaying.value = false;
+    isBuffering.value = false;
+    isSeeking.value = false;
+    currentTime.value = 0;
+    duration.value = 0;
+    isReady.value = false;
+    error.value = null;
+    metadata.value = {
+      duration: 0,
+      videoWidth: 0,
+      videoHeight: 0,
+      aspectRatio: 16 / 9,
+    };
   };
 
   const togglePlay = async () => {
@@ -200,5 +243,6 @@ export function useVideoPlayer() {
     onSeekInput,
     onSeekChange,
     stepFrame,
+    resetState,
   };
 }

@@ -261,7 +261,25 @@ void register_routes(httplib::Server& server,
       return;
     }
 
-    const std::uint64_t total_size = std::filesystem::file_size(video_path, ec);
+    std::filesystem::path stream_path = video_path;
+    std::string ext = video_path.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+      return static_cast<char>(std::tolower(c));
+    });
+
+    // If container format is not native browser supported (e.g. MKV, AVI, FLV, MOV), remux to faststart MP4
+    if (ext == ".mkv" || ext == ".avi" || ext == ".flv" || ext == ".wmv" || ext == ".mov") {
+      if (sublift::ffmpeg::available()) {
+        try {
+          stream_path = sublift::ffmpeg::remux_to_faststart_mp4(video_path);
+        } catch (const std::exception&) {
+          // If remux fails, fallback to direct streaming
+          stream_path = video_path;
+        }
+      }
+    }
+
+    const std::uint64_t total_size = std::filesystem::file_size(stream_path, ec);
     if (total_size == 0) {
       res.status = 200;
       res.set_header("Content-Length", "0");
@@ -269,13 +287,13 @@ void register_routes(httplib::Server& server,
       return;
     }
 
-    const std::string mime_type = get_video_mime_type(video_path);
+    const std::string mime_type = get_video_mime_type(stream_path);
     res.set_header("Accept-Ranges", "bytes");
 
-    int fd = ::open(video_path.c_str(), O_RDONLY);
+    int fd = ::open(stream_path.c_str(), O_RDONLY);
     if (fd < 0) {
       res.status = 500;
-      nlohmann::json err = {{"error", "Failed to open video file on server"}};
+      nlohmann::json err = {{"error", "Failed to open video stream on server"}};
       res.set_content(err.dump(), "application/json; charset=utf-8");
       return;
     }

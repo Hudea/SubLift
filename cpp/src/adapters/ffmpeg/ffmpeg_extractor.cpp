@@ -20,6 +20,7 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <thread>
 #include <vector>
 
 #include "process_utils.hpp"
@@ -364,6 +365,107 @@ std::vector<std::uint8_t> extract_single_frame_jpeg(
   }
 
   return std::vector<std::uint8_t>(res.stdout_str.begin(), res.stdout_str.end());
+}
+
+std::filesystem::path remux_to_faststart_mp4(
+    const std::filesystem::path& video_path,
+    const std::optional<std::filesystem::path>& custom_cache_dir) {
+  std::error_code ec;
+  if (!std::filesystem::exists(video_path, ec) || !std::filesystem::is_regular_file(video_path, ec)) {
+    throw std::runtime_error("Video file does not exist: " + video_path.string());
+  }
+
+  // Determine cache directory
+  std::filesystem::path cache_dir;
+  if (custom_cache_dir.has_value()) {
+    cache_dir = *custom_cache_dir;
+  } else if (const char* env_dir = std::getenv("SUBLIFT_PREVIEW_CACHE_DIR"); env_dir && *env_dir) {
+    cache_dir = env_dir;
+  } else {
+    auto tmp = std::filesystem::temp_directory_path();
+    cache_dir = tmp / "sublift_preview_cache";
+  }
+
+  std::filesystem::create_directories(cache_dir, ec);
+
+  // Compute a deterministic cache key from path, size, and last write time
+  auto fsize = std::filesystem::file_size(video_path, ec);
+  auto ftime = std::filesystem::last_write_time(video_path, ec);
+  auto time_val = static_cast<std::int64_t>(ftime.time_since_epoch().count());
+
+  std::string key_str = video_path.string() + "_" + std::to_string(fsize) + "_" + std::to_string(time_val);
+  std::size_t h = std::hash<std::string>{}(key_str);
+
+  std::ostringstream ss_name;
+  ss_name << "preview_" << std::hex << h << ".mp4";
+  std::filesystem::path final_target = cache_dir / ss_name.str();
+
+  // If cache exists and is non-empty, reuse it!
+  if (std::filesystem::exists(final_target, ec) && std::filesystem::file_size(final_target, ec) > 0) {
+    return final_target;
+  }
+
+  std::ostringstream ss_temp;
+  ss_temp << "preview_" << std::hex << h << "_tmp_" << std::to_string(::getpid()) << "_"
+          << std::this_thread::get_id() << ".mp4";
+  std::filesystem::path temp_target = cache_dir / ss_temp.str();
+
+  const std::string ffmpeg_bin = resolve_ffmpeg_bin();
+
+  // 1. Try fast remux (-map 0:v:0 -map 0:a? -c:v copy -c:a aac -movflags +faststart -f mp4)
+  std::vector<std::string> copy_cmd = {
+      ffmpeg_bin,
+      "-y",
+      "-nostdin",
+      "-v", "error",
+      "-i", video_path.string(),
+      "-map", "0:v:0",
+      "-map", "0:a?",
+      "-c:v", "copy",
+      "-c:a", "aac",
+      "-movflags", "+faststart",
+      "-f", "mp4",
+      temp_target.string()
+  };
+
+  auto res = detail::run_subprocess(copy_cmd, std::chrono::milliseconds(30000));
+  bool success = (res.exit_code == 0 && std::filesystem::exists(temp_target, ec) && std::filesystem::file_size(temp_target, ec) > 0);
+
+  // 2. If copy failed, fallback to ultrafast transcode (-pix_fmt yuv420p for 100% browser compatibility)
+  if (!success) {
+    std::filesystem::remove(temp_target, ec);
+    std::vector<std::string> trans_cmd = {
+        ffmpeg_bin,
+        "-y",
+        "-nostdin",
+        "-v", "error",
+        "-i", video_path.string(),
+        "-map", "0:v:0",
+        "-map", "0:a?",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-crf", "26",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-movflags", "+faststart",
+        "-f", "mp4",
+        temp_target.string()
+    };
+    auto trans_res = detail::run_subprocess(trans_cmd, std::chrono::milliseconds(60000));
+    if (trans_res.exit_code != 0 || !std::filesystem::exists(temp_target, ec) || std::filesystem::file_size(temp_target, ec) == 0) {
+      std::filesystem::remove(temp_target, ec);
+      std::string tail = detail::read_stderr_tail(trans_res.stderr_str, 500);
+      throw std::runtime_error("ffmpeg 转封装/转码预览流失败（" + video_path.string() + "）：" + tail);
+    }
+  }
+
+  std::filesystem::rename(temp_target, final_target, ec);
+  if (ec) {
+    std::filesystem::copy_file(temp_target, final_target, std::filesystem::copy_options::overwrite_existing, ec);
+    std::filesystem::remove(temp_target, ec);
+  }
+
+  return final_target;
 }
 
 }  // namespace sublift::ffmpeg

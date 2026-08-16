@@ -195,6 +195,25 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
     REQUIRE(res->status == 416);
   }
 
+  SECTION("Remux non-native video container (e.g. MKV) to Faststart MP4 stream") {
+    if (sublift::ffmpeg::available()) {
+      std::filesystem::path test_mkv = std::filesystem::temp_directory_path() / "sublift_synth_stream_test.mkv";
+      std::string ffmpeg_bin = sublift::ffmpeg::resolve_ffmpeg_bin();
+      std::string cmd = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=0.5:size=64x64:rate=10 -pix_fmt yuv420p " + test_mkv.string() + " > /dev/null 2>&1";
+      int ret = std::system(cmd.c_str());
+      if (ret == 0 && std::filesystem::exists(test_mkv)) {
+        std::string uri = "/api/video/stream?path=" + test_mkv.string();
+        auto res = cli.Get(uri.c_str());
+        REQUIRE(res != nullptr);
+        REQUIRE(res->status == 200);
+        REQUIRE(res->get_header_value("Content-Type") == "video/mp4");
+        REQUIRE(res->get_header_value("Accept-Ranges") == "bytes");
+        REQUIRE(!res->body.empty());
+        std::filesystem::remove(test_mkv);
+      }
+    }
+  }
+
   server.stop();
   if (server_thread.joinable()) {
     server_thread.join();
