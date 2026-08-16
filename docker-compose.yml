@@ -11,11 +11,15 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - ./data:/data:ro
+      - ./videos:/media:ro
+      - ./models:/opt/sublift/models:ro
       - ./output:/output:rw
     environment:
       - SUBLIFT_HOST=0.0.0.0
       - SUBLIFT_PORT=8080
+      - SUBLIFT_STATIC_DIR=/app/web/dist
+      - SUBLIFT_PADDLE_MODEL_DIR=/opt/sublift/models
+      - SUBLIFT_ALLOWED_MEDIA_ROOT=/media
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/system/info"]
       interval: 10s

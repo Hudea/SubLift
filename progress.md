@@ -3,16 +3,21 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-16
-- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。已完成前期 12001–12401 原型基座，经全方位审计与实机体验，正在推进 12501–12505 核心缺陷修复与端到端闭环（12501 智能 Remux 极速转封装、12502 C++ 安全沙箱与防死锁、12503 前端调度死锁修复、12504 Vitest 前端测试与深度 E2E、12505 Linux 容器化 Paddle 闭环）。Phase 10、Phase 8、Phase 7 均已收口。
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支已全量完成收口）。涵盖 12001–12401 原型基座与 12501–12505 核心缺陷修复与端到端闭环（12501 智能 Remux 极速转封装、12502 C++ 安全沙箱与防死锁、12503 前端单并发调度死锁修复、12504 Vitest 前端测试与深度 E2E、12505 Linux 容器化 Paddle 闭环与双模质量门禁）。Phase 12、Phase 10、Phase 8、Phase 7 均已全量收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- [Phase 12 缺陷修复与端到端闭环计划](docs/plans/features/12501-12505.md)：流媒体智能 Remux 极速转封装 + C++ 安全沙箱与并发防死锁 + 前端单并发调度修复 + Vitest 前端测试工程化 + Linux 容器化 Paddle 闭环。
-- [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台 + 批量任务中心。
+- [Phase 12 缺陷修复与端到端闭环计划](docs/plans/features/12501-12505.md)：已全量 100% 达成并验证结项。
+- [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台 + 批量任务中心（已完成）。
 
 ## 近期完成
 
+- [x] 12505：Linux 容器化真实闭环与 PaddleOCR/模型完整分发（`Dockerfile` 三阶段多架构构建、Multi-Arch ONNX Runtime 1.18.1、PP-OCRv6 预热模型、`docker-compose.yml` 持久化只读挂载、`verify-web-server.sh` 真实容器 / 本地 Native 双模验收套件），标准门禁 12/12 全绿。
+- [x] 12504：前端测试工程化接入 (Vitest) 与 E2E 深度断言加固（`package.json` 配置标准 `npm test`、`coordinate_mapper`/`transcript_sync`/`batch` 3 套 13 组测试标准化迁移为 Vitest、重构 `test_server_e2e.py` 严格校验 SRT Exact Match / 排队流转 / 安全沙箱 32/32 全绿、挂载入 `verify-standard.sh`）。
+- [x] 12503：前端批量调度器死锁修复、单并发竞态加固与状态闭环（`batch.ts` 重构 `processNext` 消除 `createJob` 异常时的重入死锁、`cancelTask` 同步解耦、`client.ts` 监听 `cancelled` 事件与 `done` 容错、`workbench.ts` 与 `LiveTranscript.vue` 增加 Processing 期间 `isLocked` 保护与 disabled 状态反馈）。
+- [x] 12502：C++ 服务端安全沙箱、并发 UAF 消除与防死锁加固（`path_sandbox.hpp` 严格防御 LFI / 穿越 / 空字节注入、`job_manager.cpp` 消除 `active_bridges_` 析构 UAF 并加固 Join、SSE 补齐 `id:` 契约与 `fps` 字段）。
+- [x] 12501：流媒体格式兼容性与智能 Remux 极速转封装（`remux_to_faststart_mp4` 极速转封装与原子 rename、`/api/video/stream` 智能分流代理、`useVideoPlayer.ts` 状态重置与 MediaError 友好中文诊断）。
 - [x] 12500：完成 Phase 12 全面审计、根因定界与修复规划，登记 12501–12505 修复计划与 HURDLES 记录。
 - [x] 12401：Linux 容器化与端到端自动化验收（首期基座）（`Dockerfile` 三阶段多架构构建、`docker-compose.yml` 编排、non-root sublift 用户安全加固、`sublift_server` 环境变量支持、`verify-web-server.sh` 自动化总控回归套件），6 阶段 E2E 验证全绿，标准门禁 10/10 全绿。
 - [x] 12301：实现批量任务中心 (Task Center UI & Queue)（`types/batch.ts` 与 `stores/batch.ts` 单并发串行调度引擎、调度防重入互斥锁与 SSE 异常恢复、`BatchStatsCards.vue` 5 状态筛选面板、`BatchDropZone.vue` 多选拖拽与多行绝对路径录入、`BatchTaskRow.vue` 呼吸指示灯与操作栏、`Navbar.vue` Tab 切换与未完成角标、`TaskCenterView.vue` 与错峰批量 SRT 导出），通过 `batch.test.ts` 异步测试与双审计，Vue 3 严格构建 0 错误，E2E 29 组全绿。

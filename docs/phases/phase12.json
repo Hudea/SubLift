@@ -483,7 +483,8 @@
         "Dockerfile 集成 Linux ONNX Runtime 与 PP-OCRv6 预热模型，/api/system/info 真实返回 paddle.available=true。",
         "verify-web-server.sh 具备 Docker 时自动执行容器内真实 Paddle 提取与 SRT Golden 比对；无 Docker 时显式输出容器阶段 SKIPPED 并降级为本地验证。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 重构 Dockerfile 为三阶段多架构构建（node:20-slim -> ubuntu:22.04 + Multi-Arch ONNX Runtime 1.18.1 + PP-OCRv6 预热模型 + SUBLIFT_ENABLE_PADDLE=ON -> 极简 runtime + non-root sublift 用户 UID 10001）；更新 docker-compose.yml 持久化挂载（/media:ro, /opt/sublift/models:ro）；升级 verify-web-server.sh 为 Docker 容器与本地 Native 双模验收套件（自动探测 Docker 环境，无 Docker 时显式标明 SKIPPED 并优雅降级为本地 32 项严格 E2E + Catch2 + Vitest 验收，杜绝假绿）；双子 Agent 审计通过；verify-standard 12/12 门禁全绿。"
     }
   ]
 }
