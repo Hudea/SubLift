@@ -67,9 +67,17 @@
       "name": "实现 C++ Native Web Server 基座与 HTTP 206 视频流",
       "description": "在 cpp/src/server/ 下基于 cpp-httplib 实现轻量高性能 Web 服务端，支持静态资源托管、/api/system/info 能力查询与 HTTP 206 Range 视频分片流式传输。",
       "module": [
-        "cpp/src/server/main.cpp",
-        "cpp/src/server/http_server.hpp",
+        "cpp/include/sublift/server/http_server.hpp",
+        "cpp/include/sublift/server/routes.hpp",
         "cpp/src/server/http_server.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/main.cpp",
+        "cpp/src/server/CMakeLists.txt",
+        "cpp/include/sublift/adapters/ffmpeg.hpp",
+        "cpp/src/adapters/ffmpeg/ffmpeg_extractor.cpp",
+        "cpp/third_party/CMakeLists.txt",
+        "cpp/third_party/cpp-httplib/httplib.h",
+        "cpp/tests/server_test.cpp",
         "cpp/CMakeLists.txt"
       ],
       "dependencies": ["12001"],
@@ -79,7 +87,38 @@
         "/api/video/stream 正确响应 Range: bytes=... 请求并返回 206 Partial Content，浏览器播放器可任意拖拽时间轴。",
         "/api/video/frame 可快速截取指定秒数的 JPEG 代表帧供前端选区使用。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12101.01",
+          "name": "引入 cpp-httplib 并配置 CMake",
+          "description": "在 cpp/third_party/ 引入 vendored cpp-httplib 并建立 sublift::httplib INTERFACE target。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12101.02",
+          "name": "FFmpeg 快速截取单帧 JPEG 适配",
+          "description": "在 sublift_ffmpeg 中实现 extract_single_frame_jpeg，利用 fast input seek 与 stdout MJPEG 直出。",
+          "dependencies": ["12101.01"],
+          "status": "done"
+        },
+        {
+          "id": "12101.03",
+          "name": "实现 HttpServer 与 REST 路由",
+          "description": "实现 /api/system/info 探测、/api/video/frame 抽帧与 /api/video/stream HTTP 206 Range 分片流式传输。",
+          "dependencies": ["12101.02"],
+          "status": "done"
+        },
+        {
+          "id": "12101.04",
+          "name": "编写 sublift_server 入口与 Catch2 单元测试",
+          "description": "实现 CLI 入口与信号处理，并在 cpp/tests/server_test.cpp 编写 60 组断言覆盖全部端点与 Range 边界。",
+          "dependencies": ["12101.03"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成 C++ Native Web Server 基座与 HTTP 206 视频流实现；Catch2 1833/1833 断言全绿（server_test 60/60 通过），curl 实测 /api/system/info、/api/video/stream (Range 0-1 返回 206) 与 /api/video/frame 抽帧 JPEG 验证通过。"
     },
     {
       "id": "12102",

@@ -59,6 +59,17 @@ void validate_output_crop(const SourceBox& crop, std::int32_t source_width,
 /// 探测视频综合元数据（组合 probe_source_frame 与 probe_duration_ms）
 [[nodiscard]] VideoInfo probe_video(const std::filesystem::path& video_path);
 
+/// 从视频中按指定秒数抽取单帧 JPEG 图像数据（供 Web 服务 / 预览直接使用）
+/// @param video_path 视频绝对路径
+/// @param time_seconds 指定截取时间点（秒），默认 0.0
+/// @param crop 可选的裁剪区域（SourceBox）
+/// @param quality JPEG 质量（1-31，数值越小质量越高，默认 2）
+[[nodiscard]] std::vector<std::uint8_t> extract_single_frame_jpeg(
+    const std::filesystem::path& video_path,
+    double time_seconds = 0.0,
+    const std::optional<SourceBox>& crop = std::nullopt,
+    int quality = 2);
+
 /// 纯规划：不调用 ffprobe。`source` 在 mode 为 auto|roi 且有 region_box 时必需。
 /// 与 Python plan_frame_io 在已 mock probe 时的分支语义一致（测试 / golden 用）。
 [[nodiscard]] FrameIOPlan plan_frame_io_pure(

@@ -25,6 +25,7 @@ set(_sublift_test_srcs
   worker_protocol_test.cpp
   worker_path_mode_test.cpp
   worker_cancel_test.cpp
+  server_test.cpp
   parity/config_parity_test.cpp
   parity/timeline_parity_test.cpp
   parity/dedupe_parity_test.cpp
@@ -119,6 +120,7 @@ target_link_libraries(sublift_tests
   PRIVATE
     sublift_test_support
     sublift_worker_runtime
+    sublift_server_runtime
     sublift_ffmpeg
     sublift_vision_macos
     sublift_paddle

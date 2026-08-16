@@ -86,6 +86,7 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
+find_package(Threads REQUIRED)
 
 if(SUBLIFT_ENABLE_PADDLE)
   if(SUBLIFT_REQUIRE_PADDLE)
@@ -146,6 +147,7 @@ if(SUBLIFT_ENABLE_VISION)
   enable_language(OBJCXX)
 endif()
 
+add_subdirectory(third_party)
 add_subdirectory(src/core)
 add_subdirectory(src/models)
 add_subdirectory(src/pipeline)
@@ -157,6 +159,7 @@ add_subdirectory(src/adapters/vision_macos)
 add_subdirectory(src/test_support)
 add_subdirectory(src/worker)
 add_subdirectory(src/cli)
+add_subdirectory(src/server)
 add_subdirectory(diagnostics/paddle_trace)
 
 if(SUBLIFT_BUILD_TESTS)

@@ -16,6 +16,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -306,6 +307,63 @@ void FfmpegExtractor::extract(const std::filesystem::path& video_path,
                                video_path.string() + detail_msg);
     }
   }
+}
+
+std::vector<std::uint8_t> extract_single_frame_jpeg(
+    const std::filesystem::path& video_path,
+    double time_seconds,
+    const std::optional<SourceBox>& crop,
+    int quality) {
+  std::error_code ec;
+  if (!std::filesystem::exists(video_path, ec)) {
+    throw std::runtime_error("视频文件不存在: " + video_path.string());
+  }
+
+  const std::string ffmpeg_bin = resolve_ffmpeg_bin();
+
+  std::ostringstream ss_time;
+  ss_time << std::fixed << std::setprecision(3) << std::max(0.0, time_seconds);
+
+  std::vector<std::string> cmd = {
+      ffmpeg_bin,
+      "-ss",
+      ss_time.str(),
+      "-nostdin",
+      "-v",
+      "error",
+      "-i",
+      video_path.string(),
+      "-frames:v",
+      "1",
+  };
+
+  if (crop.has_value()) {
+    std::string vf = "crop=" + std::to_string(crop->width) + ":" +
+                     std::to_string(crop->height) + ":" +
+                     std::to_string(crop->x) + ":" +
+                     std::to_string(crop->y) + ":exact=1";
+    cmd.push_back("-vf");
+    cmd.push_back(vf);
+  }
+
+  cmd.push_back("-q:v");
+  cmd.push_back(std::to_string(std::clamp(quality, 1, 31)));
+  cmd.push_back("-f");
+  cmd.push_back("image2");
+  cmd.push_back("-c:v");
+  cmd.push_back("mjpeg");
+  cmd.push_back("-");
+
+  auto res = detail::run_subprocess(cmd, std::chrono::milliseconds(10000));
+  if (res.exit_code != 0 || res.stdout_str.empty()) {
+    std::string tail = detail::read_stderr_tail(res.stderr_str, 500);
+    std::string detail_msg = tail.empty() ? "" : "：" + tail;
+    throw std::runtime_error("ffmpeg 截帧失败（退出码 " +
+                             std::to_string(res.exit_code) + "），path=" +
+                             video_path.string() + detail_msg);
+  }
+
+  return std::vector<std::uint8_t>(res.stdout_str.begin(), res.stdout_str.end());
 }
 
 }  // namespace sublift::ffmpeg
