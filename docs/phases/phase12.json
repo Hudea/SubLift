@@ -441,7 +441,8 @@
         "并发触发取消与完成时严格保持单任务运行不变量，无任务状态僵死。",
         "Processing 期间字幕表格处于只读锁定保护。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 重构 batchStore 调度引擎，引入 shouldAdvanceImmediately 与 queueMicrotask 彻底消除 createJob 异常时的重入死锁；加固 cancelTask 同步解耦与单并发严格不变量（N=1）；client.ts 增加 cancelled 事件监听与 done 事件 JSON 解析容错；workbench.ts 与 LiveTranscript.vue 增加 isLocked 编辑保护与 disabled 状态反馈；batch.test.ts 增加 createJob 失败自动接续用例；verify-standard 10/10 门禁全绿；双子 Agent 审计通过。"
     },
     {
       "id": "12504",

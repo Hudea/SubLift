@@ -119,7 +119,9 @@ export const useBatchStore = defineStore('batch', () => {
     // 寻找下一个等待执行的任务
     const nextTask = tasks.value.find((t) => t.status === 'waiting');
     if (!nextTask) {
-      isQueueRunning.value = false;
+      if (tasks.value.length > 0 && !tasks.value.some((t) => t.status === 'running')) {
+        isQueueRunning.value = false;
+      }
       currentRunningId.value = null;
       return;
     }
@@ -131,6 +133,8 @@ export const useBatchStore = defineStore('batch', () => {
     nextTask.progressPct = 0;
     nextTask.entries = [];
     nextTask.error = null;
+
+    let shouldAdvanceImmediately = false;
 
     try {
       const resp = await SubLiftApiClient.createJob({
@@ -146,7 +150,7 @@ export const useBatchStore = defineStore('batch', () => {
         await SubLiftApiClient.cancelJob(resp.job_id).catch(() => {});
         currentRunningId.value = null;
         cleanupSse();
-        processNext();
+        shouldAdvanceImmediately = true;
         return;
       }
 
@@ -174,7 +178,7 @@ export const useBatchStore = defineStore('batch', () => {
           }
           currentRunningId.value = null;
           cleanupSse();
-          processNext();
+          queueMicrotask(() => processNext());
         },
         onError: (err) => {
           if (nextTask.status === 'running') {
@@ -184,7 +188,7 @@ export const useBatchStore = defineStore('batch', () => {
           }
           currentRunningId.value = null;
           cleanupSse();
-          processNext();
+          queueMicrotask(() => processNext());
         },
       });
     } catch (err: unknown) {
@@ -193,9 +197,12 @@ export const useBatchStore = defineStore('batch', () => {
       nextTask.error = err instanceof Error ? err.message : String(err);
       currentRunningId.value = null;
       cleanupSse();
-      processNext();
+      shouldAdvanceImmediately = true;
     } finally {
       isDispatching = false;
+      if (shouldAdvanceImmediately) {
+        queueMicrotask(() => processNext());
+      }
     }
   }
 
@@ -213,16 +220,18 @@ export const useBatchStore = defineStore('batch', () => {
     if (task.status === 'running') {
       task.status = 'cancelled';
       task.stage = 'cancelled';
-      if (task.jobId) {
-        try {
-          await SubLiftApiClient.cancelJob(task.jobId);
-        } catch {
-          // Ignore cancellation error
-        }
-      }
+      const jobId = task.jobId;
       currentRunningId.value = null;
       cleanupSse();
-      processNext();
+
+      if (jobId) {
+        try {
+          await SubLiftApiClient.cancelJob(jobId);
+        } catch {
+          // Ignore cancellation network error
+        }
+      }
+      queueMicrotask(() => processNext());
     } else if (task.status === 'waiting') {
       task.status = 'cancelled';
       task.stage = 'cancelled';
@@ -265,6 +274,13 @@ export const useBatchStore = defineStore('batch', () => {
     );
   }
 
+  function clearAll() {
+    tasks.value = [];
+    isQueueRunning.value = false;
+    currentRunningId.value = null;
+    cleanupSse();
+  }
+
   function exportTaskSrt(id: string) {
     const task = tasks.value.find((t) => t.id === id);
     if (!task || task.status !== 'completed' || task.entries.length === 0) {
@@ -304,6 +320,7 @@ export const useBatchStore = defineStore('batch', () => {
     retryTask,
     removeTask,
     clearCompleted,
+    clearAll,
     exportTaskSrt,
     exportAllCompleted,
   };

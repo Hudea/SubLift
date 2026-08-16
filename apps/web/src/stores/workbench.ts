@@ -46,6 +46,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const entries = ref<SubtitleEntry[]>([]);
   const activeEntryIndex = ref<number | null>(null);
 
+  const errorMessage = ref<string | null>(null);
+
   // Computed state locks
   const isLocked = computed(() => state.value === 'Processing');
   const canStart = computed(
@@ -61,6 +63,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     videoName.value = name || videoPath.value.split(/[/\\]/).pop() || 'video.mp4';
     entries.value = [];
     activeJobId.value = null;
+    errorMessage.value = null;
     globalSubtitleSearcher.resetCache();
     state.value = 'Ready';
   }
@@ -90,6 +93,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
 
     state.value = 'Processing';
     entries.value = [];
+    errorMessage.value = null;
     globalSubtitleSearcher.resetCache();
     progress.value = { stage: 'starting', pct: 0, eta_ms: 0 };
 
@@ -121,6 +125,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         },
         onError: (err) => {
           console.error('[Job Error]', err);
+          errorMessage.value = String(err);
           state.value = 'Ready';
           if (sseUnsubscribe) {
             sseUnsubscribe();
@@ -130,6 +135,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       });
     } catch (err: unknown) {
       console.error('[Start Job Failed]', err);
+      errorMessage.value = err instanceof Error ? err.message : String(err);
       state.value = 'Ready';
       throw err;
     }
@@ -150,6 +156,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
 
   function updateSubtitleEntry(index: number, updated: Partial<SubtitleEntry>) {
+    if (isLocked.value) return;
     const target = entries.value.find((e) => e.index === index);
     if (target) {
       Object.assign(target, updated);
@@ -161,6 +168,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
 
   function removeSubtitleEntry(index: number) {
+    if (isLocked.value) return;
     entries.value = entries.value.filter((e) => e.index !== index);
     globalSubtitleSearcher.resetCache();
     if (activeEntryIndex.value === index) {
@@ -169,6 +177,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
 
   function insertEntryAfter(targetIndex: number) {
+    if (isLocked.value) return null;
     const idx = entries.value.findIndex((e) => e.index === targetIndex);
     const prev = idx >= 0 ? entries.value[idx] : null;
     const startMs = prev ? prev.end_ms + 100 : currentTimeMs.value;
@@ -194,6 +203,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   }
 
   function mergeWithNext(targetIndex: number) {
+    if (isLocked.value) return;
     const idx = entries.value.findIndex((e) => e.index === targetIndex);
     if (idx < 0 || idx >= entries.value.length - 1) return;
     const cur = entries.value[idx];
@@ -239,6 +249,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     progress,
     entries,
     activeEntryIndex,
+    errorMessage,
     isLocked,
     canStart,
     canExport,

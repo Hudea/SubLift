@@ -96,15 +96,29 @@ export class SubLiftApiClient {
       });
     }
 
-    if (callbacks.onDone) {
-      eventSource.addEventListener('done', (e: MessageEvent) => {
-        try {
-          callbacks.onDone!(JSON.parse(e.data));
-        } finally {
-          eventSource.close();
+    eventSource.addEventListener('done', (e: MessageEvent) => {
+      try {
+        if (callbacks.onDone) {
+          callbacks.onDone(JSON.parse(e.data));
         }
-      });
-    }
+      } catch (err) {
+        console.error('[SSE] Failed to parse done payload', err);
+        callbacks.onError?.('Failed to parse completion data');
+      } finally {
+        eventSource.close();
+      }
+    });
+
+    eventSource.addEventListener('cancelled', (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data);
+        callbacks.onError?.(data.reason || 'Job was cancelled');
+      } catch {
+        callbacks.onError?.('Job was cancelled');
+      } finally {
+        eventSource.close();
+      }
+    });
 
     if (callbacks.onError) {
       eventSource.addEventListener('error', (e: Event) => {

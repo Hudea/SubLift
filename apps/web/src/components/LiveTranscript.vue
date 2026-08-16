@@ -149,13 +149,19 @@
                 <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
               </svg>
             </button>
-            <button class="sl-row-btn" title="向后插入新句" @click="workbenchStore.insertEntryAfter(entry.index)">
+            <button 
+              class="sl-row-btn" 
+              title="向后插入新句" 
+              :disabled="workbenchStore.isLocked"
+              @click="workbenchStore.insertEntryAfter(entry.index)"
+            >
               +
             </button>
             <button 
               v-if="!isFiltered"
               class="sl-row-btn" 
               title="与下一句合并" 
+              :disabled="workbenchStore.isLocked"
               @click="workbenchStore.mergeWithNext(entry.index)"
             >
               ↓
@@ -163,6 +169,7 @@
             <button 
               class="sl-row-btn sl-row-btn--delete" 
               title="删除此行"
+              :disabled="workbenchStore.isLocked"
               @click="workbenchStore.removeSubtitleEntry(entry.index)"
             >
               &times;
@@ -254,6 +261,7 @@ function handleRowClick(startMs: number) {
 
 // 文本编辑
 function startEditText(entry: SubtitleEntry) {
+  if (workbenchStore.isLocked) return;
   editingTimeIndex.value = null;
   editingTextIndex.value = entry.index;
   draftText.value = entry.text;
@@ -276,6 +284,7 @@ function cancelEditText() {
 
 // 时码编辑
 function startEditTime(entry: SubtitleEntry) {
+  if (workbenchStore.isLocked) return;
   editingTextIndex.value = null;
   editingTimeIndex.value = entry.index;
   draftTimeStr.value = `${formatDisplayMs(entry.start_ms)} - ${formatDisplayMs(entry.end_ms)}`;
@@ -722,12 +731,17 @@ watch(
   transition: var(--sl-transition-snappy);
 }
 
-.sl-row-btn:hover {
+.sl-row-btn:hover:not(:disabled) {
   background: var(--sl-surface-card-hover);
   color: #ffffff;
 }
 
-.sl-row-btn--delete:hover {
+.sl-row-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sl-row-btn--delete:hover:not(:disabled) {
   background: rgba(255, 69, 58, 0.2);
   color: var(--sl-color-error);
 }

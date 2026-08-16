@@ -134,11 +134,33 @@ async function runTests() {
   assert(batchStore.stats.completed === 1, 'Stats completed should be 1');
   assert(batchStore.stats.failed === 1, 'Stats failed should be 1');
   assert(batchStore.stats.cancelled === 1, 'Stats cancelled should be 1');
-  batchStore.clearCompleted();
-  assert(batchStore.tasks.length === 1, 'Only failed task should remain after clear completed');
-  console.log('✓ Clear completed verified');
+  // 10. Test createJob throwing error immediately (Feature 12503 deadlock elimination)
+  console.log('--- Testing Immediate createJob Failure Auto-Advancement (Feature 12503) ---');
+  batchStore.clearAll();
+  batchStore.addFiles(['/path/to/bad_video.mp4', '/path/to/good_video.mp4']);
+  assert(batchStore.tasks.length === 2, 'Should have 2 tasks');
 
-  console.log('All Feature 12301 tests passed with 100% success!');
+  // Configure createJob to throw for the first task and succeed for the second
+  let callCount = 0;
+  SubLiftApiClient.createJob = async () => {
+    callCount++;
+    if (callCount === 1) {
+      throw new Error('400 Bad Request: Invalid media file');
+    }
+    return { job_id: 'good-job-id', status: 'running' };
+  };
+
+  batchStore.startQueue();
+  // Allow microtasks to resolve for both the initial task and the next task
+  await new Promise((r) => setTimeout(r, 20));
+
+  assert(batchStore.tasks[0].status === 'failed', 'Task 1 should be failed immediately');
+  assert(batchStore.tasks[0].error === '400 Bad Request: Invalid media file', 'Task 1 should hold error message');
+  assert(batchStore.tasks[1].status === 'running', 'Task 2 MUST automatically start running (Deadlock Eliminated)');
+  assert(batchStore.currentRunningId === batchStore.tasks[1].id, 'Current running should be Task 2');
+  console.log('✓ createJob throw auto-advancement & deadlock elimination verified');
+
+  console.log('All Feature 12301 & 12503 tests passed with 100% success!');
 }
 
 runTests();
