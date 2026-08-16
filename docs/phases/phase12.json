@@ -231,7 +231,31 @@
         "提供底部 30% 快速重置按钮与自定义选区切换。",
         "换算出的归一化 region_box (x, y, w, h) 在各种视频长宽比下均能与底层 C++ 裁剪完美对齐。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12202.01",
+          "name": "Letterboxing 视口几何与多向坐标映射引擎实现",
+          "description": "实现 coordinate_mapper.ts：自动消除上下/左右黑边、8-Handle 缩放与平移越界 Clamp、Retina DPR 适配与单元测试验证。",
+          "dependencies": ["12201"],
+          "status": "done"
+        },
+        {
+          "id": "12202.02",
+          "name": "Canvas ROI 8 手柄交互层与浮动尺寸 Tooltip 胶囊",
+          "description": "实现 RoiOverlay.vue：Apple System Blue 选区高亮、8 手柄拖拽缩放、空白画新框、Tooltip 实时显示真实像素尺寸。",
+          "dependencies": ["12202.01"],
+          "status": "done"
+        },
+        {
+          "id": "12202.03",
+          "name": "播放器插槽装配与 Pinia 选区状态双向联动",
+          "description": "在 VideoPlayer 挂载 RoiOverlay，与 workbenchStore.regionBox 响应式双向同步，完善底部 30%/全画幅/自定义预设。",
+          "dependencies": ["12202.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成 Canvas ROI 选区交互与 Letterboxing 坐标映射；coordinate_mapper 单元测试全绿；Vue 3 严格编译构建通过；E2E 29/29 测试全绿；verify-standard 10/10 门禁全绿。"
     },
     {
       "id": "12203",

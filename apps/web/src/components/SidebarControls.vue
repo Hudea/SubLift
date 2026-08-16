@@ -49,7 +49,8 @@
           <label class="sl-form-label">选区预设</label>
           <div class="sl-segmented-control">
             <button 
-              class="sl-segmented-item is-selected"
+              class="sl-segmented-item"
+              :class="{ 'is-selected': isBottom30Roi }"
               :disabled="workbenchStore.isLocked"
               @click="workbenchStore.resetDefaultBottomRoi()"
             >
@@ -57,10 +58,18 @@
             </button>
             <button 
               class="sl-segmented-item"
+              :class="{ 'is-selected': isFullScreenRoi }"
               :disabled="workbenchStore.isLocked"
               @click="workbenchStore.updateRegionBox({ x: 0, y: 0, width: 1, height: 1 })"
             >
               全画幅
+            </button>
+            <button 
+              class="sl-segmented-item"
+              :class="{ 'is-selected': isCustomRoi }"
+              :disabled="true"
+            >
+              自定义
             </button>
           </div>
         </div>
@@ -136,6 +145,18 @@ const availableEngines = computed<SystemEngineInfo[]>(() => {
   }
   return systemStore.availableEngines;
 });
+
+const isBottom30Roi = computed(() => {
+  const b = workbenchStore.regionBox;
+  return Math.abs(b.x - 0.0) < 0.01 && Math.abs(b.y - 0.7) < 0.05 && Math.abs(b.width - 1.0) < 0.01 && Math.abs(b.height - 0.3) < 0.05;
+});
+
+const isFullScreenRoi = computed(() => {
+  const b = workbenchStore.regionBox;
+  return Math.abs(b.x - 0.0) < 0.01 && Math.abs(b.y - 0.0) < 0.01 && Math.abs(b.width - 1.0) < 0.01 && Math.abs(b.height - 1.0) < 0.01;
+});
+
+const isCustomRoi = computed(() => !isBottom30Roi.value && !isFullScreenRoi.value);
 </script>
 
 <style scoped>

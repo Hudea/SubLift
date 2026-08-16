@@ -8,7 +8,11 @@
           v-else 
           ref="playerRef"
           :video-path="workbenchStore.videoPath"
-        />
+        >
+          <template #overlay="{ metadata }">
+            <RoiOverlay :metadata="metadata" />
+          </template>
+        </VideoPlayer>
       </div>
       <SidebarControls />
     </section>
@@ -24,6 +28,7 @@
 import { ref } from 'vue';
 import DropZone from '../components/DropZone.vue';
 import VideoPlayer from '../components/VideoPlayer.vue';
+import RoiOverlay from '../components/RoiOverlay.vue';
 import SidebarControls from '../components/SidebarControls.vue';
 import LiveTranscript from '../components/LiveTranscript.vue';
 import { useWorkbenchStore } from '../stores/workbench';
