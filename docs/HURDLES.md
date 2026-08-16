@@ -406,3 +406,63 @@
   3. 废弃 `CGDataProviderCreateWithData`，改为通过 `NSData.dataWithBytes_length_` 包转后调用 `CGDataProviderCreateWithCFData(ns_data)`，将底层二进制的生命周期安全委托给 Toll-Free Bridging 体系。
 - **验证结果**：4K 视频测试，内存消耗峰值从 2157 MiB 下降到极低 (Top 3 分配仅为数十 KB)，未见任何线性增长；后续 feat-030 自动审计首条反馈 0.68s、取消响应 0.108s，ffmpeg PID 退出且第二任务可正常启动；核心 Benchmark 无回退。≥10 分钟非 Zootopia 视频的 GUI 拖拽、进度观感、取消与重启手工验收由用户决定暂缓，仍是体验覆盖风险，不影响已验证的资源泄漏修复结论。
 - **相关文件**：`src/sublift/pipeline/core.py`（`feed` 驱动）、`src/sublift/ipc/bridge.py`（流式推送）、`src/sublift/ocr/vision.py`（内存防泄漏修复）
+
+---
+
+### HTML5 `<video>` 播放 MKV/AVI/ProRes 报 `MEDIA_ELEMENT_ERROR: Format error`
+- **日期**：2026-08-16
+- **状态**：排查已定界，待 Feature 12501 修复
+- **关联 feature**：12101, 12201, 12501
+- **现象**：Web 单视频工作台拖入或加载 MKV、AVI 或 ProRes MOV 时，视频播放器报 `Video Error: MEDIA_ELEMENT_ERROR: Format error`，画面全黑无法播放。
+- **排查路径**：
+  1. 审查 C++ 后端 `cpp/src/server/routes.cpp` 的 `/api/video/stream` 实现与 HTTP 206 分片，确认 Range 0-1、Content-Range、Accept-Ranges 协议实现符合 RFC 7233。
+  2. 检查 `get_video_mime_type`，发现对 `.mkv` 输出了 `video/x-matroska`，对 `.avi` 输出了 `video/x-msvideo`。
+  3. 分析 Chromium Blink 与 WebKit 原生 `<video>` 的 Demuxer 能力边界，确认浏览器内核完全屏蔽了 Matroska / AVI 容器解封装器，抛出 `MEDIA_ERR_SRC_NOT_SUPPORTED` (Code 4)。
+- **根本原因**：服务端采用纯原始文件二进制透传（Raw File Slicer），将浏览器内核不支持的容器封装格式直传给 HTML5 `<video>`，导致前端 Demuxer 失败报错。
+- **解决方案**：在服务端引入**智能极速转封装缓存机制（Remux Cache）**，对非原生兼容格式在后台利用 FFmpeg `-c:v copy -c:a aac -movflags +faststart`（0.3s 极速转封装）输出带 faststart 的 MP4 并在缓存中提供标准 HTTP 206 播放；前端增加格式诊断与状态重置。
+- **相关文件**：`cpp/src/server/routes.cpp`、`cpp/src/adapters/ffmpeg/`、`apps/web/src/composables/useVideoPlayer.ts`、`apps/web/src/components/DropZone.vue`
+
+---
+
+### C++ 原生服务路径未受限引发任意文件读取 (LFI) 与全通配符 CORS 风险
+- **日期**：2026-08-16
+- **状态**：排查已定界，待 Feature 12502 修复
+- **关联 feature**：12101, 12502
+- **现象**：调用 `GET /api/video/stream?path=/etc/passwd` 返回 200 并输出了系统敏感文件内容。
+- **排查路径**：
+  1. 检查 `routes.cpp:217/255`，发现仅调用了 `std::filesystem::exists` 和 `is_regular_file`，无目录边界检查、无扩展名白名单。
+  2. 检查 `http_server.cpp:14-18`，发现配置了 `Access-Control-Allow-Origin: *`。
+- **根本原因**：未对用户传入的路径进行规范化沙箱校验，且全通配符 CORS 允许外部任意恶意网页向 `127.0.0.1:8080` 发起跨域读取请求。
+- **解决方案**：引入 `PathSandbox` 工具类（`std::filesystem::canonical` 规范化、视频扩展名白名单、受限目录沙箱）；收敛 CORS Origin 策略。
+- **相关文件**：`cpp/include/sublift/server/path_sandbox.hpp`、`cpp/src/server/routes.cpp`、`cpp/src/server/http_server.cpp`
+
+---
+
+### `JobManager` 错序 UAF 悬垂指针与同步错误丢弃致 Worker 死锁
+- **日期**：2026-08-16
+- **状态**：排查已定界，待 Feature 12502 修复
+- **关联 feature**：12102, 12502
+- **现象**：`POST /api/jobs {"engine": "invalid"}` 导致服务端后台唯一的 Worker 线程永久卡死，后续所有任务均无法执行；并发 cancel 偶发崩溃。
+- **排查路径**：
+  1. 审查 `job_manager.cpp:298`，发现退出阶段先执行 `bridge.reset()` 后获取互斥锁从 `active_bridges_` 擦除，在析构与擦除之间存在 UAF 悬垂指针窗口。
+  2. 审查 `bridge.cpp:cancel_job`，发现无锁并发 `join()` 同一个 `std::thread` 存在抛出 `std::system_error` 导致 `std::terminate` 崩溃。
+  3. 审查 `job_manager.cpp:282`，发现 `(void)bridge->handle(start_msg, push_cb)` 丢弃了同步返回值。当 engine 非法时同步返回 `DoneMsg{ .ok = false }` 且不触发 `push_cb`，导致后续 `done_cv.wait` 永久死锁。
+- **根本原因**：对象生命周期管理顺序颠倒；`std::thread` 缺乏并发 Join 保护；同步失败路径未处理导致条件变量无法唤醒。
+- **解决方案**：先从 map 擦除再析构；使用 `std::move(worker_thread_)` 安全 Join；处理 `handle()` 同步返回的 `DoneMsg`/`ErrorMsg`；路由层前置校验 engine。
+- **相关文件**：`cpp/src/server/job_manager.cpp`、`cpp/src/application/bridge.cpp`、`cpp/src/server/routes.cpp`
+
+---
+
+### 前端批量调度器重入死锁与取消竞态破坏单并发
+- **日期**：2026-08-16
+- **状态**：排查已定界，待 Feature 12503 修复
+- **关联 feature**：12301, 12503
+- **现象**：批量任务中只要有一个任务创建失败，整条队列立即死锁停摆；取消任务与完成并发时两个任务同时运行。
+- **排查路径**：
+  1. 跟踪 `stores/batch.ts:processNext`，发现 `catch` 和 `cancelled` 分支同步调用 `processNext()`，此时外层 `finally` 尚未将 `isDispatching` 置为 false，重入被首行守卫 `if (isDispatching) return;` 阻断，导致调度中断。
+  2. 跟踪 `cancelTask`，发现异步 `cancelJob` 返回后无条件将 `currentRunningId` 设为 null 并关闭 SSE，误杀了刚启动的新任务。
+  3. 检查 `client.ts`，发现 `done` 事件的 `JSON.parse` 异常逃逸导致任务卡死。
+- **根本原因**：调度锁未在触发下一次流转前释放；异步取消未做任务代数/身份守卫；SSE 解析缺少防御降级。
+- **解决方案**：重构 `processNext` 确保 `finally` 释放锁后再触发下一轮；`cancelTask` 同步解除占用；`client.ts` 捕获 JSON 解析错误；工作台增加 `Failed`/`Cancelled` 状态。
+- **相关文件**：`apps/web/src/stores/batch.ts`、`apps/web/src/api/client.ts`、`apps/web/src/stores/workbench.ts`
+

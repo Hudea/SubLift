@@ -345,8 +345,8 @@
     },
     {
       "id": "12401",
-      "name": "Linux 容器化与端到端自动化验收",
-      "description": "编写 Linux Dockerfile，集成 C++ Native Server、PaddleOCR 与 FFmpeg，完成 Linux 环境下的端到端自动化回归与质量验证。",
+      "name": "Linux 容器化与端到端自动化验收（首期基座）",
+      "description": "编写 Linux Dockerfile，集成 C++ Native Server 与 FFmpeg，完成 Linux 环境下的基础端到端自动化回归与质量验证（PaddleOCR 完整集成与真实跨容器比对在 12505 闭环）。",
       "module": [
         "Dockerfile",
         ".dockerignore",
@@ -356,7 +356,7 @@
       "dependencies": ["12301"],
       "acceptance_criteria": [
         "Dockerfile 可成功构建轻量 Linux 镜像并在无头服务器上正常启动服务。",
-        "自动化脚本在 Linux 容器内跑通单视频与批量提取全流程，SRT 结果比对 exact pass。"
+        "自动化脚本在 Linux 环境下跑通单视频与批量提取全流程。"
       ],
       "subtasks": [
         {
@@ -383,6 +383,103 @@
       ],
       "status": "done",
       "evidence": "2026-08-16 完成多阶段 Dockerfile、docker-compose 与 verify-web-server.sh；通过 main.cpp 环境变量适配与 non-root 安全加固；test_server_e2e 29 组接口测试全绿；verify-web-server 6 阶段验收通过；verify-standard 10/10 门禁全绿。"
+    },
+    {
+      "id": "12501",
+      "name": "流媒体格式兼容性与智能 Remux 极速转封装",
+      "description": "解决 HTML5 <video> 播放 MKV/AVI/ProRes 报 Format error 问题，引入服务端 Faststart MP4 极速转封装缓存与前端诊断。",
+      "module": [
+        "cpp/include/sublift/adapters/ffmpeg.hpp",
+        "cpp/src/adapters/ffmpeg/ffmpeg_extractor.cpp",
+        "cpp/src/server/routes.cpp",
+        "apps/web/src/composables/useVideoPlayer.ts",
+        "apps/web/src/components/VideoPlayer.vue",
+        "apps/web/src/components/DropZone.vue"
+      ],
+      "dependencies": ["12101", "12201"],
+      "acceptance_criteria": [
+        "MKV, AVI 与 MP4 在前端工作台均可秒级正常播放，无 Format error 报错。",
+        "转封装视频完整保留 HTTP 206 自由拖拽寻道、10Hz 时钟同步与 Canvas ROI 标注。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12502",
+      "name": "C++ 服务端安全沙箱、并发 UAF 消除与防死锁加固",
+      "description": "封堵 LFI 任意文件读取漏洞，收敛 CORS 策略，消除 BridgeHandler 生命周期 UAF 与 Worker 线程同步错误死锁。",
+      "module": [
+        "cpp/include/sublift/server/path_sandbox.hpp",
+        "cpp/src/server/http_server.cpp",
+        "cpp/src/server/job_manager.cpp",
+        "cpp/src/application/bridge.cpp",
+        "cpp/src/server/routes.cpp"
+      ],
+      "dependencies": ["12101", "12102"],
+      "acceptance_criteria": [
+        "GET /api/video/stream 请求系统敏感文件（如 /etc/passwd）或非媒体扩展名严格返回 400/404 Access Denied。",
+        "传入非法 engine 参数时路由层前置拦截返回 400，后台 Worker 线程无死锁挂起。",
+        "并发 cancel 无 UAF 悬垂指针与 std::terminate 崩溃。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12503",
+      "name": "前端批量调度器死锁修复、单并发竞态加固与状态闭环",
+      "description": "重构 batchStore 消除 finally 解锁前的重入调度死锁，加固 cancelTask 同步解耦，工作台引入 Failed/Cancelled 显式终态与编辑保护锁。",
+      "module": [
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/components/LiveTranscript.vue",
+        "apps/web/src/components/DropZone.vue"
+      ],
+      "dependencies": ["12301", "12203"],
+      "acceptance_criteria": [
+        "批量队列中任一任务失败时，调度器自动平滑流转到下一个排队任务，队列不卡死。",
+        "并发触发取消与完成时严格保持单任务运行不变量，无任务状态僵死。",
+        "Processing 期间字幕表格处于只读锁定保护。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12504",
+      "name": "前端测试工程化接入 (Vitest) 与 E2E 深度断言加固",
+      "description": "接入 Vitest 规范化运行前端 3 套单元测试，重构 test_server_e2e.py 消除 SRT 导出假绿并补充排队流转与安全用例，挂载入 verify-standard.sh。",
+      "module": [
+        "apps/web/package.json",
+        "apps/web/vite.config.ts",
+        "apps/web/src/utils/coordinate_mapper.test.ts",
+        "apps/web/src/utils/transcript_sync.test.ts",
+        "apps/web/src/stores/batch.test.ts",
+        "scripts/test_server_e2e.py",
+        "scripts/verify-standard.sh"
+      ],
+      "dependencies": ["12501", "12502", "12503"],
+      "acceptance_criteria": [
+        "npm --prefix apps/web test 规范化运行并通过所有前端单元测试。",
+        "test_server_e2e.py 严格校验 SRT Exact Match，排队并发流转与安全沙箱测试 100% 通过。",
+        "verify-standard.sh 完整覆盖前端测试与 Server E2E。"
+      ],
+      "status": "not-started"
+    },
+    {
+      "id": "12505",
+      "name": "Linux 容器化真实闭环与 PaddleOCR/模型完整分发",
+      "description": "重构 Dockerfile 集成 Linux ONNX Runtime、PP-OCRv6 预热模型与 SUBLIFT_ENABLE_PADDLE=ON，升级 verify-web-server.sh 为 Docker/Native 双模验证套件并纠偏台账。",
+      "module": [
+        "Dockerfile",
+        "docker-compose.yml",
+        "scripts/verify-web-server.sh",
+        "docs/phases/phase12.json",
+        "phases.json",
+        "progress.md"
+      ],
+      "dependencies": ["12504"],
+      "acceptance_criteria": [
+        "Dockerfile 集成 Linux ONNX Runtime 与 PP-OCRv6 预热模型，/api/system/info 真实返回 paddle.available=true。",
+        "verify-web-server.sh 具备 Docker 时自动执行容器内真实 Paddle 提取与 SRT Golden 比对；无 Docker 时显式输出容器阶段 SKIPPED 并降级为本地验证。"
+      ],
+      "status": "not-started"
     }
   ]
 }

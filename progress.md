@@ -3,16 +3,18 @@
 ## 当前状态
 
 - **最后更新：** 2026-08-16
-- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）已全量收口！12001（设计基线）、12101（C++ Web Server 与视频流）、12102（SSE 实时流与 Pipeline 调度）、12201（Web 单视频工作台基础 UI）、12202（Canvas ROI 选区交互与坐标映射）、12203（双向音画联动与 SRT 导出）、12301（批量任务中心与串行调度引擎）与 12401（Linux 容器化与端到端自动化验收）全部完成。Phase 12、Phase 10、Phase 8、Phase 7 均已收口。
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。已完成前期 12001–12401 原型基座，经全方位审计与实机体验，正在推进 12501–12505 核心缺陷修复与端到端闭环（12501 智能 Remux 极速转封装、12502 C++ 安全沙箱与防死锁、12503 前端调度死锁修复、12504 Vitest 前端测试与深度 E2E、12505 Linux 容器化 Paddle 闭环）。Phase 10、Phase 8、Phase 7 均已收口。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台 + 批量任务中心 + Linux 容器化（已完成收口）。
+- [Phase 12 缺陷修复与端到端闭环计划](docs/plans/features/12501-12505.md)：流媒体智能 Remux 极速转封装 + C++ 安全沙箱与并发防死锁 + 前端单并发调度修复 + Vitest 前端测试工程化 + Linux 容器化 Paddle 闭环。
+- [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台 + 批量任务中心。
 
 ## 近期完成
 
-- [x] 12401：Linux 容器化与端到端自动化验收（`Dockerfile` 三阶段多架构构建、`docker-compose.yml` 编排、non-root sublift 用户安全加固、`sublift_server` 环境变量支持、`verify-web-server.sh` 自动化总控回归套件），6 阶段 E2E 验证全绿，标准门禁 10/10 全绿。
+- [x] 12500：完成 Phase 12 全面审计、根因定界与修复规划，登记 12501–12505 修复计划与 HURDLES 记录。
+- [x] 12401：Linux 容器化与端到端自动化验收（首期基座）（`Dockerfile` 三阶段多架构构建、`docker-compose.yml` 编排、non-root sublift 用户安全加固、`sublift_server` 环境变量支持、`verify-web-server.sh` 自动化总控回归套件），6 阶段 E2E 验证全绿，标准门禁 10/10 全绿。
 - [x] 12301：实现批量任务中心 (Task Center UI & Queue)（`types/batch.ts` 与 `stores/batch.ts` 单并发串行调度引擎、调度防重入互斥锁与 SSE 异常恢复、`BatchStatsCards.vue` 5 状态筛选面板、`BatchDropZone.vue` 多选拖拽与多行绝对路径录入、`BatchTaskRow.vue` 呼吸指示灯与操作栏、`Navbar.vue` Tab 切换与未完成角标、`TaskCenterView.vue` 与错峰批量 SRT 导出），通过 `batch.test.ts` 异步测试与双审计，Vue 3 严格构建 0 错误，E2E 29 组全绿。
 - [x] 12203：实现双向音画联动、字幕行内编辑与 SRT 导出（`subtitle_search.ts` 10Hz 时钟 $O(1)$ 缓存命中与 $O(\log N)$ 二分快速定位、`srt_formatter.ts` 标准 UTF-8 导出与弹性时码解析、`LiveTranscript.vue` 实时推流吸附与呼吸高亮平滑滚动、双击就地文本/时码编辑与打轴操作），单元测试与 E2E 29 组全绿通过。
 - [x] 12202：实现 Canvas ROI 选区交互与坐标映射（`coordinate_mapper.ts` 消除 Letterbox 黑边、`RoiOverlay.vue` 8 控制手柄缩放/平移/画新框、浮动真实尺寸 Tooltip 胶囊、Retina 高清屏适配、与 `workbenchStore.regionBox` 双向响应），单元测试与 E2E 29 组全绿通过。
