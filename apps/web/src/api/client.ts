@@ -107,14 +107,18 @@ export class SubLiftApiClient {
     }
 
     if (callbacks.onError) {
-      eventSource.addEventListener('error', (e: MessageEvent) => {
-        if (e.data) {
+      eventSource.addEventListener('error', (e: Event) => {
+        const msgEvent = e as MessageEvent;
+        if (msgEvent && msgEvent.data) {
           try {
-            const data = JSON.parse(e.data);
+            const data = JSON.parse(msgEvent.data);
             callbacks.onError!(data.error || 'Pipeline error');
           } catch {
-            callbacks.onError!(e.data);
+            callbacks.onError!(String(msgEvent.data));
           }
+        } else {
+          // Native connection lost or closed unexpectedly
+          callbacks.onError!('SSE connection lost or closed unexpectedly');
         }
       });
     }

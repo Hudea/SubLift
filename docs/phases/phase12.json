@@ -305,7 +305,11 @@
       "description": "对齐 Phase 8 批量处理能力，支持多视频拖拽排队、串行调度、状态卡片监控与一键批量打包导出。",
       "module": [
         "apps/web/src/views/TaskCenterView.vue",
-        "apps/web/src/components/BatchQueue.vue"
+        "apps/web/src/components/BatchStatsCards.vue",
+        "apps/web/src/components/BatchDropZone.vue",
+        "apps/web/src/components/BatchTaskRow.vue",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/types/batch.ts"
       ],
       "dependencies": ["12203"],
       "acceptance_criteria": [
@@ -313,7 +317,31 @@
         "服务端按单并发串行排队执行，支持单任务取消与重试。",
         "支持一键打包下载所有完成任务的 SRT 文件。"
       ],
-      "status": "not-started"
+      "subtasks": [
+        {
+          "id": "12301.01",
+          "name": "批量任务数据模型与单并发串行调度引擎",
+          "description": "定义 BatchTaskItem / BatchQueueStats，实现 Pinia batchStore 串行调度器、调度防重入互斥锁与 SSE 异常恢复。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12301.02",
+          "name": "批量统计面板卡片与双模视频导入区",
+          "description": "实现 BatchStatsCards.vue 5 状态筛选卡片与 BatchDropZone.vue（多选拖拽与多行绝对路径录入）。",
+          "dependencies": ["12301.01"],
+          "status": "done"
+        },
+        {
+          "id": "12301.03",
+          "name": "任务中心视图、单任务操作行与全量批量导出",
+          "description": "实现 BatchTaskRow.vue、TaskCenterView.vue、Navbar 分段控制器与动态未完成角标，实现批量错峰 SRT 导出。",
+          "dependencies": ["12301.02"],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-16 完成批量任务中心与单并发串行调度引擎；通过 batch.test 异步串行与容灾测试；独立架构与 UI 审计通过；Vue 3 严格打包 0 错误；E2E 29/29 测试全绿；verify-standard 10/10 门禁全绿。"
     },
     {
       "id": "12401",

@@ -63,7 +63,16 @@ export interface SsePushEntryData {
 
 export interface SseDoneData {
   job_id?: string;
-  ok: boolean;
+  ok?: boolean;
+  status?: string;
   total_entries: number;
   elapsed_ms: number;
+  video_path?: string;
+}
+
+export interface SseJobCallbacks {
+  onProgress?: (data: SseProgressData) => void;
+  onPushEntry?: (data: SsePushEntryData) => void;
+  onDone?: (data: SseDoneData) => void;
+  onError?: (error: string) => void;
 }
