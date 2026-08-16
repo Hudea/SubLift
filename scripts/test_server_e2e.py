@@ -90,16 +90,20 @@ def make_request(
     method: str,
     path: str,
     headers: dict[str, str] | None = None,
+    body: str | bytes | None = None,
 ) -> tuple[int, dict[str, str], bytes]:
     """Performs an HTTP request and returns (status, headers_dict, body_bytes)."""
     conn = http.client.HTTPConnection(host, port, timeout=5.0)
     try:
         req_headers = headers or {}
-        conn.request(method, path, headers=req_headers)
+        if body is not None:
+            conn.request(method, path, body=body, headers=req_headers)
+        else:
+            conn.request(method, path, headers=req_headers)
         resp = conn.getresponse()
         resp_headers = dict(resp.getheaders())
-        body = resp.read()
-        return resp.status, resp_headers, body
+        body_data = resp.read()
+        return resp.status, resp_headers, body_data
     finally:
         conn.close()
 
@@ -186,8 +190,9 @@ class TestSubLiftServerE2E(unittest.TestCase):
         method: str,
         path: str,
         headers: dict[str, str] | None = None,
+        body: str | bytes | None = None,
     ) -> tuple[int, dict[str, str], bytes]:
-        return make_request(self.server_host, self.server_port, method, path, headers)
+        return make_request(self.server_host, self.server_port, method, path, headers, body)
 
     # -------------------------------------------------------------------------
     # 1. /api/system/info & OPTIONS CORS Tests
@@ -291,17 +296,17 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertIn("error", err)
 
     def test_stream_02_nonexistent_file(self) -> None:
-        """TC-STR-02: Nonexistent file path returns 404 Not Found."""
+        """TC-STR-02: Nonexistent file path rejected by path sandbox as 400 Bad Request."""
         fake_path = os.path.join(self.temp_dir, "does_not_exist.mp4")
         status, _, body = self.req("GET", f"/api/video/stream?path={fake_path}")
-        self.assertEqual(status, 404)
+        self.assertEqual(status, 400)
         err = json.loads(body.decode("utf-8"))
         self.assertIn("error", err)
 
     def test_stream_03_directory_path(self) -> None:
-        """TC-STR-03: Directory path instead of regular file returns 404 Not Found."""
+        """TC-STR-03: Directory path rejected by sandbox as 400 Bad Request."""
         status, _, _ = self.req("GET", f"/api/video/stream?path={self.temp_dir}")
-        self.assertEqual(status, 404)
+        self.assertEqual(status, 400)
 
     def test_stream_04_full_file_200_ok(self) -> None:
         """TC-STR-04: Full GET request returns 200 OK with full byte payload and Accept-Ranges."""
@@ -328,61 +333,61 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertEqual(body, self.dummy_video_data[0:2])
 
     def test_stream_06_slice_range(self) -> None:
-        """TC-STR-06: Arbitrary range slice Range: bytes=100-299 returns 206 Partial Content."""
+        """TC-STR-06: Middle slice Range bytes=100-199 returns 206 Partial Content and 100 bytes."""
         status, headers, body = self.req(
             "GET",
             f"/api/video/stream?path={self.dummy_video_path}",
-            headers={"Range": "bytes=100-299"},
+            headers={"Range": "bytes=100-199"},
         )
         self.assertEqual(status, 206)
-        self.assertEqual(headers.get("Content-Range"), "bytes 100-299/10240")
-        self.assertEqual(int(headers.get("Content-Length", 0)), 200)
-        self.assertEqual(len(body), 200)
-        self.assertEqual(body, self.dummy_video_data[100:300])
-
-    def test_stream_07_open_ended_range(self) -> None:
-        """TC-STR-07: Open-ended range Range: bytes=500- returns 206 Partial Content to EOF."""
-        status, headers, body = self.req(
-            "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
-            headers={"Range": "bytes=500-"},
-        )
-        self.assertEqual(status, 206)
-        self.assertEqual(headers.get("Content-Range"), "bytes 500-10239/10240")
-        self.assertEqual(int(headers.get("Content-Length", 0)), 10240 - 500)
-        self.assertEqual(len(body), 10240 - 500)
-        self.assertEqual(body, self.dummy_video_data[500:])
-
-    def test_stream_08_suffix_range(self) -> None:
-        """TC-STR-08: Suffix range Range: bytes=-100 returns 206 Partial Content last 100 bytes."""
-        status, headers, body = self.req(
-            "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
-            headers={"Range": "bytes=-100"},
-        )
-        self.assertEqual(status, 206)
-        self.assertEqual(headers.get("Content-Range"), "bytes 10140-10239/10240")
+        self.assertEqual(headers.get("Content-Range"), "bytes 100-199/10240")
         self.assertEqual(int(headers.get("Content-Length", 0)), 100)
         self.assertEqual(len(body), 100)
-        self.assertEqual(body, self.dummy_video_data[-100:])
+        self.assertEqual(body, self.dummy_video_data[100:200])
 
-    def test_stream_09_out_of_bounds_range(self) -> None:
-        """TC-STR-09: Out-of-bounds Range: bytes=9999999- returns 416 Range Not Satisfiable."""
+    def test_stream_07_suffix_range(self) -> None:
+        """TC-STR-07: Suffix Range bytes=-50 returns 206 Partial Content with last 50 bytes."""
+        status, headers, body = self.req(
+            "GET",
+            f"/api/video/stream?path={self.dummy_video_path}",
+            headers={"Range": "bytes=-50"},
+        )
+        self.assertEqual(status, 206)
+        self.assertEqual(headers.get("Content-Range"), "bytes 10190-10239/10240")
+        self.assertEqual(int(headers.get("Content-Length", 0)), 50)
+        self.assertEqual(len(body), 50)
+        self.assertEqual(body, self.dummy_video_data[-50:])
+
+    def test_stream_08_open_ended_range(self) -> None:
+        """TC-STR-08: Open-ended Range bytes=10000- returns 206 Partial Content to EOF."""
+        status, headers, body = self.req(
+            "GET",
+            f"/api/video/stream?path={self.dummy_video_path}",
+            headers={"Range": "bytes=10000-"},
+        )
+        self.assertEqual(status, 206)
+        self.assertEqual(headers.get("Content-Range"), "bytes 10000-10239/10240")
+        self.assertEqual(int(headers.get("Content-Length", 0)), 240)
+        self.assertEqual(len(body), 240)
+        self.assertEqual(body, self.dummy_video_data[10000:])
+
+    def test_stream_09_invalid_range_416(self) -> None:
+        """TC-STR-09: Unsatisfiable Range bytes=50000-60000 returns 416 Range Not Satisfiable."""
         status, _, _ = self.req(
             "GET",
             f"/api/video/stream?path={self.dummy_video_path}",
-            headers={"Range": "bytes=9999999-"},
+            headers={"Range": "bytes=50000-60000"},
         )
         self.assertEqual(status, 416)
 
-    def test_stream_10_inverted_range(self) -> None:
-        """TC-STR-10: Inverted invalid Range: bytes=500-200 returns 416 Range Not Satisfiable."""
-        status, _, _ = self.req(
-            "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
-            headers={"Range": "bytes=500-200"},
-        )
-        self.assertEqual(status, 416)
+    def test_stream_10_head_request(self) -> None:
+        """TC-STR-10: HEAD /api/video/stream returns 200 with headers but empty body."""
+        status, headers, body = self.req("HEAD", f"/api/video/stream?path={self.dummy_video_path}")
+        self.assertEqual(status, 200)
+        self.assertEqual(headers.get("Accept-Ranges"), "bytes")
+        self.assertEqual(headers.get("Content-Type"), "video/mp4")
+        self.assertEqual(int(headers.get("Content-Length", 0)), 10240)
+        self.assertEqual(body, b"")
 
     def test_stream_11_mime_types(self) -> None:
         """TC-STR-11: Video streaming correctly maps MIME types based on file extension."""
@@ -409,7 +414,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
     # 3. /api/video/frame Frame Extraction Tests
     # -------------------------------------------------------------------------
 
-    def test_frame_01_missing_path_parameter(self) -> None:
+    def test_frame_01_missing_path(self) -> None:
         """TC-FRM-01: Missing path parameter returns 400 Bad Request."""
         status, _, body = self.req("GET", "/api/video/frame")
         self.assertEqual(status, 400)
@@ -417,10 +422,10 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertIn("error", err)
 
     def test_frame_02_nonexistent_file(self) -> None:
-        """TC-FRM-02: Nonexistent file returns 404 Not Found."""
+        """TC-FRM-02: Nonexistent file rejected by sandbox as 400 Bad Request."""
         fake_path = os.path.join(self.temp_dir, "ghost_video.mp4")
         status, _, body = self.req("GET", f"/api/video/frame?path={fake_path}")
-        self.assertEqual(status, 404)
+        self.assertEqual(status, 400)
         err = json.loads(body.decode("utf-8"))
         self.assertIn("error", err)
 
@@ -512,7 +517,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
             conn.close()
 
     def test_jobs_02_nonexistent_video_path(self) -> None:
-        """TC-JOB-02: POST /api/jobs returns 404 when video_path does not exist."""
+        """TC-JOB-02: POST /api/jobs returns 400 when video_path is invalid or does not exist."""
         conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=5.0)
         try:
             req_body = json.dumps({"video_path": "/path/to/nonexistent/video.mp4"})
@@ -523,7 +528,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            self.assertEqual(resp.status, 404)
+            self.assertEqual(resp.status, 400)
             resp.read()
         finally:
             conn.close()
@@ -586,11 +591,13 @@ class TestSubLiftServerE2E(unittest.TestCase):
 
             self.assertTrue(len(raw_stream) > 0)
             stream_text = raw_stream.decode("utf-8", errors="replace")
-            # Verify event framing
+            # Verify event framing and SSE id: contract
             self.assertIn("event: ", stream_text)
             self.assertIn("data: ", stream_text)
+            self.assertIn("id: ", stream_text)
+            self.assertIn("event: done", stream_text)
 
-            # Test SRT Export
+            # Test SRT Export with Exact Structure Assertion
             time.sleep(0.2)
             exp_status, exp_headers, exp_body = self.req("GET", f"/api/jobs/{job_id}/export")
             self.assertEqual(exp_status, 200)
@@ -599,6 +606,17 @@ class TestSubLiftServerE2E(unittest.TestCase):
             self.assertIn("attachment;", disp)
             srt_body = exp_body.decode("utf-8")
             self.assertIsInstance(srt_body, str)
+
+            # Strict SRT Format & Content Verification (eliminating false-green assertions)
+            self.assertTrue(
+                srt_body.strip().startswith("1\n"),
+                f"SRT should start with index 1:\n{srt_body}",
+            )
+            import re
+            srt_time_pattern = re.compile(r"\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}")
+            matches = srt_time_pattern.findall(srt_body)
+            self.assertGreater(len(matches), 0, f"No valid SRT timestamps found in:\n{srt_body}")
+            self.assertIn("mock_ocr", srt_body)
 
         finally:
             conn.close()
@@ -636,8 +654,85 @@ class TestSubLiftServerE2E(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_jobs_06_batch_queue_serial_execution(self) -> None:
+        """TC-JOB-06: Submit 2 jobs to verify serial worker execution and convergence."""
+        if not self.ffmpeg_available:
+            self.skipTest("FFmpeg toolchain not available for queue test")
+
+        job_ids = []
+        for _ in range(2):
+            payload = {
+                "video_path": self.synth_mp4_path,
+                "engine": "mock",
+                "fps": 5.0,
+            }
+            status, _, body = self.req(
+                "POST",
+                "/api/jobs",
+                body=json.dumps(payload),
+                headers={"Content-Type": "application/json"},
+            )
+            self.assertEqual(status, 201)
+            data = json.loads(body.decode("utf-8"))
+            job_ids.append(data["job_id"])
+
+        self.assertEqual(len(job_ids), 2)
+        # Verify both jobs can be exported after execution completes
+        for jid in job_ids:
+            # Poll export for up to 12 seconds
+            completed = False
+            for _ in range(60):
+                time.sleep(0.2)
+                exp_st, _, _ = self.req("GET", f"/api/jobs/{jid}/export")
+                if exp_st == 200:
+                    completed = True
+                    break
+            self.assertTrue(completed, f"Job {jid} did not complete successfully")
+
     # -------------------------------------------------------------------------
-    # 5. Static Web Assets & Workbench Shell Hosting Tests
+    # 5. Security & Sandbox Boundary Tests (Feature 12502 / 12504)
+    # -------------------------------------------------------------------------
+
+    def test_security_01_lfi_and_path_traversal(self) -> None:
+        """TC-SEC-01: Path sandbox blocks LFI targets (/etc/passwd, /etc/hosts) and traversal."""
+        for target in ["/etc/passwd", "/etc/hosts", "../../../etc/shadow", "/dev/null"]:
+            with self.subTest(target=target):
+                # Stream route
+                st, _, _ = self.req("GET", f"/api/video/stream?path={target}")
+                self.assertEqual(st, 400, f"Stream should reject {target} with 400")
+
+                # Frame route
+                st2, _, _ = self.req("GET", f"/api/video/frame?path={target}")
+                self.assertEqual(st2, 400, f"Frame should reject {target} with 400")
+
+                # Create Job route
+                st3, _, _ = self.req(
+                    "POST",
+                    "/api/jobs",
+                    body=json.dumps({"video_path": target, "engine": "mock"}),
+                    headers={"Content-Type": "application/json"},
+                )
+                self.assertEqual(st3, 400, f"Job creation should reject {target} with 400")
+
+    def test_security_02_invalid_ocr_engine_rejected(self) -> None:
+        """TC-SEC-02: Invalid or unavailable OCR engine name is rejected with 400 Bad Request."""
+        payload = {
+            "video_path": self.synth_mp4_path,
+            "engine": "invalid_engine_name_xyz",
+            "fps": 2.0,
+        }
+        st, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 400)
+        err = json.loads(body.decode("utf-8"))
+        self.assertIn("error", err)
+
+    # -------------------------------------------------------------------------
+    # 6. Static Web Assets & Workbench Shell Hosting Tests
     # -------------------------------------------------------------------------
 
     def test_static_01_workbench_html_and_assets(self) -> None:

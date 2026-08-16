@@ -206,6 +206,44 @@ fi
 
 echo
 echo "=============================="
+echo " Web 前端测试 (Vitest)"
+echo "=============================="
+echo
+
+if command -v npm >/dev/null 2>&1; then
+    if npm --prefix apps/web test >/tmp/sublift_web_test.log 2>&1; then
+        printf "${GREEN}[OK]${NC}  apps/web vitest\n"
+        pass=$((pass + 1))
+    else
+        printf "${RED}[FAIL]${NC} apps/web vitest\n"
+        cat /tmp/sublift_web_test.log 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+else
+    printf "${YELLOW}[SKIP]${NC} npm 未安装，跳过前端测试\n"
+fi
+
+echo
+echo "=============================="
+echo " Web 服务端 E2E 回归测试"
+echo "=============================="
+echo
+
+if [ -x build/cpp/bin/sublift_server ]; then
+    if "${UV[@]}" python scripts/test_server_e2e.py >/tmp/sublift_server_e2e.log 2>&1; then
+        printf "${GREEN}[OK]${NC}  sublift_server E2E\n"
+        pass=$((pass + 1))
+    else
+        printf "${RED}[FAIL]${NC} sublift_server E2E\n"
+        cat /tmp/sublift_server_e2e.log 2>/dev/null || true
+        fail=$((fail + 1))
+    fi
+else
+    printf "${YELLOW}[SKIP]${NC} build/cpp/bin/sublift_server 未就绪，跳过服务端 E2E\n"
+fi
+
+echo
+echo "=============================="
 echo " 汇总"
 echo "=============================="
 printf "通过: ${GREEN}%d${NC}  失败: ${RED}%d${NC}\n" "$pass" "$fail"

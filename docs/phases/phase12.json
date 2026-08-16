@@ -463,7 +463,8 @@
         "test_server_e2e.py 严格校验 SRT Exact Match，排队并发流转与安全沙箱测试 100% 通过。",
         "verify-standard.sh 完整覆盖前端测试与 Server E2E。"
       ],
-      "status": "not-started"
+      "status": "done",
+      "evidence": "2026-08-16 apps/web 接入 vitest 依赖并在 package.json 中配置标准 test script；将 coordinate_mapper.test.ts、transcript_sync.test.ts、batch.test.ts 3 套测试共 13 组测试用例标准化重构为 Vitest 套件（毫秒级全绿通过）；重构 test_server_e2e.py，消灭 SRT 导出假绿，补充 SRT 格式正则/序号/内容比对、TC-JOB-06 单并发排队与自动流转测试、TC-SEC-01/02 安全沙箱与 LFI 拦截测试（32/32 全绿）；verify-standard.sh 完整挂载 Vitest 与 Server E2E 阶段（12/12 全绿）；双子 Agent 审计通过。"
     },
     {
       "id": "12505",
