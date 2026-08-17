@@ -369,6 +369,81 @@ std::vector<std::uint8_t> extract_single_frame_jpeg(
   return std::vector<std::uint8_t>(res.stdout_str.begin(), res.stdout_str.end());
 }
 
+ImageBuffer extract_single_frame_rgb24(
+    const std::filesystem::path& video_path,
+    double time_seconds,
+    int max_dimension) {
+  std::error_code ec;
+  if (!std::filesystem::exists(video_path, ec)) {
+    throw std::runtime_error("视频文件不存在: " + video_path.string());
+  }
+
+  const SourceFrameInfo info = probe_source_frame(video_path);
+  std::int32_t src_w = info.width;
+  std::int32_t src_h = info.height;
+  if (src_w <= 0 || src_h <= 0) {
+    throw std::runtime_error("无法获取视频有效分辨率: " + video_path.string());
+  }
+
+  std::int32_t target_w = src_w;
+  std::int32_t target_h = src_h;
+
+  if (max_dimension > 0 && (src_w > max_dimension || src_h > max_dimension)) {
+    if (src_w >= src_h) {
+      target_w = max_dimension;
+      target_h = static_cast<std::int32_t>((static_cast<std::int64_t>(src_h) * max_dimension / src_w) / 2 * 2);
+    } else {
+      target_h = max_dimension;
+      target_w = static_cast<std::int32_t>((static_cast<std::int64_t>(src_w) * max_dimension / src_h) / 2 * 2);
+    }
+  } else {
+    target_w = (src_w / 2) * 2;
+    target_h = (src_h / 2) * 2;
+  }
+  if (target_w <= 0) target_w = 2;
+  if (target_h <= 0) target_h = 2;
+
+  const std::string ffmpeg_bin = resolve_ffmpeg_bin();
+
+  std::ostringstream ss_time;
+  ss_time << std::fixed << std::setprecision(3) << std::max(0.0, time_seconds);
+
+  std::vector<std::string> cmd = {
+      ffmpeg_bin,
+      "-ss",
+      ss_time.str(),
+      "-nostdin",
+      "-v",
+      "error",
+      "-i",
+      video_path.string(),
+      "-frames:v",
+      "1",
+      "-vf",
+      "scale=" + std::to_string(target_w) + ":" + std::to_string(target_h),
+      "-f",
+      "rawvideo",
+      "-pix_fmt",
+      "rgb24",
+      "-",
+  };
+
+  auto res = detail::run_subprocess(cmd, std::chrono::milliseconds(5000));
+  const std::size_t expected_bytes = static_cast<std::size_t>(target_w) * static_cast<std::size_t>(target_h) * 3;
+
+  if (res.exit_code != 0 || res.stdout_str.size() < expected_bytes) {
+    std::string tail = detail::read_stderr_tail(res.stderr_str, 500);
+    std::string detail_msg = tail.empty() ? "" : "：" + tail;
+    throw std::runtime_error("ffmpeg RGB24 内存截帧失败（退出码 " +
+                             std::to_string(res.exit_code) + "），path=" +
+                             video_path.string() + detail_msg);
+  }
+
+  ImageBuffer buffer(target_w, target_h, PixelFormat::RGB24);
+  std::memcpy(buffer.data(), res.stdout_str.data(), expected_bytes);
+  return buffer;
+}
+
 std::filesystem::path remux_to_faststart_mp4(
     const std::filesystem::path& video_path,
     const std::optional<std::filesystem::path>& custom_cache_dir) {

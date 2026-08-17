@@ -28,6 +28,7 @@
 #include "sublift/adapters/vision.hpp"
 #include "sublift/models/resource_locator.hpp"
 #include "sublift/server/path_sandbox.hpp"
+#include "sublift/server/region_detector.hpp"
 #include "sublift/version.hpp"
 
 namespace sublift::server {
@@ -676,6 +677,75 @@ void register_routes(httplib::Server& server,
 
     nlohmann::json ok = {{"path", found->string()}};
     res.set_content(ok.dump(), "application/json; charset=utf-8");
+  });
+
+  // ---------------------------------------------------------------------------
+  // POST /api/video/detect-region —— 智能字幕区域自动识别 (Feature 12509)
+  //
+  // 输入：video_path (必填), time_s (可选), engine (可选)
+  // 输出：{ "detected": true, "sample_time_s": 12.5, "suggested_box": { "x": 0, "y": 0.78, "width": 1.0, "height": 0.16 }, "preview_text": "...", "confidence": 0.95, "total_candidates": 2 }
+  // ---------------------------------------------------------------------------
+  auto region_detector = std::make_shared<RegionDetector>();
+
+  server.Post("/api/video/detect-region", [region_detector, workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+      body = nlohmann::json::parse(req.body);
+    } catch (const std::exception&) {
+      res.status = 400;
+      res.set_content(R"({"error":"Invalid JSON body"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    if (!body.contains("video_path") || !body["video_path"].is_string() ||
+        body["video_path"].get<std::string>().empty()) {
+      res.status = 400;
+      res.set_content(R"({"error":"Missing or invalid 'video_path' field"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    std::filesystem::path video_path;
+    try {
+      video_path = resolve_and_validate_media_path(body["video_path"].get<std::string>());
+    } catch (const PathSecurityException& se) {
+      res.status = 400;
+      nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    std::optional<double> time_s = std::nullopt;
+    if (body.contains("time_s") && body["time_s"].is_number()) {
+      time_s = body["time_s"].get<double>();
+    }
+
+    std::optional<std::string> engine_pref = std::nullopt;
+    if (body.contains("engine") && body["engine"].is_string()) {
+      engine_pref = body["engine"].get<std::string>();
+    }
+
+    try {
+      RegionDetectionResult result = region_detector->detect_region(video_path, time_s, engine_pref);
+      nlohmann::json out = {
+          {"detected", result.detected},
+          {"sample_time_s", result.sample_time_s},
+          {"suggested_box", {
+              {"x", result.suggested_box.x},
+              {"y", result.suggested_box.y},
+              {"width", result.suggested_box.width},
+              {"height", result.suggested_box.height}
+          }},
+          {"preview_text", result.preview_text},
+          {"confidence", result.confidence},
+          {"total_candidates", result.total_candidates}
+      };
+      res.status = 200;
+      res.set_content(out.dump(), "application/json; charset=utf-8");
+    } catch (const std::exception& e) {
+      res.status = 500;
+      nlohmann::json err = {{"error", std::string("Failed to detect subtitle region: ") + e.what()}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+    }
   });
 
   // POST /api/jobs (Create and start a subtitle extraction job)

@@ -48,6 +48,12 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     height: 0.3,
   });
 
+  // 3.5 Region Detection State (Feature 12509)
+  const isDetectingRegion = ref<boolean>(false);
+  const roiModifiedByUser = ref<boolean>(false);
+  const roiDetectionFeedback = ref<string | null>(null);
+  let detectionGeneration = 0;
+
   // 4. Progress and Live Subtitle Entries
   const progress = ref<SseProgressData>({
     stage: 'idle',
@@ -92,8 +98,15 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     entries.value = [];
     activeJobId.value = null;
     errorMessage.value = null;
+    roiDetectionFeedback.value = null;
+    roiModifiedByUser.value = false;
+    detectionGeneration++;
+    resetDefaultBottomRoi();
     globalSubtitleSearcher.resetCache();
     state.value = 'Ready';
+
+    // 载入视频后自动静默触发一次多点智能识别 (Feature 12509 方案 A)
+    autoDetectSubtitleRegion({ silent: true });
   }
 
   /**
@@ -110,6 +123,10 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     entries.value = [];
     activeJobId.value = null;
     errorMessage.value = null;
+    roiDetectionFeedback.value = null;
+    roiModifiedByUser.value = false;
+    detectionGeneration++;
+    resetDefaultBottomRoi();
     globalSubtitleSearcher.resetCache();
     state.value = 'Ready';
 
@@ -119,6 +136,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         .then((path) => {
           if (path && previewSrc.value === blobUrl) {
             videoPath.value = path;
+            autoDetectSubtitleRegion({ silent: true });
           }
         })
         .catch(() => {
@@ -134,6 +152,52 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     if (!clean) return;
     videoPath.value = clean;
     errorMessage.value = null;
+    autoDetectSubtitleRegion({ silent: true });
+  }
+
+  /** 智能字幕区域自动识别 (Feature 12509) */
+  async function autoDetectSubtitleRegion(options: { timeSec?: number; silent?: boolean } = {}) {
+    if (isLocked.value || !videoPath.value) return;
+
+    const currentGen = ++detectionGeneration;
+    isDetectingRegion.value = true;
+    roiDetectionFeedback.value = null;
+
+    try {
+      const res = await SubLiftApiClient.detectSubtitleRegion(
+        videoPath.value,
+        options.timeSec,
+        selectedEngine.value
+      );
+
+      // 竞态防御 1：切视频或重置后丢弃迟到回包
+      if (currentGen !== detectionGeneration) return;
+
+      // 竞态防御 2：静默初识模式下，若用户已手动调整过选区，不强制覆盖
+      if (options.silent && roiModifiedByUser.value) {
+        return;
+      }
+
+      if (res.detected && res.suggested_box) {
+        updateRegionBox(res.suggested_box);
+        roiDetectionFeedback.value = res.preview_text
+          ? `✨ 已识别字幕：“${res.preview_text}”`
+          : '✨ 已自动吸附字幕区域';
+      } else {
+        if (!options.silent) {
+          roiDetectionFeedback.value = '💡 当前画面未检测到明显字幕，已保留当前选区';
+        }
+      }
+    } catch (err: any) {
+      if (currentGen !== detectionGeneration) return;
+      if (!options.silent) {
+        roiDetectionFeedback.value = '识别失败，已保持当前选区';
+      }
+    } finally {
+      if (currentGen === detectionGeneration) {
+        isDetectingRegion.value = false;
+      }
+    }
   }
 
   function updateRegionBox(box: Partial<NormalizedRegionBox>) {
@@ -350,6 +414,12 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     entries.value = [];
     activeJobId.value = null;
     currentTimeMs.value = 0;
+    errorMessage.value = null;
+    roiDetectionFeedback.value = null;
+    isDetectingRegion.value = false;
+    roiModifiedByUser.value = false;
+    detectionGeneration++;
+    resetDefaultBottomRoi();
     globalSubtitleSearcher.resetCache();
   }
 
@@ -364,6 +434,9 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     targetFps,
     confidenceThreshold,
     regionBox,
+    isDetectingRegion,
+    roiModifiedByUser,
+    roiDetectionFeedback,
     progress,
     entries,
     activeEntryIndex,
@@ -376,6 +449,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     attachServerPath,
     updateRegionBox,
     resetDefaultBottomRoi,
+    autoDetectSubtitleRegion,
     updatePlaybackTime,
     startExtraction,
     cancelExtraction,

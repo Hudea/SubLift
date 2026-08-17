@@ -5,6 +5,7 @@ add_library(sublift_server_runtime STATIC
   http_server.cpp
   job_manager.cpp
   workspace_manager.cpp
+  region_detector.cpp
 )
 add_library(sublift::server_runtime ALIAS sublift_server_runtime)
 

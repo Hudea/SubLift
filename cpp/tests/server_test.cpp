@@ -822,3 +822,99 @@ TEST_CASE("Workspace Configuration API Endpoints", "[server][workspace_api]") {
   std::filesystem::remove_all(temp_dir, ec);
 }
 
+TEST_CASE("Server Auto ROI Detection", "[server][detect_region]") {
+  sublift::server::HttpServer server;
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(5, 0);
+  cli.set_read_timeout(10, 0);
+
+  SECTION("Missing or invalid video_path returns 400") {
+    auto res1 = cli.Post("/api/video/detect-region", R"({})", "application/json");
+    REQUIRE(res1 != nullptr);
+    REQUIRE(res1->status == 400);
+
+    auto res2 = cli.Post("/api/video/detect-region", R"({"video_path":""})", "application/json");
+    REQUIRE(res2 != nullptr);
+    REQUIRE(res2->status == 400);
+  }
+
+  SECTION("Nonexistent or path traversal is rejected with 400") {
+    auto res = cli.Post("/api/video/detect-region", R"({"video_path":"/nonexistent_xyz_123.mp4"})", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+
+    auto res_lfi = cli.Post("/api/video/detect-region", R"({"video_path":"/etc/passwd"})", "application/json");
+    REQUIRE(res_lfi != nullptr);
+    REQUIRE(res_lfi->status == 400);
+  }
+
+  SECTION("Detect region on valid video returns structured suggestion") {
+    if (sublift::ffmpeg::available()) {
+      std::filesystem::path test_video = std::filesystem::temp_directory_path() / "sublift_roi_detect_test.mp4";
+      std::string ffmpeg_bin = sublift::ffmpeg::resolve_ffmpeg_bin();
+      std::string cmd = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=1.0:size=320x240:rate=10 -pix_fmt yuv420p " + test_video.string() + " > /dev/null 2>&1";
+      int ret = std::system(cmd.c_str());
+      if (ret == 0 && std::filesystem::exists(test_video)) {
+        nlohmann::json req_body = {
+            {"video_path", test_video.string()},
+            {"engine", "mock"}
+        };
+        auto res = cli.Post("/api/video/detect-region", req_body.dump(), "application/json");
+        REQUIRE(res != nullptr);
+        REQUIRE(res->status == 200);
+
+        auto j = nlohmann::json::parse(res->body);
+        REQUIRE(j.contains("detected"));
+        REQUIRE(j.contains("sample_time_s"));
+        REQUIRE(j.contains("suggested_box"));
+        REQUIRE(j["suggested_box"].contains("x"));
+        REQUIRE(j["suggested_box"].contains("y"));
+        REQUIRE(j["suggested_box"].contains("width"));
+        REQUIRE(j["suggested_box"].contains("height"));
+
+        double x = j["suggested_box"]["x"].get<double>();
+        double y = j["suggested_box"]["y"].get<double>();
+        double w = j["suggested_box"]["width"].get<double>();
+        double h = j["suggested_box"]["height"].get<double>();
+
+        REQUIRE(x >= 0.0);
+        REQUIRE(x <= 1.0);
+        REQUIRE(y >= 0.0);
+        REQUIRE(y <= 1.0);
+        REQUIRE(w > 0.0);
+        REQUIRE(w <= 1.0);
+        REQUIRE(h > 0.0);
+        REQUIRE(h <= 1.0);
+        REQUIRE(y + h <= 1.0001);
+
+        // Test with explicit time_s
+        nlohmann::json req_time = {
+            {"video_path", test_video.string()},
+            {"time_s", 0.5},
+            {"engine", "mock"}
+        };
+        auto res_time = cli.Post("/api/video/detect-region", req_time.dump(), "application/json");
+        REQUIRE(res_time != nullptr);
+        REQUIRE(res_time->status == 200);
+        auto j_time = nlohmann::json::parse(res_time->body);
+        REQUIRE(j_time["sample_time_s"].get<double>() == 0.5);
+
+        std::filesystem::remove(test_video);
+      }
+    }
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+

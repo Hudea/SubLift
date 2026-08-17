@@ -120,12 +120,37 @@
         </VideoPlayer>
       </div>
 
-      <!-- 底部快捷辅助操作（ROI 快速复位） -->
+      <!-- 底部快捷辅助操作（ROI 智能识别与快速复位） -->
       <div class="sl-quick-aux-bar">
         <div class="sl-aux-left">
-          <span class="sl-aux-hint">📐 画面字幕选区：可直接在上方拖拽或调整蓝色虚线框</span>
+          <span v-if="workbenchStore.isDetectingRegion" class="sl-aux-detecting">
+            <span class="sl-aux-spinner"></span>
+            <span>正在智能探测字幕区域…</span>
+          </span>
+          <span v-else-if="workbenchStore.roiDetectionFeedback" class="sl-aux-feedback">
+            {{ workbenchStore.roiDetectionFeedback }}
+          </span>
+          <span v-else class="sl-aux-hint">
+            📐 画面字幕选区：可直接在上方拖拽，或点击右侧智能识别
+          </span>
         </div>
         <div class="sl-aux-right">
+          <button
+            class="sl-aux-btn sl-aux-btn--highlight"
+            :disabled="workbenchStore.isLocked || workbenchStore.isDetectingRegion || !workbenchStore.videoPath"
+            title="全视频多点智能扫描字幕所在区域并自动吸附"
+            @click="handleAutoDetect"
+          >
+            ✨ 智能识别字幕区
+          </button>
+          <button
+            class="sl-aux-btn sl-aux-btn--highlight"
+            :disabled="workbenchStore.isLocked || workbenchStore.isDetectingRegion || !workbenchStore.videoPath"
+            title="对当前播放画面截帧并吸附文字选区"
+            @click="handleDetectCurrentPlayhead"
+          >
+            🎯 识别当前画面
+          </button>
           <button
             class="sl-aux-btn"
             :disabled="workbenchStore.isLocked"
@@ -204,6 +229,15 @@ function handleTranscriptSeek(timeSec: number) {
 
 function handleBackToSelector() {
   workbenchStore.reset();
+}
+
+function handleAutoDetect() {
+  workbenchStore.autoDetectSubtitleRegion({ silent: false });
+}
+
+function handleDetectCurrentPlayhead() {
+  const timeSec = playerRef.value?.currentTime ?? 0;
+  workbenchStore.autoDetectSubtitleRegion({ timeSec, silent: false });
 }
 </script>
 
@@ -546,9 +580,50 @@ function handleBackToSelector() {
   border-color: var(--sl-border-standard);
 }
 
+.sl-aux-btn--highlight {
+  background: rgba(10, 132, 255, 0.1);
+  border-color: rgba(10, 132, 255, 0.3);
+  color: #5ac8fa;
+}
+
+.sl-aux-btn--highlight:hover:not(:disabled) {
+  background: rgba(10, 132, 255, 0.2);
+  border-color: #0a84ff;
+  color: #ffffff;
+}
+
 .sl-aux-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.sl-aux-detecting {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #5ac8fa;
+}
+
+.sl-aux-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(90, 200, 250, 0.3);
+  border-top-color: #5ac8fa;
+  border-radius: 50%;
+  animation: sl-spin 0.8s linear infinite;
+}
+
+.sl-aux-feedback {
+  font-size: 11.5px;
+  color: #30d158;
+  animation: sl-feedback-fade 3s ease-out forwards;
+}
+
+@keyframes sl-feedback-fade {
+  0% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0.7; }
 }
 
 .sl-right-pane {

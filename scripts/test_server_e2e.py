@@ -1047,6 +1047,71 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertIn("SubLift", html)
         self.assertIn('<div id="app"></div>', html)
 
+    # -------------------------------------------------------------------------
+    # 8. Auto ROI Subtitle Region Detection Tests (Feature 12509)
+    # -------------------------------------------------------------------------
+
+    def test_detect_region_01_invalid_params_and_security(self) -> None:
+        """TC-REG-01: POST /api/video/detect-region validates parameters and enforces sandbox."""
+        # Missing video_path
+        st, _, _ = self.req(
+            "POST",
+            "/api/video/detect-region",
+            body=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 400)
+
+        # LFI / non-media file
+        st_lfi, _, _ = self.req(
+            "POST",
+            "/api/video/detect-region",
+            body=json.dumps({"video_path": "/etc/hosts"}),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st_lfi, 400)
+
+    def test_detect_region_02_valid_video_detection(self) -> None:
+        """TC-REG-02: POST /api/video/detect-region returns suggested_box and metadata."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # Multi-point auto detection
+        req_body = json.dumps({"video_path": self.synth_mp4_path, "engine": "mock"})
+        st, _, body = self.req(
+            "POST",
+            "/api/video/detect-region",
+            body=req_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+        res = json.loads(body.decode("utf-8"))
+        self.assertIn("detected", res)
+        self.assertIn("sample_time_s", res)
+        self.assertIn("suggested_box", res)
+        box = res["suggested_box"]
+        self.assertGreaterEqual(box["x"], 0.0)
+        self.assertLessEqual(box["x"], 1.0)
+        self.assertGreaterEqual(box["y"], 0.0)
+        self.assertLessEqual(box["y"], 1.0)
+        self.assertGreater(box["width"], 0.0)
+        self.assertGreater(box["height"], 0.0)
+        self.assertLessEqual(box["y"] + box["height"], 1.0001)
+
+        # Single-point playhead detection
+        req_time = json.dumps(
+            {"video_path": self.synth_mp4_path, "time_s": 0.5, "engine": "mock"}
+        )
+        st2, _, body2 = self.req(
+            "POST",
+            "/api/video/detect-region",
+            body=req_time,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st2, 200)
+        res2 = json.loads(body2.decode("utf-8"))
+        self.assertEqual(res2["sample_time_s"], 0.5)
+
 
 def print_banner(text: str) -> None:
     line = "=" * 70

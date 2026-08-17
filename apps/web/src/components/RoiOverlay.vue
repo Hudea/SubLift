@@ -61,16 +61,51 @@ const localBox = reactive<NormalizedRegionBox>({
   height: workbenchStore.regionBox.height ?? 0.3,
 });
 
-// 监听 Pinia store 变化（外部点击底部预设或全画幅预设时即时重绘）
+let animRafId: number | null = null;
+
+function animateToBox(target: NormalizedRegionBox, durationMs = 280) {
+  if (animRafId !== null) {
+    cancelAnimationFrame(animRafId);
+    animRafId = null;
+  }
+
+  const start = { ...localBox };
+  const startTime = performance.now();
+
+  function step(now: number) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1.0, elapsed / durationMs);
+    // Ease-out cubic
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    localBox.x = start.x + (target.x - start.x) * ease;
+    localBox.y = start.y + (target.y - start.y) * ease;
+    localBox.width = start.width + (target.width - start.width) * ease;
+    localBox.height = start.height + (target.height - start.height) * ease;
+
+    scheduleRender();
+
+    if (progress < 1.0) {
+      animRafId = requestAnimationFrame(step);
+    } else {
+      animRafId = null;
+      localBox.x = target.x;
+      localBox.y = target.y;
+      localBox.width = target.width;
+      localBox.height = target.height;
+      scheduleRender();
+    }
+  }
+
+  animRafId = requestAnimationFrame(step);
+}
+
+// 监听 Pinia store 变化（外部点击底部预设、全画幅预设或自动识别吸附时平滑过渡）
 watch(
   () => workbenchStore.regionBox,
   (newBox) => {
     if (activeAction.value === 'idle') {
-      localBox.x = newBox.x;
-      localBox.y = newBox.y;
-      localBox.width = newBox.width;
-      localBox.height = newBox.height;
-      scheduleRender();
+      animateToBox(newBox, 280);
     }
   },
   { deep: true }
@@ -247,6 +282,12 @@ function updateCursor(e: PointerEvent) {
 
 function onPointerDown(e: PointerEvent) {
   if (isLocked.value || e.button !== 0 || !containerRef.value) return;
+
+  if (animRafId !== null) {
+    cancelAnimationFrame(animRafId);
+    animRafId = null;
+  }
+  workbenchStore.roiModifiedByUser = true;
 
   containerRef.value.setPointerCapture(e.pointerId);
   const { x, y } = getEventPos(e);

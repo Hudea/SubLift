@@ -5,6 +5,7 @@ import type {
   SseJobCallbacks,
   FileFingerprintDTO,
   WorkspaceConfigDTO,
+  RegionDetectionDTO,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -101,6 +102,34 @@ export class SubLiftApiClient {
     }
     const data = await res.json();
     return typeof data.path === 'string' && data.path ? data.path : null;
+  }
+
+  /**
+   * 智能字幕区域自动识别 (Feature 12509)：
+   * 对视频进行多点采样或单点截帧，识别字幕区域并返回推荐 ROI 选区。
+   */
+  static async detectSubtitleRegion(
+    videoPath: string,
+    timeSec?: number,
+    engine?: string
+  ): Promise<RegionDetectionDTO> {
+    const res = await fetch(`${API_BASE}/video/detect-region`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        video_path: videoPath,
+        ...(timeSec !== undefined ? { time_s: timeSec } : {}),
+        ...(engine ? { engine } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `Failed to detect subtitle region: HTTP ${res.status}`);
+    }
+    return res.json();
   }
 
   static async createJob(config: JobConfig): Promise<CreateJobResponse> {

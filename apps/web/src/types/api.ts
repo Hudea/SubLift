@@ -28,6 +28,15 @@ export interface NormalizedRegionBox {
   height: number;
 }
 
+export interface RegionDetectionDTO {
+  detected: boolean;
+  sample_time_s: number;
+  suggested_box: NormalizedRegionBox;
+  preview_text: string;
+  confidence: number;
+  total_candidates: number;
+}
+
 export interface JobConfig {
   video_path: string;
   engine: OcrEngineName;

@@ -70,6 +70,15 @@ void validate_output_crop(const SourceBox& crop, std::int32_t source_width,
     const std::optional<SourceBox>& crop = std::nullopt,
     int quality = 2);
 
+/// 从视频中按指定秒数抽取单帧 RGB24 内存图像数据（供 OCR 算法与字幕区域自动识别使用）
+/// @param video_path 视频绝对路径
+/// @param time_seconds 指定截取时间点（秒），默认 0.0
+/// @param max_dimension 最大长边限制（默认 1920，防止 4K 内存膨胀与提速检测）
+[[nodiscard]] ImageBuffer extract_single_frame_rgb24(
+    const std::filesystem::path& video_path,
+    double time_seconds = 0.0,
+    int max_dimension = 1920);
+
 /// 将非浏览器原生支持的视频（MKV, AVI, FLV, ProRes MOV 等）极速转封装/转码为带 faststart 的 MP4 预览缓存文件。
 /// 若输入已是兼容的 MP4 且无需转封装，或缓存中已有有效产物，直接返回路径。
 [[nodiscard]] std::filesystem::path remux_to_faststart_mp4(
