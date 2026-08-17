@@ -10,6 +10,8 @@
 #include "sublift/models.hpp"
 #include "sublift/server/job_manager.hpp"
 
+#include "sublift/server/workspace_manager.hpp"
+
 namespace httplib {
 class Server;
 }
@@ -47,9 +49,10 @@ struct SystemInfoDTO {
 /// 将字幕条目列表格式化为标准 UTF-8 SRT 字符串
 [[nodiscard]] std::string format_entries_to_srt(const std::vector<sublift::SubtitleEntry>& entries);
 
-/// 注册所有 Web API 路由（REST + 视频流 + SSE + SRT 导出）及静态文件托管
+/// 注册所有 Web API 路由（REST + 视频流 + SSE + 工作区配置 + SRT 导出）及静态文件托管
 void register_routes(httplib::Server& server,
                      std::shared_ptr<JobManager> job_manager,
-                     const std::string& static_dir = "");
+                     const std::string& static_dir = "",
+                     std::shared_ptr<WorkspaceManager> workspace_manager = nullptr);
 
 }  // namespace sublift::server

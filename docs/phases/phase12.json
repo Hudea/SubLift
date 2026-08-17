@@ -41,21 +41,27 @@
           "id": "12001.02",
           "name": "编写架构设计与实施计划",
           "description": "撰写 phase12-cross-platform-web-ui.md 与 12001.md 规划文档。",
-          "dependencies": ["12001.01"],
+          "dependencies": [
+            "12001.01"
+          ],
           "status": "done"
         },
         {
           "id": "12001.03",
           "name": "登记 Phase 12 与同步项目导航",
           "description": "在 phases.json 与 progress.md 中登记 Phase 12 与当前状态。",
-          "dependencies": ["12001.02"],
+          "dependencies": [
+            "12001.02"
+          ],
           "status": "done"
         },
         {
           "id": "12001.04",
           "name": "运行基准门禁验证",
           "description": "运行 JSON Schema 校验、diff 检查与 ./init.sh 并归档证据。",
-          "dependencies": ["12001.03"],
+          "dependencies": [
+            "12001.03"
+          ],
           "status": "done"
         }
       ],
@@ -80,7 +86,9 @@
         "cpp/tests/server_test.cpp",
         "cpp/CMakeLists.txt"
       ],
-      "dependencies": ["12001"],
+      "dependencies": [
+        "12001"
+      ],
       "acceptance_criteria": [
         "编译生成独立可执行文件 sublift_server，支持 --port、--host、--static-dir 启动参数。",
         "/api/system/info 返回正确的运行时与当前平台可用引擎列表。",
@@ -99,21 +107,27 @@
           "id": "12101.02",
           "name": "FFmpeg 快速截取单帧 JPEG 适配",
           "description": "在 sublift_ffmpeg 中实现 extract_single_frame_jpeg，利用 fast input seek 与 stdout MJPEG 直出。",
-          "dependencies": ["12101.01"],
+          "dependencies": [
+            "12101.01"
+          ],
           "status": "done"
         },
         {
           "id": "12101.03",
           "name": "实现 HttpServer 与 REST 路由",
           "description": "实现 /api/system/info 探测、/api/video/frame 抽帧与 /api/video/stream HTTP 206 Range 分片流式传输。",
-          "dependencies": ["12101.02"],
+          "dependencies": [
+            "12101.02"
+          ],
           "status": "done"
         },
         {
           "id": "12101.04",
           "name": "编写 sublift_server 入口与 Catch2 单元测试",
           "description": "实现 CLI 入口与信号处理，并在 cpp/tests/server_test.cpp 编写 60 组断言覆盖全部端点与 Range 边界。",
-          "dependencies": ["12101.03"],
+          "dependencies": [
+            "12101.03"
+          ],
           "status": "done"
         }
       ],
@@ -128,7 +142,9 @@
         "cpp/src/server/job_manager.hpp",
         "cpp/src/server/job_manager.cpp"
       ],
-      "dependencies": ["12101"],
+      "dependencies": [
+        "12101"
+      ],
       "acceptance_criteria": [
         "POST /api/jobs 正确接收路径、ROI 坐标、引擎与采样配置并启动任务。",
         "GET /api/jobs/{id}/events 建立 SSE 长连接，流式推送 progress 百分比与 push_entry 单条字幕。",
@@ -140,28 +156,36 @@
           "id": "12102.01",
           "name": "JobContext 与 JobManager 任务调度中枢实现",
           "description": "实现任务状态机 (Queued/Running/Completed/Failed/Cancelled)、UUID v4 分配、LRU 历史限制与多线程安全事件流 (JobEventStream)。",
-          "dependencies": ["12101.04"],
+          "dependencies": [
+            "12101.04"
+          ],
           "status": "done"
         },
         {
           "id": "12102.02",
           "name": "BridgeHandler 进程内流水线驱动与 PushCallback 转发",
           "description": "在后台工作线程驱动 BridgeHandler，将 ProgressMsg、PushEntryMsg、EntriesMsg、DoneMsg 转换为结构化 SSE 事件广播。",
-          "dependencies": ["12102.01"],
+          "dependencies": [
+            "12102.01"
+          ],
           "status": "done"
         },
         {
           "id": "12102.03",
           "name": "SSE 长连接流式端点与优雅断开回收",
           "description": "实现 GET /api/jobs/{id}/events chunked SSE 协议推送，支持历史回放、实时推流、15s 心跳保活与客户端断连感知。",
-          "dependencies": ["12102.02"],
+          "dependencies": [
+            "12102.02"
+          ],
           "status": "done"
         },
         {
           "id": "12102.04",
           "name": "SRT 标准格式化与导出端点",
           "description": "实现 format_srt_timestamp 与 format_entries_to_srt 工具，提供 GET /api/jobs/{id}/export 附件下载与 Catch2/E2E 全量测试。",
-          "dependencies": ["12102.03"],
+          "dependencies": [
+            "12102.03"
+          ],
           "status": "done"
         }
       ],
@@ -178,7 +202,9 @@
         "apps/web/src/views/WorkbenchView.vue",
         "apps/web/src/components/VideoPlayer.vue"
       ],
-      "dependencies": ["12001"],
+      "dependencies": [
+        "12001"
+      ],
       "acceptance_criteria": [
         "支持视频文件选择/拖拽导入，视频可平滑播放、暂停与进度拖动。",
         "时码显示精确到毫秒 (HH:MM:SS.mmm)，与播放进度实时同步。",
@@ -189,28 +215,36 @@
           "id": "12201.01",
           "name": "构建 Vue 3 + TypeScript + Vite 前端工程骨架与 Apple/Notion 设计系统",
           "description": "搭建 apps/web 工程，实现 design-tokens.css 磨砂毛玻璃、微发光边框与暗炭黑深色排版体系。",
-          "dependencies": ["12001"],
+          "dependencies": [
+            "12001"
+          ],
           "status": "done"
         },
         {
           "id": "12201.02",
           "name": "实现 HTML5 播放器与 10Hz 毫秒级时码同步引擎",
           "description": "对接 /api/video/stream HTTP 206 流，基于 useVideoPlayer 实现 10Hz 时码时钟 (HH:MM:SS.mmm) 与平滑 Scrubbing。",
-          "dependencies": ["12201.01"],
+          "dependencies": [
+            "12201.01"
+          ],
           "status": "done"
         },
         {
           "id": "12201.03",
           "name": "实现工作台四态状态机与组件交互编排",
           "description": "实现 Empty/Ready/Processing/Review 状态机驱动，封装 Navbar、DropZone、SidebarControls 与 LiveTranscript 组件。",
-          "dependencies": ["12201.02"],
+          "dependencies": [
+            "12201.02"
+          ],
           "status": "done"
         },
         {
           "id": "12201.04",
           "name": "静态托管集成与全量端到端验证",
           "description": "完成 npm run build 打包产物至 apps/web/dist，sublift_server --static-dir 挂载验证，E2E 29/29 测试全绿。",
-          "dependencies": ["12201.03"],
+          "dependencies": [
+            "12201.03"
+          ],
           "status": "done"
         }
       ],
@@ -225,7 +259,10 @@
         "apps/web/src/components/RoiOverlay.vue",
         "apps/web/src/utils/coordinate_mapper.ts"
       ],
-      "dependencies": ["12201", "12101"],
+      "dependencies": [
+        "12201",
+        "12101"
+      ],
       "acceptance_criteria": [
         "Canvas 覆盖层跟随视频视口尺寸自适应重绘，提供手柄支持拖拽调整大小与位置。",
         "提供底部 30% 快速重置按钮与自定义选区切换。",
@@ -236,21 +273,27 @@
           "id": "12202.01",
           "name": "Letterboxing 视口几何与多向坐标映射引擎实现",
           "description": "实现 coordinate_mapper.ts：自动消除上下/左右黑边、8-Handle 缩放与平移越界 Clamp、Retina DPR 适配与单元测试验证。",
-          "dependencies": ["12201"],
+          "dependencies": [
+            "12201"
+          ],
           "status": "done"
         },
         {
           "id": "12202.02",
           "name": "Canvas ROI 8 手柄交互层与浮动尺寸 Tooltip 胶囊",
           "description": "实现 RoiOverlay.vue：Apple System Blue 选区高亮、8 手柄拖拽缩放、空白画新框、Tooltip 实时显示真实像素尺寸。",
-          "dependencies": ["12202.01"],
+          "dependencies": [
+            "12202.01"
+          ],
           "status": "done"
         },
         {
           "id": "12202.03",
           "name": "播放器插槽装配与 Pinia 选区状态双向联动",
           "description": "在 VideoPlayer 挂载 RoiOverlay，与 workbenchStore.regionBox 响应式双向同步，完善底部 30%/全画幅/自定义预设。",
-          "dependencies": ["12202.02"],
+          "dependencies": [
+            "12202.02"
+          ],
           "status": "done"
         }
       ],
@@ -267,7 +310,10 @@
         "apps/web/src/utils/subtitle_search.ts",
         "apps/web/src/utils/srt_formatter.ts"
       ],
-      "dependencies": ["12202", "12102"],
+      "dependencies": [
+        "12202",
+        "12102"
+      ],
       "subtasks": [
         {
           "id": "12203.01",
@@ -280,14 +326,18 @@
           "id": "12203.02",
           "name": "标准 UTF-8 SRT 格式化与弹性时码解析器",
           "description": "实现 formatSrt、parseFlexibleTimecodeToMs、parseSrt 与 Blob 安全一键下载导出。",
-          "dependencies": ["12203.01"],
+          "dependencies": [
+            "12203.01"
+          ],
           "status": "done"
         },
         {
           "id": "12203.03",
           "name": "实时打轴表格、双向音画联动与行内双模态编辑",
           "description": "实现 LiveTranscript.vue 实时推流吸附、呼吸高亮与智能防打扰平滑滚动、双击就地文本/时码编辑与打轴操作。",
-          "dependencies": ["12203.02"],
+          "dependencies": [
+            "12203.02"
+          ],
           "status": "done"
         }
       ],
@@ -311,7 +361,9 @@
         "apps/web/src/stores/batch.ts",
         "apps/web/src/types/batch.ts"
       ],
-      "dependencies": ["12203"],
+      "dependencies": [
+        "12203"
+      ],
       "acceptance_criteria": [
         "支持多文件拖拽批量导入，展示待处理、进行中、已完成、失败状态。",
         "服务端按单并发串行排队执行，支持单任务取消与重试。",
@@ -329,14 +381,18 @@
           "id": "12301.02",
           "name": "批量统计面板卡片与双模视频导入区",
           "description": "实现 BatchStatsCards.vue 5 状态筛选卡片与 BatchDropZone.vue（多选拖拽与多行绝对路径录入）。",
-          "dependencies": ["12301.01"],
+          "dependencies": [
+            "12301.01"
+          ],
           "status": "done"
         },
         {
           "id": "12301.03",
           "name": "任务中心视图、单任务操作行与全量批量导出",
           "description": "实现 BatchTaskRow.vue、TaskCenterView.vue、Navbar 分段控制器与动态未完成角标，实现批量错峰 SRT 导出。",
-          "dependencies": ["12301.02"],
+          "dependencies": [
+            "12301.02"
+          ],
           "status": "done"
         }
       ],
@@ -353,7 +409,9 @@
         "docker-compose.yml",
         "scripts/verify-web-server.sh"
       ],
-      "dependencies": ["12301"],
+      "dependencies": [
+        "12301"
+      ],
       "acceptance_criteria": [
         "Dockerfile 可成功构建轻量 Linux 镜像并在无头服务器上正常启动服务。",
         "自动化脚本在 Linux 环境下跑通单视频与批量提取全流程。"
@@ -370,14 +428,18 @@
           "id": "12401.02",
           "name": "C++ 环境变量支持与 .dockerignore 规则定义",
           "description": "在 main.cpp 增加对 SUBLIFT_HOST、SUBLIFT_PORT 与 SUBLIFT_STATIC_DIR 环境变量读取；定义 .dockerignore 排除宿主机构建缓存。",
-          "dependencies": ["12401.01"],
+          "dependencies": [
+            "12401.01"
+          ],
           "status": "done"
         },
         {
           "id": "12401.03",
           "name": "编写 verify-web-server.sh 自动化回归脚本并完成全量质量验收",
           "description": "实现就绪探测、trap 优雅停机、静态托管校验、test_server_e2e 29 组全量接口与 Catch2 服务端回归通过。",
-          "dependencies": ["12401.02"],
+          "dependencies": [
+            "12401.02"
+          ],
           "status": "done"
         }
       ],
@@ -396,7 +458,10 @@
         "apps/web/src/components/VideoPlayer.vue",
         "apps/web/src/components/DropZone.vue"
       ],
-      "dependencies": ["12101", "12201"],
+      "dependencies": [
+        "12101",
+        "12201"
+      ],
       "acceptance_criteria": [
         "MKV, AVI 与 MP4 在前端工作台均可秒级正常播放，无 Format error 报错。",
         "转封装视频完整保留 HTTP 206 自由拖拽寻道、10Hz 时钟同步与 Canvas ROI 标注。"
@@ -415,7 +480,10 @@
         "cpp/src/application/bridge.cpp",
         "cpp/src/server/routes.cpp"
       ],
-      "dependencies": ["12101", "12102"],
+      "dependencies": [
+        "12101",
+        "12102"
+      ],
       "acceptance_criteria": [
         "GET /api/video/stream 请求系统敏感文件（如 /etc/passwd）或非媒体扩展名严格返回 400/404 Access Denied。",
         "传入非法 engine 参数时路由层前置拦截返回 400，后台 Worker 线程无死锁挂起。",
@@ -435,7 +503,10 @@
         "apps/web/src/components/LiveTranscript.vue",
         "apps/web/src/components/DropZone.vue"
       ],
-      "dependencies": ["12301", "12203"],
+      "dependencies": [
+        "12301",
+        "12203"
+      ],
       "acceptance_criteria": [
         "批量队列中任一任务失败时，调度器自动平滑流转到下一个排队任务，队列不卡死。",
         "并发触发取消与完成时严格保持单任务运行不变量，无任务状态僵死。",
@@ -457,7 +528,11 @@
         "scripts/test_server_e2e.py",
         "scripts/verify-standard.sh"
       ],
-      "dependencies": ["12501", "12502", "12503"],
+      "dependencies": [
+        "12501",
+        "12502",
+        "12503"
+      ],
       "acceptance_criteria": [
         "npm --prefix apps/web test 规范化运行并通过所有前端单元测试。",
         "test_server_e2e.py 严格校验 SRT Exact Match，排队并发流转与安全沙箱测试 100% 通过。",
@@ -478,13 +553,202 @@
         "phases.json",
         "progress.md"
       ],
-      "dependencies": ["12504"],
+      "dependencies": [
+        "12504"
+      ],
       "acceptance_criteria": [
         "Dockerfile 集成 Linux ONNX Runtime 与 PP-OCRv6 预热模型，/api/system/info 真实返回 paddle.available=true。",
         "verify-web-server.sh 具备 Docker 时自动执行容器内真实 Paddle 提取与 SRT Golden 比对；无 Docker 时显式输出容器阶段 SKIPPED 并降级为本地验证。"
       ],
+      "status": "in_progress",
+      "evidence": "2026-08-17 二轮审核后回退状态并如实化：原 evidence 中“PP-OCRv6 预热模型”与“容器化真实闭环”不实——模型下载 URL 三个全部 404 且被 || true 吞错，Docker 分支从未对真实容器执行过（宿主临时路径与容器沙箱 /media 存在结构性错配）。2026-08-17 修复：Dockerfile 模型源改为 RapidOCR 官方 ModelScope v3.9.2 ONNX 产物（PP-OCRv6 det/rec + cls + dict，与 rapidocr 包内 default_models.yaml 的 URL/SHA256 一致）并 sha256sum -c 硬失败校验；compose 移除空 ./models 遮蔽挂载与死 /output；verify-web-server.sh Docker 分支改为 mktemp 媒体目录挂载 /media + SUBLIFT_E2E_WORKSPACE_DIR/API_PATH_PREFIX 路径映射、paddle.available=true 断言与真实 Paddle 提取 + golden SRT 精确比对（首跑录制、复跑精确比对）。当前实证：本地降级模式全链路通过（E2E 33/33 含 TC-JOB-07 真实 Paddle 提取与 golden 比对、Catch2 [server] 180 断言、Vitest 15/15）；容器阶段（docker build/run + 容器内 paddle 断言）代码就绪但本机无 Docker daemon，尚未在真实容器执行——待有 Docker 环境补证后才能视为 done。"
+    },
+    {
+      "id": "12506",
+      "name": "第二轮审核修复：服务端安全收尾、前端状态闭环与验收去假绿",
+      "description": "针对 Phase 12 二轮审核发现的残留问题集中修复：.ts 白名单 LFI 残留与 CORS 通配、沙箱 fail-open、region_box clamp UB、前端 cancelled/failed 状态闭环与浏览器死路径导入、verify 脚本假绿通道与前端严格构建增量缓存假绿。",
+      "module": [
+        "cpp/include/sublift/server/path_sandbox.hpp",
+        "cpp/include/sublift/server/http_server.hpp",
+        "cpp/include/sublift/server/job_manager.hpp",
+        "cpp/src/server/http_server.cpp",
+        "cpp/src/server/main.cpp",
+        "cpp/src/server/job_manager.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/stores/batch.test.ts",
+        "apps/web/src/components/DropZone.vue",
+        "apps/web/src/components/BatchDropZone.vue",
+        "apps/web/src/views/WorkbenchView.vue",
+        "scripts/test_server_e2e.py",
+        "scripts/verify-web-server.sh",
+        "Dockerfile",
+        "docker-compose.yml"
+      ],
+      "dependencies": [
+        "12505"
+      ],
+      "acceptance_criteria": [
+        "path_sandbox 白名单移除 .ts 且沙箱根目录 canonical 失败时 fail-closed；活体探测 /etc/passwd 与 .ts 均返回 400。",
+        "CORS 默认不发送任何跨域头，仅 SUBLIFT_CORS_ORIGIN/--cors-origin 显式配置时放行；E2E 断言随配置切换。",
+        "workbench 状态机补齐 Failed/Cancelled 终态并在 UI 横幅渲染 errorMessage；服务端 cancelled 事件映射为 cancelled 而非 failed。",
+        "批量调度器：创建失败不覆盖已取消终态、迟到回调不破坏单并发不变量；浏览器拖拽导入不再用文件名冒充服务端路径。",
+        "verify 脚本无假绿通道（就绪探测 curl -sf、Catch2 缺失即失败、汇总不硬编码）；前端严格构建清除 tsbuildinfo 增量缓存后真实通过。"
+      ],
+      "subtasks": [
+        {
+          "id": "12506.01",
+          "name": "服务端安全收尾",
+          "description": "移除 .ts 白名单、沙箱 fail-closed、CORS opt-in、region_box [0,1] 归一化与 clamp UB 修复、stream file_size 竞态 404。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12506.02",
+          "name": "前端状态闭环与调度语义修正",
+          "description": "WorkbenchState 补 Failed/Cancelled 与取消窗口防御、cancelled 独立回调、catch 保留 cancelled 终态、迟到回调 finalizeIfCurrent 防御、拖拽死路径诚实提示。",
+          "dependencies": [
+            "12506.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "12506.03",
+          "name": "验收与测试去假绿",
+          "description": "E2E 增 .ts LFI/路径映射/paddle golden 用例；verify-web-server.sh 双模重构；修复 batch.test.ts 类型窄化导致严格构建从未真正通过的问题。",
+          "dependencies": [
+            "12506.02"
+          ],
+          "status": "done"
+        }
+      ],
       "status": "done",
-      "evidence": "2026-08-16 重构 Dockerfile 为三阶段多架构构建（node:20-slim -> ubuntu:22.04 + Multi-Arch ONNX Runtime 1.18.1 + PP-OCRv6 预热模型 + SUBLIFT_ENABLE_PADDLE=ON -> 极简 runtime + non-root sublift 用户 UID 10001）；更新 docker-compose.yml 持久化挂载（/media:ro, /opt/sublift/models:ro）；升级 verify-web-server.sh 为 Docker 容器与本地 Native 双模验收套件（自动探测 Docker 环境，无 Docker 时显式标明 SKIPPED 并优雅降级为本地 32 项严格 E2E + Catch2 + Vitest 验收，杜绝假绿）；双子 Agent 审计通过；verify-standard 12/12 门禁全绿。"
+      "evidence": "2026-08-17 完成。实测：sublift_tests [server] 180 断言全绿（新增 .ts 拒绝、CORS 默认关/opt-in、RegionBox clamp 用例）；活体探测 /etc/passwd 与 .ts 均被 400 且无内容泄露、默认启动无 CORS 头、SUBLIFT_CORS_ORIGIN=* 时放行；E2E 33/33 全绿（TC-SEC-01 增 .ts 目标、TC-JOB-07 真实 Paddle 提取 'SUBLIFT2026' 烧录文本往返 + debug/web-server/paddle_golden.srt 首录后二次精确比对通过）；Vitest 15/15（新增 cancelled 映射与创建失败保留 cancelled 两用例）；删除 tsconfig.tsbuildinfo 后 vue-tsc 严格构建真实通过（此前为增量缓存假绿，HEAD 原样复跑即失败）；verify-web-server.sh 本地降级模式全链路通过；ruff/mypy 通过；verify-standard 12/12 全绿。"
+    },
+    {
+      "id": "12507",
+      "name": "浏览器零拷贝预览与本机指纹反查 (blob preview & local resolve)",
+      "description": "拖拽/点选文件经 URL.createObjectURL 直接本地预览（零上传零拷贝）；提取时以 文件名+大小+首尾 4KB 字节指纹 通过 POST /api/video/resolve 让服务端在本机媒体目录反查原文件路径，命中即零拷贝提取，未命中回退粘贴路径。",
+      "module": [
+        "cpp/src/server/routes.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/utils/fingerprint.ts",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/components/VideoPlayer.vue",
+        "apps/web/src/components/DropZone.vue",
+        "apps/web/src/components/SidebarControls.vue",
+        "apps/web/src/components/BatchDropZone.vue",
+        "apps/web/src/views/WorkbenchView.vue",
+        "apps/web/src/utils/fingerprint.test.ts",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12506"
+      ],
+      "acceptance_criteria": [
+        "纯浏览器拖入/点选视频立即经 blob URL 本地预览（零上传、零服务端拷贝），ROI/时码联动正常。",
+        "POST /api/video/resolve 以 文件名+大小+首尾 4KB 字节比对在本机受控目录（SUBLIFT_ALLOWED_MEDIA_ROOT 或默认用户媒体目录）定位文件，命中返回可流式播放的原路径，指纹不符/未命中返回 404。",
+        "命中指纹时点『开始提取』零拷贝直达 ffmpeg；未命中时 UI 明确引导粘贴服务端路径，且无路径时不能发起提取。",
+        "批量导入对无原生路径文件先反查，命中自动入队，未命中如实提示。"
+      ],
+      "subtasks": [
+        {
+          "id": "12507.01",
+          "name": "服务端指纹反查端点",
+          "description": "实现 POST /api/video/resolve：受控根目录扫描 + 文件名/大小/首尾字节精确校验 + 媒体白名单约束。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12507.02",
+          "name": "前端 blob 预览与路径回退闭环",
+          "description": "fingerprint 工具、client.resolveVideoPath、workbench previewSrc/attachServerPath、DropZone/SidebarControls/BatchDropZone/WorkbenchView 接线。",
+          "dependencies": [
+            "12507.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "12507.03",
+          "name": "测试与全量验证",
+          "description": "server_test resolve 用例、E2E TC-RSV、Vitest fingerprint 用例；全量构建与门禁回归。",
+          "dependencies": [
+            "12507.02"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-17 完成。服务端 POST /api/video/resolve（指纹反查：文件名+大小+首尾 4KB 原始字节逐比对、受控根目录 SUBLIFT_ALLOWED_MEDIA_ROOT 优先且唯一、默认仅扫 ~/Movies ~/Downloads ~/Desktop ~/Documents 与 TMPDIR、限深 6 层限时 8s、跳过符号链接、命中后仍须通过媒体沙箱校验）：活体实测精确指纹 200 且返回路径可立即 206/200 流式播放，篡改 head/tail 首字节、size 不符、名称不符、.ts 白名单外均 404。前端：DropZone/BatchDropZone 拖入或点选即 URL.createObjectURL 零拷贝本地预览并异步反查，命中静默附加服务端路径；未命中时 WorkbenchView 信息横幅 + SidebarControls「服务端路径」补挂输入引导；startExtraction 无路径时先反查再回退引导，绝不以空路径建任务；批量导入反查命中自动入队、未命中如实计数提示。测试：server_test 新增 resolve 用例（[server],[resolve] 208 断言全绿，含 .ts 孪生负例与 400 载荷校验）；E2E 新增 TC-RSV-01/02（35/35 全绿，自建服务沙箱根指向 fixture workspace 保证搜索域确定）；Vitest 新增 fingerprint 3 用例（18/18 全绿）；ctest 全量 186/186；清 tsbuildinfo 后 vue-tsc 严格构建通过；verify-web-server 本地模式全链路通过；verify-standard 12/12 全绿。"
+    },
+    {
+      "id": "12508",
+      "name": "媒体处理工作区目录显式引导、动态配置与目录级 Cache 体系",
+      "description": "提供显式视频处理工作区目录引导（未配置时展示请指定视频所在文件夹路径，配置后直接进入工作台）、Navbar 目录胶囊与切换、<media_dir>/.sublift_cache 就近缓存集成以及与 PathSandbox / 指纹反查的最高优先级协同。",
+      "module": [
+        "cpp/include/sublift/server/workspace_manager.hpp",
+        "cpp/src/server/workspace_manager.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/http_server.cpp",
+        "apps/web/src/views/WorkspaceSetupView.vue",
+        "apps/web/src/components/Navbar.vue",
+        "apps/web/src/stores/system.ts",
+        "apps/web/src/App.vue"
+      ],
+      "dependencies": [
+        "12507"
+      ],
+      "acceptance_criteria": [
+        "未配置工作区时打开 WebUI 自动呈现极简引导屏『请指定视频所在的文件夹路径：』，输入并校验合法后自动初始化 .sublift_cache 目录并直接进入工作台。",
+        "已配置工作区时打开 WebUI 自动跳过引导直达工作台，顶栏 Navbar 显示工作区目录胶囊且支持点击切换。",
+        "工作区目录为指纹反查第一最高优先级根域，拖入工作区内任何视频 100% 自动秒级命中并直达提取。",
+        "Faststart Remux 转封装与截帧缓存优先就近写入 <media_dir>/.sublift_cache，免除系统临时目录污染。"
+      ],
+      "subtasks": [
+        {
+          "id": "12508.01",
+          "name": "C++ WorkspaceManager 与 /api/config/workspace 接口实现",
+          "description": "实现 WorkspaceManager，支持目录有效性校验、.sublift_cache 初始化、配置文件持久化与 GET/POST /api/config/workspace 路由。",
+          "dependencies": [],
+          "status": "done"
+        },
+        {
+          "id": "12508.02",
+          "name": "前端 WorkspaceSetupView 引导屏、Navbar 工作区胶囊与状态守卫",
+          "description": "实现 WorkspaceSetupView 极简引导卡片、Navbar 路径胶囊展示与切换 Modal，在 App.vue 与 systemStore 中接入工作区校验守卫。",
+          "dependencies": [
+            "12508.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "12508.03",
+          "name": "目录级 .sublift_cache 就近缓存与指纹反查第一优先级联动",
+          "description": "对接 remux_to_faststart_mp4 缓存目录至 <media_dir>/.sublift_cache/remux，指纹反查优先在 media_dir 内做确定性比对。",
+          "dependencies": [
+            "12508.01"
+          ],
+          "status": "done"
+        },
+        {
+          "id": "12508.04",
+          "name": "CTest、Vitest、E2E 自动化回归与标准门禁验证",
+          "description": "编写 server_test、Vitest 与 E2E 自动化测试用例，全量通过 verify-standard 门禁。",
+          "dependencies": [
+            "12508.02",
+            "12508.03"
+          ],
+          "status": "done"
+        }
+      ],
+      "status": "done",
+      "evidence": "2026-08-17 完成。C++ 新增 WorkspaceManager（~ 展开、目录合法性校验、.sublift_cache/remux/frames 自动建目录、~/.config/sublift/workspace.json 跨实例持久化）与 GET/POST /api/config/workspace 及 clear 路由；remux_to_faststart_mp4 与视频流转封装就近写入 <media_dir>/.sublift_cache/remux；指纹反查与路径沙箱将 workspace.media_dir 设为最高优先级搜索根域。前端：实现 WorkspaceSetupView 极简引导卡片（『请指定视频所在的文件夹路径：』带常用预设与回车一键初始化进入工作台）；Navbar 增加工作区目录胶囊与切换 Modal；App.vue 实现工作区未配置时自动拦截引导，配置后直通工作台与任务中心。测试：server_test 新增 WorkspaceManager 与 API 端点 2 套用例（Catch2 [server] 243 assertions 100% 全绿）；Vitest 新增 system.test.ts 工作区管理用例（23/23 全绿）；E2E 新增 TC-WKS-01/02（37/37 全绿）；verify-web-server.sh 验收通过；verify-standard.sh 12/12 门禁 100% 全绿；./init.sh OK。"
     }
   ]
 }

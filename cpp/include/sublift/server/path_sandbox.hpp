@@ -24,9 +24,12 @@ inline bool is_allowed_media_extension(const std::filesystem::path& p) {
     return static_cast<char>(std::tolower(c));
   });
 
+  // 注意：".ts" (MPEG-TS) 刻意不在白名单内——它与 TypeScript 源码扩展名冲突，
+  // 在 CORS 放行的部署下等于开放任意源码文件读取；浏览器 <video> 也无法原生
+  // 播放 MPEG-TS，收益远低于风险。需要处理 .ts 视频时请先 remux 为 .mp4。
   static const std::vector<std::string_view> kAllowedExtensions = {
       ".mp4", ".m4v", ".mov", ".webm", ".mkv",
-      ".avi", ".flv", ".wmv", ".ts", ".m2ts",
+      ".avi", ".flv", ".wmv", ".m2ts",
       ".mpg", ".mpeg", ".vob", ".3gp", ".ogv"
   };
 
@@ -80,12 +83,18 @@ inline std::filesystem::path resolve_and_validate_media_path(
   }
 
   if (root.has_value() && !root->empty()) {
+    // fail-closed：沙箱根配置了但无法解析（不存在/权限问题）时必须拒绝，
+    // 绝不能退化为"仅扩展名过滤"的全盘访问。
     std::filesystem::path canonical_root = std::filesystem::canonical(*root, ec);
-    if (!ec) {
-      auto [root_end, _] = std::mismatch(canonical_root.begin(), canonical_root.end(), canonical_p.begin());
-      if (root_end != canonical_root.end()) {
-        throw PathSecurityException("安全策略限制：禁止访问沙箱外部文件");
-      }
+    if (ec) {
+      throw PathSecurityException(
+          "沙箱根目录无法解析 (fail-closed): " + root->string());
+    }
+    auto [root_end, _] = std::mismatch(
+        canonical_root.begin(), canonical_root.end(),
+        canonical_p.begin(), canonical_p.end());
+    if (root_end != canonical_root.end()) {
+      throw PathSecurityException("安全策略限制：禁止访问沙箱外部文件");
     }
   }
 

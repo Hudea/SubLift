@@ -59,12 +59,27 @@ RUN cmake -S /app/cpp -B /app/build/cpp -G Ninja \
     -DSUBLIFT_BUILD_TESTS=OFF \
     && cmake --build /app/build/cpp --target sublift_server
 
-# Prepare pre-warmed PP-OCR models and dictionary
+# Prepare pre-warmed PP-OCRv6 ONNX models and dictionary.
+# Sources are the exact artifacts RapidOCR itself distributes (ModelScope v3.9.2),
+# pinned by SHA256; any download or checksum failure must fail the build
+# (fail-closed) instead of silently shipping an unusable engine.
 RUN mkdir -p /opt/sublift/models && \
-    (wget -q -T 10 https://github.com/RapidAI/RapidOCR/releases/download/v1.1.0/ch_PP-OCRv4_det_infer.onnx -O /opt/sublift/models/PP-OCRv6_det_small.onnx 2>/dev/null || true) && \
-    (wget -q -T 10 https://github.com/RapidAI/RapidOCR/releases/download/v1.1.0/ch_ppocr_mobile_v2.0_cls_infer.onnx -O /opt/sublift/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx 2>/dev/null || true) && \
-    (wget -q -T 10 https://github.com/RapidAI/RapidOCR/releases/download/v1.1.0/ch_PP-OCRv4_rec_infer.onnx -O /opt/sublift/models/PP-OCRv6_rec_small.onnx 2>/dev/null || true) && \
-    (wget -q -T 10 https://raw.githubusercontent.com/PaddlePaddle/PaddleOCR/release/2.7/ppocr/utils/ppocr_keys_v1.txt -O /opt/sublift/models/ppocrv6_dict.txt 2>/dev/null || true)
+    wget -q -T 60 --tries=3 -O /opt/sublift/models/PP-OCRv6_det_small.onnx \
+      "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx" && \
+    wget -q -T 60 --tries=3 -O /opt/sublift/models/PP-OCRv6_rec_small.onnx \
+      "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx" && \
+    wget -q -T 60 --tries=3 -O /opt/sublift/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx \
+      "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx" && \
+    wget -q -T 60 --tries=3 -O /opt/sublift/models/ppocrv6_dict.txt \
+      "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/ppocrv6_dict.txt" && \
+    printf '%s\n' \
+      "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f  /opt/sublift/models/PP-OCRv6_det_small.onnx" \
+      "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884  /opt/sublift/models/PP-OCRv6_rec_small.onnx" \
+      "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c  /opt/sublift/models/ch_ppocr_mobile_v2.0_cls_mobile.onnx" \
+      "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d  /opt/sublift/models/ppocrv6_dict.txt" \
+      > /tmp/sublift_model_sha256 && \
+    sha256sum -c /tmp/sublift_model_sha256 && \
+    rm -f /tmp/sublift_model_sha256
 
 # -----------------------------------------------------------------------------
 # Stage 3: Minimal Production Runtime
@@ -107,11 +122,10 @@ COPY --from=cpp-builder --chown=sublift:sublift /opt/sublift/models /opt/sublift
 COPY --from=web-builder --chown=sublift:sublift /app/apps/web/dist /app/web/dist
 
 USER sublift:sublift
-VOLUME ["/media", "/opt/sublift/models"]
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=3s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=15s --timeout=3s --start-period=15s --retries=3 \
   CMD curl -fsS http://localhost:8080/api/system/info || exit 1
 
 ENTRYPOINT ["/usr/local/bin/sublift_server"]

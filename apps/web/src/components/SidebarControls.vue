@@ -7,6 +7,28 @@
       </div>
 
       <div class="sl-card-body">
+        <!-- 服务端路径补挂（Feature 12507）：本地 blob 预览未定位到服务端路径时显示 -->
+        <div v-if="workbenchStore.needsServerPath" class="sl-form-row">
+          <label class="sl-form-label">服务端路径</label>
+          <div class="sl-server-path-group">
+            <input
+              v-model="serverPathInput"
+              type="text"
+              class="sl-server-path-input"
+              placeholder="粘贴该视频在服务器上的绝对路径"
+              @keydown.enter="submitServerPath"
+            />
+            <button
+              class="sl-server-path-btn"
+              :disabled="!serverPathInput.trim() || workbenchStore.isLocked"
+              @click="submitServerPath"
+            >
+              绑定
+            </button>
+          </div>
+          <p class="sl-server-path-hint">本地预览正常；提取需要服务端能访问的路径（macOS 可在 Finder 选中文件按 ⌘⌥C 复制）。</p>
+        </div>
+
         <!-- 引擎选择 -->
         <div class="sl-form-row">
           <label class="sl-form-label">OCR 引擎</label>
@@ -131,13 +153,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useSystemStore } from '../stores/system';
 import { useWorkbenchStore } from '../stores/workbench';
 import type { SystemEngineInfo } from '../types/api';
 
 const systemStore = useSystemStore();
 const workbenchStore = useWorkbenchStore();
+
+const serverPathInput = ref('');
+
+function submitServerPath() {
+  const path = serverPathInput.value.trim();
+  if (path) {
+    workbenchStore.attachServerPath(path);
+    serverPathInput.value = '';
+  }
+}
 
 const availableEngines = computed<SystemEngineInfo[]>(() => {
   if (systemStore.availableEngines.length === 0) {
@@ -160,6 +192,51 @@ const isCustomRoi = computed(() => !isBottom30Roi.value && !isFullScreenRoi.valu
 </script>
 
 <style scoped>
+.sl-server-path-group {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.sl-server-path-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--sl-border-standard);
+  border-radius: var(--sl-radius-xs);
+  background: var(--sl-surface-base);
+  color: var(--sl-text-primary);
+  font-size: var(--sl-font-size-xs);
+  outline: none;
+}
+
+.sl-server-path-input:focus {
+  border-color: var(--sl-color-accent);
+}
+
+.sl-server-path-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--sl-radius-xs);
+  background: var(--sl-color-accent);
+  color: #ffffff;
+  font-size: var(--sl-font-size-xs);
+  cursor: pointer;
+}
+
+.sl-server-path-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sl-server-path-hint {
+  margin: 6px 0 0;
+  font-size: var(--sl-font-size-xs);
+  color: var(--sl-text-tertiary);
+}
+
 .sl-sidebar-controls {
   display: flex;
   flex-direction: column;

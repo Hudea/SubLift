@@ -119,7 +119,7 @@ export const useBatchStore = defineStore('batch', () => {
     // 寻找下一个等待执行的任务
     const nextTask = tasks.value.find((t) => t.status === 'waiting');
     if (!nextTask) {
-      if (tasks.value.length > 0 && !tasks.value.some((t) => t.status === 'running')) {
+      if (!tasks.value.some((t) => t.status === 'waiting' || t.status === 'running')) {
         isQueueRunning.value = false;
       }
       currentRunningId.value = null;
@@ -135,6 +135,15 @@ export const useBatchStore = defineStore('batch', () => {
     nextTask.error = null;
 
     let shouldAdvanceImmediately = false;
+
+    // 迟到回调防御：只有该任务仍是当前活跃任务时才允许清理全局调度状态，
+    // 否则迟到的 done/error/cancelled 会误杀下一个任务的 SSE 并破坏单并发不变量。
+    const finalizeIfCurrent = () => {
+      if (currentRunningId.value !== nextTask.id) return;
+      currentRunningId.value = null;
+      cleanupSse();
+      queueMicrotask(() => processNext());
+    };
 
     try {
       const resp = await SubLiftApiClient.createJob({
@@ -176,9 +185,7 @@ export const useBatchStore = defineStore('batch', () => {
             nextTask.progressPct = 100;
             nextTask.elapsedMs = data.elapsed_ms;
           }
-          currentRunningId.value = null;
-          cleanupSse();
-          queueMicrotask(() => processNext());
+          finalizeIfCurrent();
         },
         onError: (err) => {
           if (nextTask.status === 'running') {
@@ -186,15 +193,26 @@ export const useBatchStore = defineStore('batch', () => {
             nextTask.stage = 'failed';
             nextTask.error = String(err);
           }
-          currentRunningId.value = null;
-          cleanupSse();
-          queueMicrotask(() => processNext());
+          finalizeIfCurrent();
+        },
+        onCancelled: (reason) => {
+          // 服务端主动取消：转 cancelled 而非 failed（语义保真）
+          if (nextTask.status === 'running') {
+            nextTask.status = 'cancelled';
+            nextTask.stage = 'cancelled';
+            nextTask.error = reason || null;
+          }
+          finalizeIfCurrent();
         },
       });
     } catch (err: unknown) {
-      nextTask.status = 'failed';
-      nextTask.stage = 'failed';
-      nextTask.error = err instanceof Error ? err.message : String(err);
+      // 创建期已取消的任务保持 cancelled 终态，不覆盖为 failed
+      // （显式放宽窄化：闭包内可能已被 cancelTask 改写）
+      if ((nextTask.status as string) !== 'cancelled') {
+        nextTask.status = 'failed';
+        nextTask.stage = 'failed';
+        nextTask.error = err instanceof Error ? err.message : String(err);
+      }
       currentRunningId.value = null;
       cleanupSse();
       shouldAdvanceImmediately = true;
@@ -241,6 +259,8 @@ export const useBatchStore = defineStore('batch', () => {
   function retryTask(id: string) {
     const task = tasks.value.find((t) => t.id === id);
     if (!task) return;
+    // running 任务正被调度器持有，waiting 任务本就排队中，二者重试会破坏调度状态
+    if (task.status === 'running' || task.status === 'waiting') return;
 
     task.status = 'waiting';
     task.stage = 'waiting';

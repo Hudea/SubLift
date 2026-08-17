@@ -75,4 +75,31 @@ export interface SseJobCallbacks {
   onPushEntry?: (data: SsePushEntryData) => void;
   onDone?: (data: SseDoneData) => void;
   onError?: (error: string) => void;
+  /** 服务端主动取消/终止：语义为 cancelled 而非 failed */
+  onCancelled?: (reason: string) => void;
 }
+
+/** 本机指纹反查（Feature 12507）：文件名 + 大小 + 首尾 4KB 原始字节 hex */
+export interface FileFingerprintDTO {
+  name: string;
+  size: number;
+  head_hex: string;
+  tail_hex: string;
+}
+
+/** 媒体处理工作区配置（Feature 12508） */
+export interface WorkspaceConfigDTO {
+  configured: boolean;
+  media_dir: string;
+  cache_dir: string;
+  video_count: number;
+}
+
+/** 工作区视频文件项（Feature 12508） */
+export interface WorkspaceVideoFileDTO {
+  name: string;
+  path: string;
+  relative_path: string;
+  size_bytes: number;
+}
+

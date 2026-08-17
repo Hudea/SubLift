@@ -268,8 +268,10 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
         std::int32_t px_w = static_cast<std::int32_t>(std::round(job->config.region_box.width * source_info.width));
         std::int32_t px_h = static_cast<std::int32_t>(std::round(job->config.region_box.height * source_info.height));
 
-        px_x = std::clamp(px_x, 0, source_info.width);
-        px_y = std::clamp(px_y, 0, source_info.height);
+        // 先把原点夹到 [0, size-1]，保证随后 w/h clamp 的上界 >= 下界 1；
+        // 否则 x==width 时 std::clamp(v, 1, 0) 属于未定义行为。
+        px_x = std::clamp(px_x, 0, source_info.width - 1);
+        px_y = std::clamp(px_y, 0, source_info.height - 1);
         px_w = std::clamp(px_w, 1, source_info.width - px_x);
         px_h = std::clamp(px_h, 1, source_info.height - px_y);
 

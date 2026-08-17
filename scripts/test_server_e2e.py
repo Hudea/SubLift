@@ -15,6 +15,7 @@ import time
 import unittest
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 
 def find_free_port() -> int:
@@ -33,11 +34,13 @@ class SubLiftServerProcess:
         port: int,
         host: str = "127.0.0.1",
         static_dir: str | None = None,
+        extra_env: dict[str, str] | None = None,
     ) -> None:
         self.binary_path = binary_path
         self.port = port
         self.host = host
         self.static_dir = static_dir
+        self.extra_env = extra_env or {}
         self.process: subprocess.Popen[str] | None = None
 
     def start(self, timeout_sec: float = 5.0) -> None:
@@ -48,11 +51,18 @@ class SubLiftServerProcess:
         if self.static_dir:
             cmd.extend(["--static-dir", self.static_dir])
 
+        # The E2E suite asserts permissive CORS headers (TC-SYS-01 / TC-CORS-01);
+        # opt the self-spawned server into CORS so those assertions stay meaningful.
+        spawn_env = dict(os.environ)
+        spawn_env.setdefault("SUBLIFT_CORS_ORIGIN", "*")
+        spawn_env.update(self.extra_env)
+
         self.process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            env=spawn_env,
         )
 
         start_time = time.time()
@@ -118,12 +128,28 @@ class TestSubLiftServerE2E(unittest.TestCase):
     synth_mp4_path: str = ""
     corrupt_file_path: str = ""
     ffmpeg_available: bool = False
+    paddle_available: bool = False
+    paddle_video_path: str = ""
+    paddle_video_ready: bool = False
+    expect_cors: bool = False
+    workspace_root: str = ""
+    api_path_prefix: str = ""
 
     @classmethod
     def setUpClass(cls) -> None:
         project_root = Path(__file__).resolve().parents[1]
         binary_path = str(project_root / "build" / "cpp" / "bin" / "sublift_server")
         static_dir = str(project_root / "apps" / "web" / "dist")
+
+        # Remote/container mode: fixtures live in a host dir that the server sees
+        # under a different mount point (e.g. host /tmp/x mounted at /media in Docker).
+        cls.workspace_root = os.environ.get("SUBLIFT_E2E_WORKSPACE_DIR", "")
+        cls.api_path_prefix = os.environ.get("SUBLIFT_E2E_API_PATH_PREFIX", "")
+        if cls.workspace_root:
+            os.makedirs(cls.workspace_root, exist_ok=True)
+            cls.temp_dir = tempfile.mkdtemp(prefix="sublift_e2e_", dir=cls.workspace_root)
+        else:
+            cls.temp_dir = tempfile.mkdtemp(prefix="sublift_e2e_")
 
         external_url = os.environ.get("SUBLIFT_SERVER_URL")
         if external_url:
@@ -132,6 +158,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
             cls.server_host = parsed.hostname or "127.0.0.1"
             cls.server_port = parsed.port or 8080
             cls.server_proc = None
+            cls.expect_cors = os.environ.get("SUBLIFT_E2E_EXPECT_CORS", "0") == "1"
         else:
             cls.server_port = find_free_port()
             cls.server_proc = SubLiftServerProcess(
@@ -139,11 +166,12 @@ class TestSubLiftServerE2E(unittest.TestCase):
                 cls.server_port,
                 cls.server_host,
                 static_dir=static_dir if os.path.exists(static_dir) else None,
+                # 自建服务时把媒体沙箱根指向 fixture workspace：
+                # 既约束 stream/jobs 的可访问范围，也让 TC-RSV 指纹反查有确定搜索域
+                extra_env={"SUBLIFT_ALLOWED_MEDIA_ROOT": cls.temp_dir},
             )
             cls.server_proc.start()
-
-        # Create temporary working directory and test assets
-        cls.temp_dir = tempfile.mkdtemp(prefix="sublift_e2e_")
+            cls.expect_cors = True
 
         # 1. 10,240-byte deterministic binary file for streaming tests
         cls.dummy_video_data = bytes([i % 256 for i in range(10240)])
@@ -178,6 +206,46 @@ class TestSubLiftServerE2E(unittest.TestCase):
             except Exception:
                 cls.ffmpeg_available = False
 
+        # 4. Probe server engine availability (real PaddleOCR support detection)
+        try:
+            st, _, info_body = make_request(
+                cls.server_host, cls.server_port, "GET", "/api/system/info"
+            )
+            info = json.loads(info_body.decode("utf-8")) if st == 200 else {}
+            cls.paddle_available = any(
+                e.get("name") == "paddle" and e.get("available") is True
+                for e in info.get("engines", [])
+            )
+        except Exception:
+            cls.paddle_available = False
+
+        # 5. Burned-in text video for real PaddleOCR extraction (TC-JOB-07).
+        #    Single bottom-anchored token: the detector targets bottom subtitle
+        #    bands, and multi-word spacing is not reliably merged into one entry
+        #    by the current pipeline, so keep the fixture to one solid token.
+        cls.paddle_video_path = os.path.join(cls.temp_dir, "paddle_text_video.mp4")
+        if cls.ffmpeg_available:
+            try:
+                draw_cmd = [
+                    ffmpeg_bin,
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=black:s=640x360:d=2.0:r=10",
+                    "-vf",
+                    "drawtext=text='SUBLIFT2026':fontcolor=white:fontsize=48:"
+                    "x=(w-text_w)/2:y=h-text_h-30",
+                    "-pix_fmt",
+                    "yuv420p",
+                    cls.paddle_video_path,
+                ]
+                res = subprocess.run(draw_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if res.returncode == 0 and os.path.exists(cls.paddle_video_path):
+                    cls.paddle_video_ready = True
+            except Exception:
+                cls.paddle_video_ready = False
+
     @classmethod
     def tearDownClass(cls) -> None:
         if cls.server_proc:
@@ -194,17 +262,36 @@ class TestSubLiftServerE2E(unittest.TestCase):
     ) -> tuple[int, dict[str, str], bytes]:
         return make_request(self.server_host, self.server_port, method, path, headers, body)
 
+    def api(self, host_path: str) -> str:
+        """Maps a host-side fixture path to the path the server API should receive.
+
+        In container mode the fixtures directory is bind-mounted under a different
+        mount point (e.g. host workspace dir -> container /media), so API paths must
+        be rewritten with SUBLIFT_E2E_API_PATH_PREFIX before being sent.
+        """
+        if not (self.workspace_root and self.api_path_prefix):
+            return quote(host_path, safe="/")
+        rel = os.path.relpath(host_path, self.workspace_root).replace(os.sep, "/")
+        return quote(self.api_path_prefix.rstrip("/") + "/" + rel, safe="/")
+
     # -------------------------------------------------------------------------
     # 1. /api/system/info & OPTIONS CORS Tests
     # -------------------------------------------------------------------------
 
     def test_sys_01_system_info_status_and_cors(self) -> None:
-        """TC-SYS-01: Verify GET /api/system/info returns 200 OK with valid CORS headers."""
+        """TC-SYS-01: Verify GET /api/system/info returns 200 OK; CORS headers when opted in."""
         status, headers, _ = self.req("GET", "/api/system/info")
         self.assertEqual(status, 200)
         self.assertIn("application/json", headers.get("Content-Type", ""))
-        self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
-        self.assertIn("GET", headers.get("Access-Control-Allow-Methods", ""))
+        if self.expect_cors:
+            self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
+            self.assertIn("GET", headers.get("Access-Control-Allow-Methods", ""))
+        else:
+            self.assertNotIn(
+                "Access-Control-Allow-Origin",
+                headers,
+                "CORS headers must be absent unless explicitly opted in",
+            )
 
     def test_sys_02_system_info_schema_and_fields(self) -> None:
         """TC-SYS-02: Verify system info JSON structure conforms to SystemInfoDTO schema."""
@@ -280,8 +367,9 @@ class TestSubLiftServerE2E(unittest.TestCase):
             with self.subTest(endpoint=ep):
                 status, headers, body = self.req("OPTIONS", ep)
                 self.assertEqual(status, 204)
-                self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
-                self.assertIn("OPTIONS", headers.get("Access-Control-Allow-Methods", ""))
+                if self.expect_cors:
+                    self.assertEqual(headers.get("Access-Control-Allow-Origin"), "*")
+                    self.assertIn("OPTIONS", headers.get("Access-Control-Allow-Methods", ""))
                 self.assertEqual(body, b"")
 
     # -------------------------------------------------------------------------
@@ -298,19 +386,20 @@ class TestSubLiftServerE2E(unittest.TestCase):
     def test_stream_02_nonexistent_file(self) -> None:
         """TC-STR-02: Nonexistent file path rejected by path sandbox as 400 Bad Request."""
         fake_path = os.path.join(self.temp_dir, "does_not_exist.mp4")
-        status, _, body = self.req("GET", f"/api/video/stream?path={fake_path}")
+        status, _, body = self.req("GET", f"/api/video/stream?path={self.api(fake_path)}")
         self.assertEqual(status, 400)
         err = json.loads(body.decode("utf-8"))
         self.assertIn("error", err)
 
     def test_stream_03_directory_path(self) -> None:
         """TC-STR-03: Directory path rejected by sandbox as 400 Bad Request."""
-        status, _, _ = self.req("GET", f"/api/video/stream?path={self.temp_dir}")
+        status, _, _ = self.req("GET", f"/api/video/stream?path={self.api(self.temp_dir)}")
         self.assertEqual(status, 400)
 
     def test_stream_04_full_file_200_ok(self) -> None:
         """TC-STR-04: Full GET request returns 200 OK with full byte payload and Accept-Ranges."""
-        status, headers, body = self.req("GET", f"/api/video/stream?path={self.dummy_video_path}")
+        uri = f"/api/video/stream?path={self.api(self.dummy_video_path)}"
+        status, headers, body = self.req("GET", uri)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Accept-Ranges"), "bytes")
         self.assertEqual(headers.get("Content-Type"), "video/mp4")
@@ -322,7 +411,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-STR-05: Safari Range bytes=0-1 returns 206 Partial Content and 2 exact bytes."""
         status, headers, body = self.req(
             "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
+            f"/api/video/stream?path={self.api(self.dummy_video_path)}",
             headers={"Range": "bytes=0-1"},
         )
         self.assertEqual(status, 206)
@@ -336,7 +425,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-STR-06: Middle slice Range bytes=100-199 returns 206 Partial Content and 100 bytes."""
         status, headers, body = self.req(
             "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
+            f"/api/video/stream?path={self.api(self.dummy_video_path)}",
             headers={"Range": "bytes=100-199"},
         )
         self.assertEqual(status, 206)
@@ -349,7 +438,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-STR-07: Suffix Range bytes=-50 returns 206 Partial Content with last 50 bytes."""
         status, headers, body = self.req(
             "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
+            f"/api/video/stream?path={self.api(self.dummy_video_path)}",
             headers={"Range": "bytes=-50"},
         )
         self.assertEqual(status, 206)
@@ -362,7 +451,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-STR-08: Open-ended Range bytes=10000- returns 206 Partial Content to EOF."""
         status, headers, body = self.req(
             "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
+            f"/api/video/stream?path={self.api(self.dummy_video_path)}",
             headers={"Range": "bytes=10000-"},
         )
         self.assertEqual(status, 206)
@@ -375,14 +464,15 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-STR-09: Unsatisfiable Range bytes=50000-60000 returns 416 Range Not Satisfiable."""
         status, _, _ = self.req(
             "GET",
-            f"/api/video/stream?path={self.dummy_video_path}",
+            f"/api/video/stream?path={self.api(self.dummy_video_path)}",
             headers={"Range": "bytes=50000-60000"},
         )
         self.assertEqual(status, 416)
 
     def test_stream_10_head_request(self) -> None:
         """TC-STR-10: HEAD /api/video/stream returns 200 with headers but empty body."""
-        status, headers, body = self.req("HEAD", f"/api/video/stream?path={self.dummy_video_path}")
+        uri = f"/api/video/stream?path={self.api(self.dummy_video_path)}"
+        status, headers, body = self.req("HEAD", uri)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Accept-Ranges"), "bytes")
         self.assertEqual(headers.get("Content-Type"), "video/mp4")
@@ -406,7 +496,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
                 f.write(b"DUMMY_VIDEO_HEADER_FOR_MIME_TEST")
 
             with self.subTest(filename=filename, mime=expected_mime):
-                status, headers, _ = self.req("GET", f"/api/video/stream?path={path}")
+                status, headers, _ = self.req("GET", f"/api/video/stream?path={self.api(path)}")
                 self.assertEqual(status, 200)
                 self.assertEqual(headers.get("Content-Type"), expected_mime)
 
@@ -424,7 +514,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
     def test_frame_02_nonexistent_file(self) -> None:
         """TC-FRM-02: Nonexistent file rejected by sandbox as 400 Bad Request."""
         fake_path = os.path.join(self.temp_dir, "ghost_video.mp4")
-        status, _, body = self.req("GET", f"/api/video/frame?path={fake_path}")
+        status, _, body = self.req("GET", f"/api/video/frame?path={self.api(fake_path)}")
         self.assertEqual(status, 400)
         err = json.loads(body.decode("utf-8"))
         self.assertIn("error", err)
@@ -433,7 +523,8 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-FRM-03: Corrupted non-video file returns 500 Internal Server Error."""
         if not self.ffmpeg_available:
             self.skipTest("FFmpeg toolchain not available for frame extraction test")
-        status, _, body = self.req("GET", f"/api/video/frame?path={self.corrupt_file_path}")
+        uri = f"/api/video/frame?path={self.api(self.corrupt_file_path)}"
+        status, _, body = self.req("GET", uri)
         self.assertEqual(status, 500)
         err = json.loads(body.decode("utf-8"))
         self.assertIn("error", err)
@@ -442,7 +533,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-FRM-04: Valid video extraction returns 200 OK and JPEG SOI + EOI markers."""
         if not self.ffmpeg_available:
             self.skipTest("FFmpeg toolchain not available for frame extraction test")
-        req_path = f"/api/video/frame?path={self.synth_mp4_path}&time_s=1.0"
+        req_path = f"/api/video/frame?path={self.api(self.synth_mp4_path)}&time_s=1.0"
         status, headers, body = self.req("GET", req_path)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Content-Type"), "image/jpeg")
@@ -456,7 +547,8 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-FRM-05: Omitted time_s parameter defaults to 0.0s and returns 200 OK valid JPEG."""
         if not self.ffmpeg_available:
             self.skipTest("FFmpeg toolchain not available for frame extraction test")
-        status, headers, body = self.req("GET", f"/api/video/frame?path={self.synth_mp4_path}")
+        uri = f"/api/video/frame?path={self.api(self.synth_mp4_path)}"
+        status, headers, body = self.req("GET", uri)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Content-Type"), "image/jpeg")
         self.assertEqual(body[0:2], b"\xff\xd8")
@@ -466,7 +558,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-FRM-06: Negative time_s=-5.0 clamps to 0.0s and returns 200 OK valid JPEG."""
         if not self.ffmpeg_available:
             self.skipTest("FFmpeg toolchain not available for frame extraction test")
-        req_path = f"/api/video/frame?path={self.synth_mp4_path}&time_s=-5.0"
+        req_path = f"/api/video/frame?path={self.api(self.synth_mp4_path)}&time_s=-5.0"
         status, headers, body = self.req("GET", req_path)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Content-Type"), "image/jpeg")
@@ -477,7 +569,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         """TC-FRM-07: Sub-second fractional time_s=0.25 returns 200 OK valid JPEG."""
         if not self.ffmpeg_available:
             self.skipTest("FFmpeg toolchain not available for frame extraction test")
-        req_path = f"/api/video/frame?path={self.synth_mp4_path}&time_s=0.25"
+        req_path = f"/api/video/frame?path={self.api(self.synth_mp4_path)}&time_s=0.25"
         status, headers, body = self.req("GET", req_path)
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("Content-Type"), "image/jpeg")
@@ -552,7 +644,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=10.0)
         try:
             job_payload = {
-                "video_path": self.synth_mp4_path,
+                "video_path": self.api(self.synth_mp4_path),
                 "engine": "mock",
                 "fps": 5.0,
                 "confidence_threshold": 0.0,
@@ -629,7 +721,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         conn = http.client.HTTPConnection(self.server_host, self.server_port, timeout=10.0)
         try:
             job_payload = {
-                "video_path": self.synth_mp4_path,
+                "video_path": self.api(self.synth_mp4_path),
                 "engine": "mock",
                 "fps": 5.0,
             }
@@ -662,7 +754,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
         job_ids = []
         for _ in range(2):
             payload = {
-                "video_path": self.synth_mp4_path,
+                "video_path": self.api(self.synth_mp4_path),
                 "engine": "mock",
                 "fps": 5.0,
             }
@@ -689,13 +781,82 @@ class TestSubLiftServerE2E(unittest.TestCase):
                     break
             self.assertTrue(completed, f"Job {jid} did not complete successfully")
 
+    def test_jobs_07_paddle_real_extraction_golden(self) -> None:
+        """TC-JOB-07: Real PaddleOCR extraction on burned-in text; golden SRT exact match."""
+        if not (self.ffmpeg_available and self.paddle_video_ready):
+            self.skipTest("FFmpeg drawtext unavailable for burned-text fixture video")
+        if not self.paddle_available:
+            self.skipTest("PaddleOCR engine not available on this server (models missing?)")
+
+        job_payload = {
+            "video_path": self.api(self.paddle_video_path),
+            "engine": "paddle",
+            "fps": 2.0,
+        }
+        status, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        # Paddle model load + inference needs a wider window than mock.
+        # 409 = job still running, keep polling until terminal (200) or evicted (404).
+        srt_status, _, exp_body = 409, None, b""
+        for _ in range(150):
+            time.sleep(0.4)
+            srt_status, _, exp_body = self.req("GET", f"/api/jobs/{job_id}/export")
+            if srt_status in (200, 404):
+                break
+        self.assertEqual(
+            srt_status, 200, f"Paddle job did not complete; last status {srt_status}"
+        )
+        srt_body = exp_body.decode("utf-8")
+
+        # Format contract + burned text must be recovered by real OCR
+        import re
+
+        srt_time_pattern = re.compile(r"\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}")
+        self.assertGreater(
+            len(srt_time_pattern.findall(srt_body)), 0, f"No valid timestamps:\n{srt_body}"
+        )
+        self.assertIn("SUBLIFT2026", srt_body.upper(), f"Burned text not recovered:\n{srt_body}")
+
+        # Golden baseline: record on first run, exact-compare afterwards
+        golden_path = os.environ.get("SUBLIFT_E2E_GOLDEN_SRT", "")
+        if golden_path:
+            if os.path.exists(golden_path):
+                expected = Path(golden_path).read_text(encoding="utf-8").strip()
+                self.assertEqual(
+                    srt_body.strip(),
+                    expected,
+                    f"SRT differs from golden baseline {golden_path}",
+                )
+            else:
+                os.makedirs(os.path.dirname(golden_path) or ".", exist_ok=True)
+                Path(golden_path).write_text(srt_body, encoding="utf-8")
+                print(f"\n[golden] recorded first-run baseline -> {golden_path}")
+
     # -------------------------------------------------------------------------
     # 5. Security & Sandbox Boundary Tests (Feature 12502 / 12504)
     # -------------------------------------------------------------------------
 
     def test_security_01_lfi_and_path_traversal(self) -> None:
         """TC-SEC-01: Path sandbox blocks LFI targets (/etc/passwd, /etc/hosts) and traversal."""
-        for target in ["/etc/passwd", "/etc/hosts", "../../../etc/shadow", "/dev/null"]:
+        # .ts is a source-code extension colliding with MPEG-TS and must stay
+        # outside the media whitelist (arbitrary code file read via CORS).
+        ts_probe = os.path.join(self.temp_dir, "secret_source.ts")
+        with open(ts_probe, "w", encoding="utf-8") as f:
+            f.write("SECRET_TS_SHOULD_NOT_BE_READABLE")
+        for target in [
+            "/etc/passwd",
+            "/etc/hosts",
+            "../../../etc/shadow",
+            "/dev/null",
+            self.api(ts_probe),
+        ]:
             with self.subTest(target=target):
                 # Stream route
                 st, _, _ = self.req("GET", f"/api/video/stream?path={target}")
@@ -717,7 +878,7 @@ class TestSubLiftServerE2E(unittest.TestCase):
     def test_security_02_invalid_ocr_engine_rejected(self) -> None:
         """TC-SEC-02: Invalid or unavailable OCR engine name is rejected with 400 Bad Request."""
         payload = {
-            "video_path": self.synth_mp4_path,
+            "video_path": self.api(self.synth_mp4_path),
             "engine": "invalid_engine_name_xyz",
             "fps": 2.0,
         }
@@ -732,7 +893,149 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertIn("error", err)
 
     # -------------------------------------------------------------------------
-    # 6. Static Web Assets & Workbench Shell Hosting Tests
+    # 5.5 Local Fingerprint Resolve Tests (Feature 12507)
+    # -------------------------------------------------------------------------
+
+    def _fingerprint_body(self, name: str, data: bytes, size: int,
+                          head_override: str | None = None,
+                          tail_override: str | None = None) -> str:
+        head = (head_override if head_override is not None else data[:4096].hex())
+        tail = (tail_override if tail_override is not None else data[-4096:].hex())
+        payload: dict[str, Any] = {
+            "name": name,
+            "size": size,
+            "head_hex": head,
+            "tail_hex": tail,
+        }
+        return json.dumps(payload)
+
+    def test_resolve_01_exact_fingerprint_locates_and_streams(self) -> None:
+        """TC-RSV-01: Exact name+size+edge-bytes fingerprint resolves the server path."""
+        body = self._fingerprint_body(
+            "test_stream_video.mp4", self.dummy_video_data, len(self.dummy_video_data)
+        )
+        st, _, resp_body = self.req(
+            "POST", "/api/video/resolve", body=body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+        data = json.loads(resp_body.decode("utf-8"))
+        self.assertIn("path", data)
+        self.assertTrue(data["path"].endswith("test_stream_video.mp4"))
+
+        # 返回的路径必须立即可用于流式播放（沙箱放行、字节完整）
+        stream_uri = f"/api/video/stream?path={quote(data['path'], safe='/')}"
+        st2, headers2, body2 = self.req("GET", stream_uri)
+        self.assertEqual(st2, 200)
+        self.assertEqual(int(headers2.get("Content-Length", 0)), len(self.dummy_video_data))
+        self.assertEqual(body2, self.dummy_video_data)
+
+    def test_resolve_02_tampered_or_unknown_fingerprints_miss(self) -> None:
+        """TC-RSV-02: Tampered head/tail/size and unknown names all return 404."""
+        data = self.dummy_video_data
+        head_hex = data[:4096].hex()
+        tail_hex = data[-4096:].hex()
+        # 篡改首字节（原始 data[0]==0x00 与 data[-4096]==0x00，改 ff 必产生差异）
+        bad_head = "ff" + head_hex[2:]
+        bad_tail = "ff" + tail_hex[2:]
+        for body in [
+            self._fingerprint_body("test_stream_video.mp4", data, len(data),
+                                   head_override=bad_head),
+            self._fingerprint_body("test_stream_video.mp4", data, len(data),
+                                   tail_override=bad_tail),
+            json.dumps({"name": "test_stream_video.mp4", "size": 999, "head_hex": head_hex}),
+            json.dumps({"name": "ghost_video.mp4", "size": len(data),
+                        "head_hex": head_hex, "tail_hex": tail_hex}),
+        ]:
+            with self.subTest(body=body[:60]):
+                st, _, _ = self.req(
+                    "POST", "/api/video/resolve", body=body,
+                    headers={"Content-Type": "application/json"},
+                )
+                self.assertEqual(st, 404)
+
+    # -------------------------------------------------------------------------
+    # 6. Workspace Configuration & .sublift_cache Tests (Feature 12508)
+    # -------------------------------------------------------------------------
+
+    def test_workspace_01_config_endpoints(self) -> None:
+        """TC-WKS-01: GET and POST /api/config/workspace manage media directory."""
+        # 1. Check workspace config
+        st, _, body = self.req("GET", "/api/config/workspace")
+        self.assertEqual(st, 200)
+        cfg = json.loads(body.decode("utf-8"))
+        self.assertIn("configured", cfg)
+        self.assertIn("media_dir", cfg)
+        self.assertIn("cache_dir", cfg)
+
+        # 2. Configure media directory to self.temp_dir
+        post_body = json.dumps({"media_dir": self.temp_dir})
+        st, _, body = self.req(
+            "POST",
+            "/api/config/workspace",
+            body=post_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+        res = json.loads(body.decode("utf-8"))
+        self.assertTrue(res.get("configured"))
+        self.assertEqual(res.get("media_dir"), os.path.realpath(self.temp_dir))
+        self.assertIn(".sublift_cache", res.get("cache_dir", ""))
+
+        # 3. Invalid directory returns 400
+        bad_body = json.dumps({"media_dir": "/nonexistent_folder_xyz_999"})
+        st_bad, _, _ = self.req(
+            "POST",
+            "/api/config/workspace",
+            body=bad_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st_bad, 400)
+
+    def test_workspace_02_cache_directory_and_fingerprint(self) -> None:
+        """TC-WKS-02: .sublift_cache is created and fingerprint resolves inside workspace."""
+        # Ensure workspace is set to temp_dir
+        post_body = json.dumps({"media_dir": self.temp_dir})
+        st, _, _ = self.req(
+            "POST",
+            "/api/config/workspace",
+            body=post_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+
+        cache_path = os.path.join(self.temp_dir, ".sublift_cache")
+        self.assertTrue(
+            os.path.isdir(cache_path),
+            ".sublift_cache directory should be automatically created",
+        )
+        self.assertTrue(
+            os.path.isdir(os.path.join(cache_path, "remux")),
+            "remux cache dir should exist",
+        )
+        self.assertTrue(
+            os.path.isdir(os.path.join(cache_path, "frames")),
+            "frames cache dir should exist",
+        )
+
+    def test_workspace_03_list_videos(self) -> None:
+        """TC-WKS-03: GET /api/config/workspace/videos lists videos in workspace."""
+        post_body = json.dumps({"media_dir": self.temp_dir})
+        self.req(
+            "POST",
+            "/api/config/workspace",
+            body=post_body,
+            headers={"Content-Type": "application/json"},
+        )
+        st, _, body = self.req("GET", "/api/config/workspace/videos")
+        self.assertEqual(st, 200)
+        vids = json.loads(body.decode("utf-8"))
+        self.assertIsInstance(vids, list)
+        self.assertGreaterEqual(len(vids), 1)
+        self.assertTrue(any(v.get("name") == "test_stream_video.mp4" for v in vids))
+
+    # -------------------------------------------------------------------------
+    # 7. Static Web Assets & Workbench Shell Hosting Tests
     # -------------------------------------------------------------------------
 
     def test_static_01_workbench_html_and_assets(self) -> None:

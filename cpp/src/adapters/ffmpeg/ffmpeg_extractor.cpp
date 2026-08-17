@@ -23,6 +23,8 @@
 #include <thread>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include "process_utils.hpp"
 
 extern "C" char** environ;
@@ -411,27 +413,65 @@ std::filesystem::path remux_to_faststart_mp4(
   std::filesystem::path temp_target = cache_dir / ss_temp.str();
 
   const std::string ffmpeg_bin = resolve_ffmpeg_bin();
+  const std::string ffprobe_bin = resolve_ffprobe_bin();
 
-  // 1. Try fast remux (-map 0:v:0 -map 0:a? -c:v copy -c:a aac -movflags +faststart -f mp4)
-  std::vector<std::string> copy_cmd = {
-      ffmpeg_bin,
-      "-y",
-      "-nostdin",
-      "-v", "error",
-      "-i", video_path.string(),
-      "-map", "0:v:0",
-      "-map", "0:a?",
-      "-c:v", "copy",
-      "-c:a", "aac",
-      "-movflags", "+faststart",
-      "-f", "mp4",
-      temp_target.string()
-  };
+  // Probe video codec and pixel format to decide whether fast copy is safe
+  bool can_fast_copy = true;
+  {
+    std::vector<std::string> probe_cmd = {
+        ffprobe_bin,
+        "-v", "error",
+        "-select_streams", "v:0",
+        "-show_entries", "stream=codec_name,pix_fmt",
+        "-of", "json",
+        video_path.string()
+    };
+    auto probe_res = detail::run_subprocess(probe_cmd, std::chrono::milliseconds(10000));
+    if (probe_res.exit_code == 0 && !probe_res.stdout_str.empty()) {
+      try {
+        auto j = nlohmann::json::parse(probe_res.stdout_str);
+        if (j.contains("streams") && j["streams"].is_array() && !j["streams"].empty()) {
+          const auto& s = j["streams"][0];
+          std::string codec = s.value("codec_name", "");
+          std::string pix = s.value("pix_fmt", "");
+          // 浏览器仅能原生硬解 8-bit h264 (yuv420p/yuvj420p)；
+          // 10-bit (yuv420p10le) 或 HEVC/ProRes 必须转码为 8-bit yuv420p
+          if (codec != "h264" || (pix != "yuv420p" && pix != "yuvj420p")) {
+            can_fast_copy = false;
+          }
+        }
+      } catch (...) {
+        // 解析失败时保守尝试
+      }
+    }
+  }
 
-  auto res = detail::run_subprocess(copy_cmd, std::chrono::milliseconds(30000));
-  bool success = (res.exit_code == 0 && std::filesystem::exists(temp_target, ec) && std::filesystem::file_size(temp_target, ec) > 0);
+  bool success = false;
 
-  // 2. If copy failed, fallback to ultrafast transcode (-pix_fmt yuv420p for 100% browser compatibility)
+  // 1. Try fast remux if 8-bit H.264
+  if (can_fast_copy) {
+    std::vector<std::string> copy_cmd = {
+        ffmpeg_bin,
+        "-y",
+        "-nostdin",
+        "-v", "error",
+        "-i", video_path.string(),
+        "-map", "0:v:0",
+        "-map", "0:a?",
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-ac", "2",
+        "-movflags", "+faststart",
+        "-f", "mp4",
+        temp_target.string()
+    };
+
+    auto res = detail::run_subprocess(copy_cmd, std::chrono::milliseconds(30000));
+    success = (res.exit_code == 0 && std::filesystem::exists(temp_target, ec) &&
+               std::filesystem::file_size(temp_target, ec) > 0);
+  }
+
+  // 2. Transcode fallback (ultrafast libx264 + yuv420p + aac stereo)
   if (!success) {
     std::filesystem::remove(temp_target, ec);
     std::vector<std::string> trans_cmd = {
@@ -447,12 +487,14 @@ std::filesystem::path remux_to_faststart_mp4(
         "-crf", "26",
         "-pix_fmt", "yuv420p",
         "-c:a", "aac",
+        "-ac", "2",
         "-movflags", "+faststart",
         "-f", "mp4",
         temp_target.string()
     };
-    auto trans_res = detail::run_subprocess(trans_cmd, std::chrono::milliseconds(60000));
-    if (trans_res.exit_code != 0 || !std::filesystem::exists(temp_target, ec) || std::filesystem::file_size(temp_target, ec) == 0) {
+    auto trans_res = detail::run_subprocess(trans_cmd, std::chrono::milliseconds(90000));
+    if (trans_res.exit_code != 0 || !std::filesystem::exists(temp_target, ec) ||
+        std::filesystem::file_size(temp_target, ec) == 0) {
       std::filesystem::remove(temp_target, ec);
       std::string tail = detail::read_stderr_tail(trans_res.stderr_str, 500);
       throw std::runtime_error("ffmpeg 转封装/转码预览流失败（" + video_path.string() + "）：" + tail);

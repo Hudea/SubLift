@@ -50,7 +50,8 @@ describe('useBatchStore - Batch Queue & Concurrency (Features 12301 & 12503)', (
     const batchStore = useBatchStore();
     batchStore.addFiles(['/path/to/video1.mp4', '/path/to/video2.mov', '/path/to/video3.webm']);
 
-    let activeSseCallback: SseJobCallbacks | null = null;
+    // 包装对象：let 变量在闭包内赋值后 TS 仍按初始 null 窄化，属性窄化会被函数调用重置
+    const sse: { cb: SseJobCallbacks | null } = { cb: null };
     const createdJobIds: string[] = [];
 
     SubLiftApiClient.createJob = async () => {
@@ -60,9 +61,9 @@ describe('useBatchStore - Batch Queue & Concurrency (Features 12301 & 12503)', (
     };
 
     SubLiftApiClient.subscribeJobEvents = (_jobId, callbacks) => {
-      activeSseCallback = callbacks;
+      sse.cb = callbacks;
       return () => {
-        activeSseCallback = null;
+        sse.cb = null;
       };
     };
 
@@ -83,12 +84,12 @@ describe('useBatchStore - Batch Queue & Concurrency (Features 12301 & 12503)', (
     expect(batchStore.stats.running).toBe(1);
 
     // Progress update
-    activeSseCallback?.onProgress?.({ stage: 'ocr', pct: 0.65, eta_ms: 1200 });
+    sse.cb?.onProgress?.({ stage: 'ocr', pct: 0.65, eta_ms: 1200 });
     expect(batchStore.tasks[0].progressPct).toBe(65);
     expect(batchStore.tasks[0].stage).toBe('ocr');
 
     // Complete Task 1 -> Task 2 auto-starts
-    activeSseCallback?.onDone?.({
+    sse.cb?.onDone?.({
       job_id: createdJobIds[0],
       status: 'completed',
       total_entries: 5,
@@ -103,7 +104,7 @@ describe('useBatchStore - Batch Queue & Concurrency (Features 12301 & 12503)', (
     expect(batchStore.currentRunningId).toBe(batchStore.tasks[1].id);
 
     // Error on Task 2 -> Task 3 auto-starts (Fail-closed isolation)
-    activeSseCallback?.onError?.('Corrupted video header');
+    sse.cb?.onError?.('Corrupted video header');
     await new Promise((r) => setTimeout(r, 10));
 
     expect(batchStore.tasks[1].status).toBe('failed');
@@ -146,5 +147,62 @@ describe('useBatchStore - Batch Queue & Concurrency (Features 12301 & 12503)', (
     expect(batchStore.tasks[0].error).toBe('400 Bad Request: Invalid media file');
     expect(batchStore.tasks[1].status).toBe('running');
     expect(batchStore.currentRunningId).toBe(batchStore.tasks[1].id);
+  });
+
+  it('maps server-side cancelled events to cancelled status, not failed, and advances the queue', async () => {
+    const batchStore = useBatchStore();
+    batchStore.addFiles(['/path/to/a.mp4', '/path/to/b.mp4']);
+
+    const sse: { cb: SseJobCallbacks | null } = { cb: null };
+    SubLiftApiClient.createJob = async () => ({ job_id: 'job-a', status: 'running' });
+    SubLiftApiClient.subscribeJobEvents = (_jobId, callbacks) => {
+      sse.cb = callbacks;
+      return () => {
+        sse.cb = null;
+      };
+    };
+
+    batchStore.startQueue();
+    await new Promise((r) => setTimeout(r, 10));
+
+    sse.cb?.onCancelled?.('Job was cancelled by server');
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(batchStore.tasks[0].status).toBe('cancelled');
+    expect(batchStore.tasks[0].stage).toBe('cancelled');
+    // 队列继续推进到下一个任务，而不是把取消误判成失败
+    expect(batchStore.tasks[1].status).toBe('running');
+    expect(batchStore.stats.failed).toBe(0);
+  });
+
+  it('preserves cancelled status when createJob rejects after a mid-flight cancel', async () => {
+    const batchStore = useBatchStore();
+    batchStore.addFiles(['/path/to/x.mp4', '/path/to/y.mp4']);
+
+    const resolvers: {
+      resolve: ((v: { job_id: string; status: string }) => void) | null;
+      reject: ((e: Error) => void) | null;
+    } = { resolve: null, reject: null };
+    SubLiftApiClient.createJob = () =>
+      new Promise((resolve, reject) => {
+        resolvers.resolve = resolve;
+        resolvers.reject = reject;
+      });
+
+    batchStore.startQueue();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(batchStore.tasks[0].status).toBe('running');
+
+    // 创建期间用户取消（此时还没有 job id）
+    await batchStore.cancelTask(batchStore.tasks[0].id);
+    expect(batchStore.tasks[0].status).toBe('cancelled');
+
+    // 随后 createJob 网络失败：终态必须保持用户意图的 cancelled，而非 failed
+    resolvers.reject?.(new Error('network down'));
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(batchStore.tasks[0].status).toBe('cancelled');
+    expect(batchStore.tasks[1].status).toBe('running');
+    expect(resolvers.resolve).toBeTruthy();
   });
 });

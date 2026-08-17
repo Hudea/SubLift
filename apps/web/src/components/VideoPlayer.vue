@@ -108,6 +108,8 @@ import { useWorkbenchStore } from '../stores/workbench';
 
 const props = defineProps<{
   videoPath: string;
+  /** blob: URL 等可直接作为 <video src> 的原始源（Feature 12507 本地预览） */
+  rawSrc?: string;
 }>();
 
 const workbenchStore = useWorkbenchStore();
@@ -133,13 +135,14 @@ const {
 } = useVideoPlayer();
 
 const streamUrl = computed(() => {
+  if (props.rawSrc) return props.rawSrc;
   if (!props.videoPath) return '';
   return SubLiftApiClient.getVideoStreamUrl(props.videoPath);
 });
 
 // 切源时清理上一个视频的状态与错误
 watch(
-  () => props.videoPath,
+  () => [props.videoPath, props.rawSrc],
   () => {
     resetState();
   }

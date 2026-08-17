@@ -2,18 +2,21 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-16
-- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支已全量完成收口）。涵盖 12001–12401 原型基座与 12501–12505 核心缺陷修复与端到端闭环（12501 智能 Remux 极速转封装、12502 C++ 安全沙箱与防死锁、12503 前端单并发调度死锁修复、12504 Vitest 前端测试与深度 E2E、12505 Linux 容器化 Paddle 闭环与双模质量门禁）。Phase 12、Phase 10、Phase 8、Phase 7 均已全量收口。
+- **最后更新：** 2026-08-17
+- **当前 Phase：** Phase 12 跨平台 Web UI 与 C++ 原生服务（apps/web-ui 分支）。二轮审核认定 12505 容器化声明与事实不符（模型下载 URL 全 404 且被吞错、Docker 分支从未对真实容器执行、E2E 路径结构性错配），已修复代码（真实 ModelScope 模型源 + SHA256 硬失败、Docker 分支路径映射 + paddle 断言 + golden 比对）并回退 12505 为 in_progress——容器内阶段待有 Docker 环境补证。12506 二轮审核修复（服务端安全收尾、前端状态闭环、验收去假绿）已完成并实测全绿。
 - **进度真源：** `phases.json → detail_file`；本文件仅作会话导航。
 
 ## 当前计划
 
-- [Phase 12 缺陷修复与端到端闭环计划](docs/plans/features/12501-12505.md)：已全量 100% 达成并验证结项。
+- [Phase 12 缺陷修复与端到端闭环计划](docs/plans/features/12501-12505.md)：12501–12504 已验证结项；12505 经二轮审核回退为 in_progress（容器阶段待 Docker 环境实证）。
 - [Phase 12 架构设计计划](docs/plans/architecture/phase12-cross-platform-web-ui.md)：C++ Native Web Server + HTTP 206 视频流 + SSE 实时打轴 + Web Workbench 单视频工作台 + 批量任务中心（已完成）。
 
 ## 近期完成
 
-- [x] 12505：Linux 容器化真实闭环与 PaddleOCR/模型完整分发（`Dockerfile` 三阶段多架构构建、Multi-Arch ONNX Runtime 1.18.1、PP-OCRv6 预热模型、`docker-compose.yml` 持久化只读挂载、`verify-web-server.sh` 真实容器 / 本地 Native 双模验收套件），标准门禁 12/12 全绿。
+- [x] 12508：媒体处理工作区目录显式引导、动态配置与目录级 Cache 体系——未配置时自动展示极简引导屏『请指定视频所在的文件夹路径：』，输入校验合法后自动就近创建 `<media_dir>/.sublift_cache`（`remux/` 与 `frames/` 子目录）并直接进入工作台；已配置直接进入工作台并在 Navbar 呈现 `📁 <dir> (<count> 视频)` 胶囊且支持点击弹窗随时切换；指纹反查与媒体沙箱将 `workspace.media_dir` 列为最高优先级第一搜索根域，拖入工作区内任何视频 100% 毫秒级命中直达提取，视频转封装缓存优先落盘至 `.sublift_cache/remux`。测试：server_test 新增 WorkspaceManager 与 API 2 套用例（Catch2 [server] 243 断言全绿）、Vitest 新增 `system.test.ts`（23/23 全绿）、E2E 新增 `TC-WKS-01/02`（37/37 全绿）、verify-standard 12/12 门禁 100% 全绿。
+- [x] 12507：浏览器零拷贝预览与本机指纹反查——拖入/点选视频经 `URL.createObjectURL` 立即本地预览（零上传零拷贝），前端计算 `文件名+大小+首尾 4KB 字节` 指纹经新增 `POST /api/video/resolve` 让服务端在受控目录（沙箱根优先，默认仅用户媒体目录，限深限时、跳符号链接、命中仍须过媒体白名单）定位原文件，命中即零拷贝提取，未命中经信息横幅 + 左侧「服务端路径」输入回退；批量导入反查命中自动入队。实测：活体指纹 200/篡改与 .ts 均 404、路径立即可流式播放；server_test 208 断言、E2E 35/35（新增 TC-RSV）、Vitest 18/18（新增 fingerprint）、ctest 186/186、verify-standard 12/12 全绿。
+- [x] 12506：二轮审核修复——`.ts` 白名单移除与沙箱 fail-closed、CORS 默认关/opt-in（`SUBLIFT_CORS_ORIGIN`/`--cors-origin`）、region_box [0,1] 归一化与 clamp UB 修复、Workbench Failed/Cancelled 终态与错误横幅、cancelled SSE 独立回调、批量 catch 保留 cancelled 终态与迟到回调防御、拖拽死路径诚实提示、E2E TC-JOB-07 真实 Paddle 提取 + golden SRT 比对、verify 脚本去假绿、前端严格构建增量缓存假绿修复（删 tsbuildinfo 后真实通过）。实测 [server] 180 断言、E2E 33/33、Vitest 15/15、verify-standard 12/12 全绿。
+- [~] 12505（回退为 in_progress）：Dockerfile 模型源修复为 RapidOCR ModelScope v3.9.2 官方 ONNX 产物 + SHA256 硬失败校验；compose 移除空 `./models` 遮蔽挂载；verify-web-server.sh Docker 分支补齐媒体目录挂载/路径映射/`paddle.available=true` 断言/golden 比对。本地降级验收全链路通过；**容器内阶段尚未在真实 Docker 环境执行，待补证后才可置 done**。
 - [x] 12504：前端测试工程化接入 (Vitest) 与 E2E 深度断言加固（`package.json` 配置标准 `npm test`、`coordinate_mapper`/`transcript_sync`/`batch` 3 套 13 组测试标准化迁移为 Vitest、重构 `test_server_e2e.py` 严格校验 SRT Exact Match / 排队流转 / 安全沙箱 32/32 全绿、挂载入 `verify-standard.sh`）。
 - [x] 12503：前端批量调度器死锁修复、单并发竞态加固与状态闭环（`batch.ts` 重构 `processNext` 消除 `createJob` 异常时的重入死锁、`cancelTask` 同步解耦、`client.ts` 监听 `cancelled` 事件与 `done` 容错、`workbench.ts` 与 `LiveTranscript.vue` 增加 Processing 期间 `isLocked` 保护与 disabled 状态反馈）。
 - [x] 12502：C++ 服务端安全沙箱、并发 UAF 消除与防死锁加固（`path_sandbox.hpp` 严格防御 LFI / 穿越 / 空字节注入、`job_manager.cpp` 消除 `active_bridges_` 析构 UAF 并加固 Join、SSE 补齐 `id:` 契约与 `fps` 字段）。

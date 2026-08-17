@@ -1,6 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <unistd.h>
+
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -77,6 +80,176 @@ TEST_CASE("Server System Info and CORS Preflight", "[server][system_info]") {
     REQUIRE(res->status == 204);
   }
 
+  SECTION("CORS headers are absent unless explicitly opted in") {
+    auto res = cli.Get("/api/system/info");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    REQUIRE(res->get_header_value("Access-Control-Allow-Origin").empty());
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+TEST_CASE("Server CORS opt-in emits configured origin", "[server][system_info]") {
+  sublift::server::ServerConfig config;
+  config.cors_origin = "*";
+  sublift::server::HttpServer server(std::move(config));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(2));
+
+  auto res = cli.Get("/api/system/info");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+  REQUIRE(res->get_header_value("Access-Control-Allow-Origin") == "*");
+
+  auto preflight = cli.Options("/api/system/info");
+  REQUIRE(preflight != nullptr);
+  REQUIRE(preflight->status == 204);
+  REQUIRE(preflight->get_header_value("Access-Control-Allow-Origin") == "*");
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+TEST_CASE("RegionBox parsing clamps to the [0,1] contract", "[server][jobs]") {
+  nlohmann::json j = {{"x", 1.5}, {"y", -0.2}, {"width", 2.0}, {"height", -1.0}};
+  auto box = sublift::server::RegionBox::from_json(j);
+  REQUIRE(box.x == 1.0);
+  REQUIRE(box.y == 0.0);
+  REQUIRE(box.width == 1.0);
+  REQUIRE(box.height == 0.0);
+}
+
+TEST_CASE("Server Video Resolve Fingerprint Lookup", "[server][resolve]") {
+  // 独立沙箱根目录，保证扫描范围确定且不影响其它用例
+  const auto root =
+      std::filesystem::temp_directory_path() /
+      ("sublift_resolve_test_" + std::to_string(::getpid()) + "_" +
+       std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  REQUIRE(std::filesystem::create_directories(root));
+
+  struct EnvGuard {
+    ~EnvGuard() { ::unsetenv("SUBLIFT_ALLOWED_MEDIA_ROOT"); }
+  } env_guard;
+  ::setenv("SUBLIFT_ALLOWED_MEDIA_ROOT", root.c_str(), 1);
+
+  struct RootGuard {
+    std::filesystem::path root;
+    ~RootGuard() {
+      std::error_code ec;
+      std::filesystem::remove_all(root, ec);
+    }
+  } root_guard{root};
+
+  // 12288 字节周期数据（周期 251，保证首尾相位不同）；.ts 孪生文件用于白名单负例
+  std::vector<uint8_t> data(12288);
+  for (size_t i = 0; i < data.size(); ++i) {
+    data[i] = static_cast<uint8_t>(i % 251);
+  }
+  const auto target = root / "sublift_resolve_target.mp4";
+  const auto ts_twin = root / "sublift_resolve_secret.ts";
+  {
+    std::ofstream(target, std::ios::binary)
+        .write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    std::ofstream(ts_twin, std::ios::binary)
+        .write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+  }
+
+  auto to_hex = [](const uint8_t* p, size_t n) {
+    static const char* kHex = "0123456789abcdef";
+    std::string out;
+    out.reserve(n * 2);
+    for (size_t i = 0; i < n; ++i) {
+      out.push_back(kHex[p[i] >> 4]);
+      out.push_back(kHex[p[i] & 0xf]);
+    }
+    return out;
+  };
+  const std::string head_hex = to_hex(data.data(), 4096);
+  const std::string tail_hex = to_hex(data.data() + data.size() - 4096, 4096);
+  std::string tampered_head = head_hex;
+  tampered_head[0] = tampered_head[0] == 'f' ? '0' : 'f';
+  tampered_head[1] = 'f';
+  std::string tampered_tail = tail_hex;
+  tampered_tail[0] = tampered_tail[0] == 'f' ? '0' : 'f';
+  tampered_tail[1] = 'f';
+
+  auto body_of = [](const std::string& name, const std::string& size,
+                    const std::string& head, const std::string& tail) {
+    nlohmann::json j = {{"name", name}, {"size", std::stoull(size)}, {"head_hex", head}};
+    if (!tail.empty()) j["tail_hex"] = tail;
+    return j.dump();
+  };
+
+  sublift::server::HttpServer server;
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+  std::thread server_thread([&]() { server.listen_after_bind(); });
+  server.wait_until_ready();
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(10));
+
+  auto post_resolve = [&](const std::string& body) {
+    return cli.Post("/api/video/resolve", body, "application/json");
+  };
+
+  SECTION("Exact fingerprint locates the file and the path is immediately streamable") {
+    auto res = post_resolve(body_of("sublift_resolve_target.mp4", "12288", head_hex, tail_hex));
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    auto json = nlohmann::json::parse(res->body);
+    std::error_code ec;
+    REQUIRE(json["path"].get<std::string>() == std::filesystem::canonical(target, ec).string());
+
+    auto stream = cli.Get("/api/video/stream?path=" + json["path"].get<std::string>());
+    REQUIRE(stream != nullptr);
+    REQUIRE(stream->status == 200);
+    REQUIRE(stream->body.size() == 12288);
+  }
+
+  SECTION("Tampered head/tail/size/name all miss with 404") {
+    for (const auto& body : {
+             body_of("sublift_resolve_target.mp4", "12288", tampered_head, tail_hex),
+             body_of("sublift_resolve_target.mp4", "12288", head_hex, tampered_tail),
+             body_of("sublift_resolve_target.mp4", "999", head_hex, ""),
+             body_of("totally_other_name.mp4", "12288", head_hex, tail_hex),
+         }) {
+      auto res = post_resolve(body);
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 404);
+    }
+  }
+
+  SECTION("Non-whitelisted extension twin is never returned") {
+    auto res = post_resolve(body_of("sublift_resolve_secret.ts", "12288", head_hex, tail_hex));
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 404);
+  }
+
+  SECTION("Invalid payloads are rejected with 400") {
+    auto no_name = post_resolve(R"({"size":10,"head_hex":"00"})");
+    REQUIRE(no_name != nullptr);
+    REQUIRE(no_name->status == 400);
+    auto bad_hex = post_resolve(body_of("x.mp4", "10", "zz", ""));
+    REQUIRE(bad_hex != nullptr);
+    REQUIRE(bad_hex->status == 400);
+  }
+
   server.stop();
   if (server_thread.joinable()) {
     server_thread.join();
@@ -118,6 +291,15 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
     auto res_sec = cli.Get("/api/video/stream?path=/etc/shadow");
     REQUIRE(res_sec != nullptr);
     REQUIRE(res_sec->status == 400);
+  }
+
+  SECTION("TypeScript .ts files are rejected despite media-like extension") {
+    // .ts 与源码扩展名冲突且浏览器无法原生播放，必须在白名单外（LFI 残留封堵）
+    TempTestFile ts_file("sublift_test_secret.ts", {'S', 'E', 'C', 'R', 'E', 'T'});
+    auto res = cli.Get("/api/video/stream?path=" + ts_file.path.string());
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+    REQUIRE(res->body.find("SECRET") == std::string::npos);
   }
 
   SECTION("Full video request returns 200 with Accept-Ranges") {
@@ -215,6 +397,18 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
         REQUIRE(!res->body.empty());
         std::filesystem::remove(test_mkv);
       }
+    }
+  }
+
+  SECTION("Explicit transcode=1 query forces remux/transcode to Faststart MP4") {
+    if (sublift::ffmpeg::available()) {
+      std::string uri = "/api/video/stream?path=" + temp_video.path.string() + "&transcode=1";
+      auto res = cli.Get(uri.c_str());
+      REQUIRE(res != nullptr);
+      // Returns 200 or 206 for stream
+      REQUIRE((res->status == 200 || res->status == 206));
+      REQUIRE(res->get_header_value("Content-Type") == "video/mp4");
+      REQUIRE(res->get_header_value("Accept-Ranges") == "bytes");
     }
   }
 
@@ -465,3 +659,166 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
     server_thread.join();
   }
 }
+
+TEST_CASE("WorkspaceManager Core and Cache Directories", "[server][workspace]") {
+  std::error_code ec;
+  auto temp_dir = std::filesystem::temp_directory_path() / ("sublift_ws_test_" + std::to_string(::getpid()));
+  std::filesystem::create_directories(temp_dir, ec);
+  auto config_file = temp_dir / "workspace_cfg.json";
+
+  // Create a dummy video file in temp_dir
+  auto dummy_vid = temp_dir / "clip1.mp4";
+  {
+    std::ofstream f(dummy_vid);
+    f << "dummy mp4 content";
+  }
+
+  SECTION("Initial unconfigured state") {
+    sublift::server::WorkspaceManager wm("", config_file.string());
+    auto info = wm.get_workspace_info();
+    REQUIRE_FALSE(info.configured);
+    REQUIRE(info.media_dir.empty());
+    REQUIRE_FALSE(wm.get_media_dir().has_value());
+  }
+
+  SECTION("Configure valid directory creates .sublift_cache and counts videos") {
+    sublift::server::WorkspaceManager wm("", config_file.string());
+    std::string err;
+    bool ok = wm.set_media_directory(temp_dir.string(), &err);
+    REQUIRE(ok);
+    REQUIRE(err.empty());
+
+    auto info = wm.get_workspace_info();
+    REQUIRE(info.configured);
+    REQUIRE(info.media_dir == std::filesystem::canonical(temp_dir).string());
+    REQUIRE(info.video_count == 1);
+    REQUIRE(info.cache_dir == (std::filesystem::canonical(temp_dir) / ".sublift_cache").string());
+
+    // Verify list_media_files returns dummy_vid
+    auto files = wm.list_media_files();
+    REQUIRE(files.size() == 1);
+    REQUIRE(files[0].name == "clip1.mp4");
+    REQUIRE(files[0].path == std::filesystem::canonical(dummy_vid).string());
+    REQUIRE(files[0].relative_path == "clip1.mp4");
+    REQUIRE(files[0].size_bytes > 0);
+  }
+
+  SECTION("Invalid directory rejected with error message") {
+    sublift::server::WorkspaceManager wm("", config_file.string());
+    std::string err;
+    bool ok = wm.set_media_directory("/nonexistent_path_xyz_12345", &err);
+    REQUIRE_FALSE(ok);
+    REQUIRE_FALSE(err.empty());
+
+    // File instead of directory
+    ok = wm.set_media_directory(dummy_vid.string(), &err);
+    REQUIRE_FALSE(ok);
+    REQUIRE(err.find("不是文件夹目录") != std::string::npos);
+  }
+
+  SECTION("Persistence across instances") {
+    {
+      sublift::server::WorkspaceManager wm1("", config_file.string());
+      wm1.set_media_directory(temp_dir.string());
+    }
+    {
+      // New instance loading same config file
+      sublift::server::WorkspaceManager wm2("", config_file.string());
+      auto info = wm2.get_workspace_info();
+      REQUIRE(info.configured);
+      REQUIRE(info.media_dir == std::filesystem::canonical(temp_dir).string());
+    }
+    {
+      // Clear workspace
+      sublift::server::WorkspaceManager wm3("", config_file.string());
+      wm3.clear_workspace();
+      REQUIRE_FALSE(wm3.get_workspace_info().configured);
+    }
+  }
+
+  std::filesystem::remove_all(temp_dir, ec);
+}
+
+TEST_CASE("Workspace Configuration API Endpoints", "[server][workspace_api]") {
+  std::error_code ec;
+  auto temp_dir = std::filesystem::temp_directory_path() / ("sublift_api_ws_" + std::to_string(::getpid()));
+  std::filesystem::create_directories(temp_dir, ec);
+  auto config_file = temp_dir / "cfg.json";
+
+  // Create a dummy mp4
+  auto dummy_file = temp_dir / "sample.mp4";
+  {
+    std::ofstream ofs(dummy_file);
+    ofs << "sample video bytes";
+  }
+
+  sublift::server::ServerConfig cfg;
+  cfg.port = 0;
+  cfg.cors_origin = "*";
+  cfg.config_file = config_file.string();
+
+  sublift::server::HttpServer server(std::move(cfg));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&server]() {
+    server.listen_after_bind();
+  });
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(2, 0);
+  cli.set_read_timeout(5, 0);
+
+  // 1. Initial GET /api/config/workspace
+  auto res1 = cli.Get("/api/config/workspace");
+  REQUIRE(res1 != nullptr);
+  REQUIRE(res1->status == 200);
+  auto j1 = nlohmann::json::parse(res1->body);
+  REQUIRE_FALSE(j1["configured"].get<bool>());
+  REQUIRE(j1["media_dir"].get<std::string>().empty());
+
+  // 2. Invalid POST /api/config/workspace
+  auto err_res = cli.Post("/api/config/workspace", R"({"media_dir":"/invalid_nonexistent_xyz"})", "application/json");
+  REQUIRE(err_res != nullptr);
+  REQUIRE(err_res->status == 400);
+
+  // 3. Valid POST /api/config/workspace
+  nlohmann::json set_req = {{"media_dir", temp_dir.string()}};
+  auto ok_res = cli.Post("/api/config/workspace", set_req.dump(), "application/json");
+  REQUIRE(ok_res != nullptr);
+  REQUIRE(ok_res->status == 200);
+  auto ok_j = nlohmann::json::parse(ok_res->body);
+  REQUIRE(ok_j["configured"].get<bool>());
+  REQUIRE(ok_j["media_dir"].get<std::string>() == std::filesystem::canonical(temp_dir).string());
+
+  // 4. GET /api/config/workspace/videos returns sample.mp4
+  auto vid_res = cli.Get("/api/config/workspace/videos");
+  REQUIRE(vid_res != nullptr);
+  REQUIRE(vid_res->status == 200);
+  auto vids_json = nlohmann::json::parse(vid_res->body);
+  REQUIRE(vids_json.is_array());
+  REQUIRE(vids_json.size() == 1);
+  REQUIRE(vids_json[0]["name"].get<std::string>() == "sample.mp4");
+
+  // 5. GET /api/config/workspace confirms configured state
+  auto res2 = cli.Get("/api/config/workspace");
+  REQUIRE(res2 != nullptr);
+  REQUIRE(res2->status == 200);
+  auto j2 = nlohmann::json::parse(res2->body);
+  REQUIRE(j2["configured"].get<bool>());
+
+  // 6. POST /api/config/workspace/clear
+  auto clr_res = cli.Post("/api/config/workspace/clear", "", "application/json");
+  REQUIRE(clr_res != nullptr);
+  REQUIRE(clr_res->status == 200);
+  auto clr_j = nlohmann::json::parse(clr_res->body);
+  REQUIRE_FALSE(clr_j["configured"].get<bool>());
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+
+  std::filesystem::remove_all(temp_dir, ec);
+}
+

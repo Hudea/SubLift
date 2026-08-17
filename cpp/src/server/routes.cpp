@@ -6,10 +6,15 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <memory>
+#include <optional>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -192,9 +197,135 @@ std::string get_video_mime_type(const std::filesystem::path& path) {
   return "video/mp4";
 }
 
+// ---------------------------------------------------------------------------
+// 本机指纹反查（Feature 12507）：文件名 + 大小 + 首尾 4KB 原始字节比对
+// ---------------------------------------------------------------------------
+namespace fingerprint {
+
+constexpr size_t kEdgeChunkBytes = 4096;
+
+struct Query {
+  std::string name_lower;  // 小写化的目标文件名（不含目录）
+  std::uint64_t size;
+  std::vector<unsigned char> head;
+  std::vector<unsigned char> tail;
+};
+
+/// 搜索根：显式工作区（WorkspaceManager）最高优先级；
+/// 其次显式沙箱根（SUBLIFT_ALLOWED_MEDIA_ROOT）；
+/// 未设置时扫描当前工作目录与本机常见用户媒体目录（浅层、限时）。
+std::vector<std::filesystem::path> collect_search_roots(
+    const std::shared_ptr<WorkspaceManager>& wm) {
+  std::vector<std::filesystem::path> roots;
+  if (wm) {
+    auto w_dir = wm->get_media_dir();
+    if (w_dir.has_value() && !w_dir->empty()) {
+      roots.push_back(*w_dir);
+      return roots;
+    }
+  }
+  if (const char* env_root = std::getenv("SUBLIFT_ALLOWED_MEDIA_ROOT"); env_root && *env_root) {
+    roots.emplace_back(env_root);
+    return roots;
+  }
+  std::error_code ec;
+  auto cwd = std::filesystem::current_path(ec);
+  if (!ec) {
+    roots.push_back(cwd);
+  }
+  if (const char* home = std::getenv("HOME"); home && *home) {
+    for (std::string_view sub : {"Movies", "Downloads", "Desktop", "Documents"}) {
+      roots.emplace_back(std::filesystem::path(home) / std::string(sub));
+    }
+  }
+  const char* tmp = std::getenv("TMPDIR");
+  if (!tmp || !*tmp) tmp = "/tmp";
+  roots.emplace_back(tmp);
+  return roots;
+}
+
+/// 读取文件首/尾各 head.size()/tail.size() 字节并与期望逐字节比对。
+/// 约定：客户端对 size > 2*kEdgeChunkBytes 的文件必须提供 tail；更小的文件
+/// head 已覆盖全文件（或尾部与 head 重叠），跳过 tail 校验。
+bool verify_file_edges(const std::filesystem::path& p, const Query& q) {
+  if (q.head.empty()) return false;
+  std::ifstream f(p, std::ios::binary);
+  if (!f) return false;
+
+  std::vector<char> buf(q.head.size());
+  f.read(buf.data(), static_cast<std::streamsize>(buf.size()));
+  if (static_cast<size_t>(f.gcount()) != buf.size()) return false;
+  if (std::memcmp(buf.data(), q.head.data(), q.head.size()) != 0) return false;
+
+  if (q.size > 2 * kEdgeChunkBytes) {
+    if (q.tail.empty()) return false;  // 大文件必须校验尾部
+    std::vector<char> tail_buf(q.tail.size());
+    f.clear();
+    f.seekg(-static_cast<std::streamoff>(tail_buf.size()), std::ios::end);
+    f.read(tail_buf.data(), static_cast<std::streamsize>(tail_buf.size()));
+    if (static_cast<size_t>(f.gcount()) != tail_buf.size()) return false;
+    if (std::memcmp(tail_buf.data(), q.tail.data(), q.tail.size()) != 0) return false;
+  }
+  return true;
+}
+
+/// 在受控根目录内限时（8s）、限深（6 层）扫描，返回第一个通过
+/// 指纹比对 + 媒体沙箱校验（可立即用于 stream/jobs）的规范路径。
+std::optional<std::filesystem::path> find_by_fingerprint(
+    const Query& q, const std::shared_ptr<WorkspaceManager>& wm) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(8);
+  std::optional<std::filesystem::path> allowed_root = std::nullopt;
+  if (wm && wm->get_media_dir().has_value()) {
+    allowed_root = wm->get_media_dir();
+  }
+
+  for (const auto& root : collect_search_roots(wm)) {
+    std::error_code ec;
+    if (!std::filesystem::exists(root, ec) || !std::filesystem::is_directory(root, ec)) continue;
+
+    std::filesystem::recursive_directory_iterator it(
+        root, std::filesystem::directory_options::skip_permission_denied, ec);
+    if (ec) continue;
+    for (const auto end = std::filesystem::recursive_directory_iterator{}; it != end;) {
+      if (std::chrono::steady_clock::now() > deadline) return std::nullopt;
+
+      if (it->is_symlink(ec)) {
+        // 不跟随符号链接，避免环与逃逸
+      } else if (it->is_regular_file(ec) && !ec) {
+        std::string fname = it->path().filename().string();
+        std::transform(fname.begin(), fname.end(), fname.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        if (fname == q.name_lower) {
+          const std::uintmax_t fsize = it->file_size(ec);
+          if (!ec && fsize == q.size && verify_file_edges(it->path(), q)) {
+            // 命中后仍须通过媒体沙箱（扩展名白名单 + 可选根目录约束），
+            // 保证返回的路径立刻可用于 /api/video/stream 与 POST /api/jobs。
+            try {
+              auto validated = resolve_and_validate_media_path(it->path().string(), allowed_root);
+              return validated;
+            } catch (const PathSecurityException&) {
+              // 不合规的候选（如非白名单扩展名）继续扫描
+            }
+          }
+        }
+      }
+
+      if (it->is_directory(ec) && (it.depth() >= 6 || it->path().filename() == ".sublift_cache")) {
+        it.disable_recursion_pending();
+      }
+      it.increment(ec);
+      if (ec) break;
+    }
+  }
+  return std::nullopt;
+}
+
+}  // namespace fingerprint
+
 void register_routes(httplib::Server& server,
                      std::shared_ptr<JobManager> job_manager,
-                     const std::string& static_dir) {
+                     const std::string& static_dir,
+                     std::shared_ptr<WorkspaceManager> workspace_manager) {
   // CORS Preflight
   server.Options(R"(/api/.*)", [](const httplib::Request&, httplib::Response& res) {
     res.status = 204;
@@ -205,6 +336,109 @@ void register_routes(httplib::Server& server,
     auto info = collect_system_info();
     res.set_content(info.to_json().dump(), "application/json; charset=utf-8");
   });
+
+  // GET /api/config/workspace (Feature 12508)
+  server.Get("/api/config/workspace", [workspace_manager](const httplib::Request&, httplib::Response& res) {
+    if (workspace_manager) {
+      auto info = workspace_manager->get_workspace_info();
+      nlohmann::json j = {
+          {"configured", info.configured},
+          {"media_dir", info.media_dir},
+          {"cache_dir", info.cache_dir},
+          {"video_count", info.video_count},
+      };
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+    } else {
+      nlohmann::json j = {
+          {"configured", false},
+          {"media_dir", ""},
+          {"cache_dir", ""},
+          {"video_count", 0},
+      };
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+    }
+  });
+
+  // GET /api/config/workspace/videos (Feature 12508: 列出工作区内的可用视频文件)
+  server.Get("/api/config/workspace/videos", [workspace_manager](const httplib::Request&, httplib::Response& res) {
+    if (!workspace_manager || !workspace_manager->get_media_dir().has_value()) {
+      res.set_content("[]", "application/json; charset=utf-8");
+      return;
+    }
+
+    auto files = workspace_manager->list_media_files();
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& item : files) {
+      arr.push_back({
+          {"name", item.name},
+          {"path", item.path},
+          {"relative_path", item.relative_path},
+          {"size_bytes", item.size_bytes},
+      });
+    }
+    res.set_content(arr.dump(), "application/json; charset=utf-8");
+  });
+
+  // POST /api/config/workspace (Feature 12508)
+  server.Post("/api/config/workspace", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    if (!workspace_manager) {
+      res.status = 500;
+      res.set_content(R"({"error":"WorkspaceManager not available"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    nlohmann::json body;
+    try {
+      body = nlohmann::json::parse(req.body);
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"error":"Invalid JSON body"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    if (!body.contains("media_dir") || !body["media_dir"].is_string()) {
+      res.status = 400;
+      res.set_content(R"({"error":"Missing or invalid 'media_dir' field"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    std::string raw_media_dir = body["media_dir"].get<std::string>();
+    std::string err_msg;
+    if (!workspace_manager->set_media_directory(raw_media_dir, &err_msg)) {
+      res.status = 400;
+      nlohmann::json err = {{"error", err_msg.empty() ? "Invalid media directory" : err_msg}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    auto info = workspace_manager->get_workspace_info();
+    nlohmann::json j = {
+        {"configured", info.configured},
+        {"media_dir", info.media_dir},
+        {"cache_dir", info.cache_dir},
+        {"video_count", info.video_count},
+    };
+    res.set_content(j.dump(), "application/json; charset=utf-8");
+  });
+
+  // Clear workspace
+  auto handle_clear_workspace = [workspace_manager](const httplib::Request&, httplib::Response& res) {
+    if (workspace_manager) {
+      workspace_manager->clear_workspace();
+      auto info = workspace_manager->get_workspace_info();
+      nlohmann::json j = {
+          {"configured", false},
+          {"media_dir", ""},
+          {"cache_dir", info.cache_dir},
+          {"video_count", 0},
+      };
+      res.set_content(j.dump(), "application/json; charset=utf-8");
+    } else {
+      res.set_content(R"({"configured":false,"media_dir":"","cache_dir":"","video_count":0})", "application/json; charset=utf-8");
+    }
+  };
+  server.Post("/api/config/workspace/clear", handle_clear_workspace);
+  server.Delete("/api/config/workspace", handle_clear_workspace);
 
   // GET /api/video/frame?path=<video_path>&time_s=<time_s>
   server.Get("/api/video/frame", [](const httplib::Request& req, httplib::Response& res) {
@@ -246,7 +480,7 @@ void register_routes(httplib::Server& server,
   });
 
   // GET /api/video/stream?path=<video_path>
-  server.Get("/api/video/stream", [](const httplib::Request& req, httplib::Response& res) {
+  server.Get("/api/video/stream", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
     if (!req.has_param("path")) {
       res.status = 400;
       nlohmann::json err = {{"error", "Missing 'path' query parameter"}};
@@ -270,11 +504,17 @@ void register_routes(httplib::Server& server,
       return static_cast<char>(std::tolower(c));
     });
 
-    // If container format is not native browser supported (e.g. MKV, AVI, FLV, MOV), remux to faststart MP4
-    if (ext == ".mkv" || ext == ".avi" || ext == ".flv" || ext == ".wmv" || ext == ".mov") {
+    // If container format is not native browser supported (e.g. MKV, AVI, FLV, MOV) or transcode is explicitly requested
+    bool needs_remux = (ext == ".mkv" || ext == ".avi" || ext == ".flv" || ext == ".wmv" || ext == ".mov" ||
+                        req.has_param("transcode") || req.has_param("remux"));
+    if (needs_remux) {
       if (sublift::ffmpeg::available()) {
         try {
-          stream_path = sublift::ffmpeg::remux_to_faststart_mp4(video_path);
+          std::optional<std::filesystem::path> custom_cache = std::nullopt;
+          if (workspace_manager) {
+            custom_cache = workspace_manager->get_remux_cache_dir();
+          }
+          stream_path = sublift::ffmpeg::remux_to_faststart_mp4(video_path, custom_cache);
         } catch (const std::exception&) {
           // If remux fails, fallback to direct streaming
           stream_path = video_path;
@@ -282,7 +522,16 @@ void register_routes(httplib::Server& server,
       }
     }
 
-    const std::uint64_t total_size = std::filesystem::file_size(stream_path);
+    // 校验与 open 之间存在竞态删除窗口：file_size 带 error_code，
+    // 文件消失时返回 404 而不是抛未捕获异常。
+    std::error_code size_ec;
+    const std::uint64_t total_size = std::filesystem::file_size(stream_path, size_ec);
+    if (size_ec) {
+      res.status = 404;
+      nlohmann::json err = {{"error", "Video file vanished before streaming: " + stream_path.string()}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
     if (total_size == 0) {
       res.status = 200;
       res.set_header("Content-Length", "0");
@@ -328,8 +577,109 @@ void register_routes(httplib::Server& server,
         });
   });
 
+  // ---------------------------------------------------------------------------
+  // POST /api/video/resolve —— 本机指纹反查（Feature 12507）
+  //
+  // 纯浏览器拿不到用户本地文件的绝对路径，但文件就在同一台机器上。
+  // 客户端提供 文件名 + 字节数 + 首尾各 4KB 的原始字节（hex），服务端在受控
+  // 目录内查找同名同大小的文件并做字节级校验；命中即返回原路径，全程零拷贝。
+  // 字节而非哈希：避免引入加密依赖，且比对强度等价（内容已由客户端提供）。
+  // ---------------------------------------------------------------------------
+  server.Post("/api/video/resolve", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+      body = nlohmann::json::parse(req.body);
+    } catch (const std::exception&) {
+      res.status = 400;
+      res.set_content(R"({"error":"Invalid JSON body"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    if (!body.contains("name") || !body.contains("size") || !body.contains("head_hex") ||
+        !body["name"].is_string() || !body["size"].is_number_unsigned() || !body["head_hex"].is_string()) {
+      res.status = 400;
+      res.set_content(R"json({"error":"Missing or invalid fingerprint fields (name/size/head_hex)"})json",
+                      "application/json; charset=utf-8");
+      return;
+    }
+
+    const std::string want_name = body["name"].get<std::string>();
+    const std::uint64_t want_size = body["size"].get<std::uint64_t>();
+    const std::string tail_hex =
+        body.contains("tail_hex") && body["tail_hex"].is_string() ? body["tail_hex"].get<std::string>() : "";
+
+    if (want_name.empty() || want_name.find('/') != std::string::npos ||
+        want_name.find('\\') != std::string::npos) {
+      res.status = 400;
+      res.set_content(R"({"error":"Invalid file name"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    struct FingerprintQuery {
+      std::string name_lower;
+      std::uint64_t size;
+      std::vector<unsigned char> head;
+      std::vector<unsigned char> tail;
+    };
+    auto hex_to_bytes = [](const std::string& hex) -> std::optional<std::vector<unsigned char>> {      if (hex.size() % 2 != 0) return std::nullopt;
+      std::vector<unsigned char> out;
+      out.reserve(hex.size() / 2);
+      for (size_t i = 0; i < hex.size(); i += 2) {
+        auto nib = [](char c) -> int {
+          if (c >= '0' && c <= '9') return c - '0';
+          if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+          if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+          return -1;
+        };
+        int hi = nib(hex[i]);
+        int lo = nib(hex[i + 1]);
+        if (hi < 0 || lo < 0) return std::nullopt;
+        out.push_back(static_cast<unsigned char>((hi << 4) | lo));
+      }
+      return out;
+    };
+
+    auto head_opt = hex_to_bytes(body["head_hex"].get<std::string>());
+    auto tail_opt = hex_to_bytes(tail_hex);
+    if (!head_opt || (!tail_hex.empty() && !tail_opt)) {
+      res.status = 400;
+      res.set_content(R"({"error":"head_hex/tail_hex must be valid hex"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    FingerprintQuery query;
+    query.name_lower = want_name;
+    std::transform(query.name_lower.begin(), query.name_lower.end(), query.name_lower.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    query.size = want_size;
+    query.head = std::move(*head_opt);
+    query.tail = tail_hex.empty() ? std::vector<unsigned char>{} : std::move(*tail_opt);
+
+    if (query.head.size() > fingerprint::kEdgeChunkBytes ||
+        query.tail.size() > fingerprint::kEdgeChunkBytes) {
+      res.status = 400;
+      res.set_content(R"({"error":"head/tail chunk exceeds limit"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    std::optional<std::filesystem::path> found =
+        fingerprint::find_by_fingerprint({query.name_lower, query.size, std::move(query.head),
+                                          std::move(query.tail)}, workspace_manager);
+
+    if (!found.has_value()) {
+      res.status = 404;
+      nlohmann::json err = {{"error",
+                             "No matching file located on server; paste the absolute path instead"}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    nlohmann::json ok = {{"path", found->string()}};
+    res.set_content(ok.dump(), "application/json; charset=utf-8");
+  });
+
   // POST /api/jobs (Create and start a subtitle extraction job)
-  server.Post("/api/jobs", [job_manager](const httplib::Request& req, httplib::Response& res) {
+  server.Post("/api/jobs", [job_manager, workspace_manager](const httplib::Request& req, httplib::Response& res) {
     if (!job_manager) {
       res.status = 500;
       nlohmann::json err = {{"error", "JobManager is not initialized"}};

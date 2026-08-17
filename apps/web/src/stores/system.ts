@@ -1,13 +1,19 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { SubLiftApiClient } from '../api/client';
-import type { SystemInfoDTO, OcrEngineName } from '../types/api';
+import type { SystemInfoDTO, OcrEngineName, WorkspaceConfigDTO } from '../types/api';
 
 export const useSystemStore = defineStore('system', () => {
   const isReady = ref(false);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
   const systemInfo = ref<SystemInfoDTO | null>(null);
+  const workspace = ref<WorkspaceConfigDTO>({
+    configured: false,
+    media_dir: '',
+    cache_dir: '',
+    video_count: 0,
+  });
 
   const availableEngines = computed(() => {
     if (!systemInfo.value) return [];
@@ -29,12 +35,57 @@ export const useSystemStore = defineStore('system', () => {
     return systemInfo.value?.version ?? 'v0.1.0';
   });
 
+  const isWorkspaceConfigured = computed(() => {
+    return workspace.value.configured && !!workspace.value.media_dir;
+  });
+
+  const currentMediaDir = computed(() => {
+    return workspace.value.media_dir;
+  });
+
+  async function fetchWorkspaceConfig() {
+    try {
+      const data = await SubLiftApiClient.getWorkspaceConfig();
+      workspace.value = data;
+    } catch {
+      // ignore
+    }
+  }
+
+  async function setWorkspace(dir: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const data = await SubLiftApiClient.setWorkspaceConfig(dir);
+      workspace.value = data;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || '无法设置工作区目录' };
+    }
+  }
+
+  async function clearWorkspace() {
+    try {
+      const data = await SubLiftApiClient.clearWorkspaceConfig();
+      workspace.value = data;
+    } catch {
+      // ignore
+    }
+  }
+
   async function fetchSystemInfo() {
     isLoading.value = true;
     error.value = null;
     try {
-      const data = await SubLiftApiClient.getSystemInfo();
+      const [data, ws] = await Promise.all([
+        SubLiftApiClient.getSystemInfo(),
+        SubLiftApiClient.getWorkspaceConfig().catch(() => ({
+          configured: false,
+          media_dir: '',
+          cache_dir: '',
+          video_count: 0,
+        })),
+      ]);
       systemInfo.value = data;
+      workspace.value = ws;
       isReady.value = true;
     } catch (err: any) {
       error.value = err.message || '无法连接到 SubLift 服务端';
@@ -49,10 +100,16 @@ export const useSystemStore = defineStore('system', () => {
     isLoading,
     error,
     systemInfo,
+    workspace,
+    isWorkspaceConfigured,
+    currentMediaDir,
     availableEngines,
     preferredEngine,
     isFfmpegReady,
     serverVersion,
     fetchSystemInfo,
+    fetchWorkspaceConfig,
+    setWorkspace,
+    clearWorkspace,
   };
 });

@@ -9,15 +9,19 @@ namespace sublift::server {
 HttpServer::HttpServer(ServerConfig config)
     : config_(std::move(config)),
       job_manager_(std::make_shared<JobManager>(1, 50)),
+      workspace_manager_(std::make_shared<WorkspaceManager>(config_.media_dir, config_.config_file)),
       svr_(std::make_unique<httplib::Server>()) {
-  // CORS Headers
-  svr_->set_default_headers({
-      {"Access-Control-Allow-Origin", "*"},
-      {"Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD"},
-      {"Access-Control-Allow-Headers", "*"},
-  });
+  // CORS 默认关闭（同源部署的安全默认）；显式配置 cors_origin 时才放行，
+  // 避免"任意网页跨域读取本地文件/提交任务"的攻击面。
+  if (!config_.cors_origin.empty()) {
+    svr_->set_default_headers({
+        {"Access-Control-Allow-Origin", config_.cors_origin},
+        {"Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD, DELETE"},
+        {"Access-Control-Allow-Headers", "Content-Type"},
+    });
+  }
 
-  register_routes(*svr_, job_manager_, config_.static_dir);
+  register_routes(*svr_, job_manager_, config_.static_dir, workspace_manager_);
 }
 
 HttpServer::~HttpServer() {

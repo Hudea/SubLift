@@ -107,6 +107,23 @@ export function useVideoPlayer() {
       isReady.value = false;
       stopClock();
       if (el.error) {
+        // 如果遇到 Format error (code 4) 且尚未启用转码参数，自动尝试请求服务端兼容转码流
+        const currentSrc = el.currentSrc || el.src;
+        if (
+          el.error.code === 4 &&
+          currentSrc &&
+          currentSrc.includes('/api/video/stream') &&
+          !currentSrc.includes('transcode=1')
+        ) {
+          const sep = currentSrc.includes('?') ? '&' : '?';
+          const retryUrl = `${currentSrc}${sep}transcode=1`;
+          isBuffering.value = true;
+          error.value = null;
+          el.src = retryUrl;
+          el.load();
+          return;
+        }
+
         let detail = el.error.message || '';
         switch (el.error.code) {
           case 1:
@@ -119,7 +136,7 @@ export function useVideoPlayer() {
             detail = '视频解码失败，数据损坏 (MEDIA_ERR_DECODE)';
             break;
           case 4:
-            detail = `当前视频封装/编码不受浏览器内核直接支持 (${detail || 'Format error'})，服务端正在转封装处理中...`;
+            detail = `当前视频封装/编码不受浏览器内核直接支持 (${detail || 'Format error'})`;
             break;
           default:
             detail = detail || '未知媒体源错误';

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -59,6 +60,12 @@ struct RegionBox {
     if (j.contains("y") && j["y"].is_number()) box.y = j["y"].get<double>();
     if (j.contains("width") && j["width"].is_number()) box.width = j["width"].get<double>();
     if (j.contains("height") && j["height"].is_number()) box.height = j["height"].get<double>();
+    // 设计契约 (phase12 §4.2)：region_box 是 [0,1] 归一化比例，入口处夹紧，
+    // 拒绝越界/负值传导到像素换算层。
+    box.x = std::clamp(box.x, 0.0, 1.0);
+    box.y = std::clamp(box.y, 0.0, 1.0);
+    box.width = std::clamp(box.width, 0.0, 1.0);
+    box.height = std::clamp(box.height, 0.0, 1.0);
     return box;
   }
 };

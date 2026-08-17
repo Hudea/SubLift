@@ -2,9 +2,9 @@ import type {
   SystemInfoDTO,
   JobConfig,
   CreateJobResponse,
-  SseProgressData,
-  SsePushEntryData,
-  SseDoneData,
+  SseJobCallbacks,
+  FileFingerprintDTO,
+  WorkspaceConfigDTO,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -21,12 +21,86 @@ export class SubLiftApiClient {
     return res.json();
   }
 
+  /** 获取当前媒体工作区配置（Feature 12508） */
+  static async getWorkspaceConfig(): Promise<WorkspaceConfigDTO> {
+    const res = await fetch(`${API_BASE}/config/workspace`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch workspace config: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /** 设置媒体工作区目录（Feature 12508） */
+  static async setWorkspaceConfig(mediaDir: string): Promise<WorkspaceConfigDTO> {
+    const res = await fetch(`${API_BASE}/config/workspace`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ media_dir: mediaDir }),
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(errJson.error || `Failed to set workspace: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /** 清除媒体工作区配置（Feature 12508） */
+  static async clearWorkspaceConfig(): Promise<WorkspaceConfigDTO> {
+    const res = await fetch(`${API_BASE}/config/workspace/clear`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to clear workspace: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /** 获取当前工作区下的所有可用视频文件（Feature 12508） */
+  static async getWorkspaceVideos(): Promise<import('../types/api').WorkspaceVideoFileDTO[]> {
+    const res = await fetch(`${API_BASE}/config/workspace/videos`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch workspace videos: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
   static getVideoStreamUrl(videoPath: string): string {
     return `${API_BASE}/video/stream?path=${encodeURIComponent(videoPath)}`;
   }
 
   static getVideoFrameUrl(videoPath: string, timeS: number = 0): string {
     return `${API_BASE}/video/frame?path=${encodeURIComponent(videoPath)}&time_s=${timeS}`;
+  }
+
+  /**
+   * 本机指纹反查（Feature 12507）：把浏览器侧文件的指纹交给服务端，
+   * 在受控目录内定位同一文件的服务端路径。命中返回路径，未命中返回 null。
+   */
+  static async resolveVideoPath(fp: FileFingerprintDTO): Promise<string | null> {
+    const res = await fetch(`${API_BASE}/video/resolve`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(fp),
+    });
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      throw new Error(`Failed to resolve video path: HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return typeof data.path === 'string' && data.path ? data.path : null;
   }
 
   static async createJob(config: JobConfig): Promise<CreateJobResponse> {
@@ -65,15 +139,7 @@ export class SubLiftApiClient {
     return res.text();
   }
 
-  static subscribeJobEvents(
-    jobId: string,
-    callbacks: {
-      onProgress?: (data: SseProgressData) => void;
-      onPushEntry?: (data: SsePushEntryData) => void;
-      onDone?: (data: SseDoneData) => void;
-      onError?: (err: string) => void;
-    }
-  ): () => void {
+  static subscribeJobEvents(jobId: string, callbacks: SseJobCallbacks): () => void {
     const eventSource = new EventSource(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/events`);
 
     if (callbacks.onProgress) {
@@ -110,11 +176,17 @@ export class SubLiftApiClient {
     });
 
     eventSource.addEventListener('cancelled', (e: MessageEvent) => {
+      let reason = 'Job was cancelled';
       try {
         const data = JSON.parse(e.data);
-        callbacks.onError?.(data.reason || 'Job was cancelled');
+        if (data && typeof data.reason === 'string' && data.reason) {
+          reason = data.reason;
+        }
       } catch {
-        callbacks.onError?.('Job was cancelled');
+        // keep default reason
+      }
+      try {
+        callbacks.onCancelled?.(reason);
       } finally {
         eventSource.close();
       }

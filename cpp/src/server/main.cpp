@@ -30,7 +30,8 @@ void print_help(std::string_view prog_name) {
             << "  -v, --version            Show version information and exit\n"
             << "      --host <ip>          Bind address (default: 127.0.0.1)\n"
             << "  -p, --port <port>        Listen port (default: 8080)\n"
-            << "      --static-dir <path>  Directory to serve static web assets from\n";
+            << "      --static-dir <path>  Directory to serve static web assets from\n"
+            << "      --cors-origin <o>    Allow-Origin for cross-origin use (default: off)\n";
 }
 
 }  // namespace
@@ -54,6 +55,23 @@ int main(int argc, char* argv[]) {
     static_dir = env_dir;
   }
 
+  std::string cors_origin = "";
+  if (const char* env_cors = std::getenv("SUBLIFT_CORS_ORIGIN"); env_cors && *env_cors) {
+    cors_origin = env_cors;
+  }
+
+  std::string media_dir = "";
+  if (const char* env_media = std::getenv("SUBLIFT_MEDIA_DIR"); env_media && *env_media) {
+    media_dir = env_media;
+  } else if (const char* env_root = std::getenv("SUBLIFT_ALLOWED_MEDIA_ROOT"); env_root && *env_root) {
+    media_dir = env_root;
+  }
+
+  std::string config_file = "";
+  if (const char* env_cfg = std::getenv("SUBLIFT_CONFIG_FILE"); env_cfg && *env_cfg) {
+    config_file = env_cfg;
+  }
+
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-h" || arg == "--help") {
@@ -74,6 +92,12 @@ int main(int argc, char* argv[]) {
       }
     } else if (arg == "--static-dir" && i + 1 < argc) {
       static_dir = argv[++i];
+    } else if (arg == "--cors-origin" && i + 1 < argc) {
+      cors_origin = argv[++i];
+    } else if (arg == "--media-dir" && i + 1 < argc) {
+      media_dir = argv[++i];
+    } else if (arg == "--config-file" && i + 1 < argc) {
+      config_file = argv[++i];
     } else {
       std::cerr << "Unknown option: " << arg << "\n";
       print_help(argv[0]);
@@ -102,6 +126,9 @@ int main(int argc, char* argv[]) {
       .port = port,
       .static_dir = static_dir,
       .thread_pool_size = 8,
+      .cors_origin = cors_origin,
+      .media_dir = media_dir,
+      .config_file = config_file,
   };
 
   g_server = std::make_unique<sublift::server::HttpServer>(std::move(config));
@@ -117,6 +144,7 @@ int main(int argc, char* argv[]) {
   if (!static_dir.empty()) {
     std::cout << " Static dir:   " << static_dir << "\n";
   }
+  std::cout << " CORS:         " << (cors_origin.empty() ? "off (same-origin only)" : cors_origin) << "\n";
   std::cout << " Available OCR Engines:\n";
   for (const auto& eng : sys_info.engines) {
     std::cout << "   - [" << (eng.available ? "x" : " ") << "] " << eng.name

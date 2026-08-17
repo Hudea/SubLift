@@ -9,9 +9,16 @@ import type {
   NormalizedRegionBox,
   SubtitleEntry,
   SseProgressData,
+  FileFingerprintDTO,
 } from '../types/api';
 
-export type WorkbenchState = 'Empty' | 'Ready' | 'Processing' | 'Review';
+export type WorkbenchState =
+  | 'Empty'
+  | 'Ready'
+  | 'Processing'
+  | 'Review'
+  | 'Failed'
+  | 'Cancelled';
 
 export const useWorkbenchStore = defineStore('workbench', () => {
   const systemStore = useSystemStore();
@@ -25,6 +32,10 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const videoPath = ref<string>('');
   const videoName = ref<string>('');
   const currentTimeMs = ref<number>(0);
+  /** blob 预览源（Feature 12507）：拖入/点选的本地文件直接由浏览器播放；
+   *  非空时播放器使用它，videoPath 仅在提取时需要。 */
+  const previewSrc = ref<string>('');
+  let pendingFingerprint: FileFingerprintDTO | null = null;
 
   // 3. Extraction configuration
   const selectedEngine = ref<OcrEngineName>('paddle');
@@ -51,14 +62,31 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   // Computed state locks
   const isLocked = computed(() => state.value === 'Processing');
   const canStart = computed(
-    () => (state.value === 'Ready' || state.value === 'Review') && !!videoPath.value && systemStore.isFfmpegReady
+    () =>
+      (state.value === 'Ready' ||
+        state.value === 'Review' ||
+        state.value === 'Failed' ||
+        state.value === 'Cancelled') &&
+      (!!videoPath.value || !!previewSrc.value) &&
+      systemStore.isFfmpegReady
   );
   const canExport = computed(() => entries.value.length > 0);
+  /** 预览就绪但服务端路径未定位（等待反查/用户粘贴） */
+  const needsServerPath = computed(() => !videoPath.value && !!previewSrc.value);
+
+  function releasePreviewSrc() {
+    if (previewSrc.value) {
+      URL.revokeObjectURL(previewSrc.value);
+      previewSrc.value = '';
+    }
+    pendingFingerprint = null;
+  }
 
   // Actions
   function loadVideo(path: string, name?: string) {
     if (isLocked.value) return;
 
+    releasePreviewSrc();
     videoPath.value = path.trim();
     videoName.value = name || videoPath.value.split(/[/\\]/).pop() || 'video.mp4';
     entries.value = [];
@@ -66,6 +94,46 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     errorMessage.value = null;
     globalSubtitleSearcher.resetCache();
     state.value = 'Ready';
+  }
+
+  /**
+   * 本地文件 blob 预览（Feature 12507）：立即零拷贝播放，
+   * 同时异步反查服务端路径，命中则静默附加（提取零摩擦）。
+   */
+  function loadVideoBlob(blobUrl: string, name: string, fingerprint?: FileFingerprintDTO) {
+    if (isLocked.value) return;
+
+    releasePreviewSrc();
+    previewSrc.value = blobUrl;
+    videoPath.value = '';
+    videoName.value = name;
+    entries.value = [];
+    activeJobId.value = null;
+    errorMessage.value = null;
+    globalSubtitleSearcher.resetCache();
+    state.value = 'Ready';
+
+    if (fingerprint) {
+      pendingFingerprint = fingerprint;
+      SubLiftApiClient.resolveVideoPath(fingerprint)
+        .then((path) => {
+          if (path && previewSrc.value === blobUrl) {
+            videoPath.value = path;
+          }
+        })
+        .catch(() => {
+          // 反查失败保持无路径状态；UI 会引导粘贴路径
+        });
+    }
+  }
+
+  /** 为 blob 预览补挂服务端路径（反查命中或用户粘贴） */
+  function attachServerPath(path: string) {
+    if (isLocked.value) return;
+    const clean = path.trim();
+    if (!clean) return;
+    videoPath.value = clean;
+    errorMessage.value = null;
   }
 
   function updateRegionBox(box: Partial<NormalizedRegionBox>) {
@@ -88,9 +156,31 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activeEntryIndex.value = globalSubtitleSearcher.findActiveIndex(entries.value, timeMs);
   }
 
+  let cancelRequested = false;
+
   async function startExtraction() {
     if (!canStart.value) return;
 
+    // blob 预览模式下先确保拿到服务端路径：优先用挂载的路径，
+    // 其次用拖入时的指纹反查；都没有则明确引导，绝不拿空路径发起任务。
+    if (!videoPath.value) {
+      let resolved: string | null = null;
+      if (pendingFingerprint) {
+        try {
+          resolved = await SubLiftApiClient.resolveVideoPath(pendingFingerprint);
+        } catch {
+          resolved = null;
+        }
+      }
+      if (!resolved) {
+        errorMessage.value =
+          '尚未定位到该视频的服务端路径：请在左侧「服务端路径」输入框粘贴绝对路径后重试。';
+        return;
+      }
+      videoPath.value = resolved;
+    }
+
+    cancelRequested = false;
     state.value = 'Processing';
     entries.value = [];
     errorMessage.value = null;
@@ -105,6 +195,15 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         confidence_threshold: confidenceThreshold.value,
         region_box: regionBox.value,
       });
+
+      // 取消窗口防御：createJob 往返期间用户点了取消（当时还没有 job id），
+      // 任务一旦建立立即在服务端取消，不让它成为孤儿任务。
+      if (cancelRequested) {
+        await SubLiftApiClient.cancelJob(resp.job_id).catch(() => {});
+        state.value = 'Cancelled';
+        errorMessage.value = '已取消提取';
+        return;
+      }
 
       activeJobId.value = resp.job_id;
 
@@ -126,7 +225,15 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         onError: (err) => {
           console.error('[Job Error]', err);
           errorMessage.value = String(err);
-          state.value = 'Ready';
+          state.value = 'Failed';
+          if (sseUnsubscribe) {
+            sseUnsubscribe();
+            sseUnsubscribe = null;
+          }
+        },
+        onCancelled: (reason) => {
+          errorMessage.value = reason || '任务已被取消';
+          state.value = 'Cancelled';
           if (sseUnsubscribe) {
             sseUnsubscribe();
             sseUnsubscribe = null;
@@ -136,13 +243,20 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     } catch (err: unknown) {
       console.error('[Start Job Failed]', err);
       errorMessage.value = err instanceof Error ? err.message : String(err);
-      state.value = 'Ready';
+      state.value = 'Failed';
       throw err;
     }
   }
 
   async function cancelExtraction() {
-    if (state.value !== 'Processing' || !activeJobId.value) return;
+    if (state.value !== 'Processing') return;
+
+    // createJob 尚未返回（还没有 job id）：标记意图，建立后立即取消
+    if (!activeJobId.value) {
+      cancelRequested = true;
+      errorMessage.value = '正在取消…';
+      return;
+    }
 
     try {
       await SubLiftApiClient.cancelJob(activeJobId.value);
@@ -151,7 +265,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
         sseUnsubscribe();
         sseUnsubscribe = null;
       }
-      state.value = 'Ready';
+      errorMessage.value = '已取消提取';
+      state.value = 'Cancelled';
     }
   }
 
@@ -228,6 +343,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       sseUnsubscribe();
       sseUnsubscribe = null;
     }
+    releasePreviewSrc();
     state.value = 'Empty';
     videoPath.value = '';
     videoName.value = '';
@@ -241,6 +357,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     state,
     videoPath,
     videoName,
+    previewSrc,
+    needsServerPath,
     currentTimeMs,
     selectedEngine,
     targetFps,
@@ -254,6 +372,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     canStart,
     canExport,
     loadVideo,
+    loadVideoBlob,
+    attachServerPath,
     updateRegionBox,
     resetDefaultBottomRoi,
     updatePlaybackTime,

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   sublift-web:
     build:
@@ -10,18 +8,14 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    # Media is served read-only from ./videos. The PP-OCRv6 models are baked into
+    # the image at /opt/sublift/models — do NOT bind-mount an empty host dir over
+    # it, that would shadow the models and disable the paddle engine.
     volumes:
       - ./videos:/media:ro
-      - ./models:/opt/sublift/models:ro
-      - ./output:/output:rw
     environment:
       - SUBLIFT_HOST=0.0.0.0
       - SUBLIFT_PORT=8080
       - SUBLIFT_STATIC_DIR=/app/web/dist
       - SUBLIFT_PADDLE_MODEL_DIR=/opt/sublift/models
       - SUBLIFT_ALLOWED_MEDIA_ROOT=/media
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/system/info"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
