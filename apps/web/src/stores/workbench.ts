@@ -38,8 +38,8 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   let pendingFingerprint: FileFingerprintDTO | null = null;
 
   // 3. Extraction configuration
-  const selectedEngine = ref<OcrEngineName>('paddle');
-  const targetFps = ref<number>(2.0);
+  const selectedEngine = ref<OcrEngineName>('vision');
+  const targetFps = ref<number>(5.0);
   const confidenceThreshold = ref<number>(0.0);
   const regionBox = ref<NormalizedRegionBox>({
     x: 0.0,
