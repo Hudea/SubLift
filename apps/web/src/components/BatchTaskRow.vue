@@ -1,5 +1,9 @@
 <template>
-  <tr class="sl-task-row" :class="`is-${task.status}`">
+  <tr 
+    class="sl-task-row" 
+    :class="[`is-${task.status}`, { 'is-selected': isSelected }]"
+    @click="handleRowClick"
+  >
     <!-- 1. 状态指示灯与名称 -->
     <td class="sl-cell-name">
       <div class="sl-name-wrapper">
@@ -11,20 +15,27 @@
       </div>
     </td>
 
-    <!-- 2. 引擎与采样配置快照 -->
+    <!-- 2. 来源位置 -->
+    <td class="sl-cell-location">
+      <span class="sl-location-tag" :title="task.importRootPath || task.videoPath">
+        {{ locationDisplay }}
+      </span>
+    </td>
+
+    <!-- 3. 引擎与采样配置快照 -->
     <td class="sl-cell-config">
       <div class="sl-tag-group">
-        <span class="sl-tag">{{ task.config.engine.toUpperCase() }}</span>
-        <span class="sl-tag">{{ task.config.fps }} FPS</span>
+        <span class="sl-tag sl-tag--engine">{{ formatEngine(task.config.engine) }}</span>
+        <span class="sl-tag sl-tag--quality">{{ formatQuality(task.config.quality) }}</span>
       </div>
     </td>
 
-    <!-- 3. 实时进度与状态 -->
+    <!-- 4. 实时进度与状态 -->
     <td class="sl-cell-progress">
       <div class="sl-progress-wrapper">
         <div class="sl-progress-header">
           <span class="sl-stage-text">{{ getStageLabel(task) }}</span>
-          <span class="sl-pct-text">{{ task.progressPct }}%</span>
+          <span v-if="task.progressPct > 0" class="sl-pct-text">{{ task.progressPct }}%</span>
         </div>
         <div class="sl-progress-track">
           <div 
@@ -36,7 +47,7 @@
       </div>
     </td>
 
-    <!-- 4. 统计与条目 -->
+    <!-- 5. 字幕条目 -->
     <td class="sl-cell-entries">
       <span v-if="task.entries.length > 0" class="sl-entry-badge">
         {{ task.entries.length }} 句
@@ -44,7 +55,7 @@
       <span v-else class="sl-muted-text">—</span>
     </td>
 
-    <!-- 5. 耗时 -->
+    <!-- 6. 耗时 -->
     <td class="sl-cell-time">
       <div class="sl-time-wrapper">
         <span v-if="task.elapsedMs > 0">{{ formatDuration(task.elapsedMs) }}</span>
@@ -52,57 +63,85 @@
       </div>
     </td>
 
-    <!-- 6. 行级操作按钮 -->
-    <td class="sl-cell-actions">
+    <!-- 7. 行级操作按钮 -->
+    <td class="sl-cell-actions" @click.stop>
       <div class="sl-action-buttons">
-        <!-- 取消 (处理中或排队中) -->
+        <!-- 启动单项 (仅 waiting 可用) -->
         <button
-          v-if="task.status === 'running' || task.status === 'waiting'"
-          class="sl-btn-icon"
-          title="取消任务"
-          @click="batchStore.cancelTask(task.id)"
+          v-if="task.status === 'waiting'"
+          class="sl-btn-icon sl-btn-icon--primary"
+          title="立即单独启动此任务"
+          aria-label="立即单独启动此任务"
+          :disabled="batchStore.isQueueRunning || batchStore.currentRunningId !== null"
+          @click="batchStore.startSingle(task.id)"
         >
-          <svg class="sl-icon" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
-          </svg>
+          ▶
         </button>
 
-        <!-- 重试 (失败或取消) -->
+        <!-- 上移 (仅 waiting 可用) -->
         <button
-          v-if="task.status === 'failed' || task.status === 'cancelled'"
+          v-if="task.status === 'waiting'"
           class="sl-btn-icon"
+          title="上移排队顺序"
+          aria-label="上移排队顺序"
+          @click="batchStore.moveTaskUp(task.id)"
+        >
+          ↑
+        </button>
+
+        <!-- 下移 (仅 waiting 可用) -->
+        <button
+          v-if="task.status === 'waiting'"
+          class="sl-btn-icon"
+          title="下移排队顺序"
+          aria-label="下移排队顺序"
+          @click="batchStore.moveTaskDown(task.id)"
+        >
+          ↓
+        </button>
+
+        <!-- 取消 (处理中或排队中) -->
+        <button
+          v-if="BatchTaskStatusGuard.canCancel(task.status)"
+          class="sl-btn-icon sl-btn-icon--warning"
+          title="取消任务"
+          aria-label="取消任务"
+          @click="batchStore.cancelTask(task.id)"
+        >
+          ✕
+        </button>
+
+        <!-- 重试 (失败、取消或中断) -->
+        <button
+          v-if="BatchTaskStatusGuard.canRetry(task.status)"
+          class="sl-btn-icon sl-btn-icon--primary"
           title="重新排队"
+          aria-label="重新排队"
           @click="batchStore.retryTask(task.id)"
         >
-          <svg class="sl-icon" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
-            <path d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
-          </svg>
+          ↺
         </button>
 
         <!-- 单任务下载 SRT (完成态) -->
         <button
-          v-if="task.status === 'completed'"
+          v-if="task.status === 'completed' && task.entries.length > 0"
           class="sl-btn-icon sl-btn-icon--accent"
           title="下载 SRT 字幕"
+          aria-label="下载 SRT 字幕"
           @click="batchStore.exportTaskSrt(task.id)"
         >
-          <svg class="sl-icon" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
-          </svg>
+          ⬇
         </button>
 
-        <!-- 删除任务 -->
+        <!-- 移除任务 -->
         <button
+          v-if="BatchTaskStatusGuard.canRemove(task.status)"
           class="sl-btn-icon sl-btn-icon--danger"
-          title="移除任务"
+          title="从队列中移除"
+          aria-label="从队列中移除"
           @click="batchStore.removeTask(task.id)"
         >
-          <svg class="sl-icon" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-          </svg>
+          🗑
         </button>
       </div>
     </td>
@@ -110,112 +149,203 @@
 </template>
 
 <script setup lang="ts">
-import type { BatchTaskItem } from '../types/batch';
+import { computed } from 'vue';
 import { useBatchStore } from '../stores/batch';
+import { BatchTaskStatusGuard } from '../utils/batch_guards';
+import { SAMPLING_QUALITY_MAP, type BatchTaskItem, type SamplingQuality } from '../types/batch';
 
-defineProps<{
+const props = defineProps<{
   task: BatchTaskItem;
 }>();
 
 const batchStore = useBatchStore();
 
+const isSelected = computed(() => batchStore.selectedTaskId === props.task.id);
+
+const locationDisplay = computed(() => {
+  if (props.task.importRootPath) return props.task.importRootPath;
+  const clean = props.task.videoPath.replace(/\\/g, '/');
+  const parts = clean.split('/').filter((p) => p.length > 0);
+  if (parts.length > 1) {
+    return `${parts[parts.length - 2]}/`;
+  }
+  return '根目录';
+});
+
+function handleRowClick() {
+  batchStore.selectTask(props.task.id);
+}
+
+function formatEngine(engine: string): string {
+  switch (engine) {
+    case 'vision':
+      return 'Vision';
+    case 'paddle':
+      return 'Paddle';
+    default:
+      return engine.toUpperCase();
+  }
+}
+
+function formatQuality(quality: SamplingQuality): string {
+  return SAMPLING_QUALITY_MAP[quality]?.label || quality;
+}
+
 function getStageLabel(task: BatchTaskItem): string {
-  if (task.status === 'waiting') return '排队中';
-  if (task.status === 'completed') return '已完成';
-  if (task.status === 'failed') return task.error ? `失败 (${task.error})` : '失败';
-  if (task.status === 'cancelled') return '已取消';
-  return task.stage || '处理中';
+  switch (task.status) {
+    case 'waiting':
+      return '等待中';
+    case 'preparing':
+      return '准备中...';
+    case 'extracting':
+      return task.stage && task.stage !== 'extracting' ? task.stage : '正在提取...';
+    case 'exporting':
+      return '正在导出...';
+    case 'completed':
+      return '提取完成';
+    case 'failed':
+      return task.error ? '处理失败' : '失败';
+    case 'cancelled':
+      return '已取消';
+    case 'interrupted':
+      return '已中断';
+    case 'skipped':
+      return '已跳过';
+  }
 }
 
 function formatDuration(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
-  const m = Math.floor(totalSec / 60);
-  const s = totalSec % 60;
-  return `${m}分${s < 10 ? '0' : ''}${s}秒`;
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  return `${min}m ${remSec}s`;
 }
 </script>
 
 <style scoped>
 .sl-task-row {
-  border-bottom: 1px solid var(--sl-border-subtle);
-  transition: var(--sl-transition-snappy);
+  border-bottom: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.06));
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  user-select: none;
 }
 
 .sl-task-row:hover {
-  background: var(--sl-surface-card-hover);
+  background-color: var(--sl-surface-elevated, #242426);
+}
+
+.sl-task-row.is-selected {
+  background-color: rgba(10, 132, 255, 0.08);
+  box-shadow: inset 2px 0 0 var(--sl-color-primary, #0a84ff);
 }
 
 td {
   padding: 10px 14px;
   vertical-align: middle;
+  font-size: var(--sl-font-size-xs, 12px);
 }
 
-.sl-cell-name {
-  max-width: 280px;
-}
-
+/* 1. Name */
 .sl-name-wrapper {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .sl-beacon-light {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
-.sl-beacon--waiting { background: var(--sl-color-ready); }
-.sl-beacon--running {
-  background: var(--sl-color-processing);
-  box-shadow: 0 0 8px var(--sl-color-processing);
-  animation: sl-pulse-fast 1.2s infinite ease-in-out;
+.sl-beacon--waiting { background: #8e8e93; }
+.sl-beacon--preparing,
+.sl-beacon--extracting,
+.sl-beacon--exporting { 
+  background: #ff9f0a; 
+  box-shadow: 0 0 6px rgba(255, 159, 10, 0.5);
+  animation: pulse-dot 1.5s infinite ease-in-out;
 }
-.sl-beacon--completed { background: var(--sl-color-success); }
-.sl-beacon--failed { background: var(--sl-color-error); }
-.sl-beacon--cancelled { background: var(--sl-text-disabled); }
+.sl-beacon--completed { background: #30d158; }
+.sl-beacon--failed { background: #ff453a; }
+.sl-beacon--cancelled { background: #636366; }
+.sl-beacon--interrupted { background: #ff453a; }
+.sl-beacon--skipped { background: #bf5af2; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
 
 .sl-file-meta {
   display: flex;
   flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
 .sl-file-title {
-  font-size: var(--sl-font-size-base);
   font-weight: 500;
-  color: var(--sl-text-primary);
+  color: var(--sl-text-primary, #ffffff);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 260px;
 }
 
 .sl-file-subpath {
   font-size: 11px;
-  color: var(--sl-text-tertiary);
-  font-family: var(--sl-font-family-mono);
+  color: var(--sl-text-tertiary, #636366);
+  font-family: var(--sl-font-mono, monospace);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 260px;
 }
 
+/* 2. Location */
+.sl-location-tag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--sl-surface-base, #161618);
+  border: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--sl-text-secondary, #8e8e93);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+/* 3. Config */
 .sl-tag-group {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 
 .sl-tag {
-  font-size: 10px;
-  font-family: var(--sl-font-family-mono);
-  background: var(--sl-surface-elevated);
-  border: 1px solid var(--sl-border-subtle);
-  border-radius: var(--sl-radius-xs);
+  font-size: 11px;
   padding: 2px 6px;
-  color: var(--sl-text-secondary);
+  border-radius: 4px;
+  background: var(--sl-surface-elevated, #2c2c2e);
+  border: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.1));
+  color: var(--sl-text-secondary, #8e8e93);
 }
 
+.sl-tag--engine {
+  color: #5ac8fa;
+}
+
+.sl-tag--quality {
+  color: #ffd60a;
+}
+
+/* 4. Progress */
 .sl-progress-wrapper {
   display: flex;
   flex-direction: column;
@@ -226,104 +356,110 @@ td {
 .sl-progress-header {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 11px;
 }
 
-.sl-stage-text { 
-  color: var(--sl-text-secondary); 
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.sl-stage-text {
+  color: var(--sl-text-secondary, #8e8e93);
 }
 
-.sl-pct-text { 
-  font-family: var(--sl-font-family-mono); 
-  color: var(--sl-text-tertiary); 
+.sl-pct-text {
+  font-weight: 600;
+  color: var(--sl-text-primary, #ffffff);
+  font-variant-numeric: tabular-nums;
 }
 
 .sl-progress-track {
   width: 100%;
   height: 4px;
-  background: var(--sl-surface-base);
-  border-radius: var(--sl-radius-pill);
+  background: var(--sl-surface-base, #161618);
+  border-radius: 2px;
   overflow: hidden;
 }
 
 .sl-progress-fill {
   height: 100%;
-  transition: width 200ms ease;
+  border-radius: 2px;
+  transition: width 0.2s ease;
 }
 
-.sl-fill--running { background: var(--sl-color-processing); }
-.sl-fill--completed { background: var(--sl-color-success); }
-.sl-fill--failed { background: var(--sl-color-error); }
-.sl-fill--waiting, .sl-fill--cancelled { background: var(--sl-color-ready); }
+.sl-fill--waiting { background: #636366; }
+.sl-fill--preparing,
+.sl-fill--extracting,
+.sl-fill--exporting { background: #ff9f0a; }
+.sl-fill--completed { background: #30d158; }
+.sl-fill--failed { background: #ff453a; }
+.sl-fill--cancelled { background: #48484a; }
 
+/* 5. Entries */
 .sl-entry-badge {
   font-size: 11px;
-  color: var(--sl-color-accent);
-  background: var(--sl-color-accent-muted);
-  padding: 2px 6px;
-  border-radius: var(--sl-radius-xs);
-  font-family: var(--sl-font-family-mono);
-}
-
-.sl-time-wrapper {
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
-  font-family: var(--sl-font-family-mono);
-  color: var(--sl-text-secondary);
+  font-weight: 500;
+  color: #30d158;
 }
 
 .sl-muted-text {
-  color: var(--sl-text-disabled);
+  color: var(--sl-text-tertiary, #636366);
 }
 
+/* 6. Time */
+.sl-time-wrapper {
+  color: var(--sl-text-secondary, #8e8e93);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 7. Actions */
 .sl-action-buttons {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 
 .sl-btn-icon {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.1));
+  background: var(--sl-surface-elevated, #2c2c2e);
+  color: var(--sl-text-secondary, #8e8e93);
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--sl-surface-card);
-  border: 1px solid var(--sl-border-subtle);
-  border-radius: var(--sl-radius-xs);
-  color: var(--sl-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  transition: var(--sl-transition-snappy);
+  transition: all 0.15s ease;
 }
 
 .sl-btn-icon:hover {
-  background: var(--sl-surface-elevated);
-  color: var(--sl-text-primary);
-  border-color: var(--sl-border-standard);
+  background: var(--sl-surface-active, #3a3a3c);
+  color: var(--sl-text-primary, #ffffff);
 }
 
-.sl-btn-icon--accent:hover {
-  background: var(--sl-color-accent-muted);
-  color: var(--sl-color-accent);
-  border-color: var(--sl-color-accent);
+.sl-btn-icon--primary {
+  color: var(--sl-color-primary, #0a84ff);
+}
+
+.sl-btn-icon--primary:hover {
+  background: rgba(10, 132, 255, 0.15);
+}
+
+.sl-btn-icon--warning {
+  color: #ff9f0a;
+}
+
+.sl-btn-icon--accent {
+  color: #30d158;
 }
 
 .sl-btn-icon--danger:hover {
-  background: var(--sl-color-error-bg);
-  color: var(--sl-color-error);
-  border-color: var(--sl-color-error);
+  color: #ff453a;
+  background: rgba(255, 69, 58, 0.15);
 }
 
-.sl-icon {
-  width: 12px;
-  height: 12px;
-}
-
-@keyframes sl-pulse-fast {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(1.3); }
+.sl-btn-icon:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 </style>

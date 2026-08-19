@@ -105,6 +105,26 @@ export class SubLiftApiClient {
   }
 
   /**
+   * 服务端绝对路径 / 目录递归扫描与展开 (Feature 12510)
+   * 传入一个或多个绝对路径（文件或目录），服务端递归扫描并返回包含全部视频文件的结构化摘要。
+   */
+  static async scanServerPaths(paths: string[]): Promise<import('../types/batch').BatchScanSummary> {
+    const res = await fetch(`${API_BASE}/video/scan-path`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ paths }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `Failed to scan server paths: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /**
    * 智能字幕区域自动识别 (Feature 12509)：
    * 对视频进行多点采样或单点截帧，识别字幕区域并返回推荐 ROI 选区。
    */

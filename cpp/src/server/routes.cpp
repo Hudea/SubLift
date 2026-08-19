@@ -680,6 +680,158 @@ void register_routes(httplib::Server& server,
   });
 
   // ---------------------------------------------------------------------------
+  // POST /api/video/scan-path —— 服务端绝对路径 / 目录递归扫描与展开 (Feature 12510)
+  //
+  // 输入：{ "path": "/path/to/dir_or_file" } 或 { "paths": ["/path/1", "/path/2"] }
+  // 输出：{ "accepted": [...], "skipped": N, "rejected": [...] }
+  // ---------------------------------------------------------------------------
+  server.Post("/api/video/scan-path", [](const httplib::Request& req, httplib::Response& res) {
+    nlohmann::json body;
+    try {
+      body = nlohmann::json::parse(req.body);
+    } catch (...) {
+      res.status = 400;
+      res.set_content(R"({"error":"Invalid JSON body"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    std::vector<std::string> raw_inputs;
+    if (body.contains("paths") && body["paths"].is_array()) {
+      for (const auto& item : body["paths"]) {
+        if (item.is_string()) raw_inputs.push_back(item.get<std::string>());
+      }
+    } else if (body.contains("path") && body["path"].is_string()) {
+      raw_inputs.push_back(body["path"].get<std::string>());
+    } else {
+      res.status = 400;
+      res.set_content(R"({"error":"Missing 'path' or 'paths' parameter"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    nlohmann::json accepted = nlohmann::json::array();
+    nlohmann::json rejected = nlohmann::json::array();
+    int skipped_count = 0;
+    std::set<std::string> seen_paths;
+
+    for (const auto& raw_input : raw_inputs) {
+      if (raw_input.empty()) continue;
+
+      std::filesystem::path expanded = expand_tilde(raw_input);
+      std::error_code ec;
+      std::filesystem::path canonical_p = std::filesystem::canonical(expanded, ec);
+      if (ec) {
+        rejected.push_back({
+            {"pathOrName", raw_input},
+            {"reason", {{"kind", "unreadable"}, {"detail", "路径不存在或无法访问"}}}
+        });
+        continue;
+      }
+
+      if (std::filesystem::is_directory(canonical_p, ec)) {
+        // 递归扫描该目录下的有效视频文件
+        int dir_accepted_count = 0;
+        std::filesystem::recursive_directory_iterator it(
+            canonical_p, std::filesystem::directory_options::skip_permission_denied, ec);
+        if (ec) {
+          rejected.push_back({
+              {"pathOrName", raw_input},
+              {"reason", {{"kind", "unreadable"}, {"detail", "目录无法访问或权限不足"}}}
+          });
+          continue;
+        }
+
+        for (const auto end = std::filesystem::recursive_directory_iterator{}; it != end;) {
+          if (it->is_symlink(ec)) {
+            skipped_count++;
+          } else if (it->is_regular_file(ec) && !ec) {
+            std::string filename = it->path().filename().string();
+            if (filename.rfind(".", 0) == 0) {
+              skipped_count++;
+            } else if (is_allowed_media_extension(it->path())) {
+              std::string p_str = it->path().string();
+              if (p_str.find(".sublift_cache") == std::string::npos &&
+                  p_str.find("/.git/") == std::string::npos) {
+                if (seen_paths.find(p_str) != seen_paths.end()) {
+                  rejected.push_back({
+                      {"pathOrName", filename},
+                      {"reason", {{"kind", "duplicate"}}}
+                  });
+                } else {
+                  seen_paths.insert(p_str);
+                  std::string rel = std::filesystem::relative(it->path(), canonical_p, ec).string();
+                  std::string import_root = "";
+                  if (rel.find('/') != std::string::npos) {
+                    import_root = rel.substr(0, rel.rfind('/') + 1);
+                  }
+                  accepted.push_back({
+                      {"name", filename},
+                      {"videoPath", p_str},
+                      {"sizeBytes", it->file_size(ec)},
+                      {"importRootPath", import_root}
+                  });
+                  dir_accepted_count++;
+                }
+              } else {
+                skipped_count++;
+              }
+            } else {
+              skipped_count++;
+            }
+          }
+          if (it->is_directory(ec) && (it.depth() >= 15 || it->path().filename() == ".sublift_cache" ||
+                                       it->path().filename() == ".git")) {
+            it.disable_recursion_pending();
+          }
+          it.increment(ec);
+          if (ec) break;
+        }
+
+        if (dir_accepted_count == 0) {
+          rejected.push_back({
+              {"pathOrName", raw_input},
+              {"reason", {{"kind", "emptyDirectory"}}}
+          });
+        }
+      } else if (std::filesystem::is_regular_file(canonical_p, ec)) {
+        // 单个常规文件
+        if (is_allowed_media_extension(canonical_p)) {
+          std::string p_str = canonical_p.string();
+          if (seen_paths.find(p_str) != seen_paths.end()) {
+            rejected.push_back({
+                {"pathOrName", canonical_p.filename().string()},
+                {"reason", {{"kind", "duplicate"}}}
+            });
+          } else {
+            seen_paths.insert(p_str);
+            accepted.push_back({
+                {"name", canonical_p.filename().string()},
+                {"videoPath", p_str},
+                {"sizeBytes", std::filesystem::file_size(canonical_p, ec)},
+            });
+          }
+        } else {
+          rejected.push_back({
+              {"pathOrName", raw_input},
+              {"reason", {{"kind", "unsupportedFormat"}, {"extension", canonical_p.extension().string()}}}
+          });
+        }
+      } else {
+        rejected.push_back({
+            {"pathOrName", raw_input},
+            {"reason", {{"kind", "unreadable"}, {"detail", "路径既不是常规文件也不是文件夹"}}}
+        });
+      }
+    }
+
+    nlohmann::json res_json = {
+        {"accepted", accepted},
+        {"skipped", skipped_count},
+        {"rejected", rejected}
+    };
+    res.set_content(res_json.dump(), "application/json; charset=utf-8");
+  });
+
+  // ---------------------------------------------------------------------------
   // POST /api/video/detect-region —— 智能字幕区域自动识别 (Feature 12509)
   //
   // 输入：video_path (必填), time_s (可选), engine (可选)

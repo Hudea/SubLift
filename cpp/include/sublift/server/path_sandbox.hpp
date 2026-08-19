@@ -17,6 +17,20 @@ class PathSecurityException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+/// 展开波浪号路径（~ -> $HOME）
+inline std::filesystem::path expand_tilde(const std::string& raw) {
+  if (raw.empty()) return {};
+  if (raw[0] == '~') {
+    const char* home = std::getenv("HOME");
+    if (home) {
+      if (raw.size() == 1) return std::filesystem::path(home);
+      if (raw[1] == '/') return std::filesystem::path(home) / raw.substr(2);
+      return std::filesystem::path(home) / raw.substr(1);
+    }
+  }
+  return std::filesystem::path(raw);
+}
+
 /// 允许访问的合法媒体视频扩展名白名单（大小写不敏感）
 inline bool is_allowed_media_extension(const std::filesystem::path& p) {
   std::string ext = p.extension().string();

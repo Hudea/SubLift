@@ -1112,6 +1112,58 @@ class TestSubLiftServerE2E(unittest.TestCase):
         res2 = json.loads(body2.decode("utf-8"))
         self.assertEqual(res2["sample_time_s"], 0.5)
 
+    def test_scan_path_01_directory_expansion(self) -> None:
+        """TC-SCN-01: POST /api/video/scan-path recursively expands server-side directory."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # Scan directory containing synth video
+        parent_dir = os.path.dirname(self.synth_mp4_path)
+        req_body = json.dumps({"path": parent_dir})
+        st, _, body = self.req(
+            "POST",
+            "/api/video/scan-path",
+            body=req_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+        res = json.loads(body.decode("utf-8"))
+        self.assertIn("accepted", res)
+        self.assertIn("skipped", res)
+        self.assertIn("rejected", res)
+        accepted_paths = [item["videoPath"] for item in res["accepted"]]
+        self.assertIn(os.path.realpath(self.synth_mp4_path), accepted_paths)
+
+    def test_scan_path_02_rejections_and_security(self) -> None:
+        """TC-SCN-02: POST /api/video/scan-path properly rejects invalid paths."""
+        # Non-existent path
+        req_body = json.dumps({"path": "/nonexistent/random/directory_12345"})
+        st, _, body = self.req(
+            "POST",
+            "/api/video/scan-path",
+            body=req_body,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 200)
+        res = json.loads(body.decode("utf-8"))
+        self.assertEqual(len(res["accepted"]), 0)
+        self.assertGreaterEqual(len(res["rejected"]), 1)
+        self.assertEqual(res["rejected"][0]["reason"]["kind"], "unreadable")
+
+        # Non-media file
+        req_file = json.dumps({"path": "/etc/hosts"})
+        st_file, _, body_file = self.req(
+            "POST",
+            "/api/video/scan-path",
+            body=req_file,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st_file, 200)
+        res_file = json.loads(body_file.decode("utf-8"))
+        self.assertEqual(len(res_file["accepted"]), 0)
+        self.assertGreaterEqual(len(res_file["rejected"]), 1)
+        self.assertEqual(res_file["rejected"][0]["reason"]["kind"], "unsupportedFormat")
+
 
 def print_banner(text: str) -> None:
     line = "=" * 70

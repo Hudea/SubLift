@@ -11,26 +11,6 @@ namespace sublift::server {
 
 namespace {
 
-std::filesystem::path expand_tilde(const std::string& raw) {
-  if (raw.empty()) return {};
-  if (raw[0] != '~') return std::filesystem::path(raw);
-
-  const char* home = std::getenv("HOME");
-  if (!home || !*home) {
-    home = std::getenv("USERPROFILE");
-  }
-  if (!home || !*home) {
-    return std::filesystem::path(raw);
-  }
-  if (raw.size() == 1) {
-    return std::filesystem::path(home);
-  }
-  if (raw[1] == '/' || raw[1] == '\\') {
-    return std::filesystem::path(home) / raw.substr(2);
-  }
-  return std::filesystem::path(raw);
-}
-
 std::filesystem::path default_config_path() {
   const char* cfg_dir = std::getenv("SUBLIFT_CONFIG_DIR");
   if (cfg_dir && *cfg_dir) {
