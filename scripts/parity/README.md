@@ -8,7 +8,7 @@
 
 # Parity dump scripts
 
-Frozen-oracle helpers for Phase 6. Contract: [`docs/cpp/parity-contract.md`](../../docs/cpp/parity-contract.md).
+Frozen-oracle helpers for Native/Python parity. Contract: [`docs/cpp/parity-contract.md`](../../docs/cpp/parity-contract.md).
 
 ## Default Config golden (feat-06004)
 
@@ -118,9 +118,7 @@ uv run python scripts/parity/check_paddle_cutover.py --check \
 0 后测 cancel/restart。macOS 同时要求 Worker 通过相对 `@loader_path` 加载 build
 tree 内的 bundled ORT，且 SHA 与性能 Candidate exact。门禁不会把报告默认写入仓库。
 
-## Signature golden (feat-06101)
-
-Full sub-phase plan: [`docs/cpp/phase6.1-pure-pipeline.md`](../../docs/cpp/phase6.1-pure-pipeline.md).
+## Signature golden
 
 ```bash
 # regenerate fixtures (proves bgr_quirk RGB2GRAY vs BGR2GRAY trap)

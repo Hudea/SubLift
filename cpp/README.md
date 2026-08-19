@@ -1,6 +1,6 @@
 # SubLift C++ tree (`cpp/`)
 
-Native core / worker / CLI for **Phase 6**. Product default path is **C++ Native Core (`sublift_worker`)** after Phase 6.6 Cutover.  
+Native core、worker、CLI 与 Web server。产品默认路径使用 **C++ Native Runtime**。
 Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 
 ## Requirements
@@ -15,26 +15,8 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 
 ## Target graph
 
-```text
-sublift_cli ──► sublift_ffmpeg ──► sublift_core ──► nlohmann_json
-sublift_worker ─┬► sublift_ffmpeg ──► sublift_core
-                ├► sublift_vision_macos (OPTION OFF, macOS only)
-                └► sublift_paddle (OPTION OFF, ONNX Runtime)
-sublift_test_support ──► sublift_core
-sublift_tests ──► test_support + Catch2 (+ core via PUBLIC)
-```
-
-| Target | Type | Role (6.0+) |
-|---|---|---|
-| `sublift_core` | STATIC | models/config/pipeline home (stubs: version) |
-| `sublift_ffmpeg` | STATIC | subprocess extractor (stub) |
-| `sublift_test_support` | STATIC | golden/parity helpers (stub) |
-| `sublift_worker` | EXE | UDS worker shell |
-| `sublift_cli` | EXE | native CLI shell |
-| `sublift_vision_macos` | STATIC | Vision adapter; **off by default** |
-| `sublift_paddle` | STATIC | PaddleOCR adapter (ONNX Runtime); **off by default** |
-
-`sublift_core` must not depend on ObjC, Swift, Apple Vision, or ONNX Runtime.
+当前 targets、依赖方向和目录所有权见
+[`docs/cpp/native-architecture.md`](../docs/cpp/native-architecture.md)。CMake 文件是可执行依赖图的真源。
 
 ## Options
 
@@ -72,7 +54,7 @@ ctest --test-dir build/cpp --output-on-failure
 
 Binaries land in `build/cpp/bin/` (`sublift_cli`, `sublift_worker`, `sublift_tests`).
 
-### ffmpeg / ffprobe integration skip policy (Phase 6.3)
+### ffmpeg / ffprobe integration skip policy
 
 | Case | Behavior |
 |---|---|
@@ -91,7 +73,7 @@ cmake --build build/cpp
 ctest --test-dir build/cpp -R vision --output-on-failure
 ```
 
-### Apple Vision OCR integration & CI policy (Phase 6.4)
+### Apple Vision OCR integration & CI policy
 
 | Case | Behavior |
 |---|---|
@@ -104,7 +86,7 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | C++ parity L0 vs L4 | C++ parity **L0** covers box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`; it runs from `./scripts/verify-standard.sh`, not Harness `./init.sh`. **L4** is live Vision text/conf 的可选报告；`dump_vision --live` 只保留说明性入口。 |
 | Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_VERIFY_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
 
-## sublift_worker CLI & Dual-Track Opt-in Guide (Phase 6.5)
+## sublift_worker CLI
 
 `sublift_worker` is the standalone native C++ IPC worker binary delivering Unix Domain Socket framing (`>I` big-endian 4B header), JSON protocol DTOs, path mode, and frame mode processing.
 
@@ -118,26 +100,26 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 ./build/cpp/bin/sublift_worker --socket /tmp/sublift_worker.sock --engine vision
 ```
 
-### Dual-Track Opt-in & Cutover Policy
+### Runtime policy
 
-- **Default Product Runtime**: C++ Native Core (`sublift_worker`) is the **default runtime** for SubLift products (Phase 6.6 Cutover Default).
-- **Rollback Path**: Host CLI / Swift GUI can fallback to Python worker by setting environment variable `SUBLIFT_RUNTIME=python` or passing `--runtime python`.
-- **Paddle OCR**: Paddle available → C++ Worker stable product path; unavailable → explicit
-  Python Paddle `paddle_override`. It never changes the requested engine.
+- **Default Product Runtime**: C++ Native Core (`sublift_worker`).
+- **Explicit Python Path**: 只有显式 `SUBLIFT_RUNTIME=python` 或等价参数才进入 Python。
+- **Fail-closed**: 请求的 Native 引擎不可用时明确失败，不自动改引擎或回退 Python。
 
-## Runtime Resolution Policy & Toggles (Phase 6.6)
+## Runtime Resolution Policy & Toggles
 
 SubLift provides unified runtime resolution (`src/sublift/runtime.py` and `RuntimePolicy.swift`):
 
 - **Default**: C++ Native Core (`sublift_worker`) for `vision`, `mock`, and available `paddle`.
 - **Priority**: Explicit `--runtime python|cpp` Flag > Environment Variable `SUBLIFT_RUNTIME=python|cpp` > Product Default (`cpp`).
 - **Engine Matrix Cross-Rules**:
-  - `engine="paddle"` + C++ capability → C++ Worker; missing capability → Python Paddle
-    with `resolved_via="paddle_override"`.
-  - Explicit/env `runtime=python` remains the Paddle rollback/Oracle path.
-  - `engine="vision"` or `"mock"` routes according to resolved runtime (`cpp` by default).
+  - Native runtime 只接受目标进程实际声明的 capability。
+  - 缺失 capability 时明确失败，不存在自动 `paddle_override`。
+  - 显式/env `runtime=python` 仍可作为 Oracle 与开发回滚路径。
 
 ## Related docs
 
-- [architecture.md](../docs/cpp/architecture.md) §2 target graph & §2.1 toolchain
-- [phase6.0-bootstrap.md](../docs/cpp/phase6.0-bootstrap.md) — feat-06002 acceptance
+- [Native architecture](../docs/cpp/native-architecture.md)
+- [Runtime contract](../docs/cpp/runtime-contract.md)
+- [Worker IPC contract](../docs/cpp/worker-ipc-contract.md)
+- [Parity contract](../docs/cpp/parity-contract.md)

@@ -28,12 +28,10 @@
 
 - [架构](docs/ARCHITECTURE.md)
 - [需求规格](docs/REQUIREMENTS.md)
-- **[Phase 6 C++ 迁移与 cutover](docs/cpp/README.md)**（6.0–6.8 已完成；Paddle Native 已正式 cutover）
-- **[Phase 6.8 C++ Paddle 回顾索引](docs/cpp/phase6.8-review-index.md)**（问题审计、设计、逐项修改、ADR、验收与复跑入口）
+- [Native C++ 架构与契约](docs/cpp/README.md)
+- [当前进度](progress.md)与 [Phase 索引](phases.json)
 - [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
 - [项目辅助架构](docs/phases/phase7.json) — Phase 7 统一保存 Harness 迁移及原 Phase 9 仓库治理记录；Phase 9 已释放
-- [Phase 8 批量任务中心计划](docs/plans/architecture/phase8-batch-task-center.md) — Task Center、文件夹扫描、串行调度、输出与恢复合同
-- [Harness 迁移架构（历史）](docs/plans/architecture/harness-migration.md) — Phase 7 初次迁移记录；当前精简边界见 AGENTS 与 ADR-0033
 
 ## 安装
 

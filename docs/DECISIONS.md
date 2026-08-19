@@ -410,14 +410,14 @@
   1. **Oracle** 必须钉扎 `oracle_commit`、运行时版本、素材 SHA256、完整 Config、`golden_schema_version`；
      比较优先中间量（signature/events/段/代表帧/OCR 决策），规则见 `docs/cpp/parity-contract.md`。
   2. **图像** 使用 `ImageBuffer`/`ImageView` 与显式像素格式；禁止公共 API 以裸 buffer 占位后再改
-     `cv::Mat`；完整 `Config` 对齐 Python；见 `docs/cpp/architecture.md`。
+     `cv::Mat`；完整 `Config` 对齐 Python；当前约束见 `docs/cpp/native-architecture.md`。
   3. **CMake targets** 拆分 `sublift_core` / `ffmpeg` / `vision_macos` / `worker` / `cli` /
      `test_support`；工具链锁定 Catch2 + nlohmann/json。
   4. **Worker 兼容** 以时序与所有权为准（progress/push_entry/entries/done、cancel、video_id），
      见 `docs/cpp/worker-ipc-contract.md`；非「消息 type 字符串相同即可」。
   5. **引擎矩阵**：6.6 后 vision/mock → C++ worker；**paddle → 仍 Python worker**；capability
      诚实暴露；禁止静默 fallback。Cutover 含质量、运行时、ASan 与 `SUBLIFT_RUNTIME` 回滚，
-     见 `docs/cpp/engine-matrix-and-cutover.md`。
+     当前规则见 `docs/cpp/runtime-contract.md`。
   6. **进 6.1 门槛**：`feat-06001`–`feat-06005` 全部 done。
 - **理由**：把返工点前移到设计门；保留已交付 paddle，同时允许 vision 路径 native cutover。
 - **影响**：强化 06002–06004；新增设计型 `feat-06005`；主 `ARCHITECTURE`/`REQUIREMENTS`/`README`

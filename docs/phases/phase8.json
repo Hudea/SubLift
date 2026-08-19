@@ -19,8 +19,7 @@
         "docs/DECISIONS.md",
         "docs/design/macos-gui.md",
         "docs/design_ui/README.md",
-        "docs/design_ui/implementation-map.md",
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/reference-index.md",
         "README.md"
       ],
@@ -674,7 +673,6 @@
         "apps/macos/Tests/SubLiftMacTests/BatchQueueSchedulerTests.swift",
         "apps/macos/Tests/SubLiftMacTests/TaskCenterPresentationTests.swift",
         "apps/macos/Tests/SubLiftMacTests/TaskCenterInteractionTests.swift",
-        "docs/design_ui/task-center-v2.md",
         "docs/design_ui/evidence/08511/",
         "docs/plans/features/08511.md"
       ],
@@ -703,7 +701,6 @@
       ],
       "architecture_refs": [
         "docs/design_ui/batch-task-center.md",
-        "docs/design_ui/task-center-v2.md",
         "docs/plans/architecture/phase8-batch-task-center.md"
       ],
       "subtasks": [

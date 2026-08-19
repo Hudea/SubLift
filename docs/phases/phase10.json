@@ -28,9 +28,8 @@
       ],
       "architecture_refs": [
         "docs/design_ui/README.md",
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md",
-        "docs/design_ui/implementation-map.md",
         "docs/plans/architecture/phase10-macos-workbench-ui.md"
       ],
       "subtasks": [
@@ -97,7 +96,7 @@
       ],
       "architecture_refs": [
         "docs/design_ui/interaction-state-spec.md",
-        "docs/design_ui/implementation-map.md"
+        "docs/design_ui/macos-workbench.md"
       ],
       "subtasks": [
         {
@@ -153,7 +152,7 @@
         "不实现自动创建新窗口、最近项目、会话恢复或文件写回。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
@@ -210,9 +209,8 @@
         "本 Feature 不实现 Inspector 内容、Transcript 重构或 Subtitle Timeline。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
-        "docs/design_ui/interaction-state-spec.md",
-        "docs/design_ui/implementation-map.md"
+        "docs/design_ui/macos-workbench.md",
+        "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
         {
@@ -268,7 +266,7 @@
         "本 Feature 不实现 Region/Extraction/Subtitle 的完整表单。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
@@ -325,7 +323,7 @@
         "不改变 Vision 候选算法、自动选中规则或 C++ ROI 实现。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md",
         "docs/design/macos-gui.md"
       ],
@@ -382,7 +380,7 @@
         "不实现全文索引、批量编辑、翻译或新字幕格式。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
@@ -506,7 +504,7 @@
         "不实现 ASS/VTT、导出 Wizard、自动保存或 session persistence。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
@@ -562,7 +560,7 @@
         "不实现复杂剪辑时间线、拖拽调整时间或媒体波形。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md"
       ],
       "subtasks": [
@@ -619,8 +617,7 @@
         "不实现自动引擎、模型下载器、新 Provider、云设置或改变 runtime 优先级。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
-        "docs/design_ui/implementation-map.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/cpp/engine-matrix-and-cutover.md"
       ],
       "subtasks": [
@@ -677,7 +674,7 @@
       ],
       "architecture_refs": [
         "docs/design_ui/interaction-state-spec.md",
-        "docs/design_ui/macos-workbench-vnext.md"
+        "docs/design_ui/macos-workbench.md"
       ],
       "subtasks": [
         {
@@ -802,7 +799,7 @@
         "不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md",
         "docs/plans/architecture/phase10-macos-workbench-ui.md"
       ],
@@ -874,7 +871,7 @@
         "不新增第三方依赖；不提交或推送，除非用户另行明确授权并使用项目 commit skill。"
       ],
       "architecture_refs": [
-        "docs/design_ui/macos-workbench-vnext.md",
+        "docs/design_ui/macos-workbench.md",
         "docs/design_ui/interaction-state-spec.md",
         "docs/plans/features/10415.md"
       ],
