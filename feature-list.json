@@ -1,6 +1,6 @@
 {
   "project": "SubLift",
-  "description": "历史兼容功能索引（非当前开发真源）。按 Phase 分组的大功能块与 feat-* 覆盖关系保留给历史文档和旧工具；当前任务与 Phase 状态以 phases.json → detail_file → features[] 为准。状态枚举：not-started / in-progress / blocked / done。",
+  "description": "历史兼容功能索引（非当前开发真源）。按 Phase 分组的大功能块与 feat-* 覆盖关系保留给历史文档和旧工具；当前 Phase 状态以 phases.json → detail_file 为准，v1 历史详情使用 features[]，v2 新详情使用 deliverables[]。历史条目中的已移除 plans/reports 路径只保留来源文字，不是当前可解析链接。",
   "phases": [
     {
       "id": "phase1",

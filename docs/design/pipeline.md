@@ -1,6 +1,7 @@
 # 打轴与编排设计
 
-> `src/sublift/pipeline/` — 帧签名、变化点检测、时间轴构建、去重合并、端到端编排。
+> 本文记录 `src/sublift/pipeline/` 的历史 Python 算法设计，用于迁移追溯与离线参考；
+> 不再是产品实现真源。当前 Native 契约以 [`docs/cpp/`](../cpp/README.md)、C++ 头文件与测试为准。
 
 ## 模块职责
 

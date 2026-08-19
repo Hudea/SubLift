@@ -1,9 +1,10 @@
 # macOS GUI 模块设计
 
-> `apps/macos/Sources/SubLiftMac/` — SwiftUI 壳、运行时路由、UDS 客户端、预览、编辑与导出。
+> `apps/macos/Sources/SubLiftMac/` — SwiftUI 壳、Native Worker 编排、UDS 客户端、预览、编辑与导出。
 >
-> ADR-0005 记录了最初的 SwiftUI + Python Worker 方案；Phase 6 cutover 后，GUI 默认启动
-> C++ `sublift_worker`，Python server 只在显式 runtime 下承担 Oracle / 开发回滚。
+> ADR-0005 记录了最初的 SwiftUI + Python Worker 方案，仅用于历史追溯。Phase 13 的产品
+> 合同是 Native-only：GUI 只认识并启动 C++ `sublift_worker`，不提供运行时实现切换；
+> 产品回滚通过回滚到上一已验收版本完成。
 >
 > **当前实现：** Phase 10 Native Workbench 已实施；视觉、交互状态和验收边界见
 > [`docs/design_ui/`](../design_ui/README.md)，逐 Feature 证据见
@@ -15,19 +16,21 @@
 
 ## 运行时边界
 
-GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runtime 与 engine，
-`PipelineClient` 再启动对应 Worker；两种 Worker 使用同一套 UDS framing 与业务消息。
+GUI 不在 Swift 进程中执行字幕 Pipeline。Swift 只选择 engine、探测 Native capability，
+并由 `PipelineClient` 启动 C++ Worker；不存在第二套产品 runtime。
 
 | 选择 | 后端 | 行为 |
 |---|---|---|
-| 默认 vision / mock | C++ `sublift_worker` | 产品主路径 |
-| 默认 paddle，capability 可用 | C++ `sublift_worker` | 产品主路径 |
-| 默认 paddle，capability 不可用 | 无 | fail-closed，显示可操作错误 |
-| 显式 `runtime=python` | `python -m sublift.ipc.server` | Oracle / 开发回滚 |
+| vision / mock | C++ `sublift_worker` | 产品路径 |
+| paddle，capability 与模型可用 | C++ `sublift_worker` | 产品路径 |
+| Worker、capability 或模型不可用 | 无 | fail-closed，显示可操作错误 |
 
-解析优先级为显式参数 → `SUBLIFT_RUNTIME` → 产品默认 C++。不允许因 C++ capability
-缺失而静默切换 Python、Vision 或 Mock。GUI 记录并展示最终 `WorkerChoice`，避免界面设置
-与真实执行后端漂移。
+不允许因 C++ capability 缺失而静默切换其他实现、Vision 或 Mock。GUI 记录实际 Worker
+与 engine capability，避免界面设置与真实执行后端漂移。
+
+当前代码中 `RuntimePolicy`、`PipelineClient`、部分测试及仓库定位仍保留 Python 分支和
+`.venv` 假设。这些是 Phase 13 待移除的迁移债务，不是兼容承诺；新增 GUI 行为不得继续
+扩展该路径。
 
 ## 模块职责
 
@@ -39,9 +42,9 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 | `WorkspaceLayout.swift` | 计算 Video/Transcript/Inspector 的比例、最小宽度与 divider clamp。 |
 | `VideoImportPolicy.swift` | 统一 Open/drop 格式校验；MKV 缺 ffmpeg 时在改变 Session 前 fail-closed。 |
 | `ExtractionConfiguration.swift` | 表达引擎与采样质量的 active/final 运行配置快照。 |
-| `RuntimePolicy.swift` | 解析 runtime / engine / 来源；执行 C++ 默认与 fail-closed 规则。 |
-| `PipelineClient.swift` | 查找并启动 C++ 或显式 Python Worker；负责 UDS 连接、framing、握手、请求与资源回收。 |
-| `Messages.swift` | IPC Codable 消息；字段与 C++/Python 共享协议对齐。 |
+| `RuntimePolicy.swift` | 过渡模块；目标只解析 engine/capability 并执行 Native fail-closed，移除 runtime 切换。 |
+| `PipelineClient.swift` | 查找并启动 C++ Worker；负责 UDS 连接、framing、握手、请求与资源回收。现存 Python 分支待删除。 |
+| `Messages.swift` | Swift ↔ C++ Worker 的 IPC Codable 消息。 |
 | `SubtitleExtractor.swift` | 发送 path-mode `start_job`，消费 progress / push_entry / entries / done，协调取消、日志与处理倍速。 |
 | `FrameSampler.swift` | 为预览候选框扫描、代表帧和 legacy frame mode 提供 AVFoundation 采样；不参与默认打轴。 |
 | `FfmpegFallback.swift` | 为 mkv 预览/代表帧、元数据及 legacy frame mode 提供系统 ffmpeg 兜底。 |
@@ -64,7 +67,7 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 | `RegionOverlay.swift` / `Region/RegionInspector.swift` | Region Editing 候选、多选、合并区域与几何投影。 |
 | `Transcript/TranscriptPanel.swift` / `TranscriptRow.swift` | 处理期只读与 Review 编辑、搜索、selection/current 和上下文命令。 |
 | `Workspace/WorkspaceInspector.swift` / 各 Inspector | Video / Region / Extraction / Subtitle 上下文详情；Extraction 配置只读。 |
-| `Extraction/ExtractionProgressView.swift` / `QuickExtractionSettingsBar.swift` | 真实进度、runtime、Stop，以及共用 AppStorage 的紧凑引擎/采样设置和重新提取确认。 |
+| `Extraction/ExtractionProgressView.swift` / `QuickExtractionSettingsBar.swift` | 真实进度、Worker 状态、Stop，以及共用 AppStorage 的紧凑引擎/采样设置和重新提取确认。 |
 | `Timeline/SubtitleTimelineView.swift` | 字幕条带、播放头、点击 seek 与前后字幕导航。 |
 | `Settings/SettingsView.swift` / `EngineCapability.swift` | General / Recognition / Advanced 分区、真实 capability 与 Developer Mode。 |
 | `TimeFormatter.swift` | 毫秒时间格式化。 |
@@ -76,7 +79,6 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 - **传输**：Unix Domain Socket；Swift 为每次连接生成临时 socket 路径。
 - **分帧**：4 字节大端 body 长度 + UTF-8 JSON。
 - **C++ 启动**：`sublift_worker --socket <path> --engine <engine>`。
-- **Python 启动**：`python -m sublift.ipc.server --socket <path> --engine <engine> --log-level INFO`，仅显式回滚。
 - **关闭**：`PipelineClient.stop()` 幂等关闭 fd、终止子进程并 unlink socket。
 - **能力探测**：Paddle 路由前对将要启动的 C++ Worker 执行 `--probe-engine paddle`。
 
@@ -94,8 +96,8 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。`RuntimePolicy` 先解析 runt
 | Worker → Swift | `log` / `done` / `error` | 诊断、业务结束与协议错误。 |
 
 Worker 启动时绑定的 engine 是实际执行身份；若与 `start_job.engine` 不一致，返回明确失败，
-不得以其他引擎继续。单条消息上限为 64 MiB；C++ 与 Python Worker 均遵守同一 framing
-边界和字段兼容契约。
+不得以其他引擎继续。单条消息上限为 64 MiB；Swift 与 C++ Worker 共同遵守 framing
+边界和字段契约。
 
 ## 默认 GUI 数据流
 
@@ -108,9 +110,9 @@ VideoMetadata + AVPlayer 预览 → VisionTextDetector 候选 → Region Editing
   ↓
 WorkspaceRootView.requestExtraction 冻结 active ExtractionConfiguration
   ↓
-RuntimePolicy.resolve(engine, runtime)
+Native capability resolve(engine)
   ↓
-PipelineClient 启动 C++ Worker（或显式 Python Worker）并握手
+PipelineClient 启动 C++ Worker 并握手
   ↓
 start_job(video_path, region_box, subtitle_profile)
   ↓
@@ -124,8 +126,7 @@ TranscriptPanel 编辑/搜索/定位 → SrtFormatter → NSSavePanel 写文件
 ```
 
 默认 path mode 不发送 JPEG `frame`，避免 AVFoundation 跳采样相位与有损编码造成质量漂移。
-C++ 与 Python extractor 是两套实现，其时间戳、ROI、像素和取消行为由冻结 parity/golden
-契约约束。
+Native extractor 的时间戳、ROI、像素和取消行为由 CTest 与冻结 parity/golden 契约约束。
 
 ## Phase 8 批量数据流（已实现）
 
@@ -191,7 +192,8 @@ starting/processing/finalizing 阶段只暴露只读 Transcript，最终 entries
 ## 已知约束
 
 - 当前只支持 SwiftPM 开发者运行；独立 `.app`、依赖随包、签名和公证后置。
-- Python runtime 是显式开发回滚，不代表未来发布 artifact 会携带 Python。
+- `RuntimePolicy`、`PipelineClient` 和 Swift 集成测试中残留的 Python 路由、`.venv` 根目录
+  假设尚待 Phase 13 清除；在此之前不得把它们描述为产品回退能力。
 - legacy frame mode 仍是协议兼容面，移除前必须先审计测试与外部消费者。
 - 批量队列已完成 Phase 8（08001 规划 + 08102–08410 实现与综合验收）；精细时间码拖动仍未规划。
 - 长视频交互已有历史手工验收，但尚未形成持续运行的跨片源 GUI 回归套件。

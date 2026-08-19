@@ -1,12 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://sublift.local/schemas/phase.schema.json",
-  "title": "SubLift Harness Phase Detail Schema",
-  "description": "Phase 级任务追踪。legacy 分支仅冻结既有 Phase 1–6 的 feat-* 历史证据；canonical 分支约束 Harness 迁移后的新任务。",
+  "title": "SubLift Phase Detail Schema",
+  "description": "兼容既有 legacy/canonical v1 Feature 历史，并为 Phase 13 起的 v2 详情约束完整产品能力、2–8 个纵向 Deliverable 与非持久化 Task 边界。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["project", "phase", "features"],
   "properties": {
+    "schema_version": {
+      "type": "integer"
+    },
     "project": {
       "type": "string",
       "minLength": 1
@@ -17,61 +19,92 @@
     },
     "description": {
       "type": "string",
-      "description": "Legacy Phase 的目标、边界或归档说明。"
+      "description": "v1 Phase 的目标、边界或归档说明。"
     },
     "plan_file": {
       "type": "string",
       "minLength": 1,
-      "description": "Legacy Phase 的设计源头相对路径。"
+      "description": "v1 历史 Phase 的设计源头相对路径。"
     },
     "features": {
-      "type": "array"
+      "type": "array",
+      "description": "v1 历史 Feature；v2 Phase 禁止使用。"
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "v2 Phase 完成后新增的完整产品能力。"
+    },
+    "scope": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "non_goals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "status": {
+      "$ref": "#/$defs/phase_status"
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "description": "组成 v2 Phase 完整能力的纵向结果；数组顺序即建议推进顺序。执行 Task 只存在于当前会话计划，不写入 Phase 文件。",
+      "prefixItems": [
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D01"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D02"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D03"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D04"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D05"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D06"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D07"}}, "required": ["id"]}]},
+        {"allOf": [{"$ref": "#/$defs/deliverable"}, {"properties": {"id": {"const": "D08"}}, "required": ["id"]}]}
+      ],
+      "items": false
+    },
+    "exit_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
     }
   },
-  "allOf": [
+  "oneOf": [
     {
-      "oneOf": [
-        {
-          "title": "Frozen legacy phase detail",
-          "properties": {
-            "phase": {
-              "enum": [
-                "Phase 1 - CLI MVP",
-                "Phase 2 - macOS GUI",
-                "phase3-opt-perf",
-                "phase4-roi-data-path",
-                "phase4.1-post-roi-throughput",
-                "phase4.2-ocr-performance-attribution",
-                "phase5-paddle-ocr",
-                "phase6-native-cpp-core"
-              ]
-            },
-            "features": {
-              "items": {
-                "$ref": "#/$defs/legacy_feature"
-              }
-            }
-          }
-        },
-        {
-          "title": "Canonical Harness phase detail",
-          "properties": {
-            "phase": {
-              "type": "string",
-              "pattern": "^Phase (?:[7-9]|[1-9][0-9]+)(?:\\.[0-9]+)?(?:\\s|：|:|$)"
-            },
-            "features": {
-              "items": {
-                "$ref": "#/$defs/canonical_feature"
-              }
-            }
-          }
-        }
-      ]
+      "$ref": "#/$defs/legacy_phase"
+    },
+    {
+      "$ref": "#/$defs/canonical_v1_phase"
+    },
+    {
+      "$ref": "#/$defs/v2_phase"
     }
   ],
   "$defs": {
+    "phase_status": {
+      "type": "string",
+      "enum": ["not-started", "in-progress", "ready-for-merge", "blocked", "done"]
+    },
     "canonical_status": {
+      "type": "string",
+      "enum": ["not-started", "in-progress", "blocked", "done"]
+    },
+    "deliverable_status": {
       "type": "string",
       "enum": ["not-started", "in-progress", "blocked", "done"]
     },
@@ -84,6 +117,171 @@
       "minLength": 1,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
     },
+    "v2_only_fields": {
+      "anyOf": [
+        {"required": ["schema_version"]},
+        {"required": ["goal"]},
+        {"required": ["scope"]},
+        {"required": ["non_goals"]},
+        {"required": ["status"]},
+        {"required": ["deliverables"]},
+        {"required": ["exit_criteria"]}
+      ]
+    },
+    "legacy_phase": {
+      "type": "object",
+      "required": ["project", "phase", "features"],
+      "not": {
+        "$ref": "#/$defs/v2_only_fields"
+      },
+      "properties": {
+        "phase": {
+          "enum": [
+            "Phase 1 - CLI MVP",
+            "Phase 2 - macOS GUI",
+            "phase3-opt-perf",
+            "phase4-roi-data-path",
+            "phase4.1-post-roi-throughput",
+            "phase4.2-ocr-performance-attribution",
+            "phase5-paddle-ocr",
+            "phase6-native-cpp-core"
+          ]
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/legacy_feature"
+          }
+        }
+      }
+    },
+    "canonical_v1_phase": {
+      "type": "object",
+      "required": ["project", "phase", "features"],
+      "not": {
+        "$ref": "#/$defs/v2_only_fields"
+      },
+      "properties": {
+        "phase": {
+          "type": "string",
+          "pattern": "^Phase (?:[7-9]|1[0-2])(?:\\.[0-9]+)?(?:\\s|：|:|$)"
+        },
+        "features": {
+          "items": {
+            "$ref": "#/$defs/canonical_feature"
+          }
+        }
+      }
+    },
+    "v2_phase": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "project",
+        "phase",
+        "goal",
+        "scope",
+        "non_goals",
+        "status",
+        "deliverables",
+        "exit_criteria"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": 2
+        },
+        "phase": {
+          "type": "string",
+          "pattern": "^Phase (?:1[3-9]|[2-9][0-9]+)(?:\\.[0-9]+)?(?:\\s|：|:|$)"
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": ["features"]
+          },
+          {
+            "required": ["plan_file"]
+          },
+          {
+            "required": ["description"]
+          }
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "in-progress"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "deliverables": {
+                "contains": {
+                  "properties": {
+                    "status": {
+                      "const": "in-progress"
+                    }
+                  },
+                  "required": ["status"]
+                },
+                "minContains": 1,
+                "maxContains": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "done"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "deliverables": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "done"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "ready-for-merge"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "deliverables": {
+                "items": {
+                  "properties": {
+                    "status": {
+                      "const": "done"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "legacy_feature_id": {
       "type": "string",
       "pattern": "^feat-[0-9]{3,5}$"
@@ -91,7 +289,7 @@
     "canonical_feature_id": {
       "type": "string",
       "pattern": "^[0-9]{5}$",
-      "description": "五位稳定历史标识。新建时前两位为所属 Phase、第三位为子阶段、后两位为 Feature 序号；已完成 Feature 被吸收到同领域 Phase 时保留原 ID，不因容器变化重编号。"
+      "description": "v1 五位稳定历史标识；已完成 Feature 被吸收到同领域 Phase 时不重编号。"
     },
     "legacy_subtask": {
       "type": "object",
@@ -159,7 +357,7 @@
     },
     "canonical_subtask": {
       "type": "object",
-      "description": "Subtask ID 继承所属 Feature 的稳定五位 ID；吸收式 Phase 迁移时同样不重编号。",
+      "description": "v1 Subtask 历史结构；v2 不持久化 Task。",
       "additionalProperties": false,
       "required": ["id", "name", "description", "dependencies", "status"],
       "properties": {
@@ -179,12 +377,17 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[0-9]{5}\\.[0-9]{2}$"
+            "pattern": "^[0-9]{5}(?:\\.[0-9]{2})?$",
+            "description": "兼容 v1 历史中同时引用 Feature ID 与 Subtask ID 的依赖。"
           },
           "uniqueItems": true
         },
         "status": {
           "$ref": "#/$defs/canonical_status"
+        },
+        "evidence": {
+          "type": "string",
+          "description": "v1 历史 Subtask 证据；v2 不使用该结构。"
         }
       }
     },
@@ -281,6 +484,76 @@
             "properties": {
               "evidence": {
                 "minLength": 1
+              }
+            }
+          }
+        }
+      ]
+    },
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "outcome", "acceptance", "status", "evidence"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^D(?:0[1-9]|[1-9][0-9])$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outcome": {
+          "type": "string",
+          "minLength": 1,
+          "description": "可从外部观察和验收的纵向结果，不是实施步骤。"
+        },
+        "acceptance": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "areas": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "status": {
+          "$ref": "#/$defs/deliverable_status"
+        },
+        "evidence": {
+          "type": "array",
+          "maxItems": 12,
+          "description": "只记录验收引用或简短结论，不沉积实施过程。",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "done"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "minItems": 1
               }
             }
           }

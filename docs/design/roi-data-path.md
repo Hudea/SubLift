@@ -1,7 +1,7 @@
 # ROI 数据通路设计（Phase 4）
 
-> 本文定义固定区域 crop-before-Python 的架构契约。feat-038 已实现该通路；
-> 任务与验收见 [phase4-roi-data-path.md](../plans/phase4-roi-data-path.md)。
+> 本文定义固定区域 crop-before-Python 的历史架构契约。feat-038 已实现该通路；
+> 任务与验收证据见 [phase4.json](../phases/phase4.json)。
 
 ## 1. 术语与非承诺
 

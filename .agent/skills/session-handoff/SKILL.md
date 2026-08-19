@@ -1,17 +1,26 @@
 ---
 name: session-handoff
-description: 结束会话前的收尾清单，当被告知会话已经接近尾声时，帮助用户做好交接：条件更新进度与任务状态、记录风险、确认初始化基线可接续。不为纯阅读/讨论制造进度记录。
+description: 结束会话前的收尾清单：按需更新当前 Deliverable、最小 evidence 与风险，并确认初始化基线可接续。不为纯阅读/讨论或会话 Task 制造长期进度记录。
 ---
 
 # Session Handoff
 
 结束会话前按序执行：
 
-1. **是否写入**：回顾本次会话的任务完成情况，仅当工作绑定已登记且已启动的跟踪任务，且导航/状态/风险/证据确有变化时，才做 2–4。纯阅读、讨论、探索规划、未绑定 Feature → 不为记而写 `progress.md` / Phase / `phases.json`。
-2. **progress.md**（按需）：刷新当前状态；理解本次会话完成的任务情况，当前的风险点，预测下一次的任务走向，按照文档模板更新。同时需要遵守 `.agent/rules/project-continuity.md` 防膨胀清理。
-3. **任务状态**（按需）：检查当前会话任务状态是否被正确标注，包括检查 phases.json 和 detail_file 的证据和完成状态标注，防止虚假标准任务完成状态。
-4. **风险**（按需）：已启动任务的未解决风险写 progress；探索性 Planning 的风险留在计划产物。
-5. **可接续**：再跑 `./init.sh`。失败则先恢复初始化基线（见 `.agent/rules/initialization.md`）。如果认为本次会话应当加入新的测试基线，参见 `.agent/rules/initialization.md` 向用户提出建议，并做简明解释。
+1. **是否写入**：仅当工作绑定已登记且已启动的 Deliverable，并且导航、状态、风险或
+   evidence 确有变化时，才做 2–4。纯阅读、讨论、探索设计、未绑定工作或仅完成会话 Task，
+   不为记而写 `progress.md`、Phase detail 或 `phases.json`。
+2. **progress.md**（按需）：只刷新当前 Phase / Deliverable、未解决风险和下一接续点；遵守
+   `.agent/rules/project-continuity.md` 的防膨胀规则，不粘贴结果链。
+3. **Deliverable / Phase 状态**（按需）：把最小可复核证据写入 Deliverable `evidence`，并检查
+   `phases.json` 与 detail 文件一致。Deliverable 验收完成后标记为 `done`；全部 Deliverable
+   完成且分支验收通过后，Phase 最多进入 `ready-for-merge`。只有合入 `main` 且在 `main` 上
+   完成必要验收，Phase 才能置 `done` 并转为只读。
+4. **风险**（按需）：已启动 Deliverable 的未解决风险写 `progress.md`；探索性判断留在对话
+   或正式设计文档，不创建长期 Task 状态。
+5. **可接续**：再跑 `./init.sh`。失败则先恢复初始化基线（见
+   `.agent/rules/initialization.md`）。如果认为应加入新的测试基线，参见 initialization rule
+   向用户提出建议，不自行扩大门禁。
 
 ## 详细交接（可选）
 

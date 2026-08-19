@@ -24,11 +24,30 @@
       }
     }
   },
+  "allOf": [
+    {
+      "properties": {
+        "phases": {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "enum": ["in-progress", "ready-for-merge"]
+              }
+            },
+            "required": ["status"]
+          },
+          "minContains": 0,
+          "maxContains": 1
+        }
+      }
+    }
+  ],
   "$defs": {
     "status": {
       "type": "string",
       "description": "Phase 的开发状态。",
-      "enum": ["not-started", "in-progress", "blocked", "done"]
+      "enum": ["not-started", "in-progress", "ready-for-merge", "blocked", "done"]
     },
     "identifier": {
       "type": "string",
@@ -56,7 +75,7 @@
         "detail_file": {
           "type": "string",
           "pattern": "^docs/phases/phase[0-9]+\\.json$",
-          "description": "该 Phase 对应的细粒度任务文件路径。"
+          "description": "该 Phase 对应的详情文件路径。v1 文件保存历史 Feature；v2 文件只保存 2–8 个纵向 Deliverable，不持久化 Task。"
         },
         "status": {
           "$ref": "#/$defs/status"

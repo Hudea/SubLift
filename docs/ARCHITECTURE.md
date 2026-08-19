@@ -1,6 +1,7 @@
 # SubLift 架构设计
 
-> **Agent 维护契约**：调整本文档须先提交变更分析报告并获得用户明确授权。
+> 本文只描述已确认的目标产品结构与依赖边界，不承载迁移计划、进度播报或验收报告；
+> 实现状态以 `phases.json` 与 `progress.md` 为准。
 
 ## 1. 设计原则
 
@@ -29,7 +30,8 @@ SubLift 按职责分层，产品依赖向领域核心收敛；平台能力和第
 
 - Core、Pipeline 与 Application 不依赖 UI、传输协议或具体 Adapter；第三方类型不得泄漏到公共接口。
 - Worker 与 Native Server 只负责协议适配和对象装配，不复制 Pipeline 算法。
-- Python Oracle、benchmark、golden/parity 与诊断工具位于产品依赖图之外。
+- 可选离线研究工具、golden/GT 资产与诊断工具位于产品依赖图之外，不得被产品 target
+  import、启动或探测。
 
 ## 3. 模块布局
 
@@ -38,7 +40,7 @@ SubLift 按职责分层，产品依赖向领域核心收敛；平台能力和第
 | `cpp/` | Native 产品实现：Core、Pipeline、Application、Protocol、Adapters、Worker、CLI 与 Server |
 | `apps/macos/` | SwiftUI 工作台、批量任务中心、播放与编辑状态，以及 UDS 客户端 |
 | `apps/web/` | Web 工作台与批量任务中心，通过 HTTP/SSE 使用 Native Server |
-| `src/sublift/` | Python Oracle、benchmark 运行时、显式回滚与 IPC 兼容实现 |
+| `src/sublift/` | Python 离线工具与待退役兼容实现；位于产品依赖图之外 |
 | `benchmark/` | 版本化配置、数据集、质量基线、golden 与 parity 资产 |
 
 各目录内部按第二章的职责边界继续拆分；详细文件归属由对应目录的 README 与构建配置维护，本文不复制完整文件树。
@@ -64,12 +66,14 @@ macOS、Web 与 CLI 共享同一套 Native 字幕处理语义；入口协议不�
 - OCR 引擎由宿主装配并通过 Port 注入，Pipeline 不选择或实例化具体 Adapter。
 - `push_entry` 用于增量呈现，最终 `entries` 是编辑与导出的权威结果。
 
-算法语义见 [pipeline](design/pipeline.md)、[OCR](design/ocr.md) 与
-[extractor](design/extractor.md) 设计；Native 实现及 parity 契约见 [C++ 文档入口](cpp/README.md)。
+历史算法背景见 [pipeline](design/pipeline.md)、[OCR](design/ocr.md) 与
+[extractor](design/extractor.md)；这些 Python 设计只用于迁移追溯。当前产品契约、Native 实现与
+parity 边界见 [C++ 文档入口](cpp/README.md) 及其可执行测试。
 
 ## 5. 核心数据模型
 
-C++ Core 定义产品运行时的领域模型；Python 使用等价模型承担 Oracle 与 parity 对照。协议 DTO、Swift 状态和 Web 类型只做边界映射，不取代领域模型。
+C++ Core 定义产品运行时的领域模型；版本化 golden、固定 GT 与 Native tests 约束其行为。
+协议 DTO、Swift 状态和 Web 类型只做边界映射，不取代领域模型。
 
 | 模型 | 语义 |
 |---|---|
@@ -102,18 +106,22 @@ Ports 用 SubLift 自有模型描述外部能力，Application 与 Pipeline 依�
 
 ## 7. 产品运行时拓扑
 
-默认产品路径使用 Native C++；macOS、CLI 与 Web 采用不同宿主边界，但复用同一 Application、Pipeline、Ports 与 Adapters。
+产品只使用 Native C++ runtime；macOS、CLI 与 Web 采用不同宿主边界，但复用同一
+Application、Pipeline、Ports 与 Adapters。
 
 | 入口 | 运行路径 |
 |---|---|
 | macOS Workbench / Task Center | SwiftUI → `PipelineClient` → UDS → C++ Worker |
 | Native CLI | 参数解析与协议客户端 → UDS → C++ Worker |
 | Web Workbench / Task Center | Browser → HTTP/SSE → Native Server → 进程内 Application / Pipeline |
-| 显式 Python | macOS/CLI 仅在 `runtime=python` 或 `SUBLIFT_RUNTIME=python` 时启动 Python IPC runtime |
 
-- Vision、Mock 与 Paddle 在 Native capability 可用时走 C++；能力缺失时明确报错，不静默换引擎或回退 Python。
+- Vision、Mock 与 Paddle 在 Native capability 可用时走 C++；能力缺失时明确报错，不静默换引擎或进入 Python。
 - Worker 与 Native Server 都发布结构化进度、增量字幕、最终结果和错误身份；最终结果替换增量预览。
-- Python 路径仅用于 Oracle、benchmark 和开发回滚，不是默认产品依赖。
+- 版本回滚使用上一版已验收 Native artifact、release/tag 或 Git revision，不提供同版本
+  Python runtime fallback。
+
+产品架构不定义任何 Python runtime 路径；仓库中与此冲突的兼容代码属于实现偏差，不构成
+受支持边界。
 
 ## 8. 配置、能力与资源
 
@@ -127,7 +135,7 @@ Ports 用 SubLift 自有模型描述外部能力，Application 与 Pipeline 依�
 | 模型与资源 | `ResourceLocator` / `ModelBundle` 解析模型和运行时资源；路径查找不进入 Core 或 Pipeline |
 | 媒体路径 | Worker、Server 在宿主边界校验和解析；领域层只接收已解析的任务输入 |
 
-参数默认值和完整字段以 Native Config 定义及其契约测试为准；Python Config 保持 Oracle 对照，不在本文复制字段清单。
+参数默认值和完整字段以 Native Config 定义及其契约测试为准，本文不复制字段清单。
 
 ## 9. 平台与验证边界
 
@@ -137,9 +145,11 @@ Ports 用 SubLift 自有模型描述外部能力，Application 与 Pipeline 依�
 | macOS | SwiftUI 产品入口；Apple Vision 仅存在于私有 ObjC++ Adapter |
 | Web / Server | Vue/TypeScript 前端通过标准 HTTP/SSE 使用 C++ Native Server |
 | OCR 与媒体依赖 | ONNX Runtime、OpenCV、Apple Framework 与 FFmpeg 封装在对应 Adapter 或宿主内部 |
-| Python | Python 3.12+、RapidOCR/PyObjC 等只服务 Oracle、benchmark、显式回滚和开发验证 |
+| 可选离线工具 | 如确有需要可使用 Python 等工具生成研究数据，但与产品构建、运行和 Native 日常验证隔离 |
 
-验证按层隔离：Core/Pipeline 使用确定性单元测试，Ports 与协议使用契约测试，Adapters 使用引擎专项测试，产品入口使用 C++/Swift/Web 与 E2E 测试；跨实现正确性由冻结 Oracle、golden、GT 与 parity 门约束。产品 target 不依赖 test support、diagnostics 或在线 Python Oracle。
+验证按层隔离：Core/Pipeline 使用确定性单元测试，Ports 与协议使用契约测试，Adapters 使用
+引擎专项测试，产品入口使用 C++/Swift/Web 与 E2E 测试；产品行为真源是版本化 golden、
+固定 GT 与 Native tests。产品 target 不依赖 test support、diagnostics 或 Python runtime。
 
 架构细节见 [C++ 文档](cpp/README.md) 与 [模块设计](design/)；需求边界见
 [`REQUIREMENTS.md`](REQUIREMENTS.md)，历史决策见 [`DECISIONS.md`](DECISIONS.md)，当前进度只以

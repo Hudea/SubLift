@@ -73,6 +73,5 @@ uv run sublift-benchmark compare-roi \
 ```
 
 只有同一 clean commit、同机、相同负载、warmup=1 + measured=3，且 hash、质量、coverage 与
-ROI A/B 硬门均通过时，才可更新本报告。完整 ROI 实现分析见
-[Phase 4 性能报告](../../docs/reports/phase4-roi-performance.md)；后续 OCR 内部归因的验收见
-[Phase 4.2 计划](../../docs/plans/phase4.2-ocr-performance-attribution.md)。
+ROI A/B 硬门均通过时，才可更新本报告。完整 ROI 实现与 OCR 内部归因证据见
+[Phase 4](../../docs/phases/phase4.json) 与 [Phase 4.2](../../docs/phases/phase42.json)。

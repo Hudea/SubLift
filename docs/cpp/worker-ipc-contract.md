@@ -1,7 +1,9 @@
 # Worker IPC 契约
 
-本契约适用于 macOS/Native CLI 与 C++ Worker，也约束显式 Python IPC runtime 的兼容面。字段真源是
+本契约只适用于 macOS/Native CLI 与 C++ Worker。字段真源是
 `cpp/include/sublift/protocol/` 与 Swift `Messages.swift`；双端集成测试锁定实际行为。
+Phase 13 迁移期间尚存的 Python IPC Server 不属于产品协议合同，也不得反向约束 Native
+协议演进。
 
 ## 1. 传输与 framing
 

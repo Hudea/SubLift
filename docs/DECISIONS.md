@@ -5,6 +5,40 @@
 
 ---
 
+## ADR-0038 退役 Python Runtime；产品收口为 Native-only（2026-08-19）
+
+- **状态**：已确认；Phase 13 正在迁移，本文只冻结目标与边界，不表示现存 Python
+  CLI、Pipeline、IPC 或验证工具已经删除。
+- **背景**：Native CLI、C++ Worker、Native Server 及 Vision/Paddle/Mock Adapters 已具备完整
+  产品链路；继续让 Python 同时承担产品 CLI、运行时回滚和行为 Oracle，会保留两套可执行
+  Pipeline、两套资源发现与两套故障语义。该结构增加分发体积、环境耦合和双实现漂移，也让
+  Native capability 缺失时的产品责任变得不清晰。Python 曾为迁移提供安全基线，但不再是
+  长期产品运行时。
+- **决策**：
+  1. C++ Native 是唯一产品运行时。macOS 使用 Swift → UDS → C++ Worker，Native CLI 使用
+     UDS → C++ Worker，Web 使用 HTTP/SSE → Native Server → 进程内 Application/Pipeline；
+     产品接口不再保留 Python runtime 选择。
+  2. Native 引擎、模型、ORT、FFmpeg 或其他 capability 缺失时必须 fail-closed，不得启动
+     Python、切换 OCR 引擎或伪装为空结果。产品回滚采用上一版已验收的 Native artifact、
+     release/tag 或 Git revision，不采用同一版本内的 Python runtime fallback。
+  3. Phase 13 负责移除产品可达的 Python CLI、Python Pipeline、Python UDS Server、
+     `runtime=python` / `SUBLIFT_RUNTIME=python` 路由及宿主启动接线。迁移完成前这些代码属于
+     明确的过渡债务，不得据此继续扩张产品契约。
+  4. Python 最多可作为隔离、可选、离线的研究或数据生成工具存在；它不得被产品 target
+     import、启动或探测，不得成为安装、构建、启动、提取、导出或 Native 日常验证的前置条件。
+  5. 产品行为真源改为版本化 golden、固定 GT 与 Native tests。历史 golden 中的
+     `oracle_commit` 继续保存来源证明，但运行中的 Python 实现不再拥有重新解释既有 golden
+     或否决 Native 合同的权力。
+  6. 最终 Python 产品源码从工作树移除时，以 Git 历史和专用 tag 保存最后可运行 revision；
+     不在仓库中创建 `archive/`、复制源码快照或维护第二份冻结实现。
+- **理由**：单一 Native 产品运行时使故障语义、资源交付与版本回滚可验证；把历史基线压缩为
+  不可变资产和 Git revision，仍保留追溯能力，同时停止为双运行时支付长期维护成本。
+- **影响**：Phase 13 在代码、构建、测试与文档中逐步完成迁移，并以无 Python 环境的产品门
+  验收。本 ADR 取代 ADR-0021、ADR-0029、ADR-0030、ADR-0033 中“保留 Python 产品回滚”
+  的现行效力；旧 ADR 与 Phase evidence 原样保留，继续表示当时的决策和事实。
+
+---
+
 ## ADR-0037 Phase 8 采用独立 Task Center 与可靠串行队列（2026-08-12）
 
 - **状态**：已确认；08001 完成设计/架构基线，产品实现从 08102 开始。

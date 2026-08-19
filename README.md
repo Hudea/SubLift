@@ -2,13 +2,13 @@
 
 硬字幕（烧录字幕）提取工具——从视频画面中自动识别字幕，生成可编辑的 SRT 文件。
 
-本地运行、隐私优先，视频与识别文本不离开本机。Vision 可直接离线使用；PaddleOCR 首次下载模型后也在本机离线推理。
+本地运行、隐私优先，视频与识别文本不离开本机。Phase 13 的目标产品运行时统一为
+Native C++；Vision 与准备好模型的 PaddleOCR 均在本机离线推理。
 
 ## 特性
 
-- **Apple Vision OCR**：C++/ObjC++ 为产品路径，PyObjC 保留 Oracle；默认中英双语识别（zh-Hans + en-US）
-- **PaddleOCR 跨平台引擎**：PP-OCRv6 + ONNX Runtime；C++ Native 为产品默认，
-  Python rapidocr 保留为 Oracle 与一键回滚
+- **Apple Vision OCR**：C++/ObjC++ 产品实现；默认中英双语识别（zh-Hans + en-US）
+- **PaddleOCR 跨平台引擎**：PP-OCRv6 + Native ONNX Runtime，缺少能力或模型时 fail-closed
 - **像素差异打轴**：双信号帧签名（前景占比 + dHash）+ 三态状态机，时间轴稳定
 - **OCR 后置与段内共识**：每段最多识别 4 个代表帧，按字幕画像选行并用跨帧共识抑制背景文字
 - **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
@@ -19,10 +19,13 @@
 ## 环境要求
 
 - macOS 13+（当前 GUI 与 Vision 引擎；Apple Silicon 推荐）
-- Python 3.12+
 - ffmpeg（含 ffprobe）
-- uv（包管理）
+- CMake 3.20+ 与 C++20 工具链（推荐 Ninja）
 - Xcode 15+ 或 SwiftPM（仅 GUI 构建需要）
+- Node.js 20+（仅 Web UI 构建需要）
+
+Python 3.12+ 与 `uv` 当前只服务仍在迁移的 benchmark、诊断、历史 Oracle 和兼容代码；
+Phase 13 完成后，它们不是产品安装条件，也不得成为 Native-only 产品运行或最终门禁的依赖。
 
 ## 文档
 
@@ -30,7 +33,7 @@
 - [需求规格](docs/REQUIREMENTS.md)
 - [Native C++ 架构与契约](docs/cpp/README.md)
 - [当前进度](progress.md)与 [Phase 索引](phases.json)
-- [CHANGELOG 6.6](CHANGELOG.md) — 默认切换、回滚、质量/性能摘要
+- [CHANGELOG 6.6](CHANGELOG.md) — 历史 cutover 与质量/性能记录
 - [项目辅助架构](docs/phases/phase7.json) — Phase 7 统一保存 Harness 迁移及原 Phase 9 仓库治理记录；Phase 9 已释放
 
 ## 安装
@@ -39,20 +42,25 @@
 git clone <repo>
 cd SubLift
 ./init.sh                  # 开工基线：连续性入口与 Phase detail JSON 链
-./scripts/verify-standard.sh  # 完整日常验证：lint/测试/C++/parity
-uv sync --extra vision     # 仅需单独补装 Vision 依赖时使用
-uv sync --extra paddle     # 仅需单独补装 PaddleOCR 依赖时使用
+cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON
+cmake --build build/cpp
+ctest --test-dir build/cpp --output-on-failure
 ```
 
-### 本地产物卫生
+`./scripts/verify-standard.sh` 仍是当前可用的全仓验证入口，但处于 Phase 13 迁移态：
+它还会同步 Python 依赖并运行历史 Oracle/parity 测试。不得据此把 Python 解释为产品依赖；
+在 Native 门完全收口前，应如实保留这项过渡限制。
 
-默认只预览可重建的 L1 生成产物及预计释放空间，不写盘：
+### 可选的过渡工具
+
+当前本地产物清理器仍由 Python 实现。它不是产品命令；默认只预览可重建产物及预计释放
+空间，不写盘：
 
 ```bash
 uv run python scripts/cleanup_local_artifacts.py
 ```
 
-Swift build、C++ build 与 Python 环境必须分别显式选择；`.venv` 不在推荐默认范围：
+Swift build、C++ build 与 Python 工具环境必须分别显式选择；`.venv` 不在推荐默认范围：
 
 ```bash
 uv run python scripts/cleanup_local_artifacts.py --swift-build
@@ -64,7 +72,7 @@ uv run python scripts/cleanup_local_artifacts.py --python-env
 视频、SRT/GT 与未分类生成文件。`--apply` 会执行实际删除；在真实工作区使用前必须先取得
 用户的再次明确授权。它从不清理分支、worktree、模型、外部资源或固定本地媒体。
 
-### 原生 C++ 构建（vision/mock 产品路径，**不强制 uv**）
+### 原生 C++ 构建（vision/mock 产品路径）
 
 ```bash
 cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUBLIFT_ENABLE_VISION=ON
@@ -73,18 +81,13 @@ cmake --build build/cpp
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
-> PaddleOCR 首次运行会下载模型到 `~/.cache/sublift/rapidocr-models`（需联网），之后可离线推理。可预先下载：
-
-```bash
-uv run --extra paddle python -c "from sublift.ocr import PaddleOcrEngine; PaddleOcrEngine()"
-```
-
-> 若 PaddleOCR 初始化失败，CLI 会显示失败原因、网络重试提示和上述预下载命令，不会输出 Python traceback。
+> Native Paddle 当前要求模型文件已存在于 `SUBLIFT_PADDLE_MODEL_DIR` 或现有默认目录；
+> 缺少模型时明确失败，不会下载模型或切换到 Python。
 
 ### Paddle Native Release 构建
 
-Paddle 产品 Candidate 必须使用与 Python Oracle 相同、已通过性能门的官方 ORT
-二进制，不能只凭相同版本号替换成 Homebrew dylib：
+下面是当前历史验收环境仍可复现的命令。它从 Python wheel 取得 ORT dylib，属于
+Phase 13 必须清除的过渡债务，不是 Native-only 最终构建合同：
 
 ```bash
 ORT_CAPI="$PWD/.venv/lib/python3.12/site-packages/onnxruntime/capi"
@@ -98,51 +101,33 @@ cmake --build build/cpp-rel
 ```
 
 CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相对
-`@loader_path/../lib`，开发态运行不依赖虚拟环境内的 ABI 软链。完整 `.app` 内置模型、
-签名、公证按 ADR-0030 后置，不属于当前开发构建。
+`@loader_path/../lib`。Phase 13 需要进一步改为独立、固定 SHA 的 Native ORT 与模型资产，
+并移除 `.venv`、RapidOCR 缓存布局及 Python 版本对 Native 构建的影响。完整 `.app` 内置
+模型、签名、公证仍按 ADR-0030 后置。
 
 ## 使用
 
-### 原生 C++ CLI（支持 vision / paddle / mock 全引擎，无需 uv）
+### 原生 C++ CLI（无需 uv）
 
 ```bash
 ./build/cpp/bin/sublift extract <video> -o output.srt
-./build/cpp/bin/sublift extract clip.mkv --engine paddle -o out.srt
 ./build/cpp/bin/sublift extract clip.mkv --fps 5 --script cjk -o out.srt
 ./build/cpp/bin/sublift extract clip.mkv --engine mock -o out.srt
+./build/cpp-rel/bin/sublift extract clip.mkv --engine paddle -o out.srt  # 使用上面的 Paddle Release 构建
 ```
 
-### 产品 CLI / Oracle / 回滚
-
-```bash
-uv run sublift extract <video> -o output.srt                 # 默认 runtime=cpp → spawn C++ worker
-uv run sublift extract clip.mkv --runtime python -o out.srt  # 强制 Python worker
-uv run sublift extract clip.mkv --engine paddle -o out.srt                   # C++ Paddle（可用时的产品默认）
-uv run sublift extract clip.mkv --engine paddle --runtime python -o out.srt  # Python Paddle 回滚 / Oracle
-SUBLIFT_RUNTIME=python uv run sublift extract clip.mkv -o out.srt  # 一键回滚
-```
-
-Phase 6.8 最终门已通过：120s canonical 上 C++ wall median 为 Python 的
-`0.8956x`、进程树 RSS 为 `0.9152x`；3 来源 614.272s 的质量输出逐源 SHA exact。
-C++ Paddle 不可用时返回明确错误，不会静默改成 Python、Vision 或 Mock。需要
-Python Oracle/开发回滚时必须显式指定 `--runtime python` 或 `SUBLIFT_RUNTIME=python`。
+Phase 6.8 的 Python/C++ 对照结果属于迁移历史，不再定义产品运行时。Phase 13 起产品只
+接受 C++ Worker：能力不可用时 fail-closed；需要回滚时回滚到上一已验收版本，而不是在
+同一版本内切换 Python 实现。仓库中尚存的 Python CLI、IPC 路由和环境变量是待移除债务，
+不构成受支持用法。
 
 ### Runtime 矩阵
 
-| engine | 产品默认 runtime | 说明 |
+| engine | 产品 runtime | 说明 |
 |---|---|---|
-| **vision** | **cpp** (`sublift_worker`) | macOS 主路径 |
-| **mock** | **cpp** | CI / 流程验证 |
-| **paddle** | **cpp**（可用时）；不可用则报错 | 完整 DB/Quad/Cls/Rec Native；显式 runtime=python 仅用于 Oracle/开发回滚 |
-
-解析优先级：**显式 `--runtime` / GUI 覆盖** → **`SUBLIFT_RUNTIME=python|cpp`** → 当前产品自动策略。
-
-### 一键回滚
-
-```bash
-export SUBLIFT_RUNTIME=python
-# CLI 与 GUI 均恢复 Python worker；Python 树保留，不删
-```
+| **vision** | **C++** (`sublift_worker`) | macOS 主路径 |
+| **mock** | **C++** | 流程验证 |
+| **paddle** | **C++** | 完整 DB/Quad/Cls/Rec Native；能力或资产缺失即报错 |
 
 ### CLI 参数
 
@@ -152,15 +137,14 @@ export SUBLIFT_RUNTIME=python
 | `-o, --output` | output.srt | 输出字幕文件路径 |
 | `--fps` | 5.0 | 帧采样率（推荐 5.0） |
 | `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
-| `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 首次运行需下载模型 |
-| `--runtime` | 自动（cpp） | `python` \| `cpp`；覆盖 env 与自动策略；`python` 是 Paddle 的保留回滚路径 |
+| `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 需要已准备好的 Native 模型资产 |
 | `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
 
 ## macOS GUI（开发者构建）
 
 > Phase 2 GUI 当前通过 SwiftPM 构建运行，**不做独立 `.app` 分发包**（见 ADR-0009）。
-> GUI 默认启动 C++ `sublift_worker`；只有显式设置 `SUBLIFT_RUNTIME=python` 时才使用
-> Python Worker 作为 Oracle / 开发回滚。
+> Phase 13 的 GUI 产品合同只启动 C++ `sublift_worker`。现存 Python runtime 分支属于
+> 迁移债务，不是支持的 GUI 模式。
 
 ```bash
 cd apps/macos
@@ -192,19 +176,28 @@ swift run SubLiftMac
 
 ```bash
 ./init.sh                     # 开工基线，会话开始/结束时运行
-./scripts/verify-standard.sh  # 标准产品验证
-uv run pytest                 # Python 单元测试
-uv run pytest -m integration  # 集成测试（需外部视频、ffmpeg、Vision 或 Paddle 模型）
-uv run ruff check .           # lint
-uv run mypy src tests         # 类型检查（strict）
+cmake --build build/cpp
+ctest --test-dir build/cpp --output-on-failure
+(cd apps/macos && swift test)
+npm --prefix apps/web test
+./scripts/verify-standard.sh  # 当前过渡态全仓验证；仍包含 Python Oracle 检查
+```
+
+仅在维护隔离的 Python benchmark、诊断或历史 Oracle 时才运行：
+
+```bash
+uv run pytest -m "not integration" --no-cov
+uv run ruff check .
+uv run mypy src tests
 ```
 
 ### Harness 与进度
 
-`phases.json → docs/phases/phase*.json` 是当前开发 Phase 和 feature 的操作真源；
+`phases.json → docs/phases/phase*.json` 是当前开发 Phase 和 Deliverable 的操作真源；
 `.agent/` 当前只保留轻量规则、会话入口和提交辅助，复杂能力编排已从活跃 Harness 移出，
 后续按真实需要增量引入。根 `feature-list.json` 仍保留给历史文档和旧工具兼容，不能用于
-选择新任务。详见 [AGENTS.md](AGENTS.md) 与 [ADR-0033](docs/DECISIONS.md)。
+选择新工作。执行 Task 只存在于当前会话计划，不写入长期 Phase 文件。详见
+[AGENTS.md](AGENTS.md) 与 [ADR-0033](docs/DECISIONS.md)。
 
 ### 架构与设计
 
@@ -218,13 +211,15 @@ uv run mypy src tests         # 类型检查（strict）
 
 Zootopia 固定片段（1080p、5fps、统一 diagnostic 口径）的最终结果：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%（字符准确率 97.6%），usable subtitle recall 92.0%，空文本与噪声均为 0。该结果用于回归锚点，不代表对其他片源的泛化保证；非 Zootopia 长视频 GUI 手工体验验收已在 Phase 4 完成，但英文/中英混排/不同字幕位置的量化 GT 扩充仍是后续工作。
 
-Benchmark 统一使用 `uv run sublift-benchmark`；入口与指标说明见
+隔离的 Python Benchmark 当前仍使用 `uv run sublift-benchmark`；入口与指标说明见
 [benchmark/README.md](benchmark/README.md)（设计见
 [docs/design/benchmark.md](docs/design/benchmark.md)）。已验收的
 [质量与性能归因基线](benchmark/baselines/README.md)随仓库版本化。版本化配置引用的固定
 本地媒体保留在 `debug/` 根目录且不入库；GUI/C++ 导入、运行、性能报告与历史归档统一写入
-`debug/benchmark/`。
+`debug/benchmark/`。该工具可以辅助分析 Native 输出，但不得成为产品运行或最终 Native
+门禁依赖。
 
 ### 技术栈
 
-Python 3.12+ / Swift 5.9+ / uv / SwiftPM / Pillow / NumPy / OpenCV / PyObjC（Vision+Quartz）/ rapidocr（PaddleOCR）/ ffmpeg
+C++20 / ObjC++ / CMake / Ninja / Swift 5.9+ / SwiftPM / Vue 3 / TypeScript / OpenCV /
+ONNX Runtime / ffmpeg；Python 3.12+ 与 uv 仅用于隔离的过渡工具。

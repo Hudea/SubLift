@@ -31,7 +31,7 @@ Python tree is **not** deleted; oracle, benchmark, and paddle keep working.
 - Correctness: 10 parity goldens (`scripts/parity/check_cutover_gate.py --check`).
 - Runtime (mock path-mode): cancel ≤1s (hard), restart ≤5s (hard), wall ≤×1.30+0.05s, RSS ≤×1.50.
 - GT L3: fixed Zootopia waterline wired; live measurement when `debug/Zootopia_clip_1080p.mp4` is present; otherwise **WAIVED** per ADR-0022 (report must not claim full publish-contract).
-- Report: `docs/reports/phase6.6-cutover-gate.md`.
+- Evidence: `docs/phases/phase6.json` (Phase 6.6 cutover entries).
 
 ### Known limits
 

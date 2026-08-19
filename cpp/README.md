@@ -24,7 +24,7 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 |---|---|---|
 | `SUBLIFT_ENABLE_VISION` | OFF | Build `sublift_vision_macos` |
 | `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (needs system ONNX Runtime; macOS: `brew install onnxruntime`) |
-| `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/rapidocr-models` | PP-OCRv6 ONNX + `ppocrv6_dict.txt` (same cache as Python rapidocr) |
+| `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/rapidocr-models` | PP-OCRv6 ONNX + `ppocrv6_dict.txt`；当前默认目录沿用历史 RapidOCR 布局，Phase 13 D03 将改为中性 Native 资源合同 |
 | `SUBLIFT_REQUIRE_PADDLE` | OFF | Fail configure if ONNX Runtime missing |
 | `SUBLIFT_BUNDLE_ONNXRUNTIME` | ON | Copy the selected ORT shared library to build `lib/` and use a relative executable rpath |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |
@@ -78,12 +78,12 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | Case | Behavior |
 |---|---|
 | `SUBLIFT_ENABLE_VISION=ON` (macOS) | Builds `sublift_vision_macos` with real Apple Vision (`Vision`, `CoreGraphics`, `Foundation`, `CoreText`). `is_vision_available()` returns `true`. `[vision][integration]` tests run in-memory CGImage text recognition |
-| `SUBLIFT_ENABLE_VISION=OFF` (Default) | Uses stub (`vision_stub.cpp`), `is_vision_available()` returns `false`, `VisionOcrEngine` constructor throws `std::runtime_error` matching Python `RuntimeError` |
+| `SUBLIFT_ENABLE_VISION=OFF` (Default) | Uses stub (`vision_stub.cpp`), `is_vision_available()` returns `false`, `VisionOcrEngine` constructor throws an explicit `std::runtime_error` |
 | Headless / CI Environment | Vision `VNRecognizeTextRequest` operates on in-memory `CGImageRef` pointers; does **not** require a GUI WindowServer session or screen recording permissions. Fully supported in headless CLI / CI runners |
 | Catch2 Filter Tag | Use Catch tag `[vision][integration]` or `ctest -R vision` to filter Vision integration tests |
 | Threading | `VisionOcrEngine::recognize` is **not thread-safe**; callers must serialize (no concurrent recognize) |
 | Pixel path | Product/parity path is **RGB24**. BGR24/Gray8 are best-effort conversions only |
-| C++ parity L0 vs L4 | C++ parity **L0** covers box/clamp/sort/empty structure via `dump_vision.py --check` + `[parity][vision]`; it runs from `./scripts/verify-standard.sh`, not Harness `./init.sh`. **L4** is live Vision text/conf 的可选报告；`dump_vision --live` 只保留说明性入口。 |
+| C++ parity L0 vs L4 | C++ `[parity][vision]` 离线读取已提交 golden，覆盖 box/clamp/sort/empty 结构。过渡期 `verify-standard.sh` 仍额外运行历史 `dump_vision.py --check`；它不是 Native-only 产品门。**L4** live Vision text/conf 只作可选报告。 |
 | Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_VERIFY_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
 
 ## sublift_worker CLI
@@ -102,20 +102,20 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 
 ### Runtime policy
 
-- **Default Product Runtime**: C++ Native Core (`sublift_worker`).
-- **Explicit Python Path**: 只有显式 `SUBLIFT_RUNTIME=python` 或等价参数才进入 Python。
-- **Fail-closed**: 请求的 Native 引擎不可用时明确失败，不自动改引擎或回退 Python。
+- **Only Product Runtime**: C++ Native Core (`sublift_worker`).
+- **Fail-closed**: 请求的 Worker、引擎、模型或 capability 不可用时明确失败，不自动改引擎或进入 Python。
+- **Rollback**: 回滚到上一版已验收 Native artifact、release/tag 或 Git revision，不在同一版本切换 runtime。
 
-## Runtime Resolution Policy & Toggles
+## Engine 与 capability 解析
 
-SubLift provides unified runtime resolution (`src/sublift/runtime.py` and `RuntimePolicy.swift`):
+产品只解析目标 Native 进程的 engine 与 capability：
 
-- **Default**: C++ Native Core (`sublift_worker`) for `vision`, `mock`, and available `paddle`.
-- **Priority**: Explicit `--runtime python|cpp` Flag > Environment Variable `SUBLIFT_RUNTIME=python|cpp` > Product Default (`cpp`).
-- **Engine Matrix Cross-Rules**:
-  - Native runtime 只接受目标进程实际声明的 capability。
-  - 缺失 capability 时明确失败，不存在自动 `paddle_override`。
-  - 显式/env `runtime=python` 仍可作为 Oracle 与开发回滚路径。
+- `vision`、`mock` 与 `paddle` 只能在当前 Worker 实际声明 capability 时选择。
+- 缺失 capability 时明确失败，不存在自动 `paddle_override` 或其他引擎替换。
+- 产品接口不接受 `--runtime` / `SUBLIFT_RUNTIME` 作为实现选择。
+
+Phase 13 迁移期间，`src/sublift/runtime.py`、Swift `RuntimePolicy` 与 Python IPC 接线仍可能
+存在于工作树；它们是待移除实现债务，不属于本 C++ tree 的产品合同，也不得新增消费者。
 
 ## Related docs
 

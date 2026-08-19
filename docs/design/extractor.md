@@ -1,6 +1,8 @@
 # 帧采样设计
 
-> `src/sublift/extractor/` — 视频帧采样抽象与 ffmpeg 实现。
+> 本文记录 `src/sublift/extractor/` 的历史 Python 抽帧设计，用于迁移追溯与
+> 离线参考；不再是产品实现真源。Native Extractor 契约以
+> [`docs/cpp/`](../cpp/README.md)、C++ Ports/Adapters 与测试为准。
 
 ## 模块职责
 

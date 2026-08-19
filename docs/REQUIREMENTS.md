@@ -2,12 +2,13 @@
 
 ## 1. 项目目标
 
-为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。当前已交付 Native C++ CLI/Worker、Python Oracle/兼容 CLI 与 macOS SwiftUI 开发者版本；Vision、PaddleOCR 和 Mock 均已接入统一运行时边界，但 Windows/Linux 产品交付与 GUI 仍是后续范围。
+为桌面用户提供一个**本地、离线、免费**的硬字幕提取工具，把烧录在视频画面中的字幕还原为可编辑字幕。产品以 Native C++ 作为唯一运行时，由 Native CLI、macOS SwiftUI 和 Web/Native Server 提供入口；Vision、PaddleOCR 和 Mock 均通过 Native 边界接入，但 Windows/Linux 桌面 GUI 仍是后续范围。
 
-**Phase 6.0–6.9 开发范围已完成：** 产品执行路径已迁移到 C++ Core，并与冻结 Python
-Oracle 对齐；vision/mock/Paddle 均已完成 C++ cutover。Paddle C++ 不可用时
-fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.app` 分发、签名、
-公证按 ADR-0030 后置。迁移契约见 [`docs/cpp/`](cpp/README.md)。
+**当前迁移状态：** Phase 6.0–6.9 已完成 C++ Core 与全引擎 cutover。ADR-0038 已确认
+Native-only 产品目标，Phase 13 正在移除现存 Python CLI、Pipeline、IPC 与 runtime 路由；
+在 Phase 13 验收完成前，这些代码仍可能存在，但只属于过渡债务，不能被描述为已经删除。
+Native capability 缺失时必须 fail-closed；回滚到上一版已验收的 Native artifact、release/tag
+或 Git revision，不切换到 Python runtime。迁移契约见 [`docs/cpp/`](cpp/README.md)。
 
 ## 2. 用户与使用场景
 
@@ -25,25 +26,26 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 ### 3.1 核心提取能力
 
 - **F1 视频输入** ✅：通过 ffmpeg 支持 mp4 / mkv / mov 等主流容器及 H.264 / H.265。
-- **F2 帧采样** ✅：按可配置采样率抽帧，默认 5fps；GUI path mode 由实际选中的
-  C++ / Python Worker 使用各自 `FfmpegExtractor`，两端遵循冻结的抽帧 parity 契约。
+- **F2 帧采样** ✅：按可配置采样率抽帧，默认 5fps；产品 path mode 由 Native
+  `FfmpegExtractor` 统一处理，并遵循版本化抽帧 golden 与 Native 契约测试。
 - **F3 字幕区域** ✅：CLI 默认裁剪画面下部 30%，支持固定区域；GUI 用 Vision 检测文字候选框并由用户多选字幕框。
-- **F4 OCR 识别** ✅：统一 `OcrEngine` 接口；Apple Vision 与 PaddleOCR（rapidocr PP-OCRv6）均返回逐行 `OcrLine(text, confidence, box)`，保留 Mock 引擎用于测试。
+- **F4 OCR 识别** ✅：统一 `IOcrEngine` Port；Native Apple Vision 与 PaddleOCR/ORT Adapter
+  均返回逐行 `OcrLine(text, confidence, box)`，保留 Native Mock 引擎用于测试。
 - **F5 时间轴生成** ✅：双信号帧签名、变化点状态机与 SSIM patrol 生成 `start_ms` / `end_ms`。
 - **F6 去重与合并** ✅：相邻同文去重、短空洞桥接与重叠处理；仍有少量 merged residual。
 - **F7 字幕导出** ⚠️：SRT 已完成；ASS、VTT 只有接口占位。
-- **F8 CLI** ✅：`sublift extract <video> -o <output>`，支持 fps、置信度、OCR 引擎及文字系统参数。
+- **F8 CLI** ✅：Native `sublift extract <video> -o <output>`，支持 fps、置信度、OCR 引擎及
+  文字系统参数；现存 Python console CLI 在 Phase 13 迁移完成前仅为过渡入口，最终移除。
 - **F9 中英文与混排** ⚠️：Vision 配置 zh-Hans + en-US，`auto/cjk/latin` 画像和多帧共识已实现；显式 CJK 边界清理对无空格混排仍有误删风险。
 - **F10 引擎自动路由** ⚠️：GUI 可按候选文字推断文字系统，但尚未实现多 OCR 引擎自动选择。
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。
 - **F12 配置文件** ❌：尚不支持 `sublift.toml` / `--config`。
 - **F13 引擎对照模式** ❌：尚未提供产品化的多引擎并行对照。
-- **F14 PaddleOCR 第二引擎** ✅：C++ ONNX adapter 已实现完整 Det DB/unclip、
+- **F14 PaddleOCR 第二引擎** ✅：C++ ONNX Adapter 已实现完整 Det DB/unclip、
   Quad crop、Cls、Rec、metadata 字典与 CTC；stage、3 来源/614.272s 质量、性能、长流、
-  cancel/restart 与回滚门均通过。Python rapidocr 保留为 Oracle/fallback。
-  `--engine paddle` CLI/GUI 可选，首次模型下载后离线推理，模型缓存位于
-  `~/.cache/sublift/rapidocr-models`。C++ capability 缺失时 fail-closed；Python rapidocr
-  只通过显式 runtime 作为 Oracle / 开发回滚。
+  cancel/restart 门均通过。`--engine paddle` 在 CLI/GUI 可选，模型齐备后离线推理；Native
+  capability 缺失时 fail-closed，不进入 Python 或其他引擎。Phase 13 同时负责解除模型目录、
+  ORT 来源和预下载流程对 Python 生态的过渡耦合。
 
 ### 3.2 Benchmark 与可观察性
 
@@ -76,11 +78,12 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 | 维度 | 要求 | 当前状态 |
 |---|---|---|
 | **性能** | 1080p、5fps 处理速度 ≥ 1× 实时 | ✅ Vision 固定 GT 实测 21.0×；Paddle 120s canonical C++ wall=Python×0.8956，且 720s 长流 15.522s wall |
-| **离线 / 隐私** | 视频与文本不上传；已缓存模型时不依赖网络 | ✅ Vision 全程本机处理；PaddleOCR 仅首次下载模型需要联网，之后本机推理 |
+| **离线 / 隐私** | 视频与文本不上传；模型齐备后不依赖网络 | ⚠️ Vision 全程本机处理；Native Paddle 推理离线，但当前只查找既有模型且缺失时 fail-closed，D03 尚需补齐不依赖 Python 的模型获取/随包闭环 |
 | **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；Paddle C++/Python canonical 进程树 RSS=0.9152x，720s Paddle C++ 长流通过；既有 4K/Vision 长流门也通过。 |
 | **可分发** | 面向终端用户的独立安装包 | ❌ Phase 2 已明确跳过 `.app` 打包与公证 |
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
-| **当前兼容性** | macOS 13+，Python 3.12+；GUI 需 SwiftPM/Xcode | ✅ macOS 开发者环境可构建运行；PaddleOCR 是不依赖 Vision 的可选 OCR 引擎 |
+| **当前兼容性** | 产品执行不要求 Python；macOS GUI 需 macOS 13+ 与 Swift 5.9+，Web/Server 使用受支持的 Native 平台 | ⚠️ Native 产品链已存在；Phase 13 正在清除 Python CLI、IPC、验证与资源准备的过渡耦合 |
+| **运行时单一性** | C++ 是唯一产品运行时；缺失 capability 时 fail-closed，版本回滚不切 Python | ⚠️ ADR-0038 已确认，Phase 13 迁移尚未完成 |
 | **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
 | **GUI 可用性 / 可访问性** | macOS 原生状态、960×600 最小布局、键盘/VoiceOver、浅深色与系统 Accent 可用 | ✅ 代码与自动测试已实施；V01–V09、960 紧凑及 Light/Dark 证据见 `docs/phases/phase10.json`、`docs/design_ui/evidence/`。V10 系统设置切换、真实 VoiceOver 会话和部分真实点击仍受系统权限限制，未伪装为已执行。 |
 
@@ -101,6 +104,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - 软字幕轨提取、实时直播流、字幕翻译、云端 SaaS
 - ASS / VTT 完整导出、配置文件（批量 GUI 队列已随 Phase 8 实现）
 - 独立 `.app` 分发、公证，以及 Windows / Linux 产品交付
+- 以 Python Pipeline、Python IPC 或进程内 runtime 切换作为产品回滚机制
 
 ## 7. 关键风险与权衡
 
@@ -111,11 +115,15 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 | 短字幕与 merged residual | 少量 timing FN 或合并错误 | 保留 failure cluster，后续按固定 GT/新增 GT 回归 |
 | path mode 的抽帧与 OCR 串行 | OCR 时停止推进 ffmpeg；但 ROI 后并发重叠还会引入取消/重启竞态，且真实 Vision 未显示稳定 wall 收益 | Phase 4.1 已验证机制/质量/取消正确却未过 wall≤串行95% 门，故保持串行；Phase 4.2 已确认 Vision 请求执行主导，下一步先补多源 GT 后研究有效 OCR 调用。 |
 | Apple Vision 在非 macOS/CI 不可用 | 集成覆盖受限 | Mock 闭环测试；平台 API 限定在适配层 |
-| PaddleOCR 首次模型下载失败 | 首次 `--engine paddle` 无法启动 | CLI 给出不含 traceback 的失败原因与预下载命令；模型缓存后离线复用 |
+| Native Paddle 模型准备尚未闭环 | 无既有模型时 `--engine paddle` fail-closed，当前产品不会自动下载 | Phase 13 D03 建立带 manifest/SHA、临时下载与原子安装的 Native 获取或随包流程；完成前不把 Python 预下载工具描述为产品能力 |
 | Paddle GT 来源仍有限 | 现有 1 个真实 CJK + 2 个确定生成源不能代表所有片源 | 当前逐源 SHA exact 且全门通过；继续扩充真实 Latin/混排/不同字幕位置，不放宽冻结门 |
 | ORT 二进制构建差异 | 相同版本/provider 仍可能有数值与性能差异 | Candidate 固定官方 ORT SHA；CMake 复制到 build `lib/` 并用相对 rpath；6.9+ 负责正式 App 签名/随包 |
+| 退役 Python 后失去同版本 runtime fallback | Native capability 故障不能在当前版本内绕行 | fail-closed；回滚上一版已验收 Native artifact/tag；golden、GT 与 Native tests 承担回归真源 |
 
 ## 8. 阶段验收状态
+
+以下 Phase 1–10 条目记录各阶段当时的验收事实，不因 ADR-0038 追溯改写；其中关于 Python
+Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 
 ### Phase 1 — CLI MVP
 
@@ -158,7 +166,7 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] 记录 Vision 输入准备、request 设置、perform、observation 映射和 residual，且不与 `ocr` coverage leaf 双计
 - [x] `trace` 记录有界的代表帧/调用/早停决策，不落盘文本、图像、box 或绝对路径
 - [x] 自动对账硬门：summary/trace 内 `call_count == stages.ocr.count == throughput.ocr_calls`；parent 与外层 ocr wall 交叉校验；off 路径无分阶段计时
-- [x] 正式报告 `docs/reports/phase4.2-ocr-attribution-baseline.md`：hash/质量/对账通过；`vision_perform≈99%`；下一方向为多源 GT 后的代表帧排序与有效调用实验
+- [x] 归因证据已收口至 `docs/phases/phase42.json`：hash/质量/对账通过；`vision_perform≈99%`；下一方向为多源 GT 后的代表帧排序与有效调用实验
 - [x] feat-043 已作为归因与优化分流任务收口；summary 扰动 1.319 未过，仅限制它不能作为产品速度基线。若未来需要此用途，另做交错 off/summary 配对复测
 
 ### Phase 5 — PaddleOCR 第二引擎（已完成）
@@ -187,3 +195,11 @@ fail-closed；仅显式 `SUBLIFT_RUNTIME=python` 进入 Oracle/开发回滚。`.
 - [x] Workspace Session、Native Shell、Inspector、Region、Transcript、Processing/Review、Timeline、Settings 与快速提取设置栏已按 Feature 顺序实施
 - [x] 完整 Swift 测试（201 XCTest + 140 Swift Testing）、项目标准门 10/10、V01–V09/960 紧凑/Light-Dark 截图及 A01/A02 代码与自动测试证据通过
 - [ ] V10 Increase Contrast/Reduce Transparency 实际切换、完整 VoiceOver 朗读会话和部分真实点击路径仍受系统权限限制；替代覆盖与边界记录于 10412–10415 evidence
+
+### Phase 13 — Python Runtime 退役与 Native-only 收口（迁移中）
+
+- [x] ADR-0038 已确认唯一 Native 产品运行时、fail-closed 与版本回滚边界
+- [~] Python 产品 CLI、Pipeline、IPC、runtime 路由及宿主接线正在移除，尚未完成
+- [ ] 产品安装、构建、启动、提取、导出与 Native 日常验证在无 Python / `.venv` 环境通过
+- [ ] 模型与 ORT 资源准备脱离 Python 生态，并以固定 manifest/SHA 验收
+- [ ] 最后 Python 产品 revision 以 Git/tag 保存；工作树不建立源码 archive

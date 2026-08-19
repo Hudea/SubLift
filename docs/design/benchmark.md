@@ -1,19 +1,24 @@
 # Benchmark v2 设计
 
-> 实现：`src/sublift/benchmark/`
+> **Phase 13 定位：隔离的可选开发工具，不属于产品运行时，也不得成为 Native 产品门禁的
+> 必需依赖。** 当前实现仍位于 Python 树中，以下内容记录其现状与可复现用法，不表示
+> Python Pipeline 继续受到产品支持。
+>
+> 实现：`src/sublift/benchmark/`（过渡态）
 > 配置与数据：`benchmark/`
 > 固定本地媒体：`debug/`；本机运行产物：`debug/benchmark/`
-> 入口：`uv run sublift-benchmark`
+> 可选工具入口：`uv run sublift-benchmark`
 
 用法见 [`benchmark/README.md`](../../benchmark/README.md)。
 
 ## 1. 目标
 
-- 用一个入口覆盖单组运行、参数矩阵、已有 SRT 评分与专项比较；
+- 为算法研究和历史复现提供单组运行、参数矩阵、已有 SRT 评分与专项比较；
 - 代码、配置、数据、冻结基线、临时产物有明确边界；
 - 新增参数时复用通用 `--set / --vary`，不继续新增一次性扫描脚本；
-- 质量、性能和外部导出共享一套 SRT 对齐与报告模型；
-- 保留历史 flat manifest 与旧脚本包装器的迁移窗口。
+- 质量、性能和外部导出可共享一套 SRT 对齐与报告模型；
+- 保留历史 flat manifest 与旧脚本包装器的迁移窗口；
+- 不参与 C++ Worker 启动、产品能力探测、运行时回退或必选验收链。
 
 ## 2. 分层
 
@@ -29,7 +34,7 @@
 └───────────────┬───────────────────────┬─────────────────┘
                 │                       │
 ┌───────────────▼──────────────┐  ┌────▼─────────────────┐
-│ Execution                    │  │ Existing SRT scoring │
+│ Optional Oracle execution    │  │ Existing SRT scoring │
 │ Python Pipeline + perf spans │  │ runtime agnostic     │
 └───────────────┬──────────────┘  └────┬─────────────────┘
                 └──────────────┬────────┘
@@ -60,14 +65,14 @@
 | `roi_compare.py` | feat-039 full/ROI 冻结硬门 |
 | `git_utils.py` | 显式 `--label auto` 的递增目录 |
 
-产品热路径仍只依赖 `src/sublift/diagnostics/performance.py` 中的可选 recorder，
-不依赖 benchmark 包。
+Native 产品热路径不依赖 benchmark 包或 Python recorder。现有 Python runner 与
+`src/sublift/diagnostics/performance.py` 仅为过渡期研究、历史复现和基线解释服务。
 
 ## 4. 资产与兼容生命周期
 
 | 类别 | 路径 / 入口 | 生命周期与规则 |
 |---|---|---|
-| Canonical CLI | `uv run sublift-benchmark` | 唯一受支持的 benchmark 入口；活跃文档、自动化与新命令只使用它。 |
+| Optional CLI | `uv run sublift-benchmark` | 当前 Python benchmark 内部的统一入口；不是产品 CLI，也不是 Native 门禁入口。 |
 | Historical shim | `scripts/run_benchmark_manifest.py`、`scripts/measure_perf_overhead.py`、`scripts/compare_roi_ab.py` | R2 历史复现兼容面；只可打印提示并向 canonical CLI 转发，不复制 runner/config/report 实现。由 `tests/test_benchmark_wrappers.py` 覆盖。 |
 | Root marker compatibility | `phases.json`；`feature-list.json` fallback | 新 checkout 优先使用 `phases.json`；仅 legacy checkout 使用 `feature-list.json`。无任一 marker 时回退调用时 cwd，三种情况由 `tests/test_benchmark_config.py` 覆盖。 |
 | Versioned configs | `benchmark/configs/` | 可复现 run/matrix 配置，入库；被报告或测试引用的 Phase config 不因编号或名称过旧而删除。 |
@@ -129,9 +134,9 @@ Pipeline 调参统一放在 `run.pipeline` 下，并能用 dotted path 进入 ma
 
 ## 6. 执行与评分
 
-### 6.1 `run / matrix / overhead`
+### 6.1 `run / matrix / overhead`（可选 Oracle 路径）
 
-使用 Python in-process 产品组件：
+当前使用冻结的 Python in-process Oracle 组件：
 
 ```text
 FfmpegExtractor
@@ -142,16 +147,19 @@ FfmpegExtractor
   → diagnostics
 ```
 
-原因是 performance recorder 目前位于 Python 产品路径，能提供阶段 wall、RSS、CPU、
-raw bytes、OCR calls 与 trace。多次 measured 默认 spawn 隔离峰值 RSS。
+原因是历史 performance recorder 位于 Python 树中，能提供阶段 wall、RSS、CPU、
+raw bytes、OCR calls 与 trace。多次 measured 默认 spawn 隔离峰值 RSS。这些数据可用于
+解释或对照 Native 结果，但不能要求产品机器安装 Python，也不能作为 C++ 能否运行的前提。
 
 ### 6.2 `score`
 
 只读取已有 SRT，不执行提取。它不关心导出来自 C++、Python、GUI 或第三方工具，因此
-是 runtime parity 和人工导出回归的统一入口。外部日志中的 wall/duration 可以显式传入。
+可用于 Native 输出、历史 Oracle 输出和人工导出的离线比较。外部日志中的 wall/duration
+可以显式传入。
 
-原生 C++ 内部性能仍使用 cutover/Paddle 专项门；在 C++ recorder 与 Python recorder
-形成同构 schema 前，不伪造阶段级横向比较。
+原生 C++ 的产品验收必须由 Native 自身的 CTest、固定资产和版本化阈值完成。在 C++
+recorder 与 Python recorder 形成同构 schema 前，不伪造阶段级横向比较，也不把 Python
+实时对照设为必选门禁。
 
 ## 7. 参数矩阵
 
@@ -207,7 +215,7 @@ pipeline_overhead；`finalize` 是容器 span，不重复计入。
 `overhead` 采用 off/summary 交错配对，并同时检查全部输出 hash 一致；性能扰动不能以
 结果漂移换取。
 
-## 10. 兼容与后续扩展
+## 10. 隔离边界与后续迁移
 
 - `scripts/run_benchmark_manifest.py`、`measure_perf_overhead.py`、
   `compare_roi_ab.py` 只做转发并提示新命令；
@@ -215,5 +223,9 @@ pipeline_overhead；`finalize` 是容器 span，不重复计入。
 - 算法专项 trace/短字幕脚本归入 `scripts/diagnostics/`，不再冒充标准 benchmark；
 - 新运行字段只需在 `RunConfig + config parser` 注册；新 Pipeline dataclass 标量字段
   自动进入 `pipeline.*` 白名单；CLI 和 matrix 都无需增加专用开关；
-- 若将来 C++ 暴露同构 performance schema，可新增 execution backend，而不改变
-  config/matrix/diagnostics/report 层。
+- Python 环境、RapidOCR、PyObjC 和 Python ONNX Runtime 只能由该可选工具自行声明，不能
+  泄漏到 CMake、Swift、C++ Worker、Web Server 或产品验证入口；
+- Native 质量门应直接消费版本化 SRT、fixture、golden 和阈值；只有生成或复核这些资产时
+  才需要启动隔离 Oracle；
+- 若将来 C++ 暴露同构 performance schema，可新增 Native execution backend；在此之前，
+  不以 Python runner 代替 Native 验收。

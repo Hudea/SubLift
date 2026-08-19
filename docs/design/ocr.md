@@ -1,6 +1,8 @@
 # OCR 引擎设计
 
-> `src/sublift/ocr/` — OCR 抽象接口与实现。平台特定 API 唯一容身处（ADR-0002）。
+> 本文记录 `src/sublift/ocr/` 的历史 Python OCR 设计，用于迁移追溯与离线对照；
+> PyObjC/RapidOCR 安装、自动下载与 Python CLI/GUI 描述都不是当前产品合同。
+> Native OCR 边界以 [`docs/cpp/`](../cpp/README.md)、C++ Ports/Adapters 与测试为准。
 
 ## 模块职责
 

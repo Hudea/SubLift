@@ -22,7 +22,7 @@
 
 - 全量测试、全量 lint 或完整类型检查；
 - 发布构建、E2E、性能测试、安全扫描或跨平台验证；
-- 当前 Feature 的专项验收；
+- 当前 Deliverable 的专项验收；
 - 产品行为正确性验证；
 - `.agent/` 能力包的全量文件审计；
 - 仅为了「更保险」而重复 CI 或 Verification 已承担的工作。
@@ -57,6 +57,6 @@
 - 不得隐藏失败或自动绕过错误；
 - 输出应指出失败项以及恢复基线所需的下一步；
 - 项目专属逻辑可以存在，但必须遵守本规则；
-- 修改 `init.sh` 或本规则属于 Harness 变更，不应夹带在普通产品 Feature 中。
+- 修改 `init.sh` 或本规则属于 Harness 变更，不应夹带在普通产品 Deliverable 中。
 
 何时调用、失败后怎么办：见 `session-bootstrap` / `session-handoff`。

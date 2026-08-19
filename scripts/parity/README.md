@@ -1,10 +1,16 @@
-## Batch / cutover entry
+# Parity 与历史 cutover 工具
+
+> 本目录保留冻结 golden 的生成/复核与历史 Python↔C++ cutover 重放工具。
+> Phase 13 起它们是隔离的可选离线工具，不是产品 runtime、Python 回退机制或
+> Native 日常产品门。本文中的“双运行时”与“cutover”只描述历史复现能力。
+
+## 历史 batch / cutover 入口
 
 - **Golden script list (single source):** `golden_registry.py`
-- **Run all correctness + runtime + GT:**
-  `uv run python scripts/parity/check_cutover_gate.py --check`
-- **Parity only (fail-fast):**
-  `uv run python scripts/parity/check_cutover_gate.py --check --parity-only`
+- **重放历史 correctness + runtime + GT：**
+  `uv run python scripts/parity/check_cutover_gate.py --check --report-out /tmp/sublift_cutover_gate.md`
+- **仅复核历史 parity（fail-fast）：**
+  `uv run python scripts/parity/check_cutover_gate.py --check --parity-only --report-out /tmp/sublift_cutover_gate.md`
 
 # Parity dump scripts
 
@@ -27,7 +33,7 @@ C++ loads the same file in Catch2 `[parity][config]` (offline; no Python at test
 ## Paddle stage golden (feat-06802)
 
 ```bash
-# 日常离线校验：不加载/下载 OCR 模型
+# 可选历史离线校验：不加载/下载 OCR 模型
 uv run python scripts/parity/dump_paddle_stages.py --check
 
 # 显式 live 双运行时重放：要求本机模型与 Paddle C++ trace executable
@@ -46,7 +52,7 @@ SHA256。产品路径默认不捕获 tensor，逐阶段大对象只存在于显�
 ## Paddle Det live gate (feat-06803)
 
 ```bash
-# 产品构建：自动记录 Python/C++ ORT dylib SHA，并选择同构建/跨构建门
+# 历史 Candidate 复核：记录 Python/C++ ORT dylib SHA，并选择同构建/跨构建门
 uv run python scripts/parity/check_paddle_det_parity.py --check \
   --report-out /tmp/sublift_paddle_det_gate.json
 
@@ -68,7 +74,8 @@ uv run python scripts/parity/check_paddle_rec_parity.py --check \
 ```
 
 该门使用冻结 Python Det quad 隔离下游算子，检查 perspective crop、Cls/Rec tensor、
-batch call、CTC token/text、最终顺序与 AABB；产品端到端路径仍由 stage 与质量门覆盖。
+batch call、CTC token/text、最终顺序与 AABB；历史端到端对照由 stage/quality 重放覆盖，
+当前产品验收以 Native tests、golden 与 GT 为准。
 
 ## Paddle E2E quality gate (feat-06805)
 
@@ -78,16 +85,16 @@ uv run python scripts/parity/check_paddle_gate.py --check \
   --report-out /tmp/sublift_paddle_quality_gate.md \
   --json-out /tmp/sublift_paddle_quality_gate.json
 
-# 仅在有意接受新的 Python Oracle 水位时更新，不能用于日常验收
+# 仅用于有意重建历史冻结资产；不得用来设定新产品水位
 uv run python scripts/parity/check_paddle_gate.py --freeze-oracle
 ```
 
 Manifest 位于 `benchmark/datasets/paddle_quality/manifest.v1.json`，冻结 3 个来源共
-614.272s 的输入/GT/生成 recipe 与 font hash。门会真实执行 Python/C++ 产品 CLI，
-同时检查当前 Oracle 相对门、冻结 Python 绝对门、逐 clip noise/empty 与 Q0 live box；
+614.272s 的输入/GT/生成 recipe 与 font hash。该历史门会重放 Python/C++ CLI，
+同时检查当时的 Oracle 相对门、冻结 Python 绝对门、逐 clip noise/empty 与 Q0 live box；
 不接受硬编码指标或缺依赖 skip。
 
-## Paddle canonical performance gate (feat-06806)
+## Paddle 历史 canonical performance 重放（feat-06806）
 
 ```bash
 uv run python scripts/parity/check_paddle_perf.py --check \
@@ -98,12 +105,12 @@ uv run python scripts/parity/check_paddle_perf.py --check \
 ```
 
 Manifest 位于 `benchmark/datasets/paddle_performance/manifest.v1.json`，冻结 120s 输入、
-预期 SRT、模型、官方 ORT dylib SHA 与 thread/batch 配置。门会先预热，再交错执行
-Python/C++ 各 3 轮产品 CLI，取 wall median 并采样完整进程树 RSS，同时记录
+预期 SRT、模型、官方 ORT dylib SHA 与 thread/batch 配置。历史门会先预热，再交错执行
+Python/C++ 各 3 轮 CLI，取 wall median 并采样完整进程树 RSS，同时记录
 OCR/Det box/Cls/Rec batch 计数。输入、模型、worker、ORT 指纹、统计或输出 hash
 任一缺失均 FAIL；`--skip-runtime` 不构成验收。
 
-## Paddle product cutover gate (feat-06807)
+## Paddle 历史 product cutover 重放（feat-06807）
 
 ```bash
 uv run python scripts/parity/check_paddle_cutover.py --check \
@@ -113,10 +120,9 @@ uv run python scripts/parity/check_paddle_cutover.py --check \
   --json-out /tmp/sublift_paddle_cutover.json
 ```
 
-该门验证 available 时的产品默认 C++、强制 Python 回滚、再次默认 C++ restart
-三次 SRT SHA exact；生成并执行 ≥600s 连续长流，并在真实 Paddle path job 进度大于
-0 后测 cancel/restart。macOS 同时要求 Worker 通过相对 `@loader_path` 加载 build
-tree 内的 bundled ORT，且 SHA 与性能 Candidate exact。门禁不会把报告默认写入仓库。
+该工具重放当时的“默认 C++ → 强制 Python 回滚 → 再次默认 C++”三次
+SRT SHA exact，并重放 ≥600s 连续长流、cancel/restart 与 macOS 相对 rpath 验收。
+“强制 Python 回滚”只是历史证据场景，不是 ADR-0038 之后的产品合同。
 
 ## Signature golden
 

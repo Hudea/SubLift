@@ -1,8 +1,7 @@
 # OCR 内部性能归因设计
 
-> 本文定义 `feat-043` 的测量契约，不是速度优化实现说明。任务状态与真实证据以
-> [phase42.json](../phases/phase42.json) 为准，执行顺序与验收见
-> [Phase 4.2 计划](../plans/phase4.2-ocr-performance-attribution.md)。
+> 本文定义 `feat-043` 的历史测量契约，不是速度优化实现说明。任务状态、
+> 执行边界与真实证据以 [phase42.json](../phases/phase42.json) 为准。
 
 ## 1. 目的与边界
 

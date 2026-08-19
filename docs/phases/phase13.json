@@ -1,0 +1,150 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 13 - 退役 Python Runtime，建立 Native-only 产品",
+  "goal": "交付不依赖 Python、uv 或 .venv 的 Native-only 产品：Native CLI、macOS 与 Web 均能完成资源准备、字幕提取、SRT 导出和产品验证，产品故障回滚通过版本回滚完成。",
+  "scope": [
+    "关闭产品双 runtime 和运行期 Python 进程入口，使 Native capability 成为唯一产品执行路径。",
+    "建立 Paddle 模型、字典与 ONNX Runtime 的 Native 获取、校验、安装和定位闭环。",
+    "建立无 Python、uv、.venv 环境下可执行的产品验证门，并把产品测试迁移到 C++、Swift 与 Web 所属层。",
+    "移除活跃产品依赖图中的 Python CLI、IPC Worker、算法副本和运行期依赖声明。",
+    "将仍有价值的 benchmark、评分、parity 与冻结 Oracle 隔离为可选离线工程工具。"
+  ],
+  "non_goals": [
+    "不为了语言统一而把适合离线分析的 benchmark、评分和报告工具重写为 C++ 或 Swift。",
+    "不以目录清空量代替替代能力和真实验收；Python 产品路径按 D02–D05 的边界有序移除。",
+    "不创建 docs/plans 或 docs/reports；本文件只保存纵向 Deliverable、验收条件和简短证据。",
+    "不把当前阶段登记解释为产品代码已经删除或 Python-free 验收已经完成。"
+  ],
+  "status": "in-progress",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "冻结退役决策与验收基线",
+      "outcome": "项目对产品与工程工具中的 Python 职责形成单一、可验证的退役边界，并以 Native-only 用户能力而不是文件删除量作为完成标准。",
+      "acceptance": [
+        "产品目标明确覆盖 Native CLI、macOS、Web、模型获取、字幕提取、SRT 导出和产品验证，且这些能力不得要求 Python、uv 或 .venv。",
+        "Python benchmark、评分、parity 与冻结 Oracle 被定义为可选离线工程工具，不进入产品运行或交付依赖图。",
+        "产品回滚策略明确改为版本回滚，不以同一版本内切换 Python Runtime 作为产品能力。",
+        "Phase 使用 2–8 个纵向 Deliverable；执行 Task 不写入 Phase 文件，evidence 只保留验收引用或简短结论。"
+      ],
+      "areas": [
+        "docs/phases",
+        "runtime-boundary",
+        "verification-boundary"
+      ],
+      "status": "done",
+      "evidence": [
+        "ADR-0038 与 architecture/runtime/parity 契约已冻结 Native-only、fail-closed、版本回滚及离线工具隔离边界。",
+        "2026-08-19：jsonschema 4.25.1 Draft202012Validator 完成两份 schema 自检、phases.json 与 13 个 Phase detail 正向校验；v1/v2 混用、ID/数量、状态生命周期和单一活跃 Phase 负例均按预期拒绝。",
+        "2026-08-19：全仓 tracked Markdown 的 100 个本地链接、JSON 语法、git diff --check 与 ./init.sh 均通过；未运行产品测试，因为 D01 只变更合同、跟踪与文档。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "关闭产品双 Runtime",
+      "outcome": "Native CLI、macOS 与 Web 只选择和启动 Native Worker/Server；请求能力不可用时 fail-closed，产品不再提供 Python Runtime 切换。",
+      "acceptance": [
+        "产品 CLI 不再通过 Python 包转发 Native Worker，也不暴露 --runtime python 或等价产品选项。",
+        "macOS 产品路径不再启动 python -m sublift.ipc.server，Web 保持 Native Server 进程内路径。",
+        "SUBLIFT_RUNTIME 不再改变产品运行时；缺失 Native engine/capability 时返回结构化错误且不静默换引擎。",
+        "Native CLI 的参数、Worker 定位、协议、失败退出和 SRT 输出获得所属 Native 层的自动测试覆盖。"
+      ],
+      "areas": [
+        "cpp/src/cli",
+        "apps/macos",
+        "runtime-policy",
+        "product-documentation"
+      ],
+      "status": "in-progress",
+      "evidence": []
+    },
+    {
+      "id": "D03",
+      "name": "建立 Native 模型与 ORT 资源闭环",
+      "outcome": "Paddle 所需模型、字典和 ONNX Runtime 可在无 Python 环境中可靠获取或随包提供，并由所有 Native 产品入口使用同一资源合同。",
+      "acceptance": [
+        "模型获取或随包流程使用版本化 manifest、固定 SHA-256、临时文件和原子安装，下载或校验失败时不留下可被误判为可用的资源。",
+        "ONNX Runtime 的构建与分发路径不从 Python site-packages 或 .venv 解析动态库。",
+        "macOS 与 Linux/Docker 的 ORT 版本、来源和 SHA 由统一 manifest 约束；变更后重跑适用的 Paddle quality/parity/performance 门。",
+        "Native CLI、macOS 与 Web 对模型位置、版本、capability 和错误身份使用同一 ResourceLocator/ModelBundle 契约。",
+        "首次资源准备完成后，Paddle Native 提取可在离线环境重复运行。"
+      ],
+      "areas": [
+        "cpp/src/models",
+        "cpp/src/adapters/paddle",
+        "native-resources",
+        "distribution"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D04",
+      "name": "建立 Python-free 产品门并迁移测试",
+      "outcome": "产品验证在无法调用 Python、uv 或 .venv 的干净环境中覆盖 Native CLI、macOS、Web、资源准备、提取和导出，Python 测试不再替产品行为背书。",
+      "acceptance": [
+        "提供独立 Python-free 产品验证入口；它不安装 Python 依赖、不运行 Python 脚本，也不因缺少 Python 而跳过产品必测项。",
+        "Native CLI、Worker/Application、Server、Swift 客户端和 Web 前端的产品合同由 CTest、Swift 测试和 Web 测试在各自层覆盖。",
+        "无 Python、uv、.venv 环境下，Native CLI、macOS 与 Web 均能完成至少一个真实 Native 提取并导出有效 SRT。",
+        "产品验证对模型获取、ORT 装载、engine capability、取消/重启、错误路径和产物完整性提供真实证据。"
+      ],
+      "areas": [
+        "scripts/verification",
+        "cpp/tests",
+        "apps/macos/Tests",
+        "apps/web"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D05",
+      "name": "移除活跃 Python 产品实现",
+      "outcome": "产品源代码、依赖声明、入口和默认验证中不再包含 Python CLI、IPC Worker、运行时路由或持续演进的产品算法副本。",
+      "acceptance": [
+        "产品安装入口、macOS 启动逻辑和活跃文档不再引用 Python Runtime、Python Worker 或产品内运行时回退。",
+        "Python CLI、IPC bridge/server、runtime resolver、worker locator 和被 Native 完整替代的活跃产品算法实现按已验证替代边界移除或迁出产品包。",
+        "与被移除产品实现绑定的重复测试被删除或转化为 Native 所属层测试，不保留两套持续演进的产品语义。",
+        "最后可运行的 Python 产品 revision 以专用 Git tag 记录；工作树不创建 archive 或源码快照副本。",
+        "扫描构建产物、产品进程树和依赖图，均不存在 Python 解释器、libpython、site-packages、uv 或 .venv 引用。"
+      ],
+      "areas": [
+        "src/sublift",
+        "pyproject.toml",
+        "apps/macos",
+        "product-tests"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D06",
+      "name": "隔离可选离线工具并完成收口",
+      "outcome": "Benchmark、评分、parity 和冻结 Oracle 作为独立可选工具驱动 Native Candidate，产品与工具拥有分离的依赖、入口和验证责任，Phase 达到合入 main 的条件。",
+      "acceptance": [
+        "Benchmark 的默认执行后端为 Native；SRT 评分、矩阵和报告层不因导入而加载 Python Pipeline、OCR、OpenCV 或 Pillow。",
+        "冻结 Python Oracle 不再跟随 Native 新功能演进，只用于复现历史 golden 或专项对照；新行为由受审查的 Native producer、GT 与 Native tests 接受。",
+        "可选 Python 工具使用独立命名空间、依赖组和验证入口，不发布到 Native 产品 artifact，也不占用产品 sublift 命令。",
+        "工具运行产物默认写入 debug/benchmark 或临时目录，不重新创建已移除的 docs/plans、docs/reports 或其他过程归档目录。",
+        "Phase 退出条件全部取得证据后状态先进入 ready-for-merge；合入 main 并在 main 上完成最终产品验证后才置为 done。"
+      ],
+      "areas": [
+        "benchmark",
+        "parity",
+        "offline-oracle",
+        "release-verification"
+      ],
+      "status": "not-started",
+      "evidence": []
+    }
+  ],
+  "exit_criteria": [
+    "在不可调用 Python、uv 或 .venv 的环境中，Native CLI、macOS 与 Web 可以启动并诚实报告 Native capability。",
+    "Paddle 模型、字典与 ONNX Runtime 可在无 Python 环境中获取或随包解析，且通过版本、SHA-256 和原子安装校验。",
+    "Native CLI、macOS 与 Web 均以真实 Native 引擎完成视频提取和有效 SRT 导出；必要的取消、重启、错误与长流路径通过产品测试。",
+    "产品验证入口完全 Python-free；可选 Python benchmark、parity 和 Oracle 使用独立入口且不进入产品依赖图。",
+    "产品运行时不存在 runtime=python、Python Worker 或静默回退；故障回滚由可恢复的上一产品版本承担。",
+    "全部 Deliverable 完成后进入 ready-for-merge；合入 main 并在 main 上复验通过后将 Phase 标记为 done 并冻结。"
+  ]
+}

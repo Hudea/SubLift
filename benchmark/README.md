@@ -1,6 +1,10 @@
 # SubLift Benchmark
 
-端到端字幕质量诊断、参数矩阵、已有 SRT 评分与 Python Pipeline 性能归因。
+> Phase 13 将本目录定位为隔离、可选、离线的工程工具与版本化资产；它不是产品
+> 运行时，也不得成为 Native 产品门禁的必需依赖。`run/matrix/overhead` 当前仍重放
+> 历史 Python Pipeline；`score` 只读取已有 SRT，与产生它的 runtime 无关。
+
+可选的端到端字幕质量诊断、参数矩阵、已有 SRT 评分与历史 Python Pipeline 性能归因。
 
 统一入口：
 
@@ -34,13 +38,13 @@ scripts/
 - 临时运行一律进入 `debug/benchmark/`；
 - `debug/Zootopia_*.mp4|mkv` 是历史版本化配置引用的本地输入契约，不是运行产物；
 - `benchmark/baselines/` 只保存经过协议验收的版本化结论；
-- 产品 C++/GUI/Python 导出均通过同一个 `score` 口径比较。
+- Native CLI/GUI/Server、历史 Python 或外部工具导出均可通过同一个 `score` 口径比较。
 
 `phases.json` 是当前 checkout 的 root marker；`feature-list.json` 只为旧 checkout
 保留 fallback。`configs / datasets / baselines / parity` 都是版本化资产，不属于本机清理
 候选；本机输入和生成物的边界见 [`docs/design/benchmark.md`](../docs/design/benchmark.md)。
 
-## 四个日常命令
+## 四个可选工具命令
 
 ### 1. 执行单组配置
 
@@ -60,8 +64,8 @@ uv run sublift-benchmark run \
   --label paddle_8fps
 ```
 
-`run` 使用 Python in-process Pipeline，以保留阶段性能埋点；支持
-`vision / paddle / mock`。C++ Worker 或 GUI 已有导出使用 `score`。
+`run` 当前使用过渡期 Python in-process Pipeline 重放历史阶段性能埋点；支持
+`vision / paddle / mock`。它不是产品提取入口；Native 或 GUI 已有导出使用 `score`。
 
 ### 2. 参数矩阵
 
@@ -99,7 +103,7 @@ uv run sublift-benchmark matrix \
 
 ### 3. 评分已有 SRT
 
-适用于 GUI、C++ Worker、Python Worker 或外部工具的导出：
+适用于 Native CLI/GUI/Server、历史 Python 或外部工具的导出：
 
 ```bash
 uv run sublift-benchmark score \

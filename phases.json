@@ -82,9 +82,16 @@
     {
       "id": "phase12",
       "name": "Phase 12 - Cross-Platform Web UI & Native Server",
-      "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：首期对齐 Phase 10 单视频工作台，为 Linux 服务器与 Docker 环境提供零 Python 依赖的硬字幕提取服务。",
+      "description": "Native Web Server 与 Web 工作台已交付；12505 的 Linux 容器内 Paddle/模型闭环缺少真实 Docker 证明，Phase 保持阻塞而非完成。",
       "detail_file": "docs/phases/phase12.json",
-      "status": "done"
+      "status": "blocked"
+    },
+    {
+      "id": "phase13",
+      "name": "Phase 13 - 退役 Python Runtime，建立 Native-only 产品",
+      "description": "关闭产品双 runtime，完成 Native 资源与 Python-free 产品验证，将 Python 仅保留为隔离的可选离线工程工具。",
+      "detail_file": "docs/phases/phase13.json",
+      "status": "in-progress"
     }
   ]
 }
