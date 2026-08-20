@@ -339,8 +339,6 @@ final class SubtitleExtractor: ObservableObject {
         switch choice?.runtime {
         case .cpp:
             return ("C++", "C++ FfmpegExtractor")
-        case .python:
-            return ("Python", "Python FfmpegExtractor")
         case nil:
             return ("unknown", "unknown extractor")
         }
@@ -355,8 +353,7 @@ final class SubtitleExtractor: ObservableObject {
         guard choice.engine == .paddle else {
             return "\(choice.engine.rawValue) · \(choice.runtime.rawValue)"
         }
-        let state = choice.runtime == .python ? "oracle_or_rollback" : "stable"
-        return "PaddleOCR · \(choice.runtime.rawValue) · PP-OCRv6 small · \(state)"
+        return "PaddleOCR · cpp · PP-OCRv6 small · stable"
     }
 
     private func estimateDurationMs(url: URL) async -> Int {

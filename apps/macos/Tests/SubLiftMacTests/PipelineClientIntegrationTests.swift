@@ -2,44 +2,31 @@ import AppKit
 import XCTest
 @testable import SubLiftMac
 
-/// 跨进程集成测试：Swift PipelineClient 启动真实 Python 或 C++ Worker 子进程并握手。
+/// 跨进程集成测试：Swift PipelineClient 启动真实 C++ Worker 子进程并握手。
 ///
 /// 本地运行：`swift test --filter PipelineClientIntegrationTests`
 final class PipelineClientIntegrationTests: XCTestCase {
-
-    /// 复用客户端的运行时仓库定位，避免测试绑定开发者本机的绝对路径。
-    private var pythonPath: String { PipelineClient.defaultPythonPath }
 
     private var workerPath: String? {
         try? PipelineClient.findWorkerExecutable()
     }
 
-    func testPythonPathResolvesFromCurrentRepository() throws {
+    func testRepoRootDoesNotRequirePythonVenv() throws {
         let repoRoot = try XCTUnwrap(PipelineClient.findRepoRoot())
-        let expectedPath = repoRoot.appendingPathComponent(".venv/bin/python").path
-
-        XCTAssertEqual(pythonPath, expectedPath)
         XCTAssertTrue(
-            FileManager.default.isExecutableFile(atPath: pythonPath),
-            "当前仓库的 Python venv 不可执行: \(pythonPath)"
+            FileManager.default.fileExists(atPath: repoRoot.appendingPathComponent("phases.json").path)
+        )
+        XCTAssertTrue(
+            FileManager.default.fileExists(atPath: repoRoot.appendingPathComponent("cpp/CMakeLists.txt").path)
         )
     }
 
-    func testStartAndHandshakeWithPythonServer() throws {
-        let client = PipelineClient()
-        defer { client.stop() }
-
-        do {
-            let success = try client.start(requestedRuntime: "python", engine: "mock", pythonExecutable: pythonPath)
-            XCTAssertTrue(success, "握手应成功：发 hello 收 bye")
-        } catch let error as PipelineClientError {
-            XCTFail("PipelineClient 失败: \(error)")
-        }
-    }
-
     func testStopCleansUpResources() throws {
+        guard let workerBin = workerPath else {
+            throw XCTSkip("sublift_worker 未编译于 build/cpp/bin/")
+        }
         let client = PipelineClient()
-        try client.start(requestedRuntime: "python", engine: "mock", pythonExecutable: pythonPath)
+        try client.start(engine: "mock", workerExecutable: workerBin)
 
         let socketPath = client.socketPath
         XCTAssertFalse(socketPath.isEmpty)
@@ -61,7 +48,6 @@ final class PipelineClientIntegrationTests: XCTestCase {
         defer { client.stop() }
 
         let success = try client.start(
-            requestedRuntime: "cpp",
             engine: "mock",
             workerExecutable: workerBin
         )
@@ -77,7 +63,6 @@ final class PipelineClientIntegrationTests: XCTestCase {
         defer { client.stop() }
 
         let success = try client.start(
-            requestedRuntime: "cpp",
             engine: "mock",
             workerExecutable: workerBin
         )
@@ -114,16 +99,27 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertEqual(e.videoId, "VID-CPP-001")
     }
 
+    func testPythonRuntimeEnvFailsClosed() {
+        let client = PipelineClient()
+        defer { client.stop() }
+        XCTAssertThrowsError(
+            try client.start(
+                engine: "mock",
+                envOverride: ["SUBLIFT_RUNTIME": "python"]
+            )
+        ) { error in
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.pythonRuntimeRequested)
+        }
+    }
+
     func testPaddleEngineFailsClosedWhenCppDisabled() {
         let client = PipelineClient()
         defer { client.stop() }
 
-        // 显式关闭 C++ Paddle 时，产品 cpp 路径必须 fail-closed，不得静默 Python。
+        // 显式关闭 C++ Paddle 时，产品路径必须 fail-closed，不得静默换引擎或 Python。
         XCTAssertThrowsError(
             try client.start(
-                requestedRuntime: "cpp",
                 engine: "paddle",
-                pythonExecutable: pythonPath,
                 envOverride: ["SUBLIFT_CPP_PADDLE": "0"]
             )
         ) { error in
@@ -160,7 +156,10 @@ final class PipelineClientIntegrationTests: XCTestCase {
         defer { client.stop() }
 
         // start 内部已发 hello 收 bye；用 mock 引擎避免 Vision 依赖
-        let success = try client.start(engine: "mock", pythonExecutable: pythonPath)
+        guard let workerBin = workerPath else {
+            throw XCTSkip("sublift_worker 未编译于 build/cpp/bin/")
+        }
+        let success = try client.start(engine: "mock", workerExecutable: workerBin)
         XCTAssertTrue(success, "握手应成功")
 
         // 1. start_job → progress(stage=ready)
@@ -206,7 +205,10 @@ final class PipelineClientIntegrationTests: XCTestCase {
         let client = PipelineClient()
         defer { client.stop() }
 
-        try client.start(engine: "mock", pythonExecutable: pythonPath)
+        guard let workerBin = workerPath else {
+            throw XCTSkip("sublift_worker 未编译于 build/cpp/bin/")
+        }
+        try client.start(engine: "mock", workerExecutable: workerBin)
 
         let invalidMsg: [String: Any] = [
             "type": "start_job"

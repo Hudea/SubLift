@@ -56,8 +56,13 @@
         "runtime-policy",
         "product-documentation"
       ],
-      "status": "in-progress",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-08-20：产品 CLI 为 Native `build/cpp/bin/sublift`；`--runtime` 与 `SUBLIFT_RUNTIME=python` fail-closed。Python `sublift extract` 退出 2 并指向 Native CLI，不再转发 Worker。",
+        "2026-08-20：macOS `PipelineClient.start` 只启动 `sublift_worker`；`SUBLIFT_RUNTIME=python` 抛结构化错误；仓库定位不再依赖 `.venv` / PYTHONPATH。Web 仍为 Native Server 进程内路径。",
+        "2026-08-20：`./build/cpp/bin/sublift_tests \"[cli]\"` 6 cases / 56 assertions passed（参数、Worker 定位、协议握手、失败退出、mock SRT）。`ctest --test-dir build/cpp --output-on-failure` 195/195 passed。",
+        "2026-08-20：`cd apps/macos && swift test` — XCTest 373 passed、Swift Testing 140 passed。`uv run pytest -m \"not integration\" --no-cov` 551 passed；`uv run ruff check .`、`uv run mypy src tests`、`./init.sh` 通过。"
+      ]
     },
     {
       "id": "D03",

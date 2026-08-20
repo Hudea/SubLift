@@ -145,7 +145,7 @@ struct SettingsView: View {
                     .accessibilityElement(children: .combine)
                     .accessibilityLabel("\(engine.displayName)：\(label)")
                 }
-                Text("Python 仅作为显式 Oracle 或回滚使用。")
+                Text("Native 是唯一运行时；能力不可用时失败关闭，回滚请使用上一已验收版本。")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -21,6 +21,7 @@ set(_sublift_test_srcs
   sublift_models_test.cpp
   resource_locator_test.cpp
   worker_framing_test.cpp
+  cli_test.cpp
 
   worker_protocol_test.cpp
   worker_path_mode_test.cpp
@@ -119,12 +120,18 @@ endif()
 target_link_libraries(sublift_tests
   PRIVATE
     sublift_test_support
+    sublift_cli_lib
     sublift_worker_runtime
     sublift_server_runtime
     sublift_ffmpeg
     sublift_vision_macos
     sublift_paddle
     Catch2::Catch2WithMain
+)
+add_dependencies(sublift_tests sublift_cli sublift_worker)
+target_compile_definitions(sublift_tests PRIVATE
+  "SUBLIFT_CLI_PATH=\"$<TARGET_FILE:sublift_cli>\""
+  "SUBLIFT_WORKER_BIN=\"$<TARGET_FILE:sublift_worker>\""
 )
 if(COMMAND sublift_use_bundled_onnxruntime)
   sublift_use_bundled_onnxruntime(sublift_tests)

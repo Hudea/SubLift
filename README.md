@@ -116,10 +116,10 @@ CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相�
 ./build/cpp-rel/bin/sublift extract clip.mkv --engine paddle -o out.srt  # 使用上面的 Paddle Release 构建
 ```
 
-Phase 6.8 的 Python/C++ 对照结果属于迁移历史，不再定义产品运行时。Phase 13 起产品只
-接受 C++ Worker：能力不可用时 fail-closed；需要回滚时回滚到上一已验收版本，而不是在
-同一版本内切换 Python 实现。仓库中尚存的 Python CLI、IPC 路由和环境变量是待移除债务，
-不构成受支持用法。
+Phase 13 起产品只接受 C++ Worker：能力不可用时 fail-closed；需要回滚时回滚到上一已验收
+版本，而不是在同一版本内切换 Python 实现。产品 CLI、macOS 与 Web 不再接受 `--runtime`
+或 `SUBLIFT_RUNTIME` 作为实现选择。`uv run sublift extract` 会 fail-closed 并提示使用
+Native `build/cpp/bin/sublift`。
 
 ### Runtime 矩阵
 
@@ -143,8 +143,7 @@ Phase 6.8 的 Python/C++ 对照结果属于迁移历史，不再定义产品运�
 ## macOS GUI（开发者构建）
 
 > Phase 2 GUI 当前通过 SwiftPM 构建运行，**不做独立 `.app` 分发包**（见 ADR-0009）。
-> Phase 13 的 GUI 产品合同只启动 C++ `sublift_worker`。现存 Python runtime 分支属于
-> 迁移债务，不是支持的 GUI 模式。
+> Phase 13 的 GUI 产品合同只启动 C++ `sublift_worker`。能力不可用时失败关闭，不启动 Python。
 
 ```bash
 cd apps/macos

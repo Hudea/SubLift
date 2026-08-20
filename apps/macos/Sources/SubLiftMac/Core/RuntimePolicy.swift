@@ -1,7 +1,6 @@
 import Foundation
 
 public enum SubLiftRuntime: String, Codable, CaseIterable, Equatable, Sendable {
-    case python = "python"
     case cpp = "cpp"
 }
 
@@ -12,8 +11,6 @@ public enum SubLiftEngine: String, Codable, CaseIterable, Equatable, Sendable {
 }
 
 public enum ResolutionSource: String, Codable, Equatable, Sendable {
-    case explicitFlag = "explicit_flag"
-    case envVar = "env_var"
     case productDefault = "product_default"
 }
 
@@ -31,8 +28,8 @@ public struct WorkerChoice: Codable, Equatable, Sendable {
 
 public enum RuntimePolicyError: Error, Equatable, LocalizedError {
     case unsupportedEngine(String)
+    case pythonRuntimeRequested
     case invalidRuntime(String)
-    /// Product default/cpp path cannot silently fall back to Python when C++ Paddle is missing.
     case paddleCppUnavailable
 
     public var errorDescription: String? {
@@ -40,22 +37,22 @@ public enum RuntimePolicyError: Error, Equatable, LocalizedError {
         case .unsupportedEngine(let e):
             let supported = SubLiftEngine.allCases.map { $0.rawValue }.sorted().joined(separator: ", ")
             return "Unsupported engine '\(e)'. Supported: [\(supported)]"
+        case .pythonRuntimeRequested:
+            return "SUBLIFT_RUNTIME=python is not a product option. Native is the only runtime. "
+                + "Roll back to a previous product version instead."
         case .invalidRuntime(let r):
-            let supported = SubLiftRuntime.allCases.map { $0.rawValue }.sorted().joined(separator: ", ")
-            return "Invalid runtime '\(r)'. Supported: [\(supported)]"
+            return "SUBLIFT_RUNTIME='\(r)' is not a product option. Native is the only runtime."
         case .paddleCppUnavailable:
-            return "Paddle C++ engine is unavailable on this system. "
-                + "Set SUBLIFT_RUNTIME=python or request runtime=python explicitly for Oracle/rollback."
+            return "Paddle C++ engine is unavailable on this system. Native capability is missing; "
+                + "no Python fallback."
         }
     }
 }
 
 public enum RuntimePolicy {
     public static func resolve(
-        requestedRuntime: String? = nil,
         requestedEngine: String = "vision",
         envOverride: [String: String]? = nil,
-        defaultRuntime: SubLiftRuntime = .cpp,
         isCppPaddleAvailable: Bool = false
     ) throws -> WorkerChoice {
         let engineNorm = requestedEngine.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -63,36 +60,24 @@ public enum RuntimePolicy {
             throw RuntimePolicyError.unsupportedEngine(requestedEngine)
         }
 
-        var source: ResolutionSource = .productDefault
-        var candidateRuntimeStr: String = defaultRuntime.rawValue
-
-        if let flag = requestedRuntime, !flag.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            candidateRuntimeStr = flag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            source = .explicitFlag
-        } else {
-            let env = envOverride ?? ProcessInfo.processInfo.environment
-            if let envVal = env["SUBLIFT_RUNTIME"], !envVal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                candidateRuntimeStr = envVal.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                source = .envVar
+        let env = envOverride ?? ProcessInfo.processInfo.environment
+        if let envVal = env["SUBLIFT_RUNTIME"] {
+            let trimmed = envVal.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                let lower = trimmed.lowercased()
+                if lower == "python" {
+                    throw RuntimePolicyError.pythonRuntimeRequested
+                }
+                if lower != "cpp" {
+                    throw RuntimePolicyError.invalidRuntime(trimmed)
+                }
             }
         }
 
-        guard let candidateRuntime = SubLiftRuntime(rawValue: candidateRuntimeStr) else {
-            throw RuntimePolicyError.invalidRuntime(candidateRuntimeStr)
+        if engine == .paddle && !isCppPaddleAvailable {
+            throw RuntimePolicyError.paddleCppUnavailable
         }
 
-        if engine == .paddle {
-            if candidateRuntime == .cpp && isCppPaddleAvailable {
-                return WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: source)
-            }
-            if candidateRuntime == .cpp {
-                // Align with Python resolve_runtime: no silent paddle_override.
-                throw RuntimePolicyError.paddleCppUnavailable
-            }
-            // Explicit/env python remains the only product-visible rollback.
-            return WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: source)
-        }
-
-        return WorkerChoice(runtime: candidateRuntime, engine: engine, resolvedVia: source)
+        return WorkerChoice(runtime: .cpp, engine: engine, resolvedVia: .productDefault)
     }
 }

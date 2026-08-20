@@ -77,23 +77,18 @@ enum EngineCapability {
         }
     }
 
-    /// 引擎实际 runtime（RuntimePolicy 真实解析；Python 仅显式 Oracle/回滚）。
+    /// 引擎实际 runtime（产品只有 Native；缺失 capability 时如实不可用）。
     static func runtimeLabel(
         for engine: OcrEngineName,
         ffmpegAvailable: Bool,
         paddleModelsAvailable: Bool
     ) -> String {
         do {
-            let choice = try RuntimePolicy.resolve(
+            _ = try RuntimePolicy.resolve(
                 requestedEngine: engine.rawValue,
                 isCppPaddleAvailable: paddleModelsAvailable
             )
-            switch choice.runtime {
-            case .cpp:
-                return "C++ runtime（默认）"
-            case .python:
-                return "Python Oracle/回滚（显式）"
-            }
+            return "C++ runtime"
         } catch {
             return "不可用（\(error.localizedDescription)）"
         }

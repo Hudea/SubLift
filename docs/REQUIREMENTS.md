@@ -35,7 +35,8 @@ Native capability 缺失时必须 fail-closed；回滚到上一版已验收的 N
 - **F6 去重与合并** ✅：相邻同文去重、短空洞桥接与重叠处理；仍有少量 merged residual。
 - **F7 字幕导出** ⚠️：SRT 已完成；ASS、VTT 只有接口占位。
 - **F8 CLI** ✅：Native `sublift extract <video> -o <output>`，支持 fps、置信度、OCR 引擎及
-  文字系统参数；现存 Python console CLI 在 Phase 13 迁移完成前仅为过渡入口，最终移除。
+  文字系统参数。`--runtime` / `SUBLIFT_RUNTIME` 不是产品选项。Python console `sublift extract`
+  已 fail-closed，指向 Native CLI；包占用待后续 Deliverable 移除。
 - **F9 中英文与混排** ⚠️：Vision 配置 zh-Hans + en-US，`auto/cjk/latin` 画像和多帧共识已实现；显式 CJK 边界清理对无空格混排仍有误删风险。
 - **F10 引擎自动路由** ⚠️：GUI 可按候选文字推断文字系统，但尚未实现多 OCR 引擎自动选择。
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。

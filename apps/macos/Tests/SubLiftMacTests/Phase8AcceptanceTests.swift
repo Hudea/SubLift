@@ -82,12 +82,9 @@ final class Phase8AcceptanceTests: XCTestCase {
         guard let mp4 = spikeVideo("mp4-h264.mp4"), let mov = spikeVideo("mov-h264.mov") else {
             throw XCTSkip("素材缺失（debug/spikes/）")
         }
-        // 环境 guard：worker/python 缺失时如实跳过（与 08206 smoke 惯例一致）。
+        // 环境 guard：worker 缺失时如实跳过（与 08206 smoke 惯例一致）。
         if (try? PipelineClient.findWorkerExecutable()) == nil {
             throw XCTSkip("sublift_worker 未编译")
-        }
-        guard FileManager.default.isExecutableFile(atPath: PipelineClient.defaultPythonPath) else {
-            throw XCTSkip("仓库 Python venv 不可执行")
         }
         // 3 任务：2 真实视频（completed）+ 1 不存在文件（failed）。
         var completedA = BatchTask.make(sourceURL: mp4, engine: .vision, quality: .fast, developerMode: false)

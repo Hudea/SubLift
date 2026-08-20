@@ -4,40 +4,36 @@ import XCTest
 final class RuntimePolicyTests: XCTestCase {
     func testDefaultCppRuntime() throws {
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
             requestedEngine: "vision",
             envOverride: [:]
         )
         XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .productDefault))
     }
 
-    func testEnvVarCppOverride() throws {
+    func testEnvVarCppIsIgnoredNoOp() throws {
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
             requestedEngine: "vision",
-            envOverride: ["SUBLIFT_RUNTIME": "cpp"],
-            defaultRuntime: .python
+            envOverride: ["SUBLIFT_RUNTIME": "cpp"]
         )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .envVar))
+        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .productDefault))
     }
 
-    func testExplicitFlagOverridesEnv() throws {
-        let choice = try RuntimePolicy.resolve(
-            requestedRuntime: "python",
-            requestedEngine: "vision",
-            envOverride: ["SUBLIFT_RUNTIME": "cpp"],
-            defaultRuntime: .python
-        )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .vision, resolvedVia: .explicitFlag))
+    func testPythonEnvFailsClosed() {
+        XCTAssertThrowsError(
+            try RuntimePolicy.resolve(
+                requestedEngine: "vision",
+                envOverride: ["SUBLIFT_RUNTIME": "python"]
+            )
+        ) { error in
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.pythonRuntimeRequested)
+        }
     }
 
     func testPaddleEngineThrowsWhenCppUnavailable() {
         XCTAssertThrowsError(
             try RuntimePolicy.resolve(
-                requestedRuntime: "cpp",
                 requestedEngine: "paddle",
-                envOverride: ["SUBLIFT_RUNTIME": "cpp"],
-                defaultRuntime: .python,
+                envOverride: [:],
                 isCppPaddleAvailable: false
             )
         ) { error in
@@ -47,81 +43,55 @@ final class RuntimePolicyTests: XCTestCase {
 
     func testPaddleProductDefaultUsesCppWhenAvailable() throws {
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
             requestedEngine: "paddle",
             envOverride: [:],
-            defaultRuntime: .cpp,
             isCppPaddleAvailable: true
         )
         XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .paddle, resolvedVia: .productDefault))
     }
 
-    func testPaddleProductDefaultThrowsWhenUnavailable() {
+    func testPaddlePythonEnvFailsClosedEvenIfCppAvailable() {
         XCTAssertThrowsError(
             try RuntimePolicy.resolve(
-                requestedRuntime: nil,
                 requestedEngine: "paddle",
-                envOverride: [:],
-                defaultRuntime: .cpp,
-                isCppPaddleAvailable: false
+                envOverride: ["SUBLIFT_RUNTIME": "python"],
+                isCppPaddleAvailable: true
             )
         ) { error in
-            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.paddleCppUnavailable)
+            XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.pythonRuntimeRequested)
         }
     }
 
-    func testPaddleExplicitPythonRemainsRollback() throws {
+    func testMockEngineNativeOnly() throws {
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: "python",
-            requestedEngine: "paddle",
-            envOverride: [:],
-            defaultRuntime: .cpp,
-            isCppPaddleAvailable: true
-        )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .python, engine: .paddle, resolvedVia: .explicitFlag))
-    }
-
-    func testMockEngineEnvCpp() throws {
-        let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
             requestedEngine: "mock",
-            envOverride: ["SUBLIFT_RUNTIME": "cpp"],
-            defaultRuntime: .python
+            envOverride: [:]
         )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .mock, resolvedVia: .envVar))
+        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .mock, resolvedVia: .productDefault))
     }
 
     func testWhitespaceAndCaseTrimming() throws {
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: "  CPP  ",
             requestedEngine: "  VISION ",
-            envOverride: [:],
-            defaultRuntime: .python
-        )
-        XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .explicitFlag))
-    }
-
-    func testCutoverDefaultCpp() throws {
-        let choice = try RuntimePolicy.resolve(
-            requestedRuntime: nil,
-            requestedEngine: "vision",
-            envOverride: [:],
-            defaultRuntime: .cpp
+            envOverride: ["SUBLIFT_RUNTIME": "  CPP  "]
         )
         XCTAssertEqual(choice, WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .productDefault))
     }
 
     func testInvalidEngineThrows() {
         XCTAssertThrowsError(
-            try RuntimePolicy.resolve(requestedRuntime: nil, requestedEngine: "onnx")
+            try RuntimePolicy.resolve(requestedEngine: "onnx")
         ) { error in
             XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.unsupportedEngine("onnx"))
         }
     }
 
-    func testInvalidRuntimeThrows() {
+    func testInvalidRuntimeEnvThrows() {
         XCTAssertThrowsError(
-            try RuntimePolicy.resolve(requestedRuntime: "invalid_rt", requestedEngine: "vision")
+            try RuntimePolicy.resolve(
+                requestedEngine: "vision",
+                envOverride: ["SUBLIFT_RUNTIME": "invalid_rt"]
+            )
         ) { error in
             XCTAssertEqual(error as? RuntimePolicyError, RuntimePolicyError.invalidRuntime("invalid_rt"))
         }

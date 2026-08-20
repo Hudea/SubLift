@@ -1,7 +1,7 @@
 import Foundation
 import Darwin
 
-/// Pipeline IPC 客户端：负责启动 Worker 子进程（C++ sublift_worker 或 Python server）并经 UDS 通信。
+/// Pipeline IPC 客户端：启动 C++ `sublift_worker` 并经 UDS 通信。
 ///
 /// **并发约定**：每个实例由一次 extract 独占；`request*` 只在 slow 后台队列调用，
 /// `stop()` 可从任意线程幂等调用（关闭 fd / terminate 进程 / unlink socket）。
@@ -11,13 +11,13 @@ public final class PipelineClient: @unchecked Sendable {
     /// 消息最大上限 (64 MiB)，对齐 Python/C++ 协议。
     static let maxMessageSize = 64 * 1024 * 1024
 
-    /// Worker 子进程（C++ 或 Python）。
+    /// C++ Worker 子进程。
     private var process: Process?
     /// UDS socket 路径。
     private(set) var socketPath: String = ""
     /// 已连接的 socket 文件描述符。
     private var socketFD: Int32 = -1
-    /// 最近一次成功握手的最终路由；供 GUI 显示真实 runtime / fallback 状态。
+    /// 最近一次成功握手的 Worker 选择；供 GUI 显示 Native runtime / engine 身份。
     public private(set) var lastWorkerChoice: WorkerChoice?
 
     public init() {}
@@ -256,29 +256,23 @@ public final class PipelineClient: @unchecked Sendable {
 
     // MARK: - 子进程管理
 
-    /// 启动 Worker 子进程（根据 RuntimePolicy 自动路由为 C++ sublift_worker 或 Python server）并连接 UDS。
+    /// 启动 C++ `sublift_worker` 并连接 UDS。能力不可用时 fail-closed，不启动 Python。
     /// - Parameters:
-    ///   - requestedRuntime: 显式强制 runtime ("python" | "cpp" | nil)
     ///   - engine: OCR 引擎（"vision"、"paddle" 或 "mock"，默认 "vision"）
-    ///   - pythonExecutable: 自定义 Python 解释器路径（开发期默认 `.venv/bin/python`）
     ///   - workerExecutable: 自定义 C++ Worker 路径
     ///   - envOverride: 环境变量覆盖（用于单测）
     /// - Returns: 是否成功握手（发 hello 收 bye）
     @discardableResult
     public func start(
-        requestedRuntime: String? = nil,
         engine: String = "vision",
-        pythonExecutable: String? = nil,
         workerExecutable: String? = nil,
         envOverride: [String: String]? = nil
     ) throws -> Bool {
-        // 先确保清理掉之前的进程和资源
         stop()
         lastWorkerChoice = nil
 
         let envForPolicy = envOverride ?? ProcessInfo.processInfo.environment
         let choice = try RuntimePolicy.resolve(
-            requestedRuntime: requestedRuntime,
             requestedEngine: engine,
             envOverride: envForPolicy,
             isCppPaddleAvailable: Self.probeCppPaddleAvailable(
@@ -293,7 +287,6 @@ public final class PipelineClient: @unchecked Sendable {
         let process = Process()
         var env = envOverride ?? ProcessInfo.processInfo.environment
 
-        // 继承环境并补上 Homebrew
         let extraPath = "/opt/homebrew/opt/ffmpeg-full/bin:/opt/homebrew/bin:/usr/local/bin"
         if let path = env["PATH"], !path.isEmpty {
             env["PATH"] = extraPath + ":" + path
@@ -301,14 +294,7 @@ public final class PipelineClient: @unchecked Sendable {
             env["PATH"] = extraPath + ":/usr/bin:/bin"
         }
 
-        let repoRoot = Self.findRepoRoot()
-        if let repoRoot {
-            let srcPath = repoRoot.appendingPathComponent("src").path
-            if let pp = env["PYTHONPATH"], !pp.isEmpty {
-                env["PYTHONPATH"] = srcPath + ":" + pp
-            } else {
-                env["PYTHONPATH"] = srcPath
-            }
+        if let repoRoot = Self.findRepoRoot() {
             process.currentDirectoryURL = repoRoot
         }
 
@@ -316,33 +302,16 @@ public final class PipelineClient: @unchecked Sendable {
         process.standardOutput = FileHandle.standardError
         process.standardError = FileHandle.standardError
 
-        if choice.runtime == .cpp {
-            let execPath = try (workerExecutable ?? Self.findWorkerExecutable(envOverride: env))
-            process.executableURL = URL(fileURLWithPath: execPath)
-            process.arguments = [
-                "--socket", socketPath,
-                "--engine", choice.engine.rawValue
-            ]
-            if choice.engine == .paddle {
-                print("[SubLift] IPC worker start bin=\(execPath) engine=paddle runtime=cpp model=PP-OCRv6-small status=stable socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
-            } else {
-                print("[SubLift] IPC C++ worker start bin=\(execPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
-            }
+        let execPath = try (workerExecutable ?? Self.findWorkerExecutable(envOverride: env))
+        process.executableURL = URL(fileURLWithPath: execPath)
+        process.arguments = [
+            "--socket", socketPath,
+            "--engine", choice.engine.rawValue
+        ]
+        if choice.engine == .paddle {
+            print("[SubLift] IPC worker start bin=\(execPath) engine=paddle runtime=cpp model=PP-OCRv6-small status=stable socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
         } else {
-            let resolvedPath = pythonExecutable ?? Self.defaultPythonPath
-            process.executableURL = URL(fileURLWithPath: resolvedPath)
-            process.arguments = [
-                "-m", "sublift.ipc.server",
-                "--socket", socketPath,
-                "--engine", choice.engine.rawValue,
-                "--log-level", "INFO"
-            ]
-            if choice.engine == .paddle {
-                let status = choice.runtime == .python ? "oracle_or_rollback" : "stable"
-                print("[SubLift] IPC worker start python=\(resolvedPath) engine=paddle runtime=python model=PP-OCRv6-small status=\(status) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
-            } else {
-                print("[SubLift] IPC Python server start python=\(resolvedPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
-            }
+            print("[SubLift] IPC C++ worker start bin=\(execPath) engine=\(choice.engine.rawValue) socket=\(socketPath) via=\(choice.resolvedVia.rawValue)")
         }
 
         do {
@@ -500,14 +469,18 @@ public final class PipelineClient: @unchecked Sendable {
         return 0
     }
 
-    /// 向上查找含 `.venv` 与 `src/sublift` 的仓库根。
+    /// 向上查找含 `phases.json` 与 `cpp/CMakeLists.txt` 的仓库根。不依赖 `.venv`。
     static func findRepoRoot() -> URL? {
+        func isRepoRoot(_ url: URL) -> Bool {
+            let phases = url.appendingPathComponent("phases.json")
+            let cmake = url.appendingPathComponent("cpp/CMakeLists.txt")
+            return FileManager.default.fileExists(atPath: phases.path)
+                && FileManager.default.fileExists(atPath: cmake.path)
+        }
+
         var currentURL = URL(fileURLWithPath: Bundle.main.bundlePath)
         for _ in 0..<8 {
-            let venv = currentURL.appendingPathComponent(".venv/bin/python")
-            let pkg = currentURL.appendingPathComponent("src/sublift")
-            if FileManager.default.fileExists(atPath: venv.path),
-               FileManager.default.fileExists(atPath: pkg.path) {
+            if isRepoRoot(currentURL) {
                 return currentURL
             }
             currentURL = currentURL.deletingLastPathComponent()
@@ -515,24 +488,13 @@ public final class PipelineClient: @unchecked Sendable {
 
         var cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         for _ in 0..<6 {
-            let venv = cwd.appendingPathComponent(".venv/bin/python")
-            let pkg = cwd.appendingPathComponent("src/sublift")
-            if FileManager.default.fileExists(atPath: venv.path),
-               FileManager.default.fileExists(atPath: pkg.path) {
+            if isRepoRoot(cwd) {
                 return cwd
             }
             cwd = cwd.deletingLastPathComponent()
         }
         return nil
     }
-
-    /// 开发期默认 Python 路径（项目根 `.venv/bin/python`）。
-    static let defaultPythonPath: String = {
-        if let root = findRepoRoot() {
-            return root.appendingPathComponent(".venv/bin/python").path
-        }
-        return Bundle.main.bundlePath + "/../../.venv/bin/python"
-    }()
 
     private func makeSocketPath() -> String {
         let tempDir = NSTemporaryDirectory()
@@ -643,7 +605,7 @@ public enum PipelineClientError: Error, Equatable {
     case socketCreateFailed(Int32)
     case socketConnectFailed(Int32)
     case socketWriteFailed(Int32)
-    /// Python 或 C++ Worker 返回 `done(ok=false)` 或 `error`。
+    /// Native Worker 返回 `done(ok=false)` 或 `error`。
     case serverError(String)
     /// 对端关闭连接（含用户取消关闭 socket）。
     case connectionClosed

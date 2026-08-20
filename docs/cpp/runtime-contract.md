@@ -1,8 +1,8 @@
 # Native Runtime 契约
 
-> ADR-0038 已确认 Native-only 目标；Phase 13 正在迁移。当前代码仍可能暴露 Python CLI、
-> IPC Server、`runtime=python` 或 `SUBLIFT_RUNTIME=python`，它们是待移除债务，不表示本契约
-> 已全部实现。
+> ADR-0038 已确认 Native-only 目标。D02 已关闭产品宿主上的双 runtime：Native CLI、macOS
+> 与 Web 只启动 Native Worker/Server；`--runtime` 与 `SUBLIFT_RUNTIME=python` 不再选择
+> 实现。仓库中尚存的 Python console 提示、IPC Server 源码与隔离 Oracle 属于 D05/D06 债务。
 
 ## 1. 产品入口
 
@@ -49,9 +49,8 @@ Pipeline/IPC，也不得把离线工具作为产品依赖。
 
 迁移完成前仍需逐项移除并以无 Python 环境验证：
 
-- Python console CLI 及其进程内 Pipeline；
-- Python UDS Server、Swift Python 启动分支与 `SUBLIFT_RUNTIME` 路由；
-- macOS 宿主查找 C++ Worker 时对 `.venv` / `PYTHONPATH` 的耦合；
+- Python console 包名占用与进程内 Pipeline（产品 extract 已 fail-closed，源码待 D05 移除）；
+- Python UDS Server 与隔离 Oracle 入口（产品宿主已不再启动）；
 - 模型预下载、ORT 选取和 Native 日常验证对 Python 工具链的依赖。
 
 可选 Python 工具若继续存在，必须是隔离、离线、非产品的工具；不得成为任何产品门的唯一

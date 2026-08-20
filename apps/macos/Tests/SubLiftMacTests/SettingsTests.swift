@@ -109,7 +109,7 @@ final class EngineCapabilityTests: XCTestCase {
     }
 
     func testRuntimeLabelUsesRealResolution() {
-        // Python 仅显式 Oracle/回滚：默认解析为 C++ runtime。
+        // 产品只有 Native runtime。
         let label = EngineCapability.runtimeLabel(
             for: .vision,
             ffmpegAvailable: true,

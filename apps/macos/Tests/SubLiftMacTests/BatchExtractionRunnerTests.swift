@@ -103,7 +103,7 @@ final class BatchExtractionRunnerTests: XCTestCase {
     }
 
     func testSuccessfulRunWritesAtomicallyAndReportsSummary() async throws {
-        fakeClient.workerChoice = WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .explicitFlag)
+        fakeClient.workerChoice = WorkerChoice(runtime: .cpp, engine: .vision, resolvedVia: .productDefault)
         fakeClient.onRequest = { _, onProgress in
             // 真实进度映射：processing pct → extracting；finalizing → exporting。
             onProgress(0.2, "processing")
@@ -275,12 +275,9 @@ final class BatchExtractionRunnerSmokeTests: XCTestCase {
               let mov = spikeVideo("mov-h264.mov") else {
             throw XCTSkip("素材缺失（debug/spikes/mp4-h264.mp4 或 mov-h264.mov）")
         }
-        // 环境 guard：worker/python 缺失时如实跳过（与 PipelineClientIntegrationTests 惯例一致）。
+        // 环境 guard：worker 缺失时如实跳过（与 PipelineClientIntegrationTests 惯例一致）。
         if (try? PipelineClient.findWorkerExecutable()) == nil {
             throw XCTSkip("sublift_worker 未编译")
-        }
-        guard FileManager.default.isExecutableFile(atPath: PipelineClient.defaultPythonPath) else {
-            throw XCTSkip("仓库 Python venv 不可执行")
         }
         let outDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("sublift-smoke-\(UUID().uuidString)", isDirectory: true)
