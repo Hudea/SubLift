@@ -38,7 +38,8 @@
 - 会话初始化：`./init.sh`
 - Native Debug 构建：`cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON && cmake --build build/cpp`
 - macOS GUI：`cd apps/macos && swift build && swift run SubLiftMac`
-- 当前全仓验证：`./scripts/verify-standard.sh`（过渡态，仍包含 Python Oracle 检查；不得据此宣称 Python 是产品依赖）
+- 产品验证：`./scripts/verify-product.sh`（Python-free；不安装/运行 Python，不因缺少 Python 跳过产品必测项）
+- 过渡全仓 / Oracle：`./scripts/verify-standard.sh`（仍包含 Python Oracle 检查，不是产品依赖）
 
 **测试与验证**：
 
@@ -47,7 +48,7 @@
 - Web：`npm --prefix apps/web test`
 - 隔离 Python 工具（仅修改对应树时）：`uv run ruff check .`、`uv run mypy src tests`、`uv run pytest -m "not integration" --no-cov`
 
-`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。不要虚构尚不存在的 Native 总门；在 Phase 13 完成前，如实说明 `scripts/verify-standard.sh` 的 Python 过渡依赖。
+`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。产品行为以 `./scripts/verify-product.sh` 为准；`scripts/verify-standard.sh` 仍是含 Python Oracle 的过渡全仓门。
 
 ## 代码 / 架构约束
 

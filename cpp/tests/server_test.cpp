@@ -639,14 +639,15 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
       }
 
       REQUIRE(job_ctx->is_terminal());
+      REQUIRE(job_ctx->status == sublift::server::JobStatus::Completed);
 
-      // Verify SRT Export endpoint
       auto exp_res = cli.Get(("/api/jobs/" + job_id + "/export").c_str());
       REQUIRE(exp_res != nullptr);
-      if (job_ctx->status == sublift::server::JobStatus::Completed) {
-        REQUIRE(exp_res->status == 200);
-        REQUIRE(exp_res->get_header_value("Content-Type") == "text/plain; charset=utf-8");
-        REQUIRE(exp_res->get_header_value("Content-Disposition").find("attachment;") != std::string::npos);
+      REQUIRE(exp_res->status == 200);
+      REQUIRE(exp_res->get_header_value("Content-Type") == "text/plain; charset=utf-8");
+      REQUIRE(exp_res->get_header_value("Content-Disposition").find("attachment;") != std::string::npos);
+      if (!exp_res->body.empty()) {
+        REQUIRE(exp_res->body.find("-->") != std::string::npos);
       }
 
       std::error_code ec;

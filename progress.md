@@ -4,7 +4,7 @@
 
 - **最后更新：** 2026-08-20
 - **当前 Phase：** [Phase 13 - 退役 Python Runtime，建立 Native-only 产品](docs/phases/phase13.json)（`in-progress`）
-- **当前 Deliverable：** D04 Python-free 产品门与测试迁移
+- **当前 Deliverable：** D05 移除活跃 Python 产品实现
 - **进度真源：** [`phases.json`](phases.json) → `detail_file`；本文件只提供当前工作与阻塞导航。
 
 ## Phase 13 目标
@@ -18,7 +18,7 @@
 1. D01 退役决策与验收基线 — `done`
 2. D02 关闭产品双 Runtime — `done`
 3. D03 Native 模型与 ORT 资源闭环 — `done`
-4. D04 Python-free 产品门与测试迁移 — `not-started`
+4. D04 Python-free 产品门与测试迁移 — `done`
 5. D05 移除活跃 Python 产品实现 — `not-started`
 6. D06 隔离可选离线工具并最终收口 — `not-started`
 

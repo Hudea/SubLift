@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased] — Phase 13 D04: Python-free product gate
+
+- Product verification is `./scripts/verify-product.sh`. It does not install or run Python, and it does not skip required checks when python/uv/.venv are missing.
+- The gate runs CTest, Swift tests, Web Vitest/build, Native resource/ORT/capability probes, CLI mock and paddle extract, and a Native Server job that exports SRT.
+- `./scripts/verify-standard.sh` remains the transitional Oracle/parity gate.
+
 ## [Unreleased] — Phase 13 D03: Native model and ORT resource loop
 
 - Paddle PP-OCRv6-small files and ONNX Runtime are pinned by `native-resources/manifest.v1.json` (SHA-256).

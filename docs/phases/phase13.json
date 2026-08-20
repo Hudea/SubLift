@@ -105,8 +105,12 @@
         "apps/macos/Tests",
         "apps/web"
       ],
-      "status": "not-started",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-08-20：新增 `./scripts/verify-product.sh`（实现于 `scripts/verification/verify-product.sh`）。脚本不调用 python/uv/.venv；缺少这些工具时仍运行全部产品必测项。",
+        "2026-08-20：门覆盖 cmake/ctest、`swift test`、`npm --prefix apps/web test` 与 `build`、`sublift resources status`、ORT 定位、CLI mock/paddle 提取、缺失视频与 `--runtime python` fail-closed、`sublift_server` `/api/system/info` + POST `/api/jobs` mock 导出 SRT。",
+        "2026-08-20：`./scripts/verify-product.sh` 通过 23 / 失败 0。CTest server jobs 收紧为 mock 任务必须 Completed 且 export 200。`./init.sh` 通过。"
+      ]
     },
     {
       "id": "D05",
