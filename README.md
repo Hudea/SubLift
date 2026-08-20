@@ -24,8 +24,8 @@ Native C++；Vision 与准备好模型的 PaddleOCR 均在本机离线推理。
 - Xcode 15+ 或 SwiftPM（仅 GUI 构建需要）
 - Node.js 20+（仅 Web UI 构建需要）
 
-Python 3.12+ 与 `uv` 当前只服务仍在迁移的 benchmark、诊断、历史 Oracle 和兼容代码；
-Phase 13 完成后，它们不是产品安装条件，也不得成为 Native-only 产品运行或最终门禁的依赖。
+Python 3.12+ 与 `uv` 只服务隔离的可选离线工具（benchmark、评分、冻结 Oracle）；
+它们不是产品安装条件，也不得成为 Native-only 产品运行或产品门禁的依赖。
 
 ## 文档
 
@@ -50,8 +50,8 @@ ctest --test-dir build/cpp --output-on-failure
 产品验证入口是 `./scripts/verify-product.sh`：不安装 Python 依赖、不运行 Python
 脚本，也不因为缺少 `python` / `uv` / `.venv` 而跳过产品必测项。
 
-`./scripts/verify-standard.sh` 仍可用于过渡全仓与历史 Oracle/parity；不得据此把
-Python 解释为产品依赖。
+隔离离线工具入口是 `./scripts/verify-offline.sh`。`./scripts/verify-standard.sh`
+仍可用于过渡全仓（Native + Oracle）；不得据此把 Python 解释为产品依赖。
 
 ### 可选的过渡工具
 

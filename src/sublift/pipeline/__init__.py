@@ -1,4 +1,4 @@
-"""端到端编排串联层。"""
+"""Frozen Oracle pipeline. Do not evolve with Native product features."""
 
 from sublift.pipeline.changepoint import (
     ChangePointDetector,

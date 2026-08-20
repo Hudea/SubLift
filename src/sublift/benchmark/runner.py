@@ -1,45 +1,33 @@
-"""Benchmark 编排：视频 + ground truth → pipeline → 报告。
+"""Benchmark 编排：视频 + ground truth → Native Candidate → 报告。
 
-``run_benchmark`` 是一键入口：用现有 ``sublift`` 包跑端到端提取，与 ground
-truth 一起交给诊断报告层分析。报告输出由 ``sublift.benchmark.report`` 负责。
+默认执行后端是 Native CLI。``--backend oracle`` 才加载冻结的 Python Pipeline。
 """
 
 from __future__ import annotations
 
 import hashlib
 import multiprocessing as mp
+import os
+import subprocess
+import tempfile
 import time
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from queue import Empty
 from typing import Any, Literal
 
 from sublift.benchmark.config import RunConfig
 from sublift.benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
-from sublift.benchmark.pipeline_config import apply_pipeline_overrides
+from sublift.benchmark.media import probe_duration_seconds
+from sublift.benchmark.result import RunResult
 from sublift.benchmark.srt import SrtEntry, load_srt
-from sublift.config import Config
-from sublift.detector.base import Detector
 from sublift.diagnostics.performance import (
     PerformanceMode,
-    PerformanceRecorder,
     aggregate_run_payloads,
-    collect_environment,
     parse_performance_mode,
 )
-from sublift.extractor import FfmpegExtractor
-from sublift.extractor.frame_io import plan_frame_io
-from sublift.models import BoundingBox, SubtitleEntry
-from sublift.ocr import (
-    MockOcrEngine,
-    OcrEngine,
-    PaddleOcrEngine,
-    VisionOcrEngine,
-    is_paddle_available,
-    is_vision_available,
-)
-from sublift.pipeline import Pipeline
+from sublift.worker_bin import resolve_native_cli, resolve_worker_bin
 
 # feat-037 固定 GT 质量门（与 phase3-opt-perf / feat-034 锚点对齐）
 _QUALITY_TIMING_F1 = 0.952
@@ -57,19 +45,6 @@ _OCR_COMPONENTS_NON_ZERO_MIN = 2  # Vision 至少 input_prepare 和 vision_perfo
 _WORKER_BASE_TIMEOUT_S = 120.0
 _WORKER_TIMEOUT_PER_VIDEO_S = 10.0
 _WORKER_JOIN_TIMEOUT_S = 30.0
-
-
-@dataclass(frozen=True)
-class RunResult:
-    """一次 benchmark 运行的完整结果。"""
-
-    config: RunConfig
-    detected: list[SrtEntry]
-    ground_truth: list[SrtEntry]
-    elapsed_seconds: float
-    video_duration_seconds: float
-    exported_srt_path: Path | None = None
-    performance: dict[str, Any] | None = None
 
 
 def run_benchmark(config: RunConfig) -> RunResult:
@@ -99,9 +74,9 @@ def run_benchmark(config: RunConfig) -> RunResult:
 
     mode = parse_performance_mode(config.performance_mode)
     ground_truth = load_srt(config.ground_truth_path)
-    video_duration = config.video_duration_seconds or _probe_duration(config.video_path)
+    video_duration = config.video_duration_seconds or probe_duration_seconds(config.video_path)
     multi = config.warmup_runs > 0 or config.measured_runs > 1
-    isolate = bool(config.isolate_processes and multi)
+    isolate = bool(config.isolate_processes and multi and config.backend == "oracle")
 
     # 预热：丢弃结果（仍跑完整路径，避免冷启动污染 measured）
     for _ in range(config.warmup_runs):
@@ -350,7 +325,118 @@ def _run_once(
     video_duration: float,
     segment_path: Path | None = None,
 ) -> tuple[RunResult, dict[str, Any] | None]:
-    """执行单次 pipeline 提取；返回 (RunResult, performance payload|None)。"""
+    """Dispatch a single extract to Native (default) or frozen Oracle."""
+    backend = (config.backend or "native").strip().lower()
+    if backend == "native":
+        return _run_once_native(config, video_duration=video_duration)
+    if backend == "oracle":
+        return _run_once_oracle(
+            config,
+            mode=mode,
+            video_duration=video_duration,
+            segment_path=segment_path,
+        )
+    raise ValueError(f"unknown benchmark backend: {config.backend!r}")
+
+
+def _run_once_native(
+    config: RunConfig,
+    *,
+    video_duration: float,
+) -> tuple[RunResult, dict[str, Any] | None]:
+    """Run Native product CLI and load the exported SRT."""
+    _require_native_supported(config)
+    cli = resolve_native_cli()
+    if cli is None:
+        raise RuntimeError(
+            "Native CLI not found. Build C++ core or set SUBLIFT_CLI_PATH."
+        )
+    with tempfile.TemporaryDirectory(prefix="sublift-bench-native-") as tmp:
+        output = Path(tmp) / "detected.srt"
+        command = [
+            str(cli),
+            "extract",
+            str(config.video_path),
+            "-o",
+            str(output),
+            "--engine",
+            config.engine,
+            "--fps",
+            str(config.fps),
+            "--confidence",
+            str(config.confidence),
+            "--script",
+            config.subtitle_script,
+        ]
+        env = os.environ.copy()
+        worker = resolve_worker_bin()
+        if worker is not None:
+            env["SUBLIFT_WORKER_PATH"] = str(worker)
+        started = time.perf_counter()
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+        )
+        elapsed = time.perf_counter() - started
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout).strip()
+            raise RuntimeError(f"Native extract failed: {detail}")
+        detected = load_srt(output) if output.exists() else []
+        exported_path: Path | None = None
+        if output.exists():
+            config.output_dir.mkdir(parents=True, exist_ok=True)
+            exported_path = config.output_dir / f"{config.output_prefix}.detected.srt"
+            exported_path.write_text(output.read_text(encoding="utf-8"), encoding="utf-8")
+    ground_truth = load_srt(config.ground_truth_path)
+    result = RunResult(
+        config=config,
+        detected=detected,
+        ground_truth=ground_truth,
+        elapsed_seconds=elapsed,
+        video_duration_seconds=video_duration,
+        exported_srt_path=exported_path,
+        performance=None,
+    )
+    return result, None
+
+
+def _require_native_supported(config: RunConfig) -> None:
+    """Reject Oracle-only knobs on the default Native backend."""
+    if config.performance_mode not in ("off", ""):
+        raise RuntimeError(
+            "Native backend does not record Python pipeline performance; "
+            "use --backend oracle for frozen Oracle traces"
+        )
+    if config.region_box is not None:
+        raise RuntimeError(
+            "Native backend does not apply region_box; use --backend oracle"
+        )
+    if config.frame_output_mode == "roi":
+        raise RuntimeError(
+            "Native backend does not apply frame_output_mode=roi; use --backend oracle"
+        )
+    if config.pipeline_overrides:
+        raise RuntimeError(
+            "Native backend does not apply pipeline overrides; use --backend oracle"
+        )
+
+
+def _run_once_oracle(
+    config: RunConfig,
+    *,
+    mode: PerformanceMode,
+    video_duration: float,
+    segment_path: Path | None = None,
+) -> tuple[RunResult, dict[str, Any] | None]:
+    """Frozen Python Oracle extract. Not the product path."""
+    from sublift.benchmark.pipeline_config import apply_pipeline_overrides
+    from sublift.config import Config
+    from sublift.diagnostics.performance import PerformanceRecorder, collect_environment
+    from sublift.pipeline import Pipeline
+
     recorder: PerformanceRecorder | None = None
     if mode is not PerformanceMode.OFF:
         recorder = PerformanceRecorder(mode=mode, segment_path=segment_path)
@@ -433,49 +519,6 @@ def _run_once(
     finally:
         if recorder is not None:
             recorder.close()
-
-
-def align_existing_srt(
-    config: RunConfig,
-    detected_path: Path,
-    *,
-    elapsed_seconds: float | None = None,
-    video_duration_seconds: float | None = None,
-) -> RunResult:
-    """对已存在的 SRT 产物计算指标（不跑 pipeline）。
-
-    用于复现历史/外部跑出的结果，例如 GUI 端用选定区域导出的 SRT。
-
-    Args:
-        config: 运行配置（label 用于区分基线）。
-        detected_path: 已存在的 SRT 文件路径。
-        elapsed_seconds: 可选耗时；缺省时速度指标为 0。
-        video_duration_seconds: 可选视频时长；缺省时从 config.video_path 探测。
-
-    Returns:
-        ``RunResult``。
-    """
-    if not detected_path.exists():
-        raise FileNotFoundError(f"检测产物 SRT 不存在: {detected_path}")
-    if not config.ground_truth_path.exists():
-        raise FileNotFoundError(f"ground truth 文件不存在: {config.ground_truth_path}")
-
-    ground_truth = load_srt(config.ground_truth_path)
-    detected = load_srt(detected_path)
-
-    dur = video_duration_seconds
-    if dur is None and config.video_path.exists():
-        dur = _probe_duration(config.video_path)
-    dur = dur or 0.0
-    elapsed = elapsed_seconds or 0.0
-    return RunResult(
-        config=config,
-        detected=detected,
-        ground_truth=ground_truth,
-        elapsed_seconds=elapsed,
-        video_duration_seconds=dur,
-        exported_srt_path=detected_path,
-    )
 
 
 def _validate_ocr_breakdown(
@@ -564,8 +607,16 @@ def _validate_ocr_breakdown(
             )
 
 
-def _build_ocr_engine(engine: str) -> OcrEngine:
-    """Construct a Python benchmark OCR engine."""
+def _build_ocr_engine(engine: str) -> Any:
+    """Construct a frozen Oracle OCR engine."""
+    from sublift.ocr import (
+        MockOcrEngine,
+        PaddleOcrEngine,
+        VisionOcrEngine,
+        is_paddle_available,
+        is_vision_available,
+    )
+
     if engine == "vision":
         if not is_vision_available():
             raise RuntimeError(
@@ -594,9 +645,13 @@ def _validate_frame_output_mode(config: RunConfig) -> None:
 
 def _build_extractor_and_detector(
     config: RunConfig,
-    recorder: PerformanceRecorder | None,
-) -> tuple[FfmpegExtractor, Detector]:
+    recorder: Any,
+) -> tuple[Any, Any]:
     """经 plan_frame_io 一次定案 extractor + detector。"""
+    from sublift.extractor import FfmpegExtractor
+    from sublift.extractor.frame_io import plan_frame_io
+    from sublift.models import BoundingBox
+
     region = None
     if config.region_box is not None:
         x, y, width, height = config.region_box
@@ -618,7 +673,7 @@ def _build_extractor_and_detector(
     return extractor, plan.detector
 
 
-def _entry_to_srt(index: int, entry: SubtitleEntry) -> SrtEntry:
+def _entry_to_srt(index: int, entry: Any) -> SrtEntry:
     """将 ``SubtitleEntry`` 转换为 benchmark 内部 ``SrtEntry``。"""
     return SrtEntry(
         index=index,
@@ -694,30 +749,3 @@ def _quality_snapshot(result: RunResult, *, run_index: int) -> dict[str, Any]:
             "text_empty": empty,
         },
     }
-
-
-def _probe_duration(video_path: Path) -> float:
-    """用 ffprobe 探测视频时长（秒）。失败时回退到 ground truth 最后时间码。"""
-    import json
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "json",
-                str(video_path),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        data = json.loads(result.stdout)
-        return float(data["format"]["duration"])
-    except (subprocess.CalledProcessError, KeyError, ValueError, FileNotFoundError):
-        return 0.0

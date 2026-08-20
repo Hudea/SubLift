@@ -614,6 +614,7 @@ class TestBenchmarkFrameOutputMode:
             measured_runs=1,
             isolate_processes=False,
             output_dir=tmp_path / "out",
+            backend="oracle",
         )
         result = run_benchmark(config)
         assert result.performance is not None

@@ -2,7 +2,7 @@
 
 > ADR-0038 已确认 Native-only 目标。D02 已关闭产品宿主上的双 runtime：Native CLI、macOS
 > 与 Web 只启动 Native Worker/Server；`--runtime` 与 `SUBLIFT_RUNTIME=python` 不再选择
-> 实现。仓库中尚存的 Python console 提示、IPC Server 源码与隔离 Oracle 属于 D05/D06 债务。
+> 实现。产品路径已无 Python CLI/IPC。隔离 Oracle 与 benchmark 属于离线工具，不进入产品运行。
 
 ## 1. 产品入口
 
@@ -45,15 +45,14 @@ Pipeline/IPC，也不得把离线工具作为产品依赖。
   manifest/SHA 是 Native artifact 的一部分。
 - 正式分发是否包含模型、动态库、签名和公证由发布范围单独定义，不能从开发构建 capability 推断。
 
-## 5. Phase 13 过渡债务
+## 5. 隔离离线工具
 
-迁移完成前仍需逐项移除并以无 Python 环境验证：
+产品路径已关闭 Python CLI、IPC 与 runtime 选择。剩余 Python 只作为隔离离线工具：
 
-- Python console 包名占用与进程内 Pipeline（产品 extract 已 fail-closed，源码待 D05 移除）；
-- Python UDS Server 与隔离 Oracle 入口（产品宿主已不再启动）；
-- 隔离 Oracle / parity 仍走 `scripts/verify-standard.sh`；产品日常验证是 `scripts/verify-product.sh`。
+- 公开命名空间：`sublift_offline` / `sublift-benchmark`；不占用产品 `sublift` 命令。
+- 冻结 Oracle 位于 `src/sublift/` 算法副本，仅复现历史 golden 或专项对照。
+- 离线验证入口：`scripts/verify-offline.sh`。产品日常验证：`scripts/verify-product.sh`。
 
-可选 Python 工具若继续存在，必须是隔离、离线、非产品的工具；不得成为任何产品门的唯一
-执行器或行为权威。
+可选 Python 工具不得成为任何产品门的唯一执行器或行为权威。
 
 Worker 的传输与消息时序见 [Worker IPC 契约](worker-ipc-contract.md)。

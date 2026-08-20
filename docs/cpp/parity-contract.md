@@ -3,8 +3,8 @@
 产品行为由版本化 golden、固定 GT 与 Native tests 共同约束。Python 曾用于生成迁移期基线，
 但不再是在线 Oracle、产品运行时或可重新解释既有资产的权威。
 
-> ADR-0038 已确认该目标；Phase 13 正在迁移验证入口。当前尚存的 Python parity/benchmark
-> 脚本可继续读取历史资产，但不得据此声称 Native-only 验收已经完成。
+> ADR-0038 已确认该目标。Python parity/benchmark 是隔离离线工具；产品验收以
+> Native tests、版本化 golden 与 `scripts/verify-product.sh` 为准。
 
 ## 1. 行为真源
 

@@ -24,7 +24,8 @@
 
 ## 项目结构地图
 
-- `src/sublift/`：待退役的 Python CLI/IPC/Pipeline 与待隔离的 Oracle、benchmark、诊断实现；不是目标产品运行时。
+- `src/sublift/`：冻结 Oracle 与离线工具内部实现（benchmark/诊断）；不是产品运行时，不随 Native 新功能演进。
+- `src/sublift_offline/`：可选离线工具的公开命名空间（`python -m sublift_offline`）。
 - `cpp/`：Native C++ Core、Worker、Vision/Paddle adapters 与 CTest。
 - `apps/macos/`：SwiftUI 开发者 GUI 与 Swift 测试。
 - `apps/web/`：Vue 3 / TypeScript Web UI 与 Vitest。
@@ -39,16 +40,17 @@
 - Native Debug 构建：`cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON && cmake --build build/cpp`
 - macOS GUI：`cd apps/macos && swift build && swift run SubLiftMac`
 - 产品验证：`./scripts/verify-product.sh`（Python-free；不安装/运行 Python，不因缺少 Python 跳过产品必测项）
-- 过渡全仓 / Oracle：`./scripts/verify-standard.sh`（仍包含 Python Oracle 检查，不是产品依赖）
+- 隔离离线工具：`./scripts/verify-offline.sh`（benchmark / 评分 / 冻结 Oracle；不是产品门）
+- 过渡全仓：`./scripts/verify-standard.sh`（Native + 离线 Python 检查的混合门，不是产品依赖）
 
 **测试与验证**：
 
 - C++：`ctest --test-dir build/cpp --output-on-failure`
 - Swift（macOS）：`cd apps/macos && swift test`
 - Web：`npm --prefix apps/web test`
-- 隔离 Python 工具（仅修改对应树时）：`uv run ruff check .`、`uv run mypy src tests`、`uv run pytest -m "not integration" --no-cov`
+- 隔离 Python 工具（仅修改对应树时）：`uv sync --extra oracle --extra vision --extra paddle`，然后 `uv run ruff check .`、`uv run mypy src tests`、`uv run pytest -m "not integration" --no-cov`
 
-`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。产品行为以 `./scripts/verify-product.sh` 为准；`scripts/verify-standard.sh` 仍是含 Python Oracle 的过渡全仓门。
+`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。产品行为以 `./scripts/verify-product.sh` 为准。可选 Python 工具走 `./scripts/verify-offline.sh`；`scripts/verify-standard.sh` 仍是含离线 Oracle 的过渡全仓门。
 
 ## 代码 / 架构约束
 
@@ -62,7 +64,7 @@
     → unavailable: fail closed
   ```
 
-- Python CLI/IPC 路由、`.venv` 驱动的 Worker 查找、RapidOCR 模型缓存和从 Python wheel 取 ORT 都是待清除的过渡债务，不得新增依赖。
+- Python CLI/IPC 路由、`.venv` 驱动的 Worker 查找、RapidOCR 模型缓存和从 Python wheel 取 ORT 已从产品路径清除；不得重新引入。
 - 活样本：`cpp/src/application/`（Native composition root）；`src/sublift/benchmark/config.py` 仅作为隔离工具的严格配置样本。
 
 ## Phase / Deliverable / Task

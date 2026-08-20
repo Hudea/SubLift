@@ -6,7 +6,8 @@ import sys
 
 _MSG = (
     "错误：产品入口是 Native CLI（build/cpp/bin/sublift）。\n"
-    "Python 包不再提供 extract / IPC Worker。离线工具请使用 sublift-benchmark。"
+    "Python 包不再提供 extract / IPC Worker。离线工具请使用 "
+    "sublift-benchmark / python -m sublift_offline。"
 )
 
 

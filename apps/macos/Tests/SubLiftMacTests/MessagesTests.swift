@@ -6,7 +6,7 @@ import Testing
 /// 验证 Swift 端 Codable struct 与 Python protocol.py 字段名一一对应。
 struct MessagesTests {
 
-    // MARK: - Request Messages (Swift → Python)
+    // MARK: - Request Messages (Swift → Worker)
 
     @Test
     func startJobRoundtrip() throws {
@@ -192,7 +192,7 @@ struct MessagesTests {
         #expect(json["video_id"] as? String == "V1")
     }
 
-    // MARK: - Response Messages (Python → Swift)
+    // MARK: - Response Messages (Worker → Swift)
 
     @Test
     func progressRoundtrip() throws {

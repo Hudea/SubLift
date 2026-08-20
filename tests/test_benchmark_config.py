@@ -150,6 +150,7 @@ def test_load_run_config_default_performance_off(tmp_path: Path) -> None:
     assert config.performance_mode == "off"
     assert config.warmup_runs == 0
     assert config.measured_runs == 1
+    assert config.backend == "native"
 
 
 def test_load_run_config_performance_block(tmp_path: Path) -> None:
@@ -290,6 +291,44 @@ def test_pipeline_overrides_are_validated_and_applied(tmp_path: Path) -> None:
     }
     assert resolved.min_duration_ms == 300
     assert resolved.change_point.presence_threshold == 0.02
+    assert config.backend == "native"
+
+
+def test_load_run_config_backend_oracle(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    manifest_dir = repo / "benchmark" / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (repo / "pyproject.toml").write_text("", encoding="utf-8")
+    (repo / "phases.json").write_text("{}", encoding="utf-8")
+    manifest = manifest_dir / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/datasets/movie.srt",
+                "backend": "oracle",
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = load_run_config(manifest)
+    assert config.backend == "oracle"
+
+
+def test_load_run_config_rejects_unknown_backend(tmp_path: Path) -> None:
+    manifest = tmp_path / "run.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "video": "debug/movie.mp4",
+                "ground_truth": "benchmark/datasets/movie.srt",
+                "backend": "python",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ManifestError, match="backend"):
+        load_run_config(manifest)
 
 
 def test_pipeline_overrides_reject_unknown_and_reserved_fields(tmp_path: Path) -> None:

@@ -4,10 +4,10 @@
 > 必需依赖。** 当前实现仍位于 Python 树中，以下内容记录其现状与可复现用法，不表示
 > Python Pipeline 继续受到产品支持。
 >
-> 实现：`src/sublift/benchmark/`（过渡态）
+> 实现：`src/sublift/benchmark/`；公开命名空间：`src/sublift_offline/`
 > 配置与数据：`benchmark/`
 > 固定本地媒体：`debug/`；本机运行产物：`debug/benchmark/`
-> 可选工具入口：`uv run sublift-benchmark`
+> 可选工具入口：`uv run sublift-benchmark` / `python -m sublift_offline`
 
 用法见 [`benchmark/README.md`](../../benchmark/README.md)。
 
@@ -34,8 +34,8 @@
 └───────────────┬───────────────────────┬─────────────────┘
                 │                       │
 ┌───────────────▼──────────────┐  ┌────▼─────────────────┐
-│ Optional Oracle execution    │  │ Existing SRT scoring │
-│ Python Pipeline + perf spans │  │ runtime agnostic     │
+│ Native CLI (default)         │  │ Existing SRT scoring │
+│ Optional frozen Oracle       │  │ runtime agnostic     │
 └───────────────┬──────────────┘  └────┬─────────────────┘
                 └──────────────┬────────┘
                                │
@@ -56,7 +56,7 @@
 | `config.py` | `RunConfig`、v1/v2 JSON、路径解析、未知字段拒绝、dotted override |
 | `pipeline_config.py` | Pipeline 参数白名单、嵌套类型校验与不可变 Config 合成 |
 | `matrix.py` | `--set / --vary` 解析、组合数上限、确定性 label、笛卡尔积 |
-| `runner.py` | Python Pipeline 执行、warmup/measured、进程隔离、质量快照 |
+| `runner.py` | 默认 Native CLI；`backend=oracle` 才加载冻结 Python Pipeline |
 | `srt.py` | GT 与 detection 共用的 SRT 解析 |
 | `diagnostics.py` | 一对一对齐、指标、case 分类、gates、failure clusters |
 | `report.py` | 单组 agent JSON、GT/det CSV、Markdown |
@@ -65,14 +65,14 @@
 | `roi_compare.py` | feat-039 full/ROI 冻结硬门 |
 | `git_utils.py` | 显式 `--label auto` 的递增目录 |
 
-Native 产品热路径不依赖 benchmark 包或 Python recorder。现有 Python runner 与
-`src/sublift/diagnostics/performance.py` 仅为过渡期研究、历史复现和基线解释服务。
+Native 产品热路径不依赖 benchmark 包或 Python recorder。冻结 Oracle 与
+`src/sublift/diagnostics/performance.py` 只服务历史复现和专项对照。
 
 ## 4. 资产与兼容生命周期
 
 | 类别 | 路径 / 入口 | 生命周期与规则 |
 |---|---|---|
-| Optional CLI | `uv run sublift-benchmark` | 当前 Python benchmark 内部的统一入口；不是产品 CLI，也不是 Native 门禁入口。 |
+| Optional CLI | `uv run sublift-benchmark` / `python -m sublift_offline` | 隔离离线工具入口；不是产品 CLI，也不是 Native 门禁入口。 |
 | Historical shim | `scripts/run_benchmark_manifest.py`、`scripts/measure_perf_overhead.py`、`scripts/compare_roi_ab.py` | R2 历史复现兼容面；只可打印提示并向 canonical CLI 转发，不复制 runner/config/report 实现。由 `tests/test_benchmark_wrappers.py` 覆盖。 |
 | Root marker compatibility | `phases.json`；`feature-list.json` fallback | 新 checkout 优先使用 `phases.json`；仅 legacy checkout 使用 `feature-list.json`。无任一 marker 时回退调用时 cwd，三种情况由 `tests/test_benchmark_config.py` 覆盖。 |
 | Versioned configs | `benchmark/configs/` | 可复现 run/matrix 配置，入库；被报告或测试引用的 Phase config 不因编号或名称过旧而删除。 |
@@ -134,9 +134,16 @@ Pipeline 调参统一放在 `run.pipeline` 下，并能用 dotted path 进入 ma
 
 ## 6. 执行与评分
 
-### 6.1 `run / matrix / overhead`（可选 Oracle 路径）
+### 6.1 `run / matrix`（默认 Native）
 
-当前使用冻结的 Python in-process Oracle 组件：
+默认 ``backend`` 为 ``native``：subprocess 调用 Native 产品 CLI，再对导出 SRT
+评分。Native 路径不支持 Oracle 专有的 ``region_box``、``frame_output_mode=roi``、
+``pipeline`` 覆盖和 Python performance recorder；这些能力需要显式
+``--backend oracle``。
+
+### 6.1.1 冻结 Oracle 路径
+
+``overhead`` 与历史 performance 配置使用冻结的 Python in-process Oracle：
 
 ```text
 FfmpegExtractor
@@ -227,5 +234,5 @@ pipeline_overhead；`finalize` 是容器 span，不重复计入。
   泄漏到 CMake、Swift、C++ Worker、Web Server 或产品验证入口；
 - Native 质量门应直接消费版本化 SRT、fixture、golden 和阈值；只有生成或复核这些资产时
   才需要启动隔离 Oracle；
-- 若将来 C++ 暴露同构 performance schema，可新增 Native execution backend；在此之前，
-  不以 Python runner 代替 Native 验收。
+- Native execution backend 已是默认；Python Oracle 冻结，只用于复现历史 golden 或专项对照。
+- 不以 Python runner 代替 Native 验收。

@@ -48,7 +48,8 @@ TEST_CASE("Server System Info and CORS Preflight", "[server][system_info]") {
 
   httplib::Client cli("127.0.0.1", port);
   cli.set_connection_timeout(std::chrono::seconds(2));
-  cli.set_read_timeout(std::chrono::seconds(2));
+  // Cold-disk SHA-256 of the four paddle files can take ~1.5–2s.
+  cli.set_read_timeout(std::chrono::seconds(5));
 
   SECTION("GET /api/system/info returns valid runtime metadata") {
     auto res = cli.Get("/api/system/info");
@@ -107,7 +108,8 @@ TEST_CASE("Server CORS opt-in emits configured origin", "[server][system_info]")
 
   httplib::Client cli("127.0.0.1", port);
   cli.set_connection_timeout(std::chrono::seconds(2));
-  cli.set_read_timeout(std::chrono::seconds(2));
+  // Cold-disk SHA-256 of the four paddle files can take ~1.5–2s.
+  cli.set_read_timeout(std::chrono::seconds(5));
 
   auto res = cli.Get("/api/system/info");
   REQUIRE(res != nullptr);

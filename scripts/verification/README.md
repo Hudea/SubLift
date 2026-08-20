@@ -7,4 +7,5 @@ one Native CLI extract plus one Native Server extract that exports SRT.
 It does not install Python packages, does not run Python scripts, and does not
 skip a required product check because `python`, `uv`, or `.venv` are missing.
 
-Isolated Oracle, parity, and benchmark tools stay on `../verify-standard.sh`.
+Isolated Oracle, parity, and benchmark tools use `../verify-offline.sh`.
+`../verify-standard.sh` remains the transitional mixed Native + Oracle gate.

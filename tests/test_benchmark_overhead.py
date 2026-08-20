@@ -10,7 +10,7 @@ import pytest
 
 import sublift.benchmark.overhead as overhead
 from sublift.benchmark.config import RunConfig
-from sublift.benchmark.runner import RunResult
+from sublift.benchmark.result import RunResult
 from sublift.benchmark.srt import SrtEntry
 from sublift.diagnostics.performance import PerformanceMode
 

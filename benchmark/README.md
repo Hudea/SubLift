@@ -1,15 +1,16 @@
 # SubLift Benchmark
 
 > Phase 13 将本目录定位为隔离、可选、离线的工程工具与版本化资产；它不是产品
-> 运行时，也不得成为 Native 产品门禁的必需依赖。`run/matrix/overhead` 当前仍重放
-> 历史 Python Pipeline；`score` 只读取已有 SRT，与产生它的 runtime 无关。
+> 运行时，也不得成为 Native 产品门禁的必需依赖。`run/matrix` 默认驱动 Native CLI；
+> 冻结 Python Oracle 只在 `--backend oracle` 时加载。`score` 只读取已有 SRT。
 
-可选的端到端字幕质量诊断、参数矩阵、已有 SRT 评分与历史 Python Pipeline 性能归因。
+可选的端到端字幕质量诊断、参数矩阵、已有 SRT 评分与冻结 Oracle 性能归因。
 
 统一入口：
 
 ```bash
 uv run sublift-benchmark --help
+python -m sublift_offline --help
 ```
 
 设计见 [`docs/design/benchmark.md`](../docs/design/benchmark.md)。
@@ -17,7 +18,8 @@ uv run sublift-benchmark --help
 ## 目录边界
 
 ```text
-src/sublift/benchmark/       # 可执行代码（随 sublift 包安装）
+src/sublift_offline/         # 公开离线工具命名空间
+src/sublift/benchmark/       # 可执行代码（随 sublift-offline 包安装）
 benchmark/
   configs/                   # 可复现 run / matrix JSON
   datasets/                  # GT、确定性生成 recipe 与数据 manifest
@@ -64,8 +66,10 @@ uv run sublift-benchmark run \
   --label paddle_8fps
 ```
 
-`run` 当前使用过渡期 Python in-process Pipeline 重放历史阶段性能埋点；支持
-`vision / paddle / mock`。它不是产品提取入口；Native 或 GUI 已有导出使用 `score`。
+`run` 默认调用 Native 产品 CLI。冻结 Python Pipeline 仅用于历史 performance
+trace 或专项对照：`--backend oracle` 或 config `"backend": "oracle"`。它不是产品
+提取入口；Native 或 GUI 已有导出使用 `score`。需要 Oracle 区域/ROI/pipeline 调参
+时也必须显式选择 oracle 后端。
 
 ### 2. 参数矩阵
 

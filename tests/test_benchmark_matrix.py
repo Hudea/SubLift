@@ -11,7 +11,7 @@ from sublift.benchmark.cli import main
 from sublift.benchmark.config import ManifestError, RunConfig, load_manifest
 from sublift.benchmark.matrix import expand_matrix, parse_set_args, parse_vary_args
 from sublift.benchmark.matrix_report import completed_record, write_matrix_reports
-from sublift.benchmark.runner import RunResult
+from sublift.benchmark.result import RunResult
 from sublift.benchmark.srt import SrtEntry
 
 

@@ -234,6 +234,7 @@ def test_benchmark_off_summary_trace_mock_video(tmp_path: Path) -> None:
             measured_runs=1,
             video_duration_seconds=1.0,
             isolate_processes=False,
+            backend="oracle",
         )
 
     off = run_benchmark(_cfg("off", "off"))
@@ -294,6 +295,7 @@ def test_benchmark_multi_run_quality_hash(tmp_path: Path) -> None:
         measured_runs=2,
         video_duration_seconds=1.0,
         isolate_processes=False,
+        backend="oracle",
     )
     result = run_benchmark(cfg)
     assert result.performance is not None

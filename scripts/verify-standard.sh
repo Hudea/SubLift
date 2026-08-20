@@ -98,12 +98,12 @@ echo "=============================="
 echo " 依赖同步"
 echo "=============================="
 echo
-# Product optional engines: keep both extras so sync does not prune them.
-if uv sync --extra vision --extra paddle 2>&1; then
-    printf "${GREEN}[OK]${NC}  uv sync --extra vision --extra paddle 成功\n"
+# Isolated offline extras: oracle (OpenCV/NumPy/Pillow) plus OCR engines.
+if uv sync --extra oracle --extra vision --extra paddle 2>&1; then
+    printf "${GREEN}[OK]${NC}  uv sync --extra oracle --extra vision --extra paddle 成功\n"
     pass=$((pass + 1))
 else
-    printf "${RED}[FAIL]${NC} uv sync --extra vision --extra paddle 失败\n"
+    printf "${RED}[FAIL]${NC} uv sync --extra oracle --extra vision --extra paddle 失败\n"
     fail=$((fail + 1))
 fi
 

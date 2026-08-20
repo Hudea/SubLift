@@ -8,6 +8,7 @@
   "match_threshold": 0.5,
   "region_box": [0, 848, 1920, 87],
   "frame_output_mode": "full",
+  "backend": "oracle",
   "label": "feat039_full",
   "output_dir": "debug/benchmark/runs/feat039_roi_ab",
   "performance": {

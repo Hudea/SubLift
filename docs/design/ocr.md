@@ -113,7 +113,7 @@ PIL.Image
 ### 依赖与安装
 
 ```bash
-uv sync --extra paddle   # rapidocr>=3.9.0,<4.0.0 + onnxruntime>=1.16
+uv sync --extra oracle --extra paddle   # frozen Oracle OpenCV + rapidocr/onnxruntime
 ```
 
 首次运行自动下载模型到 `~/.cache/sublift/rapidocr-models`（约 30MB），跨 venv 复用。离线环境可预下载：

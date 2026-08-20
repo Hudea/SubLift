@@ -8,6 +8,7 @@ import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from sublift.benchmark.config import (
     ManifestError,
@@ -29,7 +30,7 @@ from sublift.benchmark.matrix_report import (
     write_matrix_reports,
 )
 from sublift.benchmark.report import write_reports
-from sublift.benchmark.runner import align_existing_srt, run_benchmark
+from sublift.benchmark.score import align_existing_srt
 
 _EXPECTED_ERRORS = (FileNotFoundError, ManifestError, RuntimeError, ValueError)
 
@@ -127,6 +128,12 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="KEY=VALUE",
         help="通用参数覆盖，可重复",
     )
+    show_parser.add_argument(
+        "--backend",
+        choices=("native", "oracle"),
+        default=None,
+        help="提取后端：native（默认）或 oracle",
+    )
     show_parser.set_defaults(handler=_command_show)
     return parser
 
@@ -145,6 +152,12 @@ def _add_config_options(parser: argparse.ArgumentParser) -> None:
         default="manifest",
         help="manifest=使用配置标签；auto=按提交递增；其它值=显式标签",
     )
+    parser.add_argument(
+        "--backend",
+        choices=("native", "oracle"),
+        default=None,
+        help="提取后端：native（默认，产品 CLI）或 oracle（冻结 Python Pipeline）",
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -160,8 +173,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _command_run(args: argparse.Namespace) -> int:
+    from sublift.benchmark.runner import run_benchmark
+
     document = load_manifest(args.config)
-    config = resolve_run_config(document, overrides=parse_set_args(args.set))
+    config = resolve_run_config(document, overrides=_config_overrides(args))
     config = _prepare_single_output(config, label_mode=args.label)
     paths = write_reports(run_benchmark(config))
     _print_paths("benchmark 完成", paths)
@@ -174,7 +189,7 @@ def _command_score(args: argparse.Namespace) -> int:
     if args.duration is not None and args.duration <= 0:
         raise ManifestError("--duration 必须大于 0")
     document = load_manifest(args.config)
-    config = resolve_run_config(document, overrides=parse_set_args(args.set))
+    config = resolve_run_config(document, overrides=_config_overrides(args))
     config = _prepare_single_output(config, label_mode=args.label)
     result = align_existing_srt(
         config,
@@ -189,7 +204,7 @@ def _command_score(args: argparse.Namespace) -> int:
 
 def _command_show(args: argparse.Namespace) -> int:
     document = load_manifest(args.config)
-    config = resolve_run_config(document, overrides=parse_set_args(args.set))
+    config = resolve_run_config(document, overrides=_config_overrides(args))
     payload = {
         "schema_version": 2,
         "config": config_to_dict(config),
@@ -212,7 +227,7 @@ def _command_overhead(args: argparse.Namespace) -> int:
     from sublift.benchmark.overhead import run_overhead
 
     document = load_manifest(args.config)
-    config = resolve_run_config(document, overrides=parse_set_args(args.set))
+    config = resolve_run_config(document, overrides=_config_overrides(args))
     config = _prepare_single_output(config, label_mode=args.label)
     report, path = run_overhead(
         config,
@@ -228,8 +243,10 @@ def _command_overhead(args: argparse.Namespace) -> int:
 
 
 def _command_matrix(args: argparse.Namespace) -> int:
+    from sublift.benchmark.runner import run_benchmark
+
     document = load_manifest(args.config)
-    fixed_overrides = parse_set_args(args.set)
+    fixed_overrides = _config_overrides(args)
     cli_axes = parse_vary_args(args.vary)
     base_config = resolve_run_config(document, overrides=fixed_overrides)
     matrix_label, matrix_output = _prepare_matrix_output(base_config, label_mode=args.label)
@@ -302,6 +319,14 @@ def _command_matrix(args: argparse.Namespace) -> int:
     paths = write_matrix_reports(records, matrix_output)
     _print_paths("matrix 完成", paths)
     return 1 if stop_after_failure or any(record.status != "pass" for record in records) else 0
+
+
+def _config_overrides(args: argparse.Namespace) -> dict[str, Any]:
+    overrides: dict[str, Any] = dict(parse_set_args(args.set))
+    backend = getattr(args, "backend", None)
+    if backend:
+        overrides["backend"] = backend
+    return overrides
 
 
 def _prepare_single_output(config: RunConfig, *, label_mode: str) -> RunConfig:

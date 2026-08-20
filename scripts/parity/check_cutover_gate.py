@@ -424,7 +424,7 @@ def _score_entries_against_gt(
     """Score detected entries against frozen GT SRT using benchmark diagnostics."""
     from sublift.benchmark.config import RunConfig
     from sublift.benchmark.diagnostics import TEXT_EMPTY, TEXT_NOISE, analyze_result
-    from sublift.benchmark.runner import RunResult
+    from sublift.benchmark.result import RunResult
     from sublift.benchmark.srt import SrtEntry, load_srt
 
     detected = [

@@ -36,7 +36,8 @@ Native capability 缺失时必须 fail-closed；回滚到上一版已验收的 N
 - **F7 字幕导出** ⚠️：SRT 已完成；ASS、VTT 只有接口占位。
 - **F8 CLI** ✅：Native `sublift extract <video> -o <output>`，支持 fps、置信度、OCR 引擎及
   文字系统参数。`--runtime` / `SUBLIFT_RUNTIME` 不是产品选项。Python console `sublift extract`
-  已 fail-closed，指向 Native CLI；包占用待后续 Deliverable 移除。
+  已 fail-closed，指向 Native CLI。可选离线工具使用 `sublift-benchmark` /
+  `python -m sublift_offline`，不占用产品 `sublift` 命令。
 - **F9 中英文与混排** ⚠️：Vision 配置 zh-Hans + en-US，`auto/cjk/latin` 画像和多帧共识已实现；显式 CJK 边界清理对无空格混排仍有误删风险。
 - **F10 引擎自动路由** ⚠️：GUI 可按候选文字推断文字系统，但尚未实现多 OCR 引擎自动选择。
 - **F11 进度与取消** ✅：CLI/GUI 显示真实处理阶段和百分比；GUI 可快速终止 ffmpeg 与后台任务并重新开始。
@@ -50,9 +51,10 @@ Native capability 缺失时必须 fail-closed；回滚到上一版已验收的 N
 
 ### 3.2 Benchmark 与可观察性
 
-- **F15 Benchmark 框架** ✅：`sublift-benchmark` 统一提供单组运行、通用参数矩阵、
-  已有 SRT 评分和配置检查；支持固定 GT、一对一对齐、timing/CER/usable/速度指标及
-  JSON/CSV/Markdown 诊断产物。
+- **F15 Benchmark 框架** ✅：隔离离线工具 `sublift-benchmark` 统一提供单组运行、
+  通用参数矩阵、已有 SRT 评分和配置检查；默认提取后端为 Native CLI，冻结 Oracle
+  仅在显式 `backend=oracle` 时加载。支持固定 GT、一对一对齐、timing/CER/usable/
+  速度指标及 JSON/CSV/Markdown 诊断产物。评分层导入不加载 Pipeline/OCR/OpenCV/Pillow。
 - **F16 时间轴诊断** ✅：`scripts/diagnostics/run_timeline.py` 与 benchmark failure clusters 可定位漏检、合并和误检。
 - **F17 参数扫描** ✅：通用 `--set / --vary` 与 v2 config matrix 可组合 fps、engine、
   performance 等已注册参数，自动输出 matrix plan 和聚合 JSON/CSV/Markdown；历史算法
@@ -197,10 +199,11 @@ Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 - [x] 完整 Swift 测试（201 XCTest + 140 Swift Testing）、项目标准门 10/10、V01–V09/960 紧凑/Light-Dark 截图及 A01/A02 代码与自动测试证据通过
 - [ ] V10 Increase Contrast/Reduce Transparency 实际切换、完整 VoiceOver 朗读会话和部分真实点击路径仍受系统权限限制；替代覆盖与边界记录于 10412–10415 evidence
 
-### Phase 13 — Python Runtime 退役与 Native-only 收口（迁移中）
+### Phase 13 — Python Runtime 退役与 Native-only 收口（ready-for-merge）
 
 - [x] ADR-0038 已确认唯一 Native 产品运行时、fail-closed 与版本回滚边界
-- [~] Python 产品 CLI、Pipeline、IPC、runtime 路由及宿主接线正在移除，尚未完成
-- [ ] 产品安装、构建、启动、提取、导出与 Native 日常验证在无 Python / `.venv` 环境通过
-- [ ] 模型与 ORT 资源准备脱离 Python 生态，并以固定 manifest/SHA 验收
-- [ ] 最后 Python 产品 revision 以 Git/tag 保存；工作树不建立源码 archive
+- [x] Python 产品 CLI、IPC、runtime 路由及宿主接线已移除；算法副本冻结为隔离 Oracle
+- [x] 产品安装、构建、启动、提取、导出与 Native 日常验证在无 Python / `.venv` 环境通过
+- [x] 模型与 ORT 资源准备脱离 Python 生态，并以固定 manifest/SHA 验收
+- [x] 最后 Python 产品 revision 以 Git tag `python-product-last` 保存；工作树不建立源码 archive
+- [x] 可选 benchmark/评分/Oracle 使用独立命名空间、依赖组与 `./scripts/verify-offline.sh`

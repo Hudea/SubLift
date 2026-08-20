@@ -6,15 +6,17 @@
 
 用法：`benchmark/README.md`
 设计：`docs/design/benchmark.md`
-统一入口：``uv run sublift-benchmark``
+统一入口：``uv run sublift-benchmark`` / ``python -m sublift_offline``
 
 模块：
-- ``srt``：SRT 解析（统一 ground truth 与 pipeline 输出的加载）。
+- ``srt``：SRT 解析（统一 ground truth 与 detection 输出的加载）。
 - ``diagnostics``：一对一匹配、case 分类、诊断指标与报告 payload。
-- ``runner``：编排「视频 + GT → pipeline → 报告」，以及 ``align_existing_srt`` 复现历史产物。
+- ``score`` / ``report``：已有 SRT 评分与报告；导入不加载 Pipeline/OCR。
+- ``runner``：默认 Native CLI 提取；``backend=oracle`` 才加载冻结 Python Pipeline。
 - ``config``：v1/v2 配方、矩阵与 CLI override → ``RunConfig``。
-- ``report``：agent JSON / GT CSV / detection CSV / summary Markdown 输出。
 """
+
+from typing import Any
 
 from sublift.benchmark.config import (
     ManifestDocument,
@@ -24,7 +26,8 @@ from sublift.benchmark.config import (
     load_run_config,
     resolve_run_config,
 )
-from sublift.benchmark.runner import RunResult, align_existing_srt, run_benchmark
+from sublift.benchmark.result import RunResult
+from sublift.benchmark.score import align_existing_srt
 
 __all__ = [
     "ManifestDocument",
@@ -37,3 +40,12 @@ __all__ = [
     "resolve_run_config",
     "run_benchmark",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load the extract runner only when a caller asks for it."""
+    if name == "run_benchmark":
+        from sublift.benchmark.runner import run_benchmark
+
+        return run_benchmark
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

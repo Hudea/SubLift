@@ -91,7 +91,7 @@
       "name": "Phase 13 - 退役 Python Runtime，建立 Native-only 产品",
       "description": "关闭产品双 runtime，完成 Native 资源与 Python-free 产品验证，将 Python 仅保留为隔离的可选离线工程工具。",
       "detail_file": "docs/phases/phase13.json",
-      "status": "in-progress"
+      "status": "ready-for-merge"
     }
   ]
 }

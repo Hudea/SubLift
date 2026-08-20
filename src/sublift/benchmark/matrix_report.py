@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sublift.benchmark.diagnostics import analyze_result
-from sublift.benchmark.runner import RunResult
+from sublift.benchmark.result import RunResult
 
 
 @dataclass(frozen=True)

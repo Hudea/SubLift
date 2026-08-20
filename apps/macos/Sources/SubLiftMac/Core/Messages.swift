@@ -9,13 +9,13 @@ public enum MessageType: String, Codable {
     case bye
     case error
 
-    // Swift → Python
+    // Swift → Worker
     case startJob = "start_job"
     case frame
     case finalize
     case cancelJob = "cancel_job"
 
-    // Python → Swift
+    // Worker → Swift
     case progress
     case entries
     case pushEntry = "push_entry"
@@ -74,7 +74,7 @@ public struct SubtitleEntryData: Codable, Equatable {
     }
 }
 
-// MARK: - Request Messages (Swift → Python)
+// MARK: - Request Messages (Swift → Worker)
 
 /// 启动提取任务。
 ///
@@ -232,7 +232,7 @@ public struct FinalizeMessage: Codable {
     }
 }
 
-// MARK: - Response Messages (Python → Swift)
+// MARK: - Response Messages (Worker → Swift)
 
 /// 进度通知。
 public struct ProgressMessage: Codable {

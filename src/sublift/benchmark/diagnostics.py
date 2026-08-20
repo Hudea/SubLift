@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from sublift.benchmark.srt import SrtEntry
 
 if TYPE_CHECKING:
-    from sublift.benchmark.runner import RunResult
+    from sublift.benchmark.result import RunResult
 
 
 DEFAULT_USABLE_CER_THRESHOLD = 0.20

@@ -910,16 +910,16 @@ wheels = [
 ]
 
 [[package]]
-name = "sublift"
+name = "sublift-offline"
 version = "0.1.0"
 source = { editable = "." }
-dependencies = [
+
+[package.optional-dependencies]
+oracle = [
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pillow" },
 ]
-
-[package.optional-dependencies]
 paddle = [
     { name = "onnxruntime" },
     { name = "rapidocr" },
@@ -939,15 +939,15 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=1.26.0" },
+    { name = "numpy", marker = "extra == 'oracle'", specifier = ">=1.26.0" },
     { name = "onnxruntime", marker = "extra == 'paddle'", specifier = ">=1.16" },
-    { name = "opencv-python", specifier = ">=4.8.0,<5.0.0" },
-    { name = "pillow", specifier = ">=10.0.0" },
+    { name = "opencv-python", marker = "extra == 'oracle'", specifier = ">=4.8.0,<5.0.0" },
+    { name = "pillow", marker = "extra == 'oracle'", specifier = ">=10.0.0" },
     { name = "pyobjc-framework-quartz", marker = "extra == 'vision'", specifier = ">=10.0" },
     { name = "pyobjc-framework-vision", marker = "extra == 'vision'", specifier = ">=10.0" },
     { name = "rapidocr", marker = "extra == 'paddle'", specifier = ">=3.9.0,<4.0.0" },
 ]
-provides-extras = ["vision", "paddle"]
+provides-extras = ["oracle", "vision", "paddle"]
 
 [package.metadata.requires-dev]
 dev = [

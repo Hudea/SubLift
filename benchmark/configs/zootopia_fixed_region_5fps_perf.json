@@ -7,6 +7,7 @@
   "subtitle_script": "cjk",
   "match_threshold": 0.5,
   "region_box": [0, 848, 1920, 87],
+  "backend": "oracle",
   "label": "feat037_perf_baseline",
   "output_dir": "debug/benchmark/perf",
   "performance": {

@@ -9,7 +9,9 @@ from pathlib import Path
 from typing import Any
 
 from sublift.benchmark.config import RunConfig
-from sublift.benchmark.runner import RunResult, _execute_run, _probe_duration
+from sublift.benchmark.media import probe_duration_seconds
+from sublift.benchmark.result import RunResult
+from sublift.benchmark.runner import _execute_run
 from sublift.diagnostics.performance import PerformanceMode
 
 
@@ -27,9 +29,16 @@ def run_overhead(
     if not config.video_path.exists():
         raise FileNotFoundError(f"视频文件不存在: {config.video_path}")
 
-    duration = config.video_duration_seconds or _probe_duration(config.video_path)
+    if config.video_duration_seconds is not None:
+        duration = config.video_duration_seconds
+    else:
+        try:
+            duration = probe_duration_seconds(config.video_path)
+        except RuntimeError:
+            duration = 0.0
     off_config = replace(
         config,
+        backend="oracle",
         performance_mode=PerformanceMode.OFF.value,
         warmup_runs=0,
         measured_runs=1,

@@ -7,8 +7,8 @@
 
 ## ADR-0038 退役 Python Runtime；产品收口为 Native-only（2026-08-19）
 
-- **状态**：已确认；Phase 13 正在迁移，本文只冻结目标与边界，不表示现存 Python
-  CLI、Pipeline、IPC 或验证工具已经删除。
+- **状态**：已确认；Phase 13 已在分支上完成 D01–D06，状态为 ready-for-merge。产品
+  CLI/IPC/runtime 已移除；Python 仅作为隔离离线工具与冻结 Oracle。
 - **背景**：Native CLI、C++ Worker、Native Server 及 Vision/Paddle/Mock Adapters 已具备完整
   产品链路；继续让 Python 同时承担产品 CLI、运行时回滚和行为 Oracle，会保留两套可执行
   Pipeline、两套资源发现与两套故障语义。该结构增加分发体积、环境耦合和双实现漂移，也让

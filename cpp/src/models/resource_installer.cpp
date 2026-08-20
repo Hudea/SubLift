@@ -1,13 +1,18 @@
 #include "sublift/models/resource_installer.hpp"
 
+#include <fcntl.h>
+#include <spawn.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
-#include <sys/wait.h>
-#include <unistd.h>
 #include <vector>
 
 #include "sublift/hash.hpp"
+
+extern "C" char** environ;
 
 namespace sublift::models {
 namespace {
@@ -32,29 +37,55 @@ namespace {
   return std::nullopt;
 }
 
-int run_logged(const std::string& cmd) {
-  const int rc = std::system(cmd.c_str());
-  if (rc == -1) return -1;
-#if defined(WIFEXITED)
-  if (WIFEXITED(rc)) return WEXITSTATUS(rc);
-#endif
-  return rc;
+int run_argv(const std::vector<std::string>& args) {
+  if (args.empty()) return -1;
+  std::vector<char*> argv;
+  argv.reserve(args.size() + 1);
+  for (const auto& arg : args) {
+    argv.push_back(const_cast<char*>(arg.c_str()));
+  }
+  argv.push_back(nullptr);
+
+  posix_spawn_file_actions_t actions;
+  posix_spawn_file_actions_init(&actions);
+  const int devnull_fd = ::open("/dev/null", O_RDWR);
+  if (devnull_fd >= 0) {
+    posix_spawn_file_actions_adddup2(&actions, devnull_fd, STDIN_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, devnull_fd, STDOUT_FILENO);
+    posix_spawn_file_actions_adddup2(&actions, devnull_fd, STDERR_FILENO);
+    posix_spawn_file_actions_addclose(&actions, devnull_fd);
+  }
+
+  pid_t pid = 0;
+  const int spawn_err =
+      ::posix_spawn(&pid, args.front().c_str(), &actions, nullptr, argv.data(), environ);
+  posix_spawn_file_actions_destroy(&actions);
+  if (devnull_fd >= 0) {
+    ::close(devnull_fd);
+  }
+  if (spawn_err != 0) return -1;
+
+  int status = 0;
+  if (::waitpid(pid, &status, 0) < 0) return -1;
+  if (WIFEXITED(status)) return WEXITSTATUS(status);
+  return -1;
 }
 
 bool download_to(const std::string& url, const std::filesystem::path& dest, std::string* error) {
-  const auto quoted_url = "'" + url + "'";
-  const auto quoted_dest = "'" + dest.string() + "'";
   if (auto curl = find_on_path("curl")) {
-    const std::string cmd = curl->string() + " -fsSL --retry 3 --retry-delay 1 -o " +
-                            quoted_dest + " " + quoted_url;
-    if (run_logged(cmd) == 0 && exists_regular(dest)) return true;
+    if (run_argv({curl->string(), "-fsSL", "--retry", "3", "--retry-delay", "1", "-o",
+                  dest.string(), url}) == 0 &&
+        exists_regular(dest)) {
+      return true;
+    }
     *error = "curl download failed for " + url;
     return false;
   }
   if (auto wget = find_on_path("wget")) {
-    const std::string cmd =
-        wget->string() + " -q -T 60 --tries=3 -O " + quoted_dest + " " + quoted_url;
-    if (run_logged(cmd) == 0 && exists_regular(dest)) return true;
+    if (run_argv({wget->string(), "-q", "-T", "60", "--tries=3", "-O", dest.string(), url}) == 0 &&
+        exists_regular(dest)) {
+      return true;
+    }
     *error = "wget download failed for " + url;
     return false;
   }

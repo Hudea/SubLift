@@ -1,5 +1,5 @@
 [project]
-name = "sublift"
+name = "sublift-offline"
 version = "0.1.0"
 description = "SubLift 隔离的可选离线工具（benchmark / 诊断 / 冻结 Oracle）。产品入口是 Native CLI。"
 authors = [
@@ -12,22 +12,25 @@ keywords = ["subtitle", "ocr", "vision", "ffmpeg", "hardcoded-subtitle"]
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Environment :: Console",
-    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
     "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Video",
 ]
-dependencies = [
+# Default extra-free install is scoring/report only (stdlib + ffprobe).
+# Frozen Oracle extract needs the oracle extra; OCR engines are optional.
+dependencies = []
+
+[project.optional-dependencies]
+oracle = [
     "pillow>=10.0.0",
     "numpy>=1.26.0",
     # RapidOCR 也依赖 opencv-python。统一使用同一发行包，避免 paddle extra
     # 同时安装 headless/full 两份 cv2 并发生文件覆盖。
     "opencv-python>=4.8.0,<5.0.0",
 ]
-
-[project.optional-dependencies]
 vision = [
     "pyobjc-framework-Vision>=10.0",
     "pyobjc-framework-Quartz>=10.0",
@@ -39,6 +42,7 @@ paddle = [
 
 [project.scripts]
 sublift-benchmark = "sublift.benchmark.cli:main"
+sublift-offline = "sublift.benchmark.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/anomalyco/SubLift"
@@ -100,7 +104,7 @@ testpaths = ["tests"]
 pythonpath = ["src", "."]
 # 默认质量基线只运行单元测试；集成测试（包括首次构造 PaddleOcrEngine
 # 可能下载模型的用例）必须显式通过 ``pytest -m integration`` 运行。
-addopts = "-ra --strict-markers --cov=sublift --cov-report=term-missing -m 'not integration'"
+addopts = "-ra --strict-markers --cov=sublift --cov=sublift_offline --cov-report=term-missing -m 'not integration'"
 markers = [
     "integration: 需要外部资源（视频/ffmpeg/Vision）的集成测试",
 ]

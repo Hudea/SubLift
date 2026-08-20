@@ -47,10 +47,12 @@ _RUN_KEYS = frozenset(
         "output_dir",
         "performance",
         "isolate_processes",
+        "backend",
     }
 )
 _PERFORMANCE_KEYS = frozenset({"mode", "warmup_runs", "measured_runs"})
 _ENGINES = frozenset({"vision", "paddle", "mock"})
+_BACKENDS = frozenset({"native", "oracle"})
 
 
 class ManifestError(ValueError):
@@ -82,6 +84,7 @@ class RunConfig:
     isolate_processes: bool = True
     frame_output_mode: str = "full"
     pipeline_overrides: dict[str, Any] = field(default_factory=dict)
+    backend: str = "native"
 
     @property
     def output_prefix(self) -> str:
@@ -201,6 +204,7 @@ def resolve_run_config(
         isolate_processes=_bool(payload, "isolate_processes", default=True),
         frame_output_mode=frame_output_mode,
         pipeline_overrides=_pipeline(payload),
+        backend=_choice(payload, "backend", default="native", choices=_BACKENDS),
     )
 
 

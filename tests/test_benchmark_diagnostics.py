@@ -19,7 +19,7 @@ from sublift.benchmark.diagnostics import (
     analyze_entries,
 )
 from sublift.benchmark.report import write_reports
-from sublift.benchmark.runner import RunResult
+from sublift.benchmark.result import RunResult
 from sublift.benchmark.srt import SrtEntry
 
 

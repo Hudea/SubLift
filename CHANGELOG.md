@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased] — Phase 13 D06: isolate offline tools
+
+- Benchmark default extract backend is Native CLI. Frozen Python Oracle is `--backend oracle` / `"backend": "oracle"` only.
+- Scoring, matrix, and report imports do not load Pipeline, OCR, OpenCV, or Pillow.
+- Optional Python tools use the `sublift_offline` namespace, empty default deps plus `oracle`/`vision`/`paddle` extras, and `./scripts/verify-offline.sh`. They do not occupy the product `sublift` command.
+- Tool outputs stay under `debug/benchmark/`. Python Oracle is frozen and does not track new Native features.
+
 ## [Unreleased] — Phase 13 D05: remove Python product implementation
 
 - Removed Python product CLI, IPC server/bridge, runtime resolver, and the `sublift` console script.

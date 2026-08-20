@@ -15,7 +15,7 @@ from sublift.benchmark.diagnostics import (
     format_gt_cases_csv,
     format_summary_markdown,
 )
-from sublift.benchmark.runner import RunResult
+from sublift.benchmark.result import RunResult
 
 
 def write_reports(
