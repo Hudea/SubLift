@@ -59,7 +59,7 @@ enum EngineCapability {
             return Status(
                 available: false,
                 summary: "不可用",
-                detail: "PaddleOCR 模型未安装（~/.cache/sublift/rapidocr-models）"
+                detail: "PaddleOCR 模型未安装。运行 `sublift resources install` 或设置 SUBLIFT_PADDLE_MODEL_DIR。"
             )
         case .mock:
             if developerMode {

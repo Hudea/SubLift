@@ -3,7 +3,11 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <iterator>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace sublift {
 namespace {
@@ -138,16 +142,29 @@ std::array<std::uint8_t, 32> sha256_raw(
 
 }  // namespace
 
-std::string sha256_prefixed(const std::uint8_t* data, std::size_t size) {
+std::string sha256_hex(const std::uint8_t* data, std::size_t size) {
   const auto digest = sha256_raw(data, size);
   static constexpr char kHex[] = "0123456789abcdef";
-  std::string result = "sha256:";
-  result.reserve(result.size() + 64);
+  std::string result;
+  result.reserve(64);
   for (const auto byte : digest) {
     result.push_back(kHex[(byte >> 4) & 0x0f]);
     result.push_back(kHex[byte & 0x0f]);
   }
   return result;
+}
+
+std::string sha256_prefixed(const std::uint8_t* data, std::size_t size) {
+  return "sha256:" + sha256_hex(data, size);
+}
+
+std::optional<std::string> sha256_file_hex(const std::filesystem::path& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return std::nullopt;
+  std::vector<std::uint8_t> bytes{std::istreambuf_iterator<char>(in),
+                                  std::istreambuf_iterator<char>()};
+  if (!in && !in.eof()) return std::nullopt;
+  return sha256_hex(bytes.data(), bytes.size());
 }
 
 }  // namespace sublift

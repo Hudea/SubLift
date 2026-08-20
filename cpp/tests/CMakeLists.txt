@@ -20,6 +20,7 @@ set(_sublift_test_srcs
   paddle_models_test.cpp
   sublift_models_test.cpp
   resource_locator_test.cpp
+  native_resources_test.cpp
   worker_framing_test.cpp
   cli_test.cpp
 

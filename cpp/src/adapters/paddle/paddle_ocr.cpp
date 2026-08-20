@@ -19,6 +19,7 @@
 #include "ppocr_db_postprocess.hpp"
 #include "sublift/hash.hpp"
 #include "sublift/image.hpp"
+#include "sublift/models/native_manifest.hpp"
 #include "sublift/models/resource_locator.hpp"
 
 #if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
@@ -131,11 +132,17 @@ PaddleCapabilities PaddleOcrEngine::probe_capabilities(
   try {
     models::ResourceLocator locator;
     auto type = models::parse_model_type(model_type);
-    auto res = locator.probe_model_bundle(model_root_dir, type);
+    auto res = locator.probe_model_bundle(model_root_dir, type, true);
     caps.available = res.found;
     if (res.found) {
       caps.model_root = res.value.det_path.parent_path().string();
-      caps.detail = "ok";
+      auto loaded = models::load_default_native_manifest();
+      if (loaded.ok) {
+        caps.detail = "ok (" + loaded.manifest.paddle.id + "@" +
+                      loaded.manifest.paddle.version + ")";
+      } else {
+        caps.detail = "ok";
+      }
     } else {
       caps.detail = res.error_msg;
     }

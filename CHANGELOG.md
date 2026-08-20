@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased] — Phase 13 D03: Native model and ORT resource loop
+
+- Paddle PP-OCRv6-small files and ONNX Runtime are pinned by `native-resources/manifest.v1.json` (SHA-256).
+- `sublift resources install` writes a temporary file, verifies the digest, then atomically replaces the destination. A failed fetch is not a usable bundle.
+- CMake and `ResourceLocator` reject ONNX Runtime from `.venv` / `site-packages`. macOS Homebrew 1.28.0 and official GitHub linux/darwin archives are the allowed sources.
+- Default model cache is `~/.cache/sublift/models/ppocrv6-small`. SHA-matching files in the historical RapidOCR cache may still be reused; new installs do not write there.
+
 ## [Unreleased] — Phase 13 D02: close dual product runtime
 
 - Product CLI is Native `build/cpp/bin/sublift`. `--runtime` and `SUBLIFT_RUNTIME=python` fail closed; they no longer select a Python implementation.

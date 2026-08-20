@@ -251,6 +251,14 @@ TEST_CASE("CLI binary rejects python runtime and missing worker", "[cli][product
     REQUIRE(read_file(stderr_path).find("SUBLIFT_RUNTIME=python") != std::string::npos);
   }
 
+  SECTION("resources status prints native contract") {
+    const std::string cmd = std::string{"\""} + kCliPath + "\" resources status";
+    const int rc = run_logged(cmd, stdout_path, stderr_path);
+    (void)rc;
+    const auto out = read_file(stdout_path) + read_file(stderr_path);
+    REQUIRE(out.find("ppocrv6-small") != std::string::npos);
+  }
+
   SECTION("missing --worker fails closed") {
     env.set("SUBLIFT_RUNTIME", nullptr);
     const fs::path video = out_dir / "clip.mp4";

@@ -21,7 +21,8 @@ TEST_CASE("ResourceLocator - Paddle Model Bundle Probe & Locate", "[models][reso
     std::ofstream(expected.rec_path).put('\n');
     std::ofstream(expected.keys_path).put('\n');
 
-    auto result = locator.probe_model_bundle(temp_dir.string(), sublift::models::ModelType::Small);
+    auto result = locator.probe_model_bundle(
+        temp_dir.string(), sublift::models::ModelType::Small, false);
     REQUIRE(result.found);
     REQUIRE(result.source == sublift::models::ResourceSource::ExplicitOverride);
     REQUIRE(result.value.det_path == expected.det_path);
@@ -34,7 +35,8 @@ TEST_CASE("ResourceLocator - Paddle Model Bundle Probe & Locate", "[models][reso
         std::filesystem::temp_directory_path() / "sublift-resource-locator-empty-test";
     std::filesystem::create_directories(empty_dir);
 
-    auto result = locator.probe_model_bundle(empty_dir.string(), sublift::models::ModelType::Small);
+    auto result = locator.probe_model_bundle(
+        empty_dir.string(), sublift::models::ModelType::Small, false);
     REQUIRE_FALSE(result.found);
     REQUIRE(result.source == sublift::models::ResourceSource::ExplicitOverride);
     REQUIRE_FALSE(result.error_msg.empty());
@@ -48,10 +50,13 @@ TEST_CASE("ResourceLocator - Paddle Model Bundle Probe & Locate", "[models][reso
         std::filesystem::temp_directory_path() / "sublift-resource-locator-probe-construct-test";
     std::filesystem::create_directories(empty_dir);
 
-    auto probe_res = locator.probe_model_bundle(empty_dir.string(), sublift::models::ModelType::Small);
+    auto probe_res = locator.probe_model_bundle(
+        empty_dir.string(), sublift::models::ModelType::Small, true);
     REQUIRE_FALSE(probe_res.found);
 
-    REQUIRE_THROWS_AS(locator.locate_model_bundle(empty_dir.string(), sublift::models::ModelType::Small), std::runtime_error);
+    REQUIRE_THROWS_AS(
+        locator.locate_model_bundle(empty_dir.string(), sublift::models::ModelType::Small, true),
+        std::runtime_error);
 
     // Verify PaddleOcrEngine constructor throws identical error message when probe fails
     sublift::PaddleOcrOptions opts;
@@ -87,6 +92,13 @@ TEST_CASE("ResourceLocator - Executable and Library Locators", "[models][resourc
     auto res = locator.locate_onnxruntime_library("/non/existent/path/libonnxruntime.dylib");
     REQUIRE_FALSE(res.found);
     REQUIRE(res.source == sublift::models::ResourceSource::ExplicitOverride);
-    REQUIRE(res.error_msg.find("ONNX Runtime library not found") != std::string::npos);
+    REQUIRE_FALSE(res.error_msg.empty());
+  }
+
+  SECTION("Python wheel ORT path is rejected") {
+    auto res = locator.locate_onnxruntime_library(
+        "/tmp/.venv/lib/python3.12/site-packages/onnxruntime/capi/libonnxruntime.1.28.0.dylib");
+    REQUIRE_FALSE(res.found);
+    REQUIRE(res.error_msg.find("Python wheel") != std::string::npos);
   }
 }

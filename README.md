@@ -81,29 +81,28 @@ cmake --build build/cpp
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
-> Native Paddle 当前要求模型文件已存在于 `SUBLIFT_PADDLE_MODEL_DIR` 或现有默认目录；
-> 缺少模型时明确失败，不会下载模型或切换到 Python。
+> Native Paddle 使用 `native-resources/manifest.v1.json` 固定的 PP-OCRv6-small
+> 文件与 SHA-256。首次运行 `./build/cpp/bin/sublift resources install`；缺少或
+> 校验失败时明确失败，不会下载到 RapidOCR 缓存或切换到 Python。
 
 ### Paddle Native Release 构建
 
-下面是当前历史验收环境仍可复现的命令。它从 Python wheel 取得 ORT dylib，属于
-Phase 13 必须清除的过渡债务，不是 Native-only 最终构建合同：
+Paddle Native 使用 Homebrew 或官方 GitHub ONNX Runtime，版本与 SHA 由
+`native-resources/manifest.v1.json` 约束。CMake 会拒绝 `.venv` / `site-packages`
+里的 Python wheel。
 
 ```bash
-ORT_CAPI="$PWD/.venv/lib/python3.12/site-packages/onnxruntime/capi"
+# macOS：brew install onnxruntime  （1.28.0，SHA 已列入 manifest）
 cmake -S cpp -B build/cpp-rel -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DSUBLIFT_ENABLE_OPENCV=ON -DSUBLIFT_REQUIRE_OPENCV=ON \
-  -DSUBLIFT_ENABLE_PADDLE=ON -DSUBLIFT_REQUIRE_PADDLE=ON \
-  -DONNXRuntime_INCLUDE_DIR="$(brew --prefix onnxruntime)/include/onnxruntime" \
-  -DONNXRuntime_LIBRARY="$ORT_CAPI/libonnxruntime.1.28.0.dylib"
+  -DSUBLIFT_ENABLE_PADDLE=ON -DSUBLIFT_REQUIRE_PADDLE=ON
 cmake --build build/cpp-rel
+./build/cpp-rel/bin/sublift resources install   # 首次准备模型；之后可离线重复提取
 ```
 
 CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相对
-`@loader_path/../lib`。Phase 13 需要进一步改为独立、固定 SHA 的 Native ORT 与模型资产，
-并移除 `.venv`、RapidOCR 缓存布局及 Python 版本对 Native 构建的影响。完整 `.app` 内置
-模型、签名、公证仍按 ADR-0030 后置。
+`@loader_path/../lib`。完整 `.app` 内置模型、签名、公证仍按 ADR-0030 后置。
 
 ## 使用
 

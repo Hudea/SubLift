@@ -40,6 +40,11 @@ RUN if [ "$TARGETARCH" = "arm64" ]; then \
     fi && \
     ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-${ORT_ARCH}-1.18.1.tgz" && \
     wget -q "$ORT_URL" -O /tmp/ort.tgz && \
+    if [ "$ORT_ARCH" = "aarch64" ]; then \
+      echo "c1dcd8ab29e8d227d886b6ee415c08aea893956acf98f0758a42a84f27c02851  /tmp/ort.tgz"; \
+    else \
+      echo "a0994512ec1e1debc00c18bfc7a5f16249f6ebd6a6128ff2034464cc380ea211  /tmp/ort.tgz"; \
+    fi | sha256sum -c && \
     mkdir -p /opt/onnxruntime && \
     tar -xzf /tmp/ort.tgz -C /opt/onnxruntime --strip-components=1 && \
     cp -r /opt/onnxruntime/include/* /usr/local/include/ && \

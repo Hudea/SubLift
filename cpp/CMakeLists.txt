@@ -86,13 +86,44 @@ endif()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(Dependencies)
+include(NativeResources)
 find_package(Threads REQUIRED)
+set(SUBLIFT_NATIVE_MANIFEST
+  "${CMAKE_CURRENT_SOURCE_DIR}/../native-resources/manifest.v1.json")
 
 if(SUBLIFT_ENABLE_PADDLE)
   if(SUBLIFT_REQUIRE_PADDLE)
     find_package(ONNXRuntime REQUIRED)
   else()
     find_package(ONNXRuntime QUIET)
+  endif()
+  if(ONNXRuntime_FOUND)
+    sublift_library_is_python_onnxruntime("${ONNXRuntime_LIBRARY}" _ort_is_python)
+    if(_ort_is_python)
+      if(SUBLIFT_REQUIRE_PADDLE)
+        message(FATAL_ERROR
+          "ONNX Runtime at ${ONNXRuntime_LIBRARY} is a Python wheel. "
+          "Native builds must use Homebrew, a system install, or the official "
+          "GitHub artifact pinned in native-resources/manifest.v1.json.")
+      endif()
+      message(WARNING
+        "Ignoring Python-packaged ONNX Runtime at ${ONNXRuntime_LIBRARY}")
+      set(ONNXRuntime_FOUND FALSE)
+    else()
+      sublift_ort_sha256_allowed(
+        "${ONNXRuntime_LIBRARY}" "${SUBLIFT_NATIVE_MANIFEST}" _ort_sha_ok)
+      if(NOT _ort_sha_ok)
+        if(SUBLIFT_REQUIRE_PADDLE)
+          message(FATAL_ERROR
+            "ONNX Runtime at ${ONNXRuntime_LIBRARY} is not pinned by "
+            "native-resources/manifest.v1.json (SHA-256 mismatch).")
+        endif()
+        message(WARNING
+          "ONNX Runtime at ${ONNXRuntime_LIBRARY} is not in the Native "
+          "resource manifest; disabling Paddle.")
+        set(ONNXRuntime_FOUND FALSE)
+      endif()
+    endif()
   endif()
   if(ONNXRuntime_FOUND)
     message(STATUS "ONNX Runtime ${ONNXRuntime_VERSION} enabled (sublift_paddle)")

@@ -51,7 +51,7 @@ Pipeline/IPC，也不得把离线工具作为产品依赖。
 
 - Python console 包名占用与进程内 Pipeline（产品 extract 已 fail-closed，源码待 D05 移除）；
 - Python UDS Server 与隔离 Oracle 入口（产品宿主已不再启动）；
-- 模型预下载、ORT 选取和 Native 日常验证对 Python 工具链的依赖。
+- Native 日常产品验证仍可能经过含 Python 的过渡门（D04）。
 
 可选 Python 工具若继续存在，必须是隔离、离线、非产品的工具；不得成为任何产品门的唯一
 执行器或行为权威。

@@ -69,7 +69,7 @@ std::filesystem::path resolve_model_dir(const std::string& custom_dir) {
     return expand_user_path(env_dir);
   }
 
-  return expand_user_path("~/.cache/sublift/rapidocr-models");
+  return expand_user_path("~/.cache/sublift/models/ppocrv6-small");
 }
 
 ModelPaths get_expected_model_paths(const std::filesystem::path& model_dir, ModelType model_type) {

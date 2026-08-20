@@ -13,7 +13,7 @@ target_include_directories(sublift_cli_lib PUBLIC
 
 # Thin product native CLI: talks to sublift_worker over UDS.
 # Only links protocol and core. Does NOT link ORT, OpenCV, or Vision.
-target_link_libraries(sublift_cli_lib PUBLIC sublift_protocol sublift_core)
+target_link_libraries(sublift_cli_lib PUBLIC sublift_protocol sublift_core sublift_models)
 
 add_executable(sublift_cli main.cpp)
 target_link_libraries(sublift_cli PRIVATE sublift_cli_lib)

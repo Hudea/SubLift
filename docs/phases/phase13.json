@@ -81,8 +81,13 @@
         "native-resources",
         "distribution"
       ],
-      "status": "not-started",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-08-20：`native-resources/manifest.v1.json` 固定 PP-OCRv6-small 四文件与 darwin/linux ORT 的 SHA-256；`sublift resources install` 先写 `.partial` 再校验后原子替换，失败不留下可被 probe 视为可用的文件。",
+        "2026-08-20：CMake 与 ResourceLocator 拒绝 `.venv`/`site-packages` ORT。`SUBLIFT_ORT_LIB_DIR=.../onnxruntime/capi` 时 `sublift resources status` 报告 Python wheel 不是产品来源。允许源为 Homebrew 1.28.0 与官方 GitHub linux/darwin archive。未改动已验收 ORT 版本，ctest Paddle golden 仍通过。",
+        "2026-08-20：`./build/cpp/bin/sublift resources install` 将 SHA 匹配文件装入 `~/.cache/sublift/models/ppocrv6-small`；随后 `resources status` 与 `sublift_worker --probe-engine paddle` 在无下载情况下成功。CLI/macOS/Web 均经 ResourceLocator/ModelBundle。",
+        "2026-08-20：`./build/cpp/bin/sublift_tests \"[native_resources]\"` 5 cases / 23 assertions；`\"[cli]\"` 6/57；`ctest --test-dir build/cpp --output-on-failure` 200/200；相关 Swift EngineCapability/PipelineClient 测试通过；`./init.sh` 通过。"
+      ]
     },
     {
       "id": "D04",

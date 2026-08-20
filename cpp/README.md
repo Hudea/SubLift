@@ -24,7 +24,7 @@ Architecture and contracts: [`docs/cpp/`](../docs/cpp/).
 |---|---|---|
 | `SUBLIFT_ENABLE_VISION` | OFF | Build `sublift_vision_macos` |
 | `SUBLIFT_ENABLE_PADDLE` | OFF | Build `sublift_paddle` (needs system ONNX Runtime; macOS: `brew install onnxruntime`) |
-| `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/rapidocr-models` | PP-OCRv6 ONNX + `ppocrv6_dict.txt`；当前默认目录沿用历史 RapidOCR 布局，Phase 13 D03 将改为中性 Native 资源合同 |
+| `SUBLIFT_PADDLE_MODEL_DIR` | `~/.cache/sublift/models/ppocrv6-small` | PP-OCRv6-small ONNX + `ppocrv6_dict.txt`，SHA 由 `native-resources/manifest.v1.json` 约束 |
 | `SUBLIFT_REQUIRE_PADDLE` | OFF | Fail configure if ONNX Runtime missing |
 | `SUBLIFT_BUNDLE_ONNXRUNTIME` | ON | Copy the selected ORT shared library to build `lib/` and use a relative executable rpath |
 | `SUBLIFT_SANITIZE` | OFF | ASan+UBSan on Debug |

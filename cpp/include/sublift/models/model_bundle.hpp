@@ -22,8 +22,9 @@ std::string model_type_to_string(ModelType type);
 /// 3. 解析用户主目录波浪号 (~) 扩展
 std::filesystem::path expand_user_path(const std::filesystem::path& path);
 
-/// 4. 解析 Paddle 模型缓存目录：
-/// 优先级：自定义 custom_dir > 环境变量 SUBLIFT_PADDLE_MODEL_DIR > 默认 ~/.cache/sublift/rapidocr-models
+/// 4. 解析 Paddle 模型目录：
+/// 优先级：自定义 custom_dir > 环境变量 SUBLIFT_PADDLE_MODEL_DIR >
+/// 默认 ~/.cache/sublift/models/ppocrv6-small
 std::filesystem::path resolve_model_dir(const std::string& custom_dir = "");
 
 /// 5. 预期模型路径组合

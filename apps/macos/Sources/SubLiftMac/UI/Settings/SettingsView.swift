@@ -183,11 +183,27 @@ struct SettingsView: View {
         }
     }
 
-    /// Paddle 模型目录（与 Python `DEFAULT_MODEL_DIR` 对齐）。
+    /// Paddle 模型是否出现在 Native 资源合同目录中（SHA 由 Worker/CLI 校验）。
     private static func paddleModelsExist() -> Bool {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cache/sublift/rapidocr-models", isDirectory: true)
-        guard let items = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return false }
-        return !items.isEmpty
+        let names = [
+            "PP-OCRv6_det_small.onnx",
+            "PP-OCRv6_rec_small.onnx",
+            "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+            "ppocrv6_dict.txt"
+        ]
+        var dirs: [URL] = [
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".cache/sublift/models/ppocrv6-small", isDirectory: true),
+            URL(fileURLWithPath: "/opt/sublift/models")
+        ]
+        if let env = ProcessInfo.processInfo.environment["SUBLIFT_PADDLE_MODEL_DIR"],
+           !env.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            dirs.insert(URL(fileURLWithPath: env), at: 0)
+        }
+        return dirs.contains { dir in
+            names.allSatisfy { name in
+                FileManager.default.isReadableFile(atPath: dir.appendingPathComponent(name).path)
+            }
+        }
     }
 }

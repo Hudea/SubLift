@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "kind": "native-resources",
+  "paddle": {
+    "id": "ppocrv6-small",
+    "version": "rapidocr-3.9.2",
+    "install_subdir": "models/ppocrv6-small",
+    "files": [
+      {
+        "role": "det",
+        "filename": "PP-OCRv6_det_small.onnx",
+        "sha256": "090f04abcd9d9a7498bc4ebf677e4cb9bdce1fe4197ddb7e529f1ef44e1ff94f",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/det/PP-OCRv6_det_small.onnx"
+      },
+      {
+        "role": "rec",
+        "filename": "PP-OCRv6_rec_small.onnx",
+        "sha256": "6f327246b50388f3c176ae304bd95767ea6dc0c9ae92153ef8cbe210b3c14884",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv6/rec/PP-OCRv6_rec_small.onnx"
+      },
+      {
+        "role": "cls",
+        "filename": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+        "sha256": "e47acedf663230f8863ff1ab0e64dd2d82b838fceb5957146dab185a89d6215c",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/onnx/PP-OCRv4/cls/ch_ppocr_mobile_v2.0_cls_mobile.onnx"
+      },
+      {
+        "role": "keys",
+        "filename": "ppocrv6_dict.txt",
+        "sha256": "b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d",
+        "url": "https://www.modelscope.cn/models/RapidAI/RapidOCR/resolve/v3.9.2/paddle/PP-OCRv6/rec/PP-OCRv6_rec_small/ppocrv6_dict.txt"
+      }
+    ]
+  },
+  "onnxruntime": [
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "version": "1.28.0",
+      "library": "libonnxruntime.1.28.0.dylib",
+      "sha256": "dc19bbcb2f5c9fb3c68b4f9248aa0a35065ff702c5dbeae75eac54a74da97b6d",
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.28.0/onnxruntime-osx-arm64-1.28.0.tgz",
+      "tarball_sha256": "1268b359718099bde2cedb55787f182a130067bc4f31e8c88478c445b850d3d8",
+      "source": "github-official"
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "version": "1.28.0",
+      "library": "libonnxruntime.1.28.0.dylib",
+      "sha256": "55a76108337660d3c66d8f6fdb32fb012cce8bd14ae16aa7f9679ab1025edf11",
+      "source": "homebrew-onnxruntime-1.28.0"
+    },
+    {
+      "os": "linux",
+      "arch": "x64",
+      "version": "1.18.1",
+      "library": "libonnxruntime.so.1.18.1",
+      "sha256": "1147caa734d19f7549f90a659aa9ca444366eeb80a596900d19d242145a9f4c9",
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-x64-1.18.1.tgz",
+      "tarball_sha256": "a0994512ec1e1debc00c18bfc7a5f16249f6ebd6a6128ff2034464cc380ea211",
+      "source": "github-official"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "version": "1.18.1",
+      "library": "libonnxruntime.so.1.18.1",
+      "sha256": "006437cc7da2dd9a8a116e3fb0c96fe9c4ec8645fccbb731f3b02082a6fbf70e",
+      "url": "https://github.com/microsoft/onnxruntime/releases/download/v1.18.1/onnxruntime-linux-aarch64-1.18.1.tgz",
+      "tarball_sha256": "c1dcd8ab29e8d227d886b6ee415c08aea893956acf98f0758a42a84f27c02851",
+      "source": "github-official"
+    }
+  ]
+}

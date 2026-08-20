@@ -24,6 +24,9 @@
 #include "sublift/cli/runtime_guard.hpp"
 #include "sublift/cli/srt.hpp"
 #include "sublift/cli/worker_locator.hpp"
+#include "sublift/models/native_manifest.hpp"
+#include "sublift/models/resource_installer.hpp"
+#include "sublift/models/resource_locator.hpp"
 #include "sublift/protocol/framing.hpp"
 #include "sublift/protocol/protocol.hpp"
 #include "sublift/version.hpp"
@@ -46,6 +49,8 @@ void print_usage(const char* prog) {
                "  %s                          # print version\n"
                "  %s --version\n"
                "  %s extract <video> [options]\n"
+               "  %s resources status\n"
+               "  %s resources install [--dir PATH]\n"
                "\n"
                "Native product CLI. Spawns sibling sublift_worker over UDS.\n"
                "Native is the only runtime; --runtime and SUBLIFT_RUNTIME do not\n"
@@ -58,7 +63,70 @@ void print_usage(const char* prog) {
                "  --engine mock|vision|paddle  OCR engine (default: vision)\n"
                "  --script auto|cjk|latin  Subtitle script (default: auto)\n"
                "  --worker PATH             Override sublift_worker binary\n",
-               prog, prog, prog);
+               prog, prog, prog, prog, prog);
+}
+
+int run_resources(int argc, char** argv) {
+  std::string action = (argc >= 3) ? argv[2] : "status";
+  if (action == "-h" || action == "--help" || action == "help") {
+    print_usage(argv[0]);
+    return 0;
+  }
+  auto loaded = sublift::models::load_default_native_manifest();
+  if (!loaded.ok) {
+    std::fprintf(stderr, "Error: %s\n", loaded.error_msg.c_str());
+    return 1;
+  }
+  sublift::models::ResourceLocator locator;
+  if (action == "status") {
+    std::fprintf(stdout, "manifest: %s\n", loaded.path.c_str());
+    std::fprintf(stdout, "paddle: %s@%s\n", loaded.manifest.paddle.id.c_str(),
+                 loaded.manifest.paddle.version.c_str());
+    auto models = locator.probe_model_bundle("", sublift::models::ModelType::Small, true);
+    std::fprintf(stdout, "models: %s\n", models.found ? "available" : "unavailable");
+    if (!models.found) {
+      std::fprintf(stdout, "  %s\n", models.error_msg.c_str());
+    } else {
+      std::fprintf(stdout, "  dir=%s\n", models.value.det_path.parent_path().c_str());
+    }
+    auto ort = locator.locate_onnxruntime_library();
+    std::fprintf(stdout, "onnxruntime: %s\n", ort.found ? "available" : "unavailable");
+    if (ort.found) {
+      std::fprintf(stdout, "  %s\n", ort.value.c_str());
+    } else {
+      std::fprintf(stdout, "  %s\n", ort.error_msg.c_str());
+    }
+    return models.found ? 0 : 1;
+  }
+  if (action == "install") {
+    sublift::models::InstallOptions opts;
+    opts.allow_network = true;
+    opts.source_dirs.push_back(sublift::models::default_legacy_model_dir());
+    for (int i = 3; i < argc; ++i) {
+      std::string_view arg = argv[i];
+      if ((arg == "--dir" || arg == "-o") && i + 1 < argc) {
+        opts.destination_dir = argv[++i];
+      } else {
+        std::fprintf(stderr, "Error: unknown option %s\n", argv[i]);
+        return 2;
+      }
+    }
+    auto installed = sublift::models::install_paddle_bundle(loaded.manifest, opts);
+    for (const auto& file : installed.files) {
+      std::fprintf(stdout, "%s: %s (%s)\n", file.filename.c_str(),
+                   file.ok ? (file.skipped ? "ok" : "installed") : "failed",
+                   file.detail.c_str());
+    }
+    if (!installed.ok) {
+      std::fprintf(stderr, "Error: %s\n", installed.error_msg.c_str());
+      return 1;
+    }
+    std::fprintf(stdout, "installed: %s\n", installed.destination_dir.c_str());
+    return 0;
+  }
+  std::fprintf(stderr, "Error: unknown resources command '%s'\n", action.c_str());
+  print_usage(argv[0]);
+  return 2;
 }
 
 [[nodiscard]] std::string join_engines(const std::vector<std::string>& engines) {
@@ -294,6 +362,9 @@ int main(int argc, char** argv) {
   if (cmd == "-h" || cmd == "--help" || cmd == "help") {
     print_usage(argv[0]);
     return 0;
+  }
+  if (cmd == "resources") {
+    return run_resources(argc, argv);
   }
   if (cmd == "extract") {
     std::vector<std::string> args;
