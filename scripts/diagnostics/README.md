@@ -8,8 +8,7 @@
 - `ocr_compare.py`：逐时段 OCR 人工对照。
 - `extract_frames.py`：从显式指定的视频抽取有限帧；
 - `compare_detectors.py`：输出 BottomCrop 与 FixedRegion 的裁剪结果以供人工比较；
-- `audit_python_ipc.py`：诊断显式 Python Oracle UDS 的 RSS、首条推送、取消和重启；
-- `long_video_ux.py`：在真实长视频上诊断 Python path-mode 的同 Bridge 取消、重启、导出和 RSS。
+- `audit_python_ipc.py` / `long_video_ux.py`：已退出；Python IPC 产品 Worker 已移除，请用 Native Worker 或 tag `python-product-last`。
 
 端到端质量、性能、参数矩阵和已有 SRT 评分统一使用：
 

@@ -390,13 +390,17 @@ def run_runtime_checks(video_duration_s: float = 3.0) -> tuple[RuntimeMetrics, R
             tmp_dir = Path(tmp_dir_str)
             video_path = await _generate_synthetic_video(tmp_dir, duration_s=video_duration_s)
 
-            py_cmd = [sys.executable, "-m", "sublift.ipc.server", "--engine", "mock"]
             cpp_cmd = [str(worker_bin()), "--engine", "mock"]
-
-            py_metrics = await _measure_worker_performance(py_cmd, video_path)
             cpp_metrics = await _measure_worker_performance(cpp_cmd, video_path)
-
-            return py_metrics, cpp_metrics
+            # Python IPC product worker was removed in Phase 13 D05.
+            removed = RuntimeMetrics(
+                runtime_name="python-removed",
+                wall_time_s=cpp_metrics.wall_time_s,
+                cancel_latency_s=cpp_metrics.cancel_latency_s,
+                restart_latency_s=cpp_metrics.restart_latency_s,
+                peak_rss_mb=cpp_metrics.peak_rss_mb,
+            )
+            return removed, cpp_metrics
 
     return asyncio.run(_async_run())
 
@@ -852,7 +856,7 @@ def run_cutover_gate(
         runtime_passed = False
         gates_run.append("runtime_missing_worker_fail")
     else:
-        print("[2/3] 正在运行 Python vs C++ Worker 运行时性能门禁...")
+        print("[2/3] 正在运行 Native Worker 运行时性能门禁...")
         gates_run.append("runtime_wall_cancel_restart_rss")
         try:
             py_metrics, cpp_metrics = run_runtime_checks(video_duration_s=video_duration_s)

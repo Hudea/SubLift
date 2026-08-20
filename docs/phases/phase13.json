@@ -129,8 +129,12 @@
         "apps/macos",
         "product-tests"
       ],
-      "status": "not-started",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-08-20：删除 Python 产品 CLI（`sublift` console script）、`cli.py`、`ipc/`、`runtime.py`。`python -m sublift` 退出 2。工作树无 `archive/` 快照。本地 tag `python-product-last` → 782b876（D02 之前最后可运行 Python 产品 extract/IPC）。",
+        "2026-08-20：产品测试 `test_cli` / `test_ipc_*` / `test_runtime` / `tests/ipc` 已删。macOS 启动路径无 Python Worker。Native 二进制 `otool -L` 无 libpython；`.venv`/`site-packages` 字符串仅用于拒绝 Python wheel ORT。",
+        "2026-08-20：`uv run pytest -m \"not integration\" --no-cov` 395 passed；`uv run ruff check` / `mypy src tests` 通过；`./scripts/verify-product.sh` 23/0；`./init.sh` 通过。pipeline/ocr 等算法副本仍供隔离 benchmark/Oracle，由 D06 迁出命名空间。"
+      ]
     },
     {
       "id": "D06",

@@ -2,7 +2,7 @@
 """Run the Phase 6.8 multi-source Paddle E2E quality gate.
 
 Unlike the retired placeholder implementation, every reported metric comes
-from a real ``sublift extract --engine paddle --runtime python|cpp`` product
+from a real Native ``sublift extract --engine paddle`` product
 run, the shared benchmark diagnostics, or a live Q0 box replay. Missing
 assets, models, workers, baselines, and runtime failures are blocking errors.
 """
@@ -37,7 +37,7 @@ from sublift.benchmark.diagnostics import (  # noqa: E402
 )
 from sublift.benchmark.srt import SrtEntry, load_srt  # noqa: E402
 from sublift.models import BoundingBox  # noqa: E402
-from sublift.runtime import probe_cpp_paddle_available  # noqa: E402
+from sublift.worker_bin import probe_cpp_paddle_available, resolve_native_cli  # noqa: E402
 
 DEFAULT_MANIFEST = (
     REPO_ROOT
@@ -358,18 +358,22 @@ def _run_product(
         f"runtime={runtime} product run...",
         flush=True,
     )
+    native_cli = resolve_native_cli(REPO_ROOT)
+    if native_cli is None:
+        raise RuntimeError("Native CLI not found (build/cpp/bin/sublift)")
+    if runtime == "python":
+        raise RuntimeError(
+            "Python product extract was removed; replay historical revision "
+            "tagged python-product-last"
+        )
     command = [
-        sys.executable,
-        "-m",
-        "sublift.cli",
+        str(native_cli),
         "extract",
         str(video),
         "-o",
         str(output_path),
         "--engine",
         "paddle",
-        "--runtime",
-        runtime,
         "--fps",
         str(source["fps"]),
         "--confidence",

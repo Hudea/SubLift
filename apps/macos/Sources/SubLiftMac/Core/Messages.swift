@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - MessageType
 
-/// IPC 消息类型常量，与 Python `sublift.ipc.protocol` 模块对齐。
+/// IPC 消息类型常量，与 Native Worker 协议对齐。
 public enum MessageType: String, Codable {
     // 控制消息
     case hello

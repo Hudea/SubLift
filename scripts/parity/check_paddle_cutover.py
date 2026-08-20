@@ -33,11 +33,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from sublift.benchmark.srt import load_srt  # noqa: E402
-from sublift.runtime import (  # noqa: E402
+from sublift.worker_bin import (  # noqa: E402
     probe_cpp_paddle_available,
-    resolve_runtime,
+    resolve_native_cli,
+    resolve_worker_bin,
 )
-from sublift.worker_bin import resolve_worker_bin  # noqa: E402
 
 QUALITY_MANIFEST = REPO_ROOT / "benchmark/datasets/paddle_quality/manifest.v1.json"
 PERF_MANIFEST = REPO_ROOT / "benchmark/datasets/paddle_performance/manifest.v1.json"
@@ -234,10 +234,16 @@ def _run_product(
     fps: float,
     script: str,
 ) -> ProductRun:
+    if requested_runtime == "python":
+        raise RuntimeError(
+            "Python product extract was removed; replay historical revision "
+            "tagged python-product-last"
+        )
+    native_cli = resolve_native_cli(REPO_ROOT)
+    if native_cli is None:
+        raise RuntimeError("Native CLI not found (build/cpp/bin/sublift)")
     command = [
-        sys.executable,
-        "-m",
-        "sublift.cli",
+        str(native_cli),
         "extract",
         str(video),
         "-o",
@@ -249,8 +255,6 @@ def _run_product(
         "--script",
         script,
     ]
-    if requested_runtime is not None:
-        command.extend(["--runtime", requested_runtime])
 
     env = os.environ.copy()
     env["SUBLIFT_WORKER_PATH"] = str(worker)
@@ -487,8 +491,8 @@ def _render_markdown(report: dict[str, Any]) -> str:
             f"- Same-Worker restart readiness: {lifecycle['restart_seconds'] * 1000:.1f}ms "
             f"(gate ≤ {RESTART_SECONDS_MAX * 1000:.0f}ms).",
             "",
-            "Python Paddle remains available through explicit `--runtime python` / "
-            "`SUBLIFT_RUNTIME=python`; no fallback changes the requested OCR engine.",
+            "Python product extract was removed. Historical Python Paddle is the "
+            "`python-product-last` Git tag, not a same-version runtime switch.",
         ]
     )
     if report.get("failure"):
@@ -512,21 +516,8 @@ def run_cutover_gate(
     probe_env["SUBLIFT_WORKER_PATH"] = str(worker)
     if not probe_cpp_paddle_available(env_override=probe_env, repo_root=REPO_ROOT):
         raise RuntimeError("accepted Release Worker did not pass Paddle capability probe")
-    default_choice = resolve_runtime(
-        requested_engine="paddle",
-        env_override={},
-        cpp_paddle_available=True,
-    )
-    rollback_choice = resolve_runtime(
-        requested_runtime="python",
-        requested_engine="paddle",
-        env_override={},
-        cpp_paddle_available=True,
-    )
-    if default_choice.runtime != "cpp" or default_choice.engine != "paddle":
-        raise RuntimeError(f"product default route is not C++ Paddle: {default_choice}")
-    if rollback_choice.runtime != "python" or rollback_choice.engine != "paddle":
-        raise RuntimeError(f"Python rollback changed runtime/engine: {rollback_choice}")
+    if resolve_native_cli(REPO_ROOT) is None:
+        raise RuntimeError("product Native CLI is missing")
 
     source = _source_from_manifest(quality, ROLLBACK_SOURCE_ID)
     source_path = _verify_source(source)
@@ -547,16 +538,6 @@ def run_cutover_gate(
                 script=str(source["script"]),
             ),
             _run_product(
-                name="forced_python_rollback",
-                video=source_path,
-                output=temp / "python-rollback.srt",
-                worker=worker,
-                expected_runtime="python",
-                requested_runtime="python",
-                fps=float(source["fps"]),
-                script=str(source["script"]),
-            ),
-            _run_product(
                 name="default_cpp_after_restart",
                 video=source_path,
                 output=temp / "default-after.srt",
@@ -570,7 +551,7 @@ def run_cutover_gate(
         hashes = {run.output_sha256 for run in runs}
         if len(hashes) != 1:
             raise RuntimeError(
-                "default C++ → forced Python → default C++ outputs are not byte-exact"
+                "default C++ restart outputs are not byte-exact"
             )
         if min(run.output_entries for run in runs) <= 0:
             raise RuntimeError("rollback exercise produced an empty SRT")
@@ -613,14 +594,13 @@ def run_cutover_gate(
             },
             "routes": {
                 "product_default": {
-                    "runtime": default_choice.runtime,
-                    "engine": default_choice.engine,
-                    "resolved_via": default_choice.resolved_via.value,
+                    "runtime": "cpp",
+                    "engine": "paddle",
+                    "resolved_via": "native_cli",
                 },
-                "forced_python": {
-                    "runtime": rollback_choice.runtime,
-                    "engine": rollback_choice.engine,
-                    "resolved_via": rollback_choice.resolved_via.value,
+                "python_product_extract": {
+                    "removed": True,
+                    "historical_tag": "python-product-last",
                 },
             },
             "product_runs": [asdict(run) for run in runs],

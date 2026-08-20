@@ -114,9 +114,8 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 - 缺失 capability 时明确失败，不存在自动 `paddle_override` 或其他引擎替换。
 - 产品接口不接受 `--runtime` / `SUBLIFT_RUNTIME` 作为实现选择。
 
-产品宿主（Native CLI、macOS、Web）已不再通过 `RuntimePolicy` / `SUBLIFT_RUNTIME` 选择
-Python。`src/sublift/runtime.py` 与 Python IPC Server 仍可能存在于工作树，属于待移除隔离
-工具债务，不属于本 C++ tree 的产品合同，也不得新增消费者。
+产品宿主（Native CLI、macOS、Web）只选择 Native Worker/Server。Python CLI、IPC Server
+与 runtime resolver 已从产品包移除；剩余 `src/sublift` 仅服务隔离的 benchmark / Oracle。
 
 ## Related docs
 

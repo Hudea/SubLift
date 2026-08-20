@@ -377,18 +377,24 @@ def _timed_product_run(
     ) as temp_dir:
         output_path = Path(temp_dir) / "output.srt"
         video_path = REPO_ROOT / str(source["video"])
+        if runtime == "python":
+            raise RuntimeError(
+                "Python product extract was removed; replay historical revision "
+                "tagged python-product-last"
+            )
+        from sublift.worker_bin import resolve_native_cli
+
+        native_cli = resolve_native_cli(REPO_ROOT)
+        if native_cli is None:
+            raise RuntimeError("Native CLI not found (build/cpp/bin/sublift)")
         cli_command = [
-            sys.executable,
-            "-m",
-            "sublift.cli",
+            str(native_cli),
             "extract",
             str(video_path),
             "-o",
             str(output_path),
             "--engine",
             "paddle",
-            "--runtime",
-            runtime,
             "--fps",
             str(source["fps"]),
             "--confidence",

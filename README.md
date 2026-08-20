@@ -119,8 +119,8 @@ CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相�
 
 Phase 13 起产品只接受 C++ Worker：能力不可用时 fail-closed；需要回滚时回滚到上一已验收
 版本，而不是在同一版本内切换 Python 实现。产品 CLI、macOS 与 Web 不再接受 `--runtime`
-或 `SUBLIFT_RUNTIME` 作为实现选择。`uv run sublift extract` 会 fail-closed 并提示使用
-Native `build/cpp/bin/sublift`。
+或 `SUBLIFT_RUNTIME` 作为实现选择。Python 包不再提供 `sublift extract`；离线工具入口是
+`sublift-benchmark`。
 
 ### Runtime 矩阵
 

@@ -1,7 +1,7 @@
 [project]
 name = "sublift"
 version = "0.1.0"
-description = "硬字幕（烧录字幕）提取工具，从视频画面中自动识别字幕，生成可编辑的 SRT / ASS / VTT 文件。"
+description = "SubLift 隔离的可选离线工具（benchmark / 诊断 / 冻结 Oracle）。产品入口是 Native CLI。"
 authors = [
     { name = "Hudea", email = "jinzhang0707@outlook.com" }
 ]
@@ -38,7 +38,6 @@ paddle = [
 ]
 
 [project.scripts]
-sublift = "sublift.cli:main"
 sublift-benchmark = "sublift.benchmark.cli:main"
 
 [project.urls]

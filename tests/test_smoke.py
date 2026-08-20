@@ -1,13 +1,12 @@
 """SubLift 冒烟测试。
 
-验证核心数据模型与 CLI 解析的基础行为，不依赖外部资源（视频/ffmpeg/Vision）。
+验证离线工具包数据模型的基础行为，不依赖外部资源。
 """
 
 from __future__ import annotations
 
 import pytest
 
-from sublift.cli import build_parser
 from sublift.models import BoundingBox, Frame, OcrResult, Region, SubtitleEntry
 
 
@@ -43,22 +42,4 @@ class TestModels:
             entry.text = "y"  # type: ignore[misc]
 
 
-class TestCli:
-    """CLI 参数解析基础测试（扩展覆盖见 test_cli.py）。"""
 
-    def test_extract_parses_required_args(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["extract", "video.mp4"])
-        assert args.command == "extract"
-        assert args.video == "video.mp4"
-        assert args.output == "output.srt"
-
-    def test_extract_default_fps(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args(["extract", "video.mp4"])
-        assert args.fps == 5.0
-
-    def test_no_command_sets_none(self) -> None:
-        parser = build_parser()
-        args = parser.parse_args([])
-        assert args.command is None

@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased] — Phase 13 D05: remove Python product implementation
+
+- Removed Python product CLI, IPC server/bridge, runtime resolver, and the `sublift` console script.
+- Remaining `src/sublift` is isolated offline tools (benchmark / frozen Oracle). Product extract is Native only.
+- Last runnable Python product revision is Git tag `python-product-last`.
+
 ## [Unreleased] — Phase 13 D04: Python-free product gate
 
 - Product verification is `./scripts/verify-product.sh`. It does not install or run Python, and it does not skip required checks when python/uv/.venv are missing.

@@ -5,7 +5,7 @@ import Foundation
 /// 协调 PipelineClient（IPC）的端到端字幕提取。
 ///
 /// **统一抽帧（path mode）**：Swift 只传 `video_path` + 参数，由实际选中的
-/// C++ / Python Worker 使用各自 `FfmpegExtractor` 抽帧，不再 AVF+JPEG 推帧。
+/// Native Worker 使用 C++ `FfmpegExtractor` 抽帧，不再 AVF+JPEG 推帧。
 ///
 /// **生命周期**：每次 `extract` 独占一个 `PipelineClient` + `jobToken`。
 /// 取消/完成后丢弃 token，迟到的 progress / push_entry 不会污染 UI 状态。

@@ -1,6 +1,7 @@
-"""SubLift: 硬字幕提取工具。
+"""SubLift offline Python tools (benchmark, diagnostics, frozen Oracle).
 
-从视频画面中自动识别烧录字幕，生成可编辑的 SRT / ASS / VTT 文件。
+The product CLI is Native ``build/cpp/bin/sublift``. This package is not a
+product runtime and does not extract subtitles as a supported product path.
 """
 
 __version__ = "0.1.0"
