@@ -141,8 +141,8 @@ class TestSubLiftServerE2E(unittest.TestCase):
         binary_path = str(project_root / "build" / "cpp" / "bin" / "sublift_server")
         static_dir = str(project_root / "apps" / "web" / "dist")
 
-        # Remote/container mode: fixtures live in a host dir that the server sees
-        # under a different mount point (e.g. host /tmp/x mounted at /media in Docker).
+        # Remote-server mode: fixtures may live in a client-side directory that
+        # the server sees under a different filesystem path.
         cls.workspace_root = os.environ.get("SUBLIFT_E2E_WORKSPACE_DIR", "")
         cls.api_path_prefix = os.environ.get("SUBLIFT_E2E_API_PATH_PREFIX", "")
         if cls.workspace_root:
@@ -265,9 +265,8 @@ class TestSubLiftServerE2E(unittest.TestCase):
     def api(self, host_path: str) -> str:
         """Maps a host-side fixture path to the path the server API should receive.
 
-        In container mode the fixtures directory is bind-mounted under a different
-        mount point (e.g. host workspace dir -> container /media), so API paths must
-        be rewritten with SUBLIFT_E2E_API_PATH_PREFIX before being sent.
+        When a remote server sees the fixtures under a different filesystem path,
+        rewrite API paths with SUBLIFT_E2E_API_PATH_PREFIX before sending them.
         """
         if not (self.workspace_root and self.api_path_prefix):
             return quote(host_path, safe="/")

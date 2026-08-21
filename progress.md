@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-20
+- **最后更新：** 2026-08-21
 - **当前 Phase：** [Phase 13 - 退役 Python Runtime，建立 Native-only 产品](docs/phases/phase13.json)（`ready-for-merge`）
 - **当前 Deliverable：** 无（D01–D06 均 `done`）。合入 `main` 并在 `main` 上复验产品门后才可将 Phase 置 `done`。
 - **进度真源：** [`phases.json`](phases.json) → `detail_file`；本文件只提供当前工作与阻塞导航。
@@ -17,9 +17,9 @@
 
 ## 阻塞项
 
-- [Phase 12](docs/phases/phase12.json) / 12505 — `blocked`：本地修复与降级验收已有证据，
-  但尚无真实 Docker build/run、容器内 `paddle.available=true` 和 golden SRT 比对证明；
-  取得这些外部环境证据前不得将 Phase 12 标记为完成。
+- [Phase 12](docs/phases/phase12.json) / 12505 — `blocked`：Linux 容器交付暂缓，活跃 Docker
+  资产与容器验收分支已移除；本地 Native Server 与 Web 工作台不受影响。未来恢复该范围时
+  需重新实现容器分发并取得真实运行、Paddle capability 与 golden SRT 比对证据。
 
 ## 最近收口
 

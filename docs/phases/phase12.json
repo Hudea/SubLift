@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 12 - Cross-Platform Web UI & Native Server",
-  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：本地 Native Server 与 Web 工作台已经交付；Linux 容器内 Paddle/模型闭环仍缺真实 Docker 环境证明，12505 保持 blocked。",
+  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：本地 Native Server 与 Web 工作台已经交付；Linux 容器交付暂缓，活跃 Docker 资产已移除，12505 保持 blocked。",
   "features": [
     {
       "id": "12001",
@@ -544,7 +544,7 @@
     {
       "id": "12505",
       "name": "Linux 容器化真实闭环与 PaddleOCR/模型完整分发",
-      "description": "重构 Dockerfile 集成 Linux ONNX Runtime、PP-OCRv6 预热模型与 SUBLIFT_ENABLE_PADDLE=ON，升级 verify-web-server.sh 为 Docker/Native 双模验证套件并纠偏台账。",
+      "description": "Linux 容器交付暂缓；恢复该范围时需重新建立 ONNX Runtime、PP-OCRv6 模型分发与容器内真实验收闭环。",
       "module": [
         "Dockerfile",
         "docker-compose.yml",
@@ -561,7 +561,7 @@
         "verify-web-server.sh 具备 Docker 时自动执行容器内真实 Paddle 提取与 SRT Golden 比对；无 Docker 时显式输出容器阶段 SKIPPED 并降级为本地验证。"
       ],
       "status": "blocked",
-      "evidence": "2026-08-17 二轮审核后回退状态并如实化：原 evidence 中“PP-OCRv6 预热模型”与“容器化真实闭环”不实——模型下载 URL 三个全部 404 且被 || true 吞错，Docker 分支从未对真实容器执行过（宿主临时路径与容器沙箱 /media 存在结构性错配）。2026-08-17 修复：Dockerfile 模型源改为 RapidOCR 官方 ModelScope v3.9.2 ONNX 产物（PP-OCRv6 det/rec + cls + dict，与 rapidocr 包内 default_models.yaml 的 URL/SHA256 一致）并 sha256sum -c 硬失败校验；compose 移除空 ./models 遮蔽挂载与死 /output；verify-web-server.sh Docker 分支改为 mktemp 媒体目录挂载 /media + SUBLIFT_E2E_WORKSPACE_DIR/API_PATH_PREFIX 路径映射、paddle.available=true 断言与真实 Paddle 提取 + golden SRT 精确比对（首跑录制、复跑精确比对）。当前实证：本地降级模式全链路通过（E2E 33/33 含 TC-JOB-07 真实 Paddle 提取与 golden 比对、Catch2 [server] 180 断言、Vitest 15/15）；容器阶段（docker build/run + 容器内 paddle 断言）代码就绪但本机无 Docker daemon，尚未在真实容器执行。2026-08-19 按证据纠正为 blocked；获得真实 Docker build/run、容器内 paddle.available=true 和 golden SRT 比对证据前不得置为 done。"
+      "evidence": "2026-08-17 二轮审核后回退状态并如实化：原 evidence 中“PP-OCRv6 预热模型”与“容器化真实闭环”不实——模型下载 URL 三个全部 404 且被 || true 吞错，Docker 分支从未对真实容器执行过（宿主临时路径与容器沙箱 /media 存在结构性错配）。2026-08-17 修复：Dockerfile 模型源改为 RapidOCR 官方 ModelScope v3.9.2 ONNX 产物（PP-OCRv6 det/rec + cls + dict，与 rapidocr 包内 default_models.yaml 的 URL/SHA256 一致）并 sha256sum -c 硬失败校验；compose 移除空 ./models 遮蔽挂载与死 /output；verify-web-server.sh Docker 分支改为 mktemp 媒体目录挂载 /media + SUBLIFT_E2E_WORKSPACE_DIR/API_PATH_PREFIX 路径映射、paddle.available=true 断言与真实 Paddle 提取 + golden SRT 精确比对（首跑录制、复跑精确比对）。当前实证：本地降级模式全链路通过（E2E 33/33 含 TC-JOB-07 真实 Paddle 提取与 golden 比对、Catch2 [server] 180 断言、Vitest 15/15）；容器阶段（docker build/run + 容器内 paddle 断言）代码就绪但本机无 Docker daemon，尚未在真实容器执行。2026-08-19 按证据纠正为 blocked；获得真实 Docker build/run、容器内 paddle.available=true 和 golden SRT 比对证据前不得置为 done。2026-08-21：按当前产品范围决策暂缓 Linux 容器交付，删除活跃 Dockerfile、Compose 与容器验收分支；本地 Native Server 验收保留，12505 继续 blocked，未来恢复时需重新实现并取得真实容器证据。同日验证：本地 Web Server 门 E2E 42/42（含 Paddle golden）、Catch2 292 assertions、Vitest 32/32；Python-free 产品门复跑 23/0；13 份 Phase detail Schema、git diff --check 与 ./init.sh 通过。"
     },
     {
       "id": "12506",

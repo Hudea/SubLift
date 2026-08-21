@@ -71,7 +71,7 @@
       "acceptance": [
         "模型获取或随包流程使用版本化 manifest、固定 SHA-256、临时文件和原子安装，下载或校验失败时不留下可被误判为可用的资源。",
         "ONNX Runtime 的构建与分发路径不从 Python site-packages 或 .venv 解析动态库。",
-        "macOS 与 Linux/Docker 的 ORT 版本、来源和 SHA 由统一 manifest 约束；变更后重跑适用的 Paddle quality/parity/performance 门。",
+        "macOS 与 Linux 的 ORT 版本、来源和 SHA 由统一 manifest 约束；变更后重跑适用的 Paddle quality/parity/performance 门。",
         "Native CLI、macOS 与 Web 对模型位置、版本、capability 和错误身份使用同一 ResourceLocator/ModelBundle 契约。",
         "首次资源准备完成后，Paddle Native 提取可在离线环境重复运行。"
       ],

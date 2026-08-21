@@ -82,7 +82,7 @@
     {
       "id": "phase12",
       "name": "Phase 12 - Cross-Platform Web UI & Native Server",
-      "description": "Native Web Server 与 Web 工作台已交付；12505 的 Linux 容器内 Paddle/模型闭环缺少真实 Docker 证明，Phase 保持阻塞而非完成。",
+      "description": "Native Web Server 与 Web 工作台已交付；Linux 容器交付暂缓且活跃 Docker 资产已移除，12505 保持 blocked。",
       "detail_file": "docs/phases/phase12.json",
       "status": "blocked"
     },
