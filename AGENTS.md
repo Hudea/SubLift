@@ -39,9 +39,7 @@
 - 会话初始化：`./init.sh`
 - Native Debug 构建：`cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON && cmake --build build/cpp`
 - macOS GUI：`cd apps/macos && swift build && swift run SubLiftMac`
-- 产品验证：`./scripts/verify-product.sh`（Python-free；不安装/运行 Python，不因缺少 Python 跳过产品必测项）
 - 隔离离线工具：`./scripts/verify-offline.sh`（benchmark / 评分 / 冻结 Oracle；不是产品门）
-- 过渡全仓：`./scripts/verify-standard.sh`（Native + 离线 Python 检查的混合门，不是产品依赖）
 
 **测试与验证**：
 

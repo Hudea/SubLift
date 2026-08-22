@@ -16,7 +16,7 @@
     "不创建 docs/plans 或 docs/reports；本文件只保存纵向 Deliverable、验收条件和简短证据。",
     "不把当前阶段登记解释为产品代码已经删除或 Python-free 验收已经完成。"
   ],
-  "status": "ready-for-merge",
+  "status": "done",
   "deliverables": [
     {
       "id": "D01",
@@ -158,7 +158,8 @@
         "2026-08-20：Benchmark 默认 backend=native（Native CLI）。冻结 Oracle 仅 `--backend oracle` / config `backend=oracle`。评分/矩阵/报告导入不加载 Pipeline、OCR、OpenCV、Pillow。",
         "2026-08-20：可选工具命名空间 `sublift_offline`；pyproject `sublift-offline` 默认无依赖，extras 为 oracle/vision/paddle。console scripts 为 `sublift-benchmark` 与 `sublift-offline`，不占用产品 `sublift`。默认产物 `debug/benchmark/runs`；未重建 docs/plans 或 docs/reports。",
         "2026-08-20：`uv run pytest -m \"not integration\" --no-cov` 403 passed / 23 deselected；`uv run ruff check .` 与 `uv run mypy src tests` 通过。`./scripts/verify-offline.sh` 12/0。`./init.sh` 通过。产品门仍为 `./scripts/verify-product.sh`（D04 证据 23/0，本 Deliverable 未改 Native 产品代码）。",
-        "2026-08-20：Phase 13 全部 Deliverable 完成，状态进入 ready-for-merge；合入 main 并在 main 上复验前不得标记 done。"
+        "2026-08-20：Phase 13 全部 Deliverable 完成，状态进入 ready-for-merge；合入 main 并在 main 上复验前不得标记 done。",
+        "2026-08-22：合入 main 分支并完成复验；./scripts/verify-product.sh（passed 23 / failed 0）与 ./init.sh 均通过，Phase 13 正式完成并冻结为 done。"
       ]
     }
   ],

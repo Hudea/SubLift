@@ -15,7 +15,7 @@ target_include_directories(sublift_models
 target_link_libraries(sublift_models PUBLIC sublift_core)
 target_link_libraries(sublift_models PRIVATE nlohmann_json::nlohmann_json)
 
-set(_sublift_native_manifest "${PROJECT_SOURCE_DIR}/../native-resources/manifest.v1.json")
+set(_sublift_native_manifest "${PROJECT_SOURCE_DIR}/../resources/manifest.json")
 file(TO_CMAKE_PATH "${_sublift_native_manifest}" _sublift_native_manifest)
 string(REPLACE "\\" "\\\\" _sublift_native_manifest_esc "${_sublift_native_manifest}")
 target_compile_definitions(sublift_models PUBLIC
@@ -25,7 +25,7 @@ target_compile_definitions(sublift_models PUBLIC
 set(_sublift_manifest_share "${CMAKE_BINARY_DIR}/share/sublift")
 file(MAKE_DIRECTORY "${_sublift_manifest_share}")
 configure_file(
-  "${PROJECT_SOURCE_DIR}/../native-resources/manifest.v1.json"
-  "${_sublift_manifest_share}/manifest.v1.json"
+  "${PROJECT_SOURCE_DIR}/../resources/manifest.json"
+  "${_sublift_manifest_share}/manifest.json"
   COPYONLY
 )

@@ -1,5 +1,4 @@
 #include "sublift/adapters/paddle.hpp"
-#include "sublift/diagnostics/paddle_stage_trace.hpp"
 #include "sublift/adapters/paddle_geometry.hpp"
 
 #include <algorithm>
@@ -29,15 +28,8 @@
 #include <opencv2/opencv.hpp>
 #define SUBLIFT_PADDLE_USE_OPENCV 1
 #endif
-#endif
 
 namespace sublift {
-
-void PaddleStageTrace::clear() {
-  *this = PaddleStageTrace{};
-}
-
-#if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
 
 namespace {
 
@@ -243,9 +235,7 @@ struct PaddleOcrEngine::Impl {
   }
 
   paddle::DBPostProcessResult run_det(
-      const paddle::GlobalPreprocessResult& global,
-      PaddleStageTrace* trace) {
-    const auto preprocess_start = SteadyClock::now();
+      const paddle::GlobalPreprocessResult& global) {
     auto prepared = paddle::prepare_det_input(
         global.rgb.data(), global.width, global.height);
     const auto rw = prepared.width;
@@ -253,14 +243,6 @@ struct PaddleOcrEngine::Impl {
     auto& input = prepared.nchw;
 
     std::array<int64_t, 4> shape{1, 3, rh, rw};
-    if (trace != nullptr) {
-      trace->det_input.shape.assign(shape.begin(), shape.end());
-      trace->det_input.values = input;
-      trace->det_preprocess_ms = elapsed_ms(preprocess_start);
-      trace->det_call_count += 1;
-    }
-
-    const auto infer_start = SteadyClock::now();
     Ort::Value tensor = Ort::Value::CreateTensor<float>(memory_info, input.data(), input.size(),
                                                         shape.data(), shape.size());
     const char* in_names[] = {det_input_name.c_str()};
@@ -269,12 +251,6 @@ struct PaddleOcrEngine::Impl {
     float* out = outputs[0].GetTensorMutableData<float>();
     auto info = outputs[0].GetTensorTypeAndShapeInfo();
     auto dims = info.GetShape();
-    const std::size_t output_count = info.GetElementCount();
-    if (trace != nullptr) {
-      trace->det_probability_map.shape = dims;
-      trace->det_probability_map.values.assign(out, out + output_count);
-      trace->det_infer_ms = elapsed_ms(infer_start);
-    }
     int32_t oh = rh;
     int32_t ow = rw;
     if (dims.size() == 4) {
@@ -286,34 +262,15 @@ struct PaddleOcrEngine::Impl {
     }
     paddle::DBPostProcessOptions opts;
     opts.det_box_thresh = 0.5F;
-    const auto postprocess_start = SteadyClock::now();
     auto result = paddle::db_postprocess(
         out, oh, ow, global.height, global.width, opts);
     paddle::sort_db_result(&result);
     runtime_stats.det_boxes += result.quads.size();
-    if (trace != nullptr) {
-      trace->det_quads.reserve(result.quads.size());
-      for (const auto& quad : result.quads) {
-        trace->det_quads.push_back(PaddleQuadTrace{
-            .x0 = quad.p0.x,
-            .y0 = quad.p0.y,
-            .x1 = quad.p1.x,
-            .y1 = quad.p1.y,
-            .x2 = quad.p2.x,
-            .y2 = quad.p2.y,
-            .x3 = quad.p3.x,
-            .y3 = quad.p3.y,
-            .score = quad.score,
-        });
-      }
-      trace->det_postprocess_ms = elapsed_ms(postprocess_start);
-    }
     return result;
   }
 
   std::vector<paddle::ClsResult> run_cls(
-      std::vector<paddle::CropResult>& crops,
-      PaddleStageTrace* trace) {
+      std::vector<paddle::CropResult>& crops) {
     constexpr std::int64_t kChannels = 3;
     constexpr std::int64_t kHeight = 48;
     constexpr std::int64_t kWidth = 192;
@@ -341,7 +298,6 @@ struct PaddleOcrEngine::Impl {
       ++runtime_stats.cls_batches;
       const std::size_t end = std::min(indices.size(), begin + batch_size);
       const std::size_t batch = end - begin;
-      const auto preprocess_start = SteadyClock::now();
       std::vector<float> input(
           batch * static_cast<std::size_t>(
                       kChannels * kHeight * kWidth),
@@ -359,16 +315,7 @@ struct PaddleOcrEngine::Impl {
           kHeight,
           kWidth,
       };
-      if (trace != nullptr) {
-        trace->cls_preprocess_ms += elapsed_ms(preprocess_start);
-        trace->cls_inputs.push_back(PaddleTensorTrace{
-            .shape = std::vector<std::int64_t>(shape.begin(), shape.end()),
-            .values = input,
-        });
-        trace->cls_call_count += 1;
-      }
 
-      const auto infer_start = SteadyClock::now();
       Ort::Value tensor = Ort::Value::CreateTensor<float>(
           memory_info,
           input.data(),
@@ -392,16 +339,7 @@ struct PaddleOcrEngine::Impl {
           output_shape[1] != 2) {
         throw std::runtime_error("PaddleOCR cls 输出维度异常");
       }
-      if (trace != nullptr) {
-        trace->cls_infer_ms += elapsed_ms(infer_start);
-        trace->cls_logits.push_back(PaddleTensorTrace{
-            .shape = output_shape,
-            .values = std::vector<float>(
-                output, output + output_info.GetElementCount()),
-        });
-      }
 
-      const auto postprocess_start = SteadyClock::now();
       for (std::size_t item = 0; item < batch; ++item) {
         const float* scores = output + item * 2;
         const int label = scores[1] > scores[0] ? 1 : 0;
@@ -410,24 +348,13 @@ struct PaddleOcrEngine::Impl {
         auto result = paddle::apply_cls_result(
             crops[original_index], label, score, kRotateThreshold);
         results[original_index] = result;
-        if (trace != nullptr) {
-          trace->cls_results.push_back(PaddleClsResultTrace{
-              .label = label == 1 ? "180" : "0",
-              .score = score,
-              .rotated_180 = result.rotated_180,
-          });
-        }
-      }
-      if (trace != nullptr) {
-        trace->cls_postprocess_ms += elapsed_ms(postprocess_start);
       }
     }
     return results;
   }
 
   std::vector<paddle_detail::CtcResult> run_rec(
-      const std::vector<paddle::CropResult>& crops,
-      PaddleStageTrace* trace) {
+      const std::vector<paddle::CropResult>& crops) {
     constexpr std::int64_t kChannels = 3;
     constexpr std::int64_t kHeight = 48;
     constexpr double kBaseWidthRatio = 320.0 / 48.0;
@@ -466,7 +393,6 @@ struct PaddleOcrEngine::Impl {
           1,
           static_cast<std::int64_t>(
               static_cast<double>(kHeight) * max_width_ratio));
-      const auto preprocess_start = SteadyClock::now();
       const std::size_t item_size = static_cast<std::size_t>(
           kChannels * kHeight * target_width);
       std::vector<float> input(batch * item_size, 0.0F);
@@ -483,16 +409,7 @@ struct PaddleOcrEngine::Impl {
           kHeight,
           target_width,
       };
-      if (trace != nullptr) {
-        trace->rec_preprocess_ms += elapsed_ms(preprocess_start);
-        trace->rec_inputs.push_back(PaddleTensorTrace{
-            .shape = std::vector<std::int64_t>(shape.begin(), shape.end()),
-            .values = input,
-        });
-        trace->rec_call_count += 1;
-      }
 
-      const auto infer_start = SteadyClock::now();
       Ort::Value tensor = Ort::Value::CreateTensor<float>(
           memory_info,
           input.data(),
@@ -522,16 +439,7 @@ struct PaddleOcrEngine::Impl {
         throw std::runtime_error(
             "PaddleOCR rec 输出类别数与模型字典不一致");
       }
-      if (trace != nullptr) {
-        trace->rec_infer_ms += elapsed_ms(infer_start);
-        trace->rec_logits.push_back(PaddleTensorTrace{
-            .shape = output_shape,
-            .values = std::vector<float>(
-                output, output + output_info.GetElementCount()),
-        });
-      }
 
-      const auto decode_start = SteadyClock::now();
       const std::size_t output_item_size =
           static_cast<std::size_t>(sequence_length) *
           static_cast<std::size_t>(class_count);
@@ -542,16 +450,6 @@ struct PaddleOcrEngine::Impl {
             class_count,
             dictionary);
         results[indices[begin + item]] = decoded;
-        if (trace != nullptr) {
-          trace->decoded_results.push_back(PaddleDecodedTrace{
-              .ctc_tokens = decoded.token_indices,
-              .decoded_text = decoded.text,
-              .decoded_confidence = decoded.confidence,
-          });
-        }
-      }
-      if (trace != nullptr) {
-        trace->rec_decode_ms += elapsed_ms(decode_start);
       }
     }
     return results;
@@ -584,62 +482,10 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
     const int32_t w = image.width();
     const int32_t h = image.height();
     const int32_t stride = static_cast<int32_t>(image.stride_bytes());
-    PaddleStageTrace* trace =
-        impl_->options.dump_stages ? impl_->options.stage_trace : nullptr;
-    if (trace != nullptr) {
-      trace->clear();
-      trace->recognize_call_count = 1;
-      trace->input_width = w;
-      trace->input_height = h;
-      trace->input_stride = stride;
-      trace->input_color_order = "RGB";
-      trace->cls_enabled = true;
-      trace->input_rgb.resize(
-          static_cast<std::size_t>(w) * static_cast<std::size_t>(h) * 3);
-      for (std::int32_t y = 0; y < h; ++y) {
-        std::memcpy(
-            trace->input_rgb.data() +
-                static_cast<std::size_t>(y) * static_cast<std::size_t>(w) * 3,
-            rgb + static_cast<std::size_t>(y) *
-                      static_cast<std::size_t>(stride),
-            static_cast<std::size_t>(w) * 3);
-      }
-    }
 
-    const auto global_start = SteadyClock::now();
     const auto global = paddle::prepare_global_image(rgb, w, h, stride);
-    if (trace != nullptr) {
-      trace->working_width = global.width;
-      trace->working_height = global.height;
-      trace->working_rgb = global.rgb;
-      trace->global_ratio_h = global.ratio_h;
-      trace->global_ratio_w = global.ratio_w;
-      trace->global_padding_top = global.padding_top;
-      trace->global_padding_left = global.padding_left;
-      trace->global_preprocess_ms = elapsed_ms(global_start);
-    }
-
-    auto db_res = impl_->run_det(global, trace);
-    if (impl_->options.det_quads_override != nullptr) {
-      db_res.quads.clear();
-      db_res.quads.reserve(impl_->options.det_quads_override->size());
-      for (const auto& frozen : *impl_->options.det_quads_override) {
-        db_res.quads.push_back(paddle::QuadPolygon{
-            .p0 = Point2D{frozen.x0, frozen.y0},
-            .p1 = Point2D{frozen.x1, frozen.y1},
-            .p2 = Point2D{frozen.x2, frozen.y2},
-            .p3 = Point2D{frozen.x3, frozen.y3},
-            .score = frozen.score,
-        });
-      }
-      if (trace != nullptr) {
-        trace->det_quads = *impl_->options.det_quads_override;
-      }
-    }
+    auto db_res = impl_->run_det(global);
     if (db_res.quads.empty()) {
-      if (trace != nullptr) {
-        trace->output_lines.clear();
-      }
       return OcrResult::from_lines({});
     }
 
@@ -647,25 +493,14 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
     crops.reserve(db_res.quads.size());
     for (size_t i = 0; i < db_res.quads.size(); ++i) {
       const auto& quad = db_res.quads[i];
-
-      const auto crop_start = SteadyClock::now();
       paddle::CropResult crop = paddle::get_rotate_crop(
           global.rgb.data(), global.width, global.height, global.width * 3,
           quad);
-      if (trace != nullptr) {
-        trace->crop_ms += elapsed_ms(crop_start);
-        trace->crops.push_back(PaddleCropStageTrace{
-            .width = crop.width,
-            .height = crop.height,
-            .rotated_90 = crop.rotated_90,
-            .rgb = crop.rgb_data,
-        });
-      }
       crops.push_back(std::move(crop));
     }
 
-    (void)impl_->run_cls(crops, trace);
-    auto recognized = impl_->run_rec(crops, trace);
+    (void)impl_->run_cls(crops);
+    auto recognized = impl_->run_rec(crops);
 
     std::vector<OcrLine> lines;
     lines.reserve(db_res.quads.size());
@@ -688,14 +523,8 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
           .box = crop_box,
       });
     }
-    const auto output_start = SteadyClock::now();
     sort_ocr_lines(lines);
-    OcrResult result = OcrResult::from_lines(lines);
-    if (trace != nullptr) {
-      trace->output_lines = result.lines;
-      trace->output_ms = elapsed_ms(output_start);
-    }
-    return result;
+    return OcrResult::from_lines(lines);
   } catch (const Ort::Exception& e) {
     throw std::runtime_error(std::string("PaddleOCR ONNX Runtime 推理故障: ") + e.what());
   } catch (const std::runtime_error&) {

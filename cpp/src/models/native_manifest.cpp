@@ -128,12 +128,16 @@ ManifestLoadResult load_default_native_manifest(
 #endif
   const auto exe_dir = executable_dir.has_value() ? executable_dir : process_executable_dir();
   if (exe_dir.has_value()) {
+    candidates.push_back(*exe_dir / "share" / "sublift" / "manifest.json");
+    candidates.push_back(exe_dir->parent_path() / "share" / "sublift" / "manifest.json");
     candidates.push_back(*exe_dir / "share" / "sublift" / "manifest.v1.json");
     candidates.push_back(exe_dir->parent_path() / "share" / "sublift" / "manifest.v1.json");
   }
   std::error_code ec;
   const auto cwd = std::filesystem::current_path(ec);
   if (!ec) {
+    candidates.push_back(cwd / "resources" / "manifest.json");
+    candidates.push_back(cwd.parent_path() / "resources" / "manifest.json");
     candidates.push_back(cwd / "native-resources" / "manifest.v1.json");
     candidates.push_back(cwd.parent_path() / "native-resources" / "manifest.v1.json");
   }
@@ -216,7 +220,7 @@ bool ort_library_digest_allowed(
   }
   if (error_msg) {
     *error_msg = "ONNX Runtime library SHA-256 " + *digest +
-                 " is not in native-resources/manifest.v1.json";
+                 " is not in resources/manifest.json";
   }
   return false;
 }

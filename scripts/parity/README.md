@@ -30,53 +30,6 @@ Golden path: `benchmark/parity/goldens/config/default_config.v1.json`.
 
 C++ loads the same file in Catch2 `[parity][config]` (offline; no Python at test time).
 
-## Paddle stage golden (feat-06802)
-
-```bash
-# 可选历史离线校验：不加载/下载 OCR 模型
-uv run python scripts/parity/dump_paddle_stages.py --check
-
-# 显式 live 双运行时重放：要求本机模型与 Paddle C++ trace executable
-uv run python scripts/parity/dump_paddle_stages.py --check --runtime \
-  --report-out /tmp/sublift_paddle_stages_live.json \
-  --raw-dir /tmp/sublift_paddle_stages_raw
-
-# 仅在有意更新冻结 Oracle/Candidate 时重建 v2 golden
-uv run python scripts/parity/dump_paddle_stages.py --runtime
-```
-
-Golden: `benchmark/parity/goldens/paddle/paddle_stages.v2.json`。冻结环境、模型、
-字典与参数位于 `freeze_paddle_manifest.json`；live 模式会在推理前核验实际文件
-SHA256。产品路径默认不捕获 tensor，逐阶段大对象只存在于显式诊断工具。
-
-## Paddle Det live gate (feat-06803)
-
-```bash
-# 历史 Candidate 复核：记录 Python/C++ ORT dylib SHA，并选择同构建/跨构建门
-uv run python scripts/parity/check_paddle_det_parity.py --check \
-  --report-out /tmp/sublift_paddle_det_gate.json
-
-# 严格同 ORT 二进制复验时，显式给出 Candidate 动态库
-uv run python scripts/parity/check_paddle_det_parity.py --check \
-  --candidate-ort-library /path/to/libonnxruntime \
-  --report-out /tmp/sublift_paddle_det_strict.json
-```
-
-硬门覆盖 Det input/probability tensor、quad IoU/坐标/score 和 empty 的
-`0 box / 0 Rec`。同 ORT 二进制 probability `max_abs <= 1e-5`；同版本/provider
-但不同二进制构建使用 `2.5e-5`，报告必须带双方 SHA256，box 门不放宽。
-
-## Paddle Crop / Cls / Rec live gate (feat-06804)
-
-```bash
-uv run python scripts/parity/check_paddle_rec_parity.py --check \
-  --report-out /tmp/sublift_paddle_rec_gate.json
-```
-
-该门使用冻结 Python Det quad 隔离下游算子，检查 perspective crop、Cls/Rec tensor、
-batch call、CTC token/text、最终顺序与 AABB；历史端到端对照由 stage/quality 重放覆盖，
-当前产品验收以 Native tests、golden 与 GT 为准。
-
 ## Paddle E2E quality gate (feat-06805)
 
 ```bash

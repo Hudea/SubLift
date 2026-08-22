@@ -86,7 +86,7 @@ revision/tag 定位，不建立源码 archive。
 - 日常离线测试读取已提交 golden，不启动 Python。
 - Live Paddle/Vision、性能、长流和 GT 门仅在所需模型、媒体与依赖齐备时运行；缺失条件不得伪装为完整验收。
 - `--skip-runtime`、`--skip-gt` 等降级模式只验证其实际执行部分。
-- 产品 target 不依赖 test support、diagnostics 或 benchmark。
+- 产品 target 不依赖 test support 或 benchmark。
 - Native-only 产品门必须能在不存在 Python、`.venv` 和 `PYTHONPATH` 的环境执行。
 - 可选 Python 工具只能离线生成候选数据；是否接受结果由 golden review、GT 和 Native tests
   决定，工具本身不是行为真源。

@@ -2,12 +2,12 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-21
-- **当前 Phase：** [Phase 13 - 退役 Python Runtime，建立 Native-only 产品](docs/phases/phase13.json)（`ready-for-merge`）
-- **当前 Deliverable：** 无（D01–D06 均 `done`）。合入 `main` 并在 `main` 上复验产品门后才可将 Phase 置 `done`。
+- **最后更新：** 2026-08-22
+- **当前 Phase：** 无（[Phase 13](docs/phases/phase13.json) 已在 `main` 完成验收并置 `done`）
+- **当前 Deliverable：** 无。所有已登记 Deliverable 均已交付。
 - **进度真源：** [`phases.json`](phases.json) → `detail_file`；本文件只提供当前工作与阻塞导航。
 
-## Phase 13 目标
+## Phase 13 目标（已达成）
 
 在无 Python、uv、`.venv` 的环境中，使 Native CLI、macOS 与 Web 均可完成模型与 ORT
 资源准备、视频提取、SRT 导出和产品验证。产品不再提供 Python Runtime 回退；需要回滚时
@@ -23,7 +23,7 @@
 
 ## 最近收口
 
-- Phase 13 D01–D06 已在当前分支完成，Phase 进入 `ready-for-merge`（尚未合入 main）。
+- Phase 13 已合入 `main`，通过 `./scripts/verify-product.sh` 并在 `main` 上冻结为 `done`。
 - Phase 12 除 12505 容器实证外的 Native Server、Web Workbench、Task Center、媒体工作区与本地验证能力已交付。
 - Phase 10 macOS Native Workbench UI 已完成。
 - Phase 8 macOS Batch Task Center 已完成。

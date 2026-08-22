@@ -15,7 +15,7 @@
 | `sublift_worker_runtime` | OCR/Detector/媒体服务工厂与 UDS session | application、protocol；Adapters 私有 |
 | `sublift_cli` | 参数解析、Worker 启动、IPC 客户端与 SRT 输出 | protocol、core |
 | `sublift_server_runtime` | HTTP/SSE、JobManager、媒体沙箱与 Web 宿主 | application、worker runtime、Adapters 与 server 依赖 |
-| `sublift_test_support` / diagnostics | Golden、fixture、比较器与 Paddle trace | 仅测试和显式诊断 |
+| `sublift_test_support` | Golden、fixture 与比较器 | 仅测试 |
 
 ## 2. 依赖方向
 
@@ -44,7 +44,7 @@ Application 只依赖 SubLift 自有模型及抽象能力；Worker 与 Server �
 | `cpp/src/worker/` | Worker composition root 与 UDS connection |
 | `cpp/include/sublift/server/`、`cpp/src/server/` | Native Web Server |
 | `cpp/src/cli/` | Native CLI |
-| `cpp/src/test_support/`、`cpp/diagnostics/` | 非产品验证与诊断 |
+| `cpp/src/test_support/` | 仅测试辅助与 Fixture 加载 |
 
 根级兼容头只做转发，不承载新实现；新公共接口应落在对应职责目录。
 

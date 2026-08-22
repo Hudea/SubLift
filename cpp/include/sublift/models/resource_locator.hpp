@@ -29,7 +29,7 @@ class ResourceLocator {
 
   /// Probe and locate Paddle model bundle.
   /// When require_digest is true (product default), files must match the
-  /// committed native-resources manifest SHA-256.
+  /// committed resource manifest (resources/manifest.json) SHA-256.
   [[nodiscard]] ResourceResult<ModelPaths> probe_model_bundle(
       const std::string& custom_dir = "", ModelType type = ModelType::Small,
       bool require_digest = true) const;

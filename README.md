@@ -83,14 +83,14 @@ cmake --build build/cpp
 ```
 
 > Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
-> Native Paddle 使用 `native-resources/manifest.v1.json` 固定的 PP-OCRv6-small
+> Native Paddle 使用 `resources/manifest.json` 固定的 PP-OCRv6-small
 > 文件与 SHA-256。首次运行 `./build/cpp/bin/sublift resources install`；缺少或
 > 校验失败时明确失败，不会下载到 RapidOCR 缓存或切换到 Python。
 
 ### Paddle Native Release 构建
 
 Paddle Native 使用 Homebrew 或官方 GitHub ONNX Runtime，版本与 SHA 由
-`native-resources/manifest.v1.json` 约束。CMake 会拒绝 `.venv` / `site-packages`
+`resources/manifest.json` 约束。CMake 会拒绝 `.venv` / `site-packages`
 里的 Python wheel。
 
 ```bash

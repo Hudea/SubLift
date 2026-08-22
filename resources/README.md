@@ -1,6 +1,6 @@
-# Native resource manifest
+# Resource manifest
 
-`manifest.v1.json` is the product contract for Paddle PP-OCRv6-small models,
+`manifest.json` is the product contract for Paddle PP-OCRv6-small models,
 the recognition dictionary, and ONNX Runtime shared libraries.
 
 - Models and ORT artifacts are pinned by SHA-256.

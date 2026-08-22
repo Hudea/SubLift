@@ -120,7 +120,7 @@ ResourceResult<ModelPaths> ResourceLocator::probe_model_bundle(
     if (type != ModelType::Small) {
       res.error_msg =
           "Paddle model type '" + model_type_to_string(type) +
-          "' is not pinned in native-resources/manifest.v1.json";
+          "' is not pinned in resources/manifest.json";
       return res;
     }
     manifest = load_default_native_manifest();

@@ -10,25 +10,16 @@
 
 namespace sublift {
 
-// Forward diagnostics types so product consumers need not include stage-trace
-// headers. Full definitions live in sublift/diagnostics/paddle_stage_trace.hpp.
-struct PaddleStageTrace;
-struct PaddleQuadTrace;
-
 /// 返回 C++ PaddleOCR 引擎在当前运行时/构建中是否可用
 [[nodiscard]] bool is_paddle_available() noexcept;
 
-/// Product-facing paddle options (diagnostics fields are optional / null by default).
+/// Product-facing paddle options.
 struct PaddleOptions {
   std::string model_type{"small"};  // tiny / small / medium
   std::string model_root_dir{};
   std::int32_t intra_op_threads{4};
   std::int32_t cls_batch_size{6};
   std::int32_t rec_batch_size{6};
-  bool dump_stages{false};
-  std::string dump_out_dir{};
-  PaddleStageTrace* stage_trace{nullptr};
-  const std::vector<PaddleQuadTrace>* det_quads_override{nullptr};
 };
 
 /// Backward-compatible alias used by existing call sites / parity tools.
