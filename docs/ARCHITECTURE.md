@@ -40,7 +40,7 @@ SubLift 按职责分层，产品依赖向领域核心收敛；平台能力和第
 | `cpp/` | Native 产品实现：Core、Pipeline、Application、Protocol、Adapters、Worker、CLI 与 Server |
 | `apps/macos/` | SwiftUI 工作台、批量任务中心、播放与编辑状态，以及 UDS 客户端 |
 | `apps/web/` | Web 工作台与批量任务中心，通过 HTTP/SSE 使用 Native Server |
-| `src/sublift/` | Python 离线工具与待退役兼容实现；位于产品依赖图之外 |
+| `src/sublift/` | 冻结 Oracle 与离线工具内部实现；位于产品依赖图之外，不随产品新能力演进 |
 | `benchmark/` | 版本化配置、数据集、质量基线、golden 与 parity 资产 |
 
 各目录内部按第二章的职责边界继续拆分；详细文件归属由对应目录的 README 与构建配置维护，本文不复制完整文件树。
@@ -123,6 +123,21 @@ Application、Pipeline、Ports 与 Adapters。
 产品架构不定义任何 Python runtime 路径；仓库中与此冲突的兼容代码属于实现偏差，不构成
 受支持边界。
 
+### 7.1 Web / Native Server 会话与结果所有权
+
+Web 入口仍是本机产品边界，不因使用 HTTP 而获得读取任意本机文件或丢弃任务状态的例外：
+
+- `WorkspaceManager` 提供当前唯一媒体授权根；stream、frame、detect、resolve、scan、job
+  和 export 对路径做同一套 canonical、symlink 与内部缓存边界校验。Native Server 默认只
+  绑定 loopback，扩大监听范围必须显式采用独立访问控制合同。
+- JobManager 暴露可查询的配置、状态、事件 cursor 与最终结果快照。Web 队列以 job id 关联，
+  持久化状态版本化、原子写且有界；服务重启后活动任务变为 interrupted，不自动恢复 OCR。
+- SSE 事件使用 job 内单调序号，重连从 Last-Event-ID/cursor 继续；客户端按 job id + seq
+  去重。进度协议使用 `0.0–1.0`，仅在 UI 显示边界换算为百分数。
+- 单视频与批量入口映射到同一配置快照，显式携带 ROI policy。最终字幕、用户审阅草稿与
+  输出文件各有版本/状态；浏览器下载不等同于服务端已保存，磁盘 completed 必须以原子写
+  成功为准。
+
 ## 8. 配置、能力与资源
 
 配置在产品入口完成解析和校验，由 Application 为每个 job 创建不可追溯修改的快照；运行中的任务不读取 UI 的后续变更。
@@ -133,7 +148,9 @@ Application、Pipeline、Ports 与 Adapters。
 | Capability | 由当前二进制、平台、Adapter 和资源共同声明；UI 只展示探测结果，不自行推断 |
 | 引擎选择 | 宿主根据显式配置装配 Adapter；不可用时 fail-closed，不静默改引擎 |
 | 模型与资源 | `ResourceLocator` / `ModelBundle` 解析模型和运行时资源；路径查找不进入 Core 或 Pipeline |
-| 媒体路径 | Worker、Server 在宿主边界校验和解析；领域层只接收已解析的任务输入 |
+| 媒体路径 | Worker 在宿主边界校验；Server 以 `WorkspaceManager` 的 canonical media root 统一授权和解析；领域层只接收已解析输入 |
+| Web 任务状态 | 配置快照、queue/job 状态、事件 cursor 和终态结果使用工作区内的版本化、有界持久化；损坏或未知版本 fail-closed |
+| Web 输出 | 浏览器下载与工作区保存分开；服务端保存必须在授权根内按冲突策略原子落盘，Review 导出使用当前草稿版本 |
 
 参数默认值和完整字段以 Native Config 定义及其契约测试为准，本文不复制字段清单。
 

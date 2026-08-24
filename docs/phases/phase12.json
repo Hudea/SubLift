@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 12 - Cross-Platform Web UI & Native Server",
-  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）：本地 Native Server 与 Web 工作台已经交付；Linux 容器交付暂缓，活跃 Docker 资产已移除，12505 保持 blocked。",
+  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）。既有服务端、单视频工作台、智能选区和批量交互基座已交付；2026-08-23 全局审计后重新进入完成度收口，当前推进 12510，12511–12516 登记为后续纵向能力。Linux 容器交付仍暂缓，12505 保持 blocked。",
   "features": [
     {
       "id": "12001",
@@ -749,6 +749,263 @@
       ],
       "status": "done",
       "evidence": "2026-08-17 完成。C++ 新增 WorkspaceManager（~ 展开、目录合法性校验、.sublift_cache/remux/frames 自动建目录、~/.config/sublift/workspace.json 跨实例持久化）与 GET/POST /api/config/workspace 及 clear 路由；remux_to_faststart_mp4 与视频流转封装就近写入 <media_dir>/.sublift_cache/remux；指纹反查与路径沙箱将 workspace.media_dir 设为最高优先级搜索根域。前端：实现 WorkspaceSetupView 极简引导卡片（『请指定视频所在的文件夹路径：』带常用预设与回车一键初始化进入工作台）；Navbar 增加工作区目录胶囊与切换 Modal；App.vue 实现工作区未配置时自动拦截引导，配置后直通工作台与任务中心。测试：server_test 新增 WorkspaceManager 与 API 端点 2 套用例（Catch2 [server] 243 assertions 100% 全绿）；Vitest 新增 system.test.ts 工作区管理用例（23/23 全绿）；E2E 新增 TC-WKS-01/02（37/37 全绿）；verify-web-server.sh 验收通过；verify-standard.sh 12/12 门禁 100% 全绿；./init.sh OK。"
+    },
+    {
+      "id": "12509",
+      "name": "智能字幕区域识别与选区平滑吸附",
+      "description": "在 Web 单视频工作台中由 Native Server 对视频代表时刻进行字幕区域检测，返回归一化候选框；前端自动应用首个可信结果，并允许用户继续拖动、缩放和锁定选区。",
+      "module": [
+        "cpp/include/sublift/server/region_detector.hpp",
+        "cpp/src/server/region_detector.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/components/RoiOverlay.vue",
+        "apps/web/src/views/WorkbenchView.vue",
+        "apps/web/src/stores/workbench_roi.test.ts",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12508"
+      ],
+      "acceptance_criteria": [
+        "POST /api/video/detect-region 对受支持视频返回带来源尺寸的归一化字幕区域；非法路径、非媒体文件和越界输入 fail-closed。",
+        "视频载入后可自动触发检测并给出明确反馈；低置信或无候选时保留可操作的默认区域，不阻断手工选区。",
+        "用户已手工移动或缩放选区后，迟到的自动检测结果不得覆盖用户选择；Canvas 选区仍可平滑拖动、缩放并保持坐标映射正确。",
+        "Native Server 契约测试、Web 状态测试与真实浏览器单视频提取共同覆盖自动识别、手工覆盖和最终 region_box 传递。"
+      ],
+      "status": "done",
+      "evidence": "实现提交 28a71d5（feat(server,web): 实现智能字幕区域自动识别与选区平滑吸附）。2026-08-23 复核：npm --prefix apps/web test 为 7 files / 32 tests 全绿；sublift_tests [server] 为 11 test cases / 292 assertions 全绿；真实浏览器载入 Zootopia 片段后自动检测区域、显示预览文字并携带 region_box 完成 Vision Fast 提取，得到 59 条字幕。"
+    },
+    {
+      "id": "12510",
+      "name": "Web 批量任务中心交互增强与受控文件夹扫描",
+      "description": "把现有批量队列完善为可理解、可操作、可验证的任务中心：统一浏览器文件夹导入与服务端路径扫描，提供筛选、任务详情、单项控制、重试、重排和清理，并保证扫描结果只来自当前工作区。",
+      "module": [
+        "cpp/include/sublift/server/path_sandbox.hpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/batch.ts",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/stores/batch.test.ts",
+        "apps/web/src/utils/browser_scanner.ts",
+        "apps/web/src/utils/browser_scanner.test.ts",
+        "apps/web/src/utils/batch_guards.ts",
+        "apps/web/src/components/BatchDropZone.vue",
+        "apps/web/src/components/BatchTaskInspector.vue",
+        "apps/web/src/components/BatchTaskRow.vue",
+        "apps/web/src/views/TaskCenterView.vue",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12508"
+      ],
+      "acceptance_criteria": [
+        "浏览器文件夹导入和服务端路径扫描统一输出 accepted / skipped / rejected 摘要，明确区分重复、格式不支持、路径不可读和超限原因；文件名不得冒充服务端绝对路径。",
+        "POST /api/video/scan-path 只扫描当前 WorkspaceManager 的 canonical media root，拒绝工作区外路径与符号链接逃逸，并具备明确的深度、结果数量和耗时上限。",
+        "任务中心支持搜索与状态筛选、详情 Inspector、单项启动/取消/重试/移除、等待项重排、完成项清理；所有动作遵守单并发和终态不可回退约束。",
+        "多来源重复导入保持确定性去重；单个输入失败不阻断其余合法视频入队，扫描和调度错误在 UI 中可见。",
+        "Vitest、Catch2 与 E2E 覆盖浏览器扫描、服务端扫描边界、重复/拒绝摘要和队列交互；真实浏览器完成至少两个视频的串行批量提取。"
+      ],
+      "status": "in-progress",
+      "evidence": "已有实现基线提交 88fa1cb（feat(server,web): 实现 Web 批量任务中心交互增强与文件夹扫描支持）。2026-08-23 复核：npm --prefix apps/web test 为 7 files / 32 tests 全绿，sublift_tests [server] 为 11 test cases / 292 assertions 全绿，真实浏览器两视频串行批量任务完成；但 live probe 证明 /api/video/scan-path 及部分媒体路由尚未统一受当前工作区根约束，且扫描缺少统一的结果数/耗时硬上限，因此保持 in-progress。"
+    },
+    {
+      "id": "12511",
+      "name": "统一媒体沙箱与 Native Server 信任边界",
+      "description": "把 WorkspaceManager 设为 Native Server 唯一媒体授权根，让预览、抽帧、检测、任务创建、指纹反查、扫描和导出共享同一 fail-closed 路径策略，并冻结本地服务的网络暴露边界。",
+      "module": [
+        "cpp/include/sublift/server/path_sandbox.hpp",
+        "cpp/include/sublift/server/workspace_manager.hpp",
+        "cpp/src/server/workspace_manager.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/http_server.cpp",
+        "cpp/src/server/main.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/stores/system.ts",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12510"
+      ],
+      "acceptance_criteria": [
+        "所有接收或产生媒体路径的 HTTP 路由均从当前 WorkspaceManager 获取 canonical allowed root；UI 切换工作区后新请求立即使用新根，根不可解析时 fail-closed。",
+        "工作区外绝对路径、.. 逃逸、符号链接逃逸、非媒体文件、.sublift_cache 内部资产和已切换旧根中的路径均被一致拒绝，且响应不泄露文件内容。",
+        "Native Server 默认只绑定 loopback；非 loopback 暴露必须显式启用并满足已冻结的访问控制与 CORS 策略，不得因 --host 参数意外扩大本地文件访问面。",
+        "Catch2 与 E2E 为 stream、frame、detect-region、resolve、scan-path、jobs 和 export 建立同一组正负路径矩阵，并包含工作区切换回归。"
+      ],
+      "non_goals": [
+        "不把 Native Server 扩展为云端 SaaS、多租户服务或互联网文件服务器。",
+        "不通过恢复全盘默认搜索来兼容旧调用。"
+      ],
+      "architecture_refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md",
+        "docs/cpp/runtime-contract.md"
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "12512",
+      "name": "可恢复 Job/Queue 与可靠 SSE 事件流",
+      "description": "让 Native Server 与 Web 客户端拥有可查询、可恢复、可去重的任务控制面：页面刷新或服务重启后能恢复队列和终态结果，活动任务以明确的 interrupted 语义收口，SSE 重连不重复字幕。",
+      "module": [
+        "cpp/include/sublift/server/job_manager.hpp",
+        "cpp/src/server/job_manager.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/workspace_manager.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/types/batch.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/stores/batch.test.ts",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12511"
+      ],
+      "acceptance_criteria": [
+        "Native Server 提供 job 列表、单项状态与结果快照；队列、配置快照和终态结果在当前工作区的版本化状态文件中原子保存，并具备大小与历史数量上限。",
+        "服务重启时 queued/running 任务转为 interrupted 且默认暂停，用户显式重试或继续前不得自动启动 OCR；损坏或未知版本状态 fail-closed。",
+        "SSE event id 单调递增，服务端消费 Last-Event-ID 或显式 cursor，客户端按 job id + seq 去重；断线重连与刷新不得重复 push_entry 或丢失终态。",
+        "进度协议统一使用 0.0–1.0，Web 仅在显示边界转换为 0–100%；单视频与批量视图对同一 job 显示一致进度。",
+        "Vitest、Catch2 与 E2E 覆盖刷新恢复、服务重启、损坏状态、SSE 重连、迟到事件和有界清理。"
+      ],
+      "architecture_refs": [
+        "docs/ARCHITECTURE.md",
+        "docs/DECISIONS.md"
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "12513",
+      "name": "单视频与批量提取配置及质量一致性",
+      "description": "为 Web 单视频工作台与批量任务建立同一份显式配置快照和 ROI 策略，消除同一视频因入口不同而静默采用不同默认值、选区或质量档位的结果漂移。",
+      "module": [
+        "cpp/include/sublift/server/job_manager.hpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/types/batch.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/stores/workbench_roi.test.ts",
+        "apps/web/src/stores/batch.test.ts",
+        "apps/web/src/components/BatchTaskInspector.vue",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12509",
+        "12512"
+      ],
+      "acceptance_criteria": [
+        "单视频与批量任务共享同一配置 DTO 和默认值真源，完整快照 engine、fps/quality、confidence、script 与 ROI policy；任务进入 preparing 后配置不可隐式漂移。",
+        "批量任务逐视频显式选择 auto / fixed / default ROI 策略；auto 对每个视频独立检测，fixed 展示实际 region_box，default 明示使用 Pipeline 默认区域。",
+        "任务列表与 Inspector 展示实际生效配置和区域来源；能力不可用、配置非法或自动选区失败时明确报错或显示回退原因，不静默换引擎。",
+        "Mock/fixture E2E 对同一视频同一配置要求 job request 和最终 SRT exact；真实 Vision 样本至少核对条目数量、时间轴与文本差异并记录允许的引擎非确定性，不允许入口默认差异。"
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "12514",
+      "name": "真实输出计划与原子批量导出",
+      "description": "把任务中心展示的 SRT 路径变成真实、可验证的输出计划：支持服务端安全落盘与冲突策略，并把浏览器下载和工作区保存明确区分，避免把预测路径或重复下载误报为已导出。",
+      "module": [
+        "cpp/include/sublift/server/workspace_manager.hpp",
+        "cpp/src/server/workspace_manager.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/job_manager.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/stores/batch.ts",
+        "apps/web/src/utils/srt_formatter.ts",
+        "apps/web/src/components/BatchTaskInspector.vue",
+        "apps/web/src/views/TaskCenterView.vue",
+        "scripts/test_server_e2e.py"
+      ],
+      "dependencies": [
+        "12512",
+        "12513"
+      ],
+      "acceptance_criteria": [
+        "服务端输出目标必须位于当前工作区授权范围，采用同目录临时文件 + fsync/close + 原子 rename 落盘；失败时不得留下伪 completed 或半写文件。",
+        "批量输出支持 skip / deterministic rename / explicit replace，真实探测文件是否存在；UI 展示的路径、冲突提示和最终结果与磁盘状态一致。",
+        "浏览器下载与服务端保存是两个明确动作；批量下载要么生成单一 ZIP，要么明确选择服务端批量保存，不得用连续触发多个浏览器下载伪装为原子批量导出。",
+        "零字幕任务显示可区分的 empty result，默认不生成误导性空文件；用户明确保存空 SRT 时记录该选择。",
+        "Catch2、Vitest 与 E2E 覆盖路径逃逸、冲突策略、写入失败恢复、真实文件内容和批量结果汇总。"
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "12515",
+      "name": "字幕审阅草稿与无损校对",
+      "description": "把 Web Review 从一次性内存编辑升级为可恢复的校对工作区：用户修改、时间码和草稿状态在刷新后保留，导出始终使用已确认的编辑结果。",
+      "module": [
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/workspace_manager.cpp",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/api/client.ts",
+        "apps/web/src/types/api.ts",
+        "apps/web/src/stores/workbench.ts",
+        "apps/web/src/components/LiveTranscript.vue",
+        "apps/web/src/utils/srt_formatter.ts",
+        "apps/web/src/utils/timecode.ts"
+      ],
+      "dependencies": [
+        "12514"
+      ],
+      "acceptance_criteria": [
+        "Review 中的文本与起止时间修改自动保存为版本化草稿，并展示 dirty / saving / saved / failed 状态；刷新或重开同一 job 后恢复最后成功保存版本。",
+        "提供可预测的撤销/重做；无效时间码、start >= end 和与相邻条目冲突在提交前可见，不以静默 clamp 覆盖用户输入。",
+        "增量提取结果与用户草稿所有权分离；进入 Review 后迟到事件不得覆盖已编辑条目，重新提取需显式确认如何处理旧草稿。",
+        "单项下载、服务端保存与后续批量导出均使用当前已编辑结果，并可追溯其源 job 与草稿版本。",
+        "Vitest 与 E2E 覆盖编辑、时间码校验、刷新恢复、保存失败、撤销/重做和导出一致性。"
+      ],
+      "status": "not-started",
+      "evidence": ""
+    },
+    {
+      "id": "12516",
+      "name": "Web 可访问性与紧凑布局验收",
+      "description": "为 Web 工作区、任务中心、Modal、进度与字幕编辑建立键盘、焦点、状态播报和紧凑视窗合同，使核心流程无需鼠标也可完成，并在 960×600 下保持可操作。",
+      "module": [
+        "apps/web/src/App.vue",
+        "apps/web/src/styles/main.css",
+        "apps/web/src/styles/design-tokens.css",
+        "apps/web/src/components/Navbar.vue",
+        "apps/web/src/components/BatchDropZone.vue",
+        "apps/web/src/components/BatchTaskInspector.vue",
+        "apps/web/src/components/BatchTaskRow.vue",
+        "apps/web/src/components/LiveTranscript.vue",
+        "apps/web/src/components/RoiOverlay.vue",
+        "apps/web/src/views/WorkbenchView.vue",
+        "apps/web/src/views/TaskCenterView.vue"
+      ],
+      "dependencies": [
+        "12510",
+        "12515"
+      ],
+      "acceptance_criteria": [
+        "所有核心按钮、字段、任务行和字幕编辑器具有可感知名称、稳定 Tab 顺序与清晰 focus-visible；Modal 使用 dialog 语义、初始焦点、焦点约束和 Escape 关闭。",
+        "任务状态、错误、进度和保存结果通过合适的 status / aria-live 语义播报，视觉颜色不是唯一状态载体；ROI 提供等价的键盘调整方式或可访问数值输入。",
+        "正文、路径、错误和字幕文本可选择复制；全局 user-select:none 不再屏蔽内容；prefers-reduced-motion 下关闭非必要动画。",
+        "在 960×600、200% 浏览器缩放、浅/深色和高对比偏好下，单视频提取、批量导入、取消、校对和导出主路径无控件遮挡或不可达。",
+        "自动测试覆盖键盘、语义和紧凑布局关键不变量，并以真实浏览器截图和键盘走查补足视觉证据。"
+      ],
+      "non_goals": [
+        "不借可访问性收口重做视觉品牌或引入未验收的新组件库。"
+      ],
+      "status": "not-started",
+      "evidence": ""
     }
   ]
 }

@@ -2,8 +2,8 @@
 
 本目录只维护当前 Native 产品仍依赖的架构与契约，不记录 Phase 计划、迁移步骤或验收报告。
 
-> ADR-0038 已确认 C++ 是唯一产品运行时；Phase 13 正在退役 Python 产品路径。本文描述目标
-> 契约，现存 Python CLI、Pipeline、IPC、runtime 路由和资源准备耦合仍是待完成迁移债务。
+> ADR-0038 已确认 C++ 是唯一产品运行时；Phase 13 已完成 Python 产品路径退役并在 `main`
+> 置 `done`。本文描述现行 Native 产品合同；Python 只保留为隔离离线工具与冻结 Oracle。
 
 | 文档 | 职责 |
 |---|---|

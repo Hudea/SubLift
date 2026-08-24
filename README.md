@@ -2,8 +2,8 @@
 
 硬字幕（烧录字幕）提取工具——从视频画面中自动识别字幕，生成可编辑的 SRT 文件。
 
-本地运行、隐私优先，视频与识别文本不离开本机。Phase 13 的目标产品运行时统一为
-Native C++；Vision 与准备好模型的 PaddleOCR 均在本机离线推理。
+本地运行、隐私优先，视频与识别文本不离开本机。产品运行时已统一为 Native C++；Vision
+与准备好模型的 PaddleOCR 均在本机离线推理，Python 只服务隔离的可选离线工具。
 
 ## 特性
 
@@ -15,6 +15,7 @@ Native C++；Vision 与准备好模型的 PaddleOCR 均在本机离线推理。
 - **真实进度与快速取消**：CLI/GUI 展示处理阶段和百分比，GUI 可中途取消并重新开始
 - **macOS GUI**：SwiftUI 界面，拖拽导入、视频预览、增量字幕、字幕编辑、SRT 导出
 - **批量任务中心** ✅：独立 Task Center（⌘⇧T）、多文件/文件夹统一导入、单并发串行队列、安全 SRT 输出与本地 JSON 恢复（Phase 8 已完成）
+- **Web / Native Server** ⚠️：单视频工作台、智能 ROI 和批量交互基座已可用；Phase 12 正在收口工作区信任边界、任务恢复、配置一致性、真实导出与可访问性
 
 ## 环境要求
 
@@ -223,4 +224,4 @@ Zootopia 固定片段（1080p、5fps、统一 diagnostic 口径）的最终结�
 ### 技术栈
 
 C++20 / ObjC++ / CMake / Ninja / Swift 5.9+ / SwiftPM / Vue 3 / TypeScript / OpenCV /
-ONNX Runtime / ffmpeg；Python 3.12+ 与 uv 仅用于隔离的过渡工具。
+ONNX Runtime / ffmpeg；Python 3.12+ 与 uv 仅用于隔离的可选离线工具。

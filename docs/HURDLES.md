@@ -18,6 +18,77 @@
 
 ---
 
+### WorkspaceManager 已配置但媒体路由未统一使用授权根
+- **日期**：2026-08-23
+- **状态**：未解决；由 12510/12511 收口。
+- **现象**：Web 已要求用户配置媒体工作区，Navbar 也展示当前目录；但在该工作区之外请求
+  `/api/video/stream` 仍可返回 HTTP 206，`/api/video/scan-path` 也能递归扫描任意可访问绝对
+  路径。UI 的“工作区”因此目前只是搜索/缓存优先级，不是完整安全边界。
+- **排查路径**：
+  1. 通过 `/api/config/workspace` 确认当前 media root 已切到隔离测试目录。
+  2. 对工作区外的仓库视频发 Range 请求，确认服务端仍返回内容而非 400/403。
+  3. 对照路由发现 stream/frame/job 等调用 `resolve_and_validate_media_path` 时没有传入
+     `WorkspaceManager` 当前根，scan-path 路由甚至未捕获 manager；只有显式 allowed_root 或
+     环境变量存在时，底层 sandbox 才会应用根约束。
+- **根本原因**：工作区状态、搜索优先级与路径授权被分散在多个调用点；新增路由可绕过
+  WorkspaceManager，单独存在 `PathSandbox` 并不能保证端点实际使用同一策略。
+- **解决方案**：由 12510 先收紧扫描端点，再由 12511 让所有媒体路由从 WorkspaceManager
+  注入唯一 canonical root，并建立工作区外、symlink、旧根和内部 cache 的共享负例矩阵。
+- **相关文件**：`cpp/src/server/routes.cpp`、`cpp/include/sublift/server/path_sandbox.hpp`、
+  `cpp/src/server/workspace_manager.cpp`、`docs/DECISIONS.md` ADR-0039。
+
+---
+
+### Web SSE 的进度单位和重连 cursor 没有形成单一合同
+- **日期**：2026-08-23
+- **状态**：未解决；由 12512 收口。
+- **现象**：Native Server 发布的 `pct` 是 `0.0–1.0`。批量 Store 显示时乘以 100，而单视频
+  Workbench 直接把该值当百分数，真实任务处理到中段时 UI 仍显示约 1%。SSE 端点每次连接
+  都从 seq=0 开始，不消费 `Last-Event-ID`；刷新后 Web 内存队列清空。
+- **排查路径**：
+  1. 真实 Vision 提取时同时观察字幕条目数量与进度条，确认不是 Pipeline 停滞。
+  2. 对照 `WorkbenchView.vue` 与 `batch.ts`，确认两个入口分别直接取整和乘 100。
+  3. 检查 `/api/jobs/:id/events`，确认 `last_seq_ptr` 固定初始化为 0；JobManager 和 Pinia tasks
+     都没有可恢复 Repository。
+- **根本原因**：协议值、显示值和恢复 cursor 没有统一所有权；两个前端入口各自解释同一个
+  DTO，SSE 被当作一次性推送通道而非可续传事件日志。
+- **解决方案**：协议固定 `pct=0.0–1.0`，UI 只在显示边界换算；SSE 使用单调 seq 与
+  Last-Event-ID/cursor，客户端以 job id + seq 去重；队列、配置和终态结果版本化持久化。
+- **相关文件**：`cpp/src/server/routes.cpp`、`cpp/include/sublift/server/job_manager.hpp`、
+  `apps/web/src/stores/workbench.ts`、`apps/web/src/stores/batch.ts`。
+
+---
+
+### 单视频自动 ROI 与批量默认 ROI 造成入口质量漂移
+- **日期**：2026-08-23
+- **状态**：未解决；由 12513 收口。
+- **现象**：同一 Zootopia 测试视频在单视频入口自动识别 ROI 后得到 59 条字幕；随后从批量
+  入口以默认配置运行得到 93 条。两次 job request 的差异是批量任务没有携带自动区域，而
+  UI 未明确展示该 ROI policy，用户会把差异误解为算法不稳定。
+- **根本原因**：单视频和批量 Store 各自生成 JobConfig；单视频传当前 `regionBox`，批量只在
+  task config 已显式存在时传 `region_box`，但当前导入 UI 不为每个视频建立区域策略。
+- **解决方案**：共享配置 DTO 与默认值真源，为每个任务显式记录 auto/fixed/default ROI，
+  auto 对每个视频独立检测，并在列表/Inspector 展示实际生效配置和回退原因。
+- **相关文件**：`apps/web/src/stores/workbench.ts`、`apps/web/src/stores/batch.ts`、
+  `apps/web/src/types/batch.ts`、`docs/phases/phase12.json` 12513。
+
+---
+
+### Web 批量界面把预测输出路径当作已落盘结果
+- **日期**：2026-08-23
+- **状态**：未解决；由 12514 收口。
+- **现象**：批量任务创建时预填 sidecar `.srt` 路径并在 Inspector 中显示“原子覆盖”提示，
+  但任务完成后没有服务端写文件；单项导出实际是浏览器 download，批量导出则循环触发多个
+  download。路径、冲突和磁盘存在性提示都不是最终写入事实。
+- **根本原因**：前端输出规划模型复用了 macOS Task Center 的概念，却没有对应的 Web
+  server writer；client-side download 与 server-side save 被折叠为同一个“导出”状态。
+- **解决方案**：明确区分浏览器下载和工作区保存；后者必须经过统一沙箱、冲突策略和同目录
+  原子写。批量动作生成单一 ZIP 或显式服务端保存集合，不再用连续下载表示原子完成。
+- **相关文件**：`apps/web/src/stores/batch.ts`、`apps/web/src/utils/srt_formatter.ts`、
+  `cpp/src/server/routes.cpp`、`docs/phases/phase12.json` 12514。
+
+---
+
 ### Apple Vision 对 CoreText 合成图返回零 observations
 - **日期**：2026-07-30
 - **状态**：已解决（默认开发门稳定；live smoke 保留为显式诊断）。
@@ -465,4 +536,3 @@
 - **根本原因**：调度锁未在触发下一次流转前释放；异步取消未做任务代数/身份守卫；SSE 解析缺少防御降级。
 - **解决方案**：重构 `processNext` 确保 `finally` 释放锁后再触发下一轮；`cancelTask` 同步解除占用；`client.ts` 捕获 JSON 解析错误；工作台增加 `Failed`/`Cancelled` 状态。
 - **相关文件**：`apps/web/src/stores/batch.ts`、`apps/web/src/api/client.ts`、`apps/web/src/stores/workbench.ts`
-

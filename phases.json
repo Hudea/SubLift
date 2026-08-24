@@ -82,9 +82,9 @@
     {
       "id": "phase12",
       "name": "Phase 12 - Cross-Platform Web UI & Native Server",
-      "description": "Native Web Server 与 Web 工作台已交付；Linux 容器交付暂缓且活跃 Docker 资产已移除，12505 保持 blocked。",
+      "description": "Native Server 与 Web 基座已交付；2026-08-23 全局审计后重新进入完成度收口，当前推进 12510，并按 12511–12516 补齐信任边界、恢复、配置一致性、真实导出、审阅草稿和可访问性。Linux 容器范围 12505 仍 blocked。",
       "detail_file": "docs/phases/phase12.json",
-      "status": "blocked"
+      "status": "in-progress"
     },
     {
       "id": "phase13",

@@ -5,9 +5,39 @@
 
 ---
 
+## ADR-0039 Web/Native Server 以工作区为信任边界，并采用可恢复任务控制面（2026-08-23）
+
+- **状态**：已确认；由 Phase 12 的 12510–12516 依次实施，当前 12510 in-progress。
+- **背景**：Phase 12 已具备 Native Server、单视频工作台、智能 ROI 和批量任务中心，但全局
+  活体审计发现：工作区配置尚未被所有媒体路由当作授权根，服务端路径扫描可越出工作区；
+  Native job 与 Web queue 主要驻留内存，SSE 重连不消费 cursor；单视频与批量入口对进度和
+  ROI 的解释不一致；批量界面展示预测输出路径，却实际只触发浏览器下载。继续叠加交互会把
+  安全、恢复、质量和输出语义债固化为产品合同。
+- **决策**：
+  1. `WorkspaceManager` 是 Native Server 唯一媒体授权根。所有 stream、frame、detect、
+     resolve、scan、job 和 export 路由共享 canonical、fail-closed 的路径策略；Server 默认
+     只绑定 loopback，非 loopback 暴露必须显式启用并满足单独的访问控制合同。
+  2. Native job、Web queue、配置快照和终态结果形成可查询、版本化、原子持久化且有界的
+     任务控制面。重启把活动任务收口为 interrupted 并保持暂停；SSE 使用单调 seq 与
+     Last-Event-ID/cursor 恢复，客户端按 job id + seq 去重。
+  3. 单视频与批量使用同一配置 DTO 和默认值真源；每项任务显式记录 engine、fps/quality、
+     confidence、script 与 `auto/fixed/default` ROI policy，任何回退或能力缺失都必须可见。
+  4. 浏览器下载与服务端保存是两种明确操作。工作区保存采用受控路径、冲突策略和原子写；
+     Review 编辑使用可恢复草稿，导出消费当前已确认版本，不能把预测路径或内存结果标成已落盘。
+  5. Web 完成度包含键盘、焦点、状态播报、可选中文本、reduced motion 和 960×600 紧凑布局，
+     这些约束与功能测试一起进入 Phase 12 验收。
+- **理由**：本地优先不等于可以信任任意本机路径，页面可见也不等于任务或输出可恢复。
+  先冻结统一信任边界、任务身份和结果所有权，单视频与批量入口才能复用同一可验证语义；
+  显式的输出与可访问性合同也避免 UI 用提示文字掩盖未发生的产品行为。
+- **影响**：Phase 12 从仅受 12505 阻塞调整为可执行的 in-progress；12509 补登记为已完成，
+  12510 为唯一当前 Feature，12511–12516 记录后续纵向收口。实现状态与最小 evidence 以
+  `docs/phases/phase12.json` 为准。
+
+---
+
 ## ADR-0038 退役 Python Runtime；产品收口为 Native-only（2026-08-19）
 
-- **状态**：已确认；Phase 13 已在分支上完成 D01–D06，状态为 ready-for-merge。产品
+- **状态**：已确认并完成；Phase 13 已合入 `main`、通过产品验收并置 `done`。产品
   CLI/IPC/runtime 已移除；Python 仅作为隔离离线工具与冻结 Oracle。
 - **背景**：Native CLI、C++ Worker、Native Server 及 Vision/Paddle/Mock Adapters 已具备完整
   产品链路；继续让 Python 同时承担产品 CLI、运行时回滚和行为 Oracle，会保留两套可执行
