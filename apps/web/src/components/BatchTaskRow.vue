@@ -9,7 +9,10 @@
       <div class="sl-name-wrapper">
         <span class="sl-beacon-light" :class="`sl-beacon--${task.status}`"></span>
         <div class="sl-file-meta">
-          <span class="sl-file-title" :title="task.videoPath">{{ task.name }}</span>
+          <div class="sl-file-title-wrap">
+            <span class="sl-file-title" :title="task.videoPath">{{ task.name }}</span>
+            <span v-if="task.outputExists" class="sl-out-exists-tag" title="对应 SRT 字幕已存在，导出时将原子覆盖">SRT已存在</span>
+          </div>
           <span class="sl-file-subpath" :title="task.videoPath">{{ task.videoPath }}</span>
         </div>
       </div>
@@ -287,13 +290,32 @@ td {
   min-width: 0;
 }
 
+.sl-file-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .sl-file-title {
   font-weight: 500;
   color: var(--sl-text-primary, #ffffff);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 260px;
+  max-width: 240px;
+}
+
+.sl-out-exists-tag {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 159, 10, 0.15);
+  border: 1px solid rgba(255, 159, 10, 0.3);
+  color: #ff9f0a;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .sl-file-subpath {

@@ -110,22 +110,32 @@ export interface TaskInspectorModel {
 }
 
 export type BatchInputRejectionReason =
-  | { kind: 'unsupportedFormat'; extension: string }
-  | { kind: 'mkvRequiresFfmpeg' }
+  | { kind: 'unsupportedFormat'; extension?: string; detail?: string }
+  | { kind: 'mkvRequiresFfmpeg'; detail?: string }
   | { kind: 'unreadable'; detail?: string }
-  | { kind: 'duplicate' }
-  | { kind: 'emptyDirectory' };
+  | { kind: 'duplicate'; detail?: string }
+  | { kind: 'emptyDirectory'; detail?: string }
+  | { kind: 'outOfWorkspace'; detail?: string }
+  | { kind: 'securityViolation'; detail?: string };
 
 export interface BatchScanRejection {
+  path?: string;
   pathOrName: string;
   reason: BatchInputRejectionReason;
+  message?: string;
 }
 
 export interface BatchAcceptedItem {
+  id?: string;
   videoPath: string;
   name: string;
   sizeBytes?: number;
   importRootPath?: string;
+  relativePath?: string;
+  outputPath?: string;
+  outputExists?: boolean;
+  format?: string;
+  location?: string;
 }
 
 export interface BatchScanSummary {

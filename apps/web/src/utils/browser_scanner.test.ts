@@ -79,4 +79,52 @@ describe('BrowserDirectoryScanner & BatchTaskStatusGuard', () => {
     expect(entries.length).toBe(3);
     expect(callCount).toBe(3);
   });
+
+  it('verifies BatchTaskStatusGuard isTerminal and nextActiveStage methods', () => {
+    expect(BatchTaskStatusGuard.isTerminal('completed')).toBe(true);
+    expect(BatchTaskStatusGuard.isTerminal('failed')).toBe(true);
+    expect(BatchTaskStatusGuard.isTerminal('cancelled')).toBe(true);
+    expect(BatchTaskStatusGuard.isTerminal('interrupted')).toBe(true);
+    expect(BatchTaskStatusGuard.isTerminal('skipped')).toBe(true);
+    expect(BatchTaskStatusGuard.isTerminal('waiting')).toBe(false);
+    expect(BatchTaskStatusGuard.isTerminal('extracting')).toBe(false);
+
+    expect(BatchTaskStatusGuard.nextActiveStage('preparing')).toBe('extracting');
+    expect(BatchTaskStatusGuard.nextActiveStage('extracting')).toBe('exporting');
+    expect(BatchTaskStatusGuard.nextActiveStage('exporting')).toBeNull();
+    expect(BatchTaskStatusGuard.nextActiveStage('waiting')).toBeNull();
+  });
+
+  it('scanDataTransferItems handles FileList with webkitRelativePath for folder structure and skips hidden files', async () => {
+    const fileList = [
+      { name: 'movie.mp4', webkitRelativePath: 'Season1/movie.mp4', size: 1000 },
+      { name: '.DS_Store', webkitRelativePath: 'Season1/.DS_Store', size: 50 },
+      { name: 'app_asset.mp4', webkitRelativePath: 'App.app/Contents/app_asset.mp4', size: 200 },
+      { name: 'notes.txt', webkitRelativePath: 'Season1/notes.txt', size: 100 },
+    ] as unknown as FileList;
+
+    const result = await BrowserDirectoryScanner.scanDataTransferItems(fileList);
+    expect(result.files.length).toBe(1);
+    expect(result.files[0].file.name).toBe('movie.mp4');
+    expect(result.files[0].relativeDir).toBe('Season1/');
+    expect(result.skipped).toBe(2); // .DS_Store and App.app
+    expect(result.rejected.length).toBe(1); // notes.txt unsupportedFormat
+    expect(result.rejected[0].reason.kind).toBe('unsupportedFormat');
+  });
+
+  it('resolveFilesWithConcurrency resolves native path and deduplicates', async () => {
+    const mockFiles = [
+      { file: { name: 'video1.mp4', path: '/local/media/video1.mp4', size: 1024 } as any },
+      { file: { name: 'video2.mp4', path: '/local/media/video2.mp4', size: 2048 } as any, relativeDir: 'Clips/' },
+    ];
+
+    const existing = new Set<string>(['/local/media/video1.mp4']);
+    const result = await BrowserDirectoryScanner.resolveFilesWithConcurrency(mockFiles, existing);
+
+    expect(result.accepted.length).toBe(1);
+    expect(result.accepted[0].videoPath).toBe('/local/media/video2.mp4');
+    expect(result.accepted[0].importRootPath).toBe('Clips/');
+    expect(result.rejected.length).toBe(1);
+    expect(result.rejected[0].reason.kind).toBe('duplicate');
+  });
 });

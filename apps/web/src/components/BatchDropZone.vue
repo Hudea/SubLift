@@ -170,15 +170,23 @@ function triggerDirInput() {
 function formatRejectionReason(reason: BatchInputRejectionReason): string {
   switch (reason.kind) {
     case 'unsupportedFormat':
-      return `不支持的格式 .${reason.extension}`;
+      return reason.extension
+        ? `不支持的格式 .${reason.extension}`
+        : reason.detail || '不支持的格式';
     case 'mkvRequiresFfmpeg':
-      return 'MKV 需要系统安装 ffmpeg';
+      return reason.detail || 'MKV 需要系统安装 ffmpeg';
     case 'duplicate':
-      return '队列中已存在或本批次重复';
+      return reason.detail || '队列中已存在或本批次重复';
     case 'emptyDirectory':
-      return '文件夹为空';
+      return reason.detail || '文件夹为空';
+    case 'outOfWorkspace':
+      return reason.detail || '路径超出工作区安全范围';
+    case 'securityViolation':
+      return reason.detail || '安全策略违规 (越界符号链接或非法路径)';
     case 'unreadable':
       return reason.detail ? `读取失败: ${reason.detail}` : '无法访问或权限不足';
+    default:
+      return (reason as any).detail || (reason as any).message || (reason as any).kind;
   }
 }
 
@@ -303,11 +311,14 @@ async function importAllFromWorkspace() {
           });
         } else {
           existing.add(item.path);
+          const rel = item.relative_path.replace(/\\/g, '/');
           accepted.push({
             videoPath: item.path,
             name: item.name,
             sizeBytes: item.size_bytes,
-            importRootPath: item.relative_path.includes('/') ? item.relative_path.split('/').slice(0, -1).join('/') + '/' : undefined,
+            importRootPath: rel.includes('/')
+              ? rel.substring(0, rel.lastIndexOf('/') + 1)
+              : undefined,
           });
         }
       }

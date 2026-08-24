@@ -685,7 +685,28 @@ void register_routes(httplib::Server& server,
   // 输入：{ "path": "/path/to/dir_or_file" } 或 { "paths": ["/path/1", "/path/2"] }
   // 输出：{ "accepted": [...], "skipped": N, "rejected": [...] }
   // ---------------------------------------------------------------------------
-  server.Post("/api/video/scan-path", [](const httplib::Request& req, httplib::Response& res) {
+  server.Post("/api/video/scan-path", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    std::filesystem::path allowed_root;
+    if (workspace_manager && workspace_manager->get_media_dir().has_value() &&
+        !workspace_manager->get_media_dir()->empty()) {
+      allowed_root = *workspace_manager->get_media_dir();
+    } else if (const char* env_root = std::getenv("SUBLIFT_ALLOWED_MEDIA_ROOT"); env_root && *env_root) {
+      allowed_root = std::filesystem::path(env_root);
+    } else {
+      res.status = 400;
+      res.set_content(R"({"error":"Workspace is not configured"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    std::error_code root_ec;
+    std::filesystem::path canonical_root = std::filesystem::canonical(allowed_root, root_ec);
+    if (root_ec) {
+      res.status = 400;
+      res.set_content(R"json({"error":"Workspace root directory cannot be resolved (fail-closed)"})json",
+                      "application/json; charset=utf-8");
+      return;
+    }
+
     nlohmann::json body;
     try {
       body = nlohmann::json::parse(req.body);
@@ -696,11 +717,26 @@ void register_routes(httplib::Server& server,
     }
 
     std::vector<std::string> raw_inputs;
-    if (body.contains("paths") && body["paths"].is_array()) {
-      for (const auto& item : body["paths"]) {
-        if (item.is_string()) raw_inputs.push_back(item.get<std::string>());
+    if (body.contains("paths")) {
+      if (!body["paths"].is_array()) {
+        res.status = 400;
+        res.set_content(R"({"error":"Field 'paths' must be an array"})", "application/json; charset=utf-8");
+        return;
       }
-    } else if (body.contains("path") && body["path"].is_string()) {
+      for (const auto& item : body["paths"]) {
+        if (!item.is_string()) {
+          res.status = 400;
+          res.set_content(R"({"error":"Items in 'paths' must be strings"})", "application/json; charset=utf-8");
+          return;
+        }
+        raw_inputs.push_back(item.get<std::string>());
+      }
+    } else if (body.contains("path")) {
+      if (!body["path"].is_string()) {
+        res.status = 400;
+        res.set_content(R"({"error":"Field 'path' must be a string"})", "application/json; charset=utf-8");
+        return;
+      }
       raw_inputs.push_back(body["path"].get<std::string>());
     } else {
       res.status = 400;
@@ -708,118 +744,227 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    constexpr int kMaxDepth = 10;
+    constexpr size_t kMaxFiles = 500;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(5000);
+
     nlohmann::json accepted = nlohmann::json::array();
     nlohmann::json rejected = nlohmann::json::array();
     int skipped_count = 0;
     std::set<std::string> seen_paths;
 
+    auto generate_item_id = [](const std::string& p_str) -> std::string {
+      auto h = std::hash<std::string>{}(p_str);
+      char buf[32];
+      std::snprintf(buf, sizeof(buf), "srv_%016llx", static_cast<unsigned long long>(h));
+      return std::string(buf);
+    };
+
+    auto make_rejection = [](const std::string& path_or_name,
+                             const std::string& kind,
+                             const std::string& message = "",
+                             const std::string& ext = "") -> nlohmann::json {
+      nlohmann::json reason_obj = {{"kind", kind}};
+      if (!message.empty()) {
+        reason_obj["detail"] = message;
+      }
+      if (!ext.empty()) {
+        reason_obj["extension"] = ext;
+      }
+      return nlohmann::json{
+          {"path", path_or_name},
+          {"pathOrName", path_or_name},
+          {"reason", reason_obj},
+          {"message", message.empty() ? kind : message}
+      };
+    };
+
+    auto is_companion_subtitle_extension = [](const std::filesystem::path& p) -> bool {
+      std::string ext = p.extension().string();
+      std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+      });
+      return (ext == ".srt" || ext == ".vtt" || ext == ".ass" || ext == ".ssa" ||
+              ext == ".sub" || ext == ".sbv" || ext == ".lrc" || ext == ".idx");
+    };
+
     for (const auto& raw_input : raw_inputs) {
       if (raw_input.empty()) continue;
 
-      std::filesystem::path expanded = expand_tilde(raw_input);
+      if (raw_input.find('\0') != std::string::npos) {
+        rejected.push_back(make_rejection(raw_input, "unreadable", "非法路径包含空字符"));
+        continue;
+      }
+
+      if (std::chrono::steady_clock::now() > deadline) {
+        skipped_count++;
+        break;
+      }
+
+      std::filesystem::path input_p = expand_tilde(raw_input);
+      if (input_p.is_relative()) {
+        input_p = canonical_root / input_p;
+      }
+
       std::error_code ec;
-      std::filesystem::path canonical_p = std::filesystem::canonical(expanded, ec);
+      std::filesystem::path canonical_p = std::filesystem::canonical(input_p, ec);
       if (ec) {
-        rejected.push_back({
-            {"pathOrName", raw_input},
-            {"reason", {{"kind", "unreadable"}, {"detail", "路径不存在或无法访问"}}}
-        });
+        rejected.push_back(make_rejection(raw_input, "unreadable", "路径不存在或无法访问"));
+        continue;
+      }
+
+      // Sandbox containment validation against canonical workspace root
+      auto [root_end, _] = std::mismatch(
+          canonical_root.begin(), canonical_root.end(),
+          canonical_p.begin(), canonical_p.end());
+      if (root_end != canonical_root.end()) {
+        rejected.push_back(make_rejection(raw_input, "unreadable", "安全策略限制：禁止扫描工作区外部路径"));
         continue;
       }
 
       if (std::filesystem::is_directory(canonical_p, ec)) {
-        // 递归扫描该目录下的有效视频文件
         int dir_accepted_count = 0;
         std::filesystem::recursive_directory_iterator it(
             canonical_p, std::filesystem::directory_options::skip_permission_denied, ec);
         if (ec) {
-          rejected.push_back({
-              {"pathOrName", raw_input},
-              {"reason", {{"kind", "unreadable"}, {"detail", "目录无法访问或权限不足"}}}
-          });
+          rejected.push_back(make_rejection(raw_input, "unreadable", "目录无法访问或权限不足"));
           continue;
         }
 
         for (const auto end = std::filesystem::recursive_directory_iterator{}; it != end;) {
+          if (std::chrono::steady_clock::now() > deadline) {
+            skipped_count++;
+            break;
+          }
+
+          if (accepted.size() >= kMaxFiles) {
+            skipped_count++;
+            if (it->is_directory(ec)) {
+              it.disable_recursion_pending();
+            }
+            it.increment(ec);
+            if (ec) break;
+            continue;
+          }
+
           if (it->is_symlink(ec)) {
             skipped_count++;
+          } else if (it->is_directory(ec)) {
+            std::string dir_name = it->path().filename().string();
+            if (dir_name.rfind(".", 0) == 0 || dir_name == ".git" || dir_name == ".sublift_cache") {
+              skipped_count++;
+              it.disable_recursion_pending();
+            } else if (it.depth() >= kMaxDepth) {
+              it.disable_recursion_pending();
+            }
           } else if (it->is_regular_file(ec) && !ec) {
             std::string filename = it->path().filename().string();
-            if (filename.rfind(".", 0) == 0) {
+            if (filename.rfind(".", 0) == 0 || filename == ".DS_Store") {
               skipped_count++;
             } else if (is_allowed_media_extension(it->path())) {
-              std::string p_str = it->path().string();
-              if (p_str.find(".sublift_cache") == std::string::npos &&
-                  p_str.find("/.git/") == std::string::npos) {
-                if (seen_paths.find(p_str) != seen_paths.end()) {
-                  rejected.push_back({
-                      {"pathOrName", filename},
-                      {"reason", {{"kind", "duplicate"}}}
-                  });
+              std::string rel = std::filesystem::relative(it->path(), canonical_root, ec).string();
+              bool hidden_in_rel = false;
+              for (const auto& part : std::filesystem::path(rel)) {
+                std::string s = part.string();
+                if (s != "." && s != ".." && s.rfind(".", 0) == 0) {
+                  hidden_in_rel = true;
+                  break;
+                }
+              }
+
+              if (hidden_in_rel) {
+                skipped_count++;
+              } else {
+                std::string p_str = it->path().string();
+                if (seen_paths.count(p_str)) {
+                  rejected.push_back(make_rejection(filename, "duplicate", "重复的文件"));
                 } else {
                   seen_paths.insert(p_str);
-                  std::string rel = std::filesystem::relative(it->path(), canonical_p, ec).string();
                   std::string import_root = "";
                   if (rel.find('/') != std::string::npos) {
                     import_root = rel.substr(0, rel.rfind('/') + 1);
                   }
+                  std::string ext = it->path().extension().string();
+                  if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+                  std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+                    return static_cast<char>(std::tolower(c));
+                  });
+
+                  auto srt_path = std::filesystem::path(it->path()).replace_extension(".srt");
+                  bool output_exists = std::filesystem::exists(srt_path, ec);
+
                   accepted.push_back({
+                      {"id", generate_item_id(p_str)},
                       {"name", filename},
                       {"videoPath", p_str},
+                      {"relativePath", rel},
+                      {"importRootPath", import_root},
                       {"sizeBytes", it->file_size(ec)},
-                      {"importRootPath", import_root}
+                      {"format", ext},
+                      {"location", "server-path"},
+                      {"outputExists", output_exists}
                   });
                   dir_accepted_count++;
                 }
-              } else {
-                skipped_count++;
               }
+            } else if (is_companion_subtitle_extension(it->path())) {
+              // Companion subtitle file; ignore without counting as skipped
             } else {
               skipped_count++;
             }
+          } else {
+            skipped_count++;
           }
-          if (it->is_directory(ec) && (it.depth() >= 15 || it->path().filename() == ".sublift_cache" ||
-                                       it->path().filename() == ".git")) {
-            it.disable_recursion_pending();
-          }
+
           it.increment(ec);
           if (ec) break;
         }
 
         if (dir_accepted_count == 0) {
-          rejected.push_back({
-              {"pathOrName", raw_input},
-              {"reason", {{"kind", "emptyDirectory"}}}
-          });
+          rejected.push_back(make_rejection(raw_input, "emptyDirectory", "目录内未找到支持的媒体视频文件"));
         }
       } else if (std::filesystem::is_regular_file(canonical_p, ec)) {
-        // 单个常规文件
         if (is_allowed_media_extension(canonical_p)) {
           std::string p_str = canonical_p.string();
-          if (seen_paths.find(p_str) != seen_paths.end()) {
-            rejected.push_back({
-                {"pathOrName", canonical_p.filename().string()},
-                {"reason", {{"kind", "duplicate"}}}
-            });
+          if (seen_paths.count(p_str)) {
+            rejected.push_back(make_rejection(canonical_p.filename().string(), "duplicate", "重复的文件路径"));
           } else {
-            seen_paths.insert(p_str);
-            accepted.push_back({
-                {"name", canonical_p.filename().string()},
-                {"videoPath", p_str},
-                {"sizeBytes", std::filesystem::file_size(canonical_p, ec)},
-            });
+            if (accepted.size() >= kMaxFiles) {
+              skipped_count++;
+            } else {
+              seen_paths.insert(p_str);
+              std::string rel = std::filesystem::relative(canonical_p, canonical_root, ec).string();
+              std::string import_root = "";
+              if (rel.find('/') != std::string::npos) {
+                import_root = rel.substr(0, rel.rfind('/') + 1);
+              }
+              std::string ext = canonical_p.extension().string();
+              if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+              std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+              });
+
+              auto srt_path = std::filesystem::path(canonical_p).replace_extension(".srt");
+              bool output_exists = std::filesystem::exists(srt_path, ec);
+
+              accepted.push_back({
+                  {"id", generate_item_id(p_str)},
+                  {"name", canonical_p.filename().string()},
+                  {"videoPath", p_str},
+                  {"relativePath", rel},
+                  {"importRootPath", import_root},
+                  {"sizeBytes", std::filesystem::file_size(canonical_p, ec)},
+                  {"format", ext},
+                  {"location", "server-path"},
+                  {"outputExists", output_exists}
+              });
+            }
           }
         } else {
-          rejected.push_back({
-              {"pathOrName", raw_input},
-              {"reason", {{"kind", "unsupportedFormat"}, {"extension", canonical_p.extension().string()}}}
-          });
+          rejected.push_back(make_rejection(raw_input, "unsupportedFormat", "不支持的文件格式", canonical_p.extension().string()));
         }
       } else {
-        rejected.push_back({
-            {"pathOrName", raw_input},
-            {"reason", {{"kind", "unreadable"}, {"detail", "路径既不是常规文件也不是文件夹"}}}
-        });
+        rejected.push_back(make_rejection(raw_input, "unreadable", "路径既不是常规文件也不是文件夹"));
       }
     }
 

@@ -810,8 +810,8 @@
         "多来源重复导入保持确定性去重；单个输入失败不阻断其余合法视频入队，扫描和调度错误在 UI 中可见。",
         "Vitest、Catch2 与 E2E 覆盖浏览器扫描、服务端扫描边界、重复/拒绝摘要和队列交互；真实浏览器完成至少两个视频的串行批量提取。"
       ],
-      "status": "in-progress",
-      "evidence": "已有实现基线提交 88fa1cb（feat(server,web): 实现 Web 批量任务中心交互增强与文件夹扫描支持）。2026-08-23 复核：npm --prefix apps/web test 为 7 files / 32 tests 全绿，sublift_tests [server] 为 11 test cases / 292 assertions 全绿，真实浏览器两视频串行批量任务完成；但 live probe 证明 /api/video/scan-path 及部分媒体路由尚未统一受当前工作区根约束，且扫描缺少统一的结果数/耗时硬上限，因此保持 in-progress。"
+      "status": "done",
+      "evidence": "2026-08-24 完成交付。C++ 服务端 POST /api/video/scan-path 严格受限至 WorkspaceManager canonical media root，未配置或路径逃逸时 fail-closed 返回 400/403；设置硬性递归深度上限 10 层、最大文件数 500 个、5.0s steady_clock 超时守卫、跳过符号链接与隐藏文件并排除 .ts 等非媒体扩展名；伴生字幕识别为 outputExists 标记。Web 前端批量任务中心实现 9 态 FSM（waiting/preparing/extracting/exporting/completed/failed/cancelled/interrupted/skipped）、等待项保位上下重排、单项独立执行与串行队列锁隔离、多模态导入（BrowserDirectoryScanner readEntries 递归/FileList/相对路径解析）、关键词搜索与多状态筛选空态引导、伴生 SRT 冲突告警徽章及任务 Inspector 诊断。自动化验证全绿：Catch2 scan-path 14/14 组用例全绿（128 assertions）、全量 C++ 测试 212/212（2035 assertions）全绿、CTest 21/21 全绿、Vitest 前端测试 7 files / 42 tests 全绿、vue-tsc + vite build 编译零错误、./init.sh 与 ./scripts/verify-product.sh（23/23）全部通过。"
     },
     {
       "id": "12511",

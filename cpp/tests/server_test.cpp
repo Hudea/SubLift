@@ -920,4 +920,520 @@ TEST_CASE("Server Auto ROI Detection", "[server][detect_region]") {
   }
 }
 
+namespace {
+
+struct EnvVarGuard {
+  std::string name;
+  std::optional<std::string> original_val;
+
+  explicit EnvVarGuard(std::string var_name, std::optional<std::string> new_val = std::nullopt)
+      : name(std::move(var_name)) {
+    const char* val = std::getenv(name.c_str());
+    if (val) {
+      original_val = std::string(val);
+    }
+    if (new_val.has_value()) {
+      ::setenv(name.c_str(), new_val->c_str(), 1);
+    } else {
+      ::unsetenv(name.c_str());
+    }
+  }
+
+  ~EnvVarGuard() {
+    if (original_val.has_value()) {
+      ::setenv(name.c_str(), original_val->c_str(), 1);
+    } else {
+      ::unsetenv(name.c_str());
+    }
+  }
+};
+
+struct ScanServerFixture {
+  std::filesystem::path temp_dir;
+  std::filesystem::path canonical_temp_dir;
+  std::filesystem::path config_file;
+  std::unique_ptr<sublift::server::HttpServer> server;
+  std::thread server_thread;
+  std::unique_ptr<httplib::Client> cli;
+  int port{0};
+
+  explicit ScanServerFixture(bool configure_media_dir = true) {
+    std::error_code ec;
+    auto now = std::chrono::steady_clock::now().time_since_epoch().count();
+    temp_dir = std::filesystem::temp_directory_path() /
+               ("sublift_scan_test_" + std::to_string(::getpid()) + "_" + std::to_string(now));
+    std::filesystem::create_directories(temp_dir, ec);
+    canonical_temp_dir = std::filesystem::canonical(temp_dir, ec);
+    config_file = temp_dir / "cfg.json";
+
+    sublift::server::ServerConfig cfg;
+    cfg.port = 0;
+    cfg.cors_origin = "*";
+    if (configure_media_dir) {
+      cfg.media_dir = canonical_temp_dir.string();
+    }
+    cfg.config_file = config_file.string();
+
+    server = std::make_unique<sublift::server::HttpServer>(std::move(cfg));
+    port = server->bind_to_any_port("127.0.0.1");
+    if (port <= 0) {
+      throw std::runtime_error("Failed to bind test server port");
+    }
+
+    server_thread = std::thread([this]() {
+      server->listen_after_bind();
+    });
+    server->wait_until_ready();
+
+    cli = std::make_unique<httplib::Client>("127.0.0.1", port);
+    cli->set_connection_timeout(5, 0);
+    cli->set_read_timeout(10, 0);
+  }
+
+  void create_file(const std::filesystem::path& rel_path, const std::string& content = "dummy media content") {
+    std::error_code ec;
+    auto full_path = canonical_temp_dir / rel_path;
+    std::filesystem::create_directories(full_path.parent_path(), ec);
+    std::ofstream ofs(full_path, std::ios::binary);
+    ofs << content;
+  }
+
+  ~ScanServerFixture() {
+    if (server) {
+      server->stop();
+    }
+    if (server_thread.joinable()) {
+      server_thread.join();
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+  }
+};
+
+}  // namespace
+
+TEST_CASE("TC-SCN-01: Valid directory scan inside workspace root", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("folder1/clip1.mp4", std::string(120, 'a'));
+  fixture.create_file("folder1/clip1.srt", "1\n00:00:01,000 --> 00:00:02,000\nSubtitle\n");
+  fixture.create_file("folder1/nested/clip2.mov", std::string(240, 'b'));
+
+  nlohmann::json req_body = {{"path", "folder1"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req_body.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j.contains("accepted"));
+  REQUIRE(j.contains("skipped"));
+  REQUIRE(j.contains("rejected"));
+  REQUIRE(j["accepted"].is_array());
+  REQUIRE(j["accepted"].size() == 2);
+  REQUIRE(j["skipped"] == 0);
+  REQUIRE(j["rejected"].empty());
+
+  bool found_clip1 = false;
+  bool found_clip2 = false;
+
+  for (const auto& item : j["accepted"]) {
+    REQUIRE(item.contains("id"));
+    REQUIRE(item["id"].is_string());
+    REQUIRE_FALSE(item["id"].get<std::string>().empty());
+
+    REQUIRE(item.contains("name"));
+    REQUIRE(item.contains("videoPath"));
+    REQUIRE(item.contains("relativePath"));
+    REQUIRE(item.contains("sizeBytes"));
+    REQUIRE(item.contains("format"));
+    REQUIRE(item.contains("location"));
+    REQUIRE(item.contains("outputExists"));
+
+    REQUIRE(item["location"] == "server-path");
+
+    std::string name = item["name"].get<std::string>();
+    if (name == "clip1.mp4") {
+      found_clip1 = true;
+      REQUIRE(item["format"] == "mp4");
+      REQUIRE(item["sizeBytes"] == 120);
+      REQUIRE(item["outputExists"] == true);
+      std::string vpath = item["videoPath"].get<std::string>();
+      REQUIRE(vpath.find("folder1/clip1.mp4") != std::string::npos);
+    } else if (name == "clip2.mov") {
+      found_clip2 = true;
+      REQUIRE(item["format"] == "mov");
+      REQUIRE(item["sizeBytes"] == 240);
+      REQUIRE(item["outputExists"] == false);
+      std::string vpath = item["videoPath"].get<std::string>();
+      REQUIRE(vpath.find("folder1/nested/clip2.mov") != std::string::npos);
+    }
+  }
+
+  REQUIRE(found_clip1);
+  REQUIRE(found_clip2);
+}
+
+TEST_CASE("TC-SCN-02: Valid single file scan inside workspace", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("single_clip.mkv", std::string(300, 'c'));
+  fixture.create_file("single_clip.srt", "1\n00:00:01,000 --> 00:00:03,000\nLine\n");
+
+  SECTION("Scan single file via path string") {
+    nlohmann::json req = {{"path", "single_clip.mkv"}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto j = nlohmann::json::parse(res->body);
+    REQUIRE(j["accepted"].size() == 1);
+    REQUIRE(j["accepted"][0]["name"] == "single_clip.mkv");
+    REQUIRE(j["accepted"][0]["format"] == "mkv");
+    REQUIRE(j["accepted"][0]["sizeBytes"] == 300);
+    REQUIRE(j["accepted"][0]["outputExists"] == true);
+    REQUIRE(j["accepted"][0]["location"] == "server-path");
+    REQUIRE(j["skipped"] == 0);
+    REQUIRE(j["rejected"].empty());
+  }
+
+  SECTION("Scan single file via paths array") {
+    nlohmann::json req = {{"paths", {"single_clip.mkv"}}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto j = nlohmann::json::parse(res->body);
+    REQUIRE(j["accepted"].size() == 1);
+    REQUIRE(j["accepted"][0]["name"] == "single_clip.mkv");
+    REQUIRE(j["accepted"][0]["format"] == "mkv");
+  }
+}
+
+TEST_CASE("TC-SCN-03: Unconfigured workspace returning HTTP 400", "[server][scan-path]") {
+  EnvVarGuard env_guard("SUBLIFT_ALLOWED_MEDIA_ROOT", std::nullopt);
+  ScanServerFixture fixture(false);  // unconfigured media_dir
+
+  nlohmann::json req = {{"path", "some_folder"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 400);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j.contains("error"));
+  REQUIRE_FALSE(j["error"].get<std::string>().empty());
+}
+
+TEST_CASE("TC-SCN-04: Out-of-workspace absolute path rejection", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+
+  std::error_code ec;
+  auto outside_dir = std::filesystem::temp_directory_path() /
+                     ("sublift_outside_ws_" + std::to_string(::getpid()) + "_" +
+                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directories(outside_dir, ec);
+  auto outside_file = outside_dir / "outside_video.mp4";
+  {
+    std::ofstream ofs(outside_file, std::ios::binary);
+    ofs << "outside content";
+  }
+
+  struct OutsideCleanup {
+    std::filesystem::path p;
+    ~OutsideCleanup() {
+      std::error_code err;
+      std::filesystem::remove_all(p, err);
+    }
+  } cleanup{outside_dir};
+
+  SECTION("Direct outside file absolute path") {
+    nlohmann::json req = {{"path", outside_file.string()}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() >= 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+
+  SECTION("Direct outside directory absolute path") {
+    nlohmann::json req = {{"paths", {outside_dir.string(), "/etc"}}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() >= 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+}
+
+TEST_CASE("TC-SCN-05: Directory traversal .. escape attempt rejection", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("sub/valid.mp4", "valid");
+
+  SECTION("Parent traversal from root") {
+    nlohmann::json req = {{"path", "../../etc"}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() >= 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+
+  SECTION("Relative traversal trying to escape media root") {
+    nlohmann::json req = {{"paths", {"sub/../../../tmp"}}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() >= 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+}
+
+TEST_CASE("TC-SCN-06: Symlink escape pointing outside workspace directory being rejected/skipped", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("safe_dir/real.mp4", "real media");
+
+  std::error_code ec;
+  auto outside_dir = std::filesystem::temp_directory_path() /
+                     ("sublift_symlink_ext_" + std::to_string(::getpid()) + "_" +
+                      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  std::filesystem::create_directories(outside_dir, ec);
+  auto outside_clip = outside_dir / "external.mp4";
+  {
+    std::ofstream ofs(outside_clip, std::ios::binary);
+    ofs << "external secret video";
+  }
+
+  struct OutsideCleaner {
+    std::filesystem::path p;
+    ~OutsideCleaner() {
+      std::error_code err;
+      std::filesystem::remove_all(p, err);
+    }
+  } cleaner{outside_dir};
+
+  // Create symlink inside safe_dir pointing to external outside directory
+  std::filesystem::create_directory_symlink(outside_dir, fixture.canonical_temp_dir / "safe_dir" / "symlink_dir", ec);
+  std::filesystem::create_symlink(outside_clip, fixture.canonical_temp_dir / "safe_dir" / "symlink_file.mp4", ec);
+
+  nlohmann::json req = {{"path", "safe_dir"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].size() == 1);
+  REQUIRE(j["accepted"][0]["name"] == "real.mp4");
+  REQUIRE(j["skipped"].get<int>() >= 1);
+
+  // Verify external file is never accepted
+  for (const auto& item : j["accepted"]) {
+    REQUIRE(item["name"] != "external.mp4");
+    REQUIRE(item["name"] != "symlink_file.mp4");
+  }
+}
+
+TEST_CASE("TC-SCN-07: Depth recursion limit (directory deeper than 10 levels is skipped/not recursed)", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("d0/shallow.mp4", "shallow video");
+
+  // Create 12 levels deep directory: d0/l1/l2/l3/l4/l5/l6/l7/l8/l9/l10/l11/deep.mp4
+  std::string deep_path = "d0";
+  for (int i = 1; i <= 11; ++i) {
+    deep_path += "/l" + std::to_string(i);
+  }
+  deep_path += "/deep.mp4";
+  fixture.create_file(deep_path, "deep video");
+
+  nlohmann::json req = {{"path", "d0"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].size() == 1);
+  REQUIRE(j["accepted"][0]["name"] == "shallow.mp4");
+  for (const auto& item : j["accepted"]) {
+    REQUIRE(item["name"] != "deep.mp4");
+  }
+}
+
+TEST_CASE("TC-SCN-08: Max file count limit (capping at 500 files)", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  for (int i = 0; i < 520; ++i) {
+    char name[64];
+    std::snprintf(name, sizeof(name), "bulk/video_%04d.mp4", i);
+    fixture.create_file(name, "content");
+  }
+
+  nlohmann::json req = {{"path", "bulk"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].size() == 500);
+  REQUIRE(j["skipped"].get<int>() >= 20);
+}
+
+TEST_CASE("TC-SCN-09: Skipping hidden files and directories", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("hidden_test/visible.mp4", "visible video");
+  fixture.create_file("hidden_test/.DS_Store", "junk");
+  fixture.create_file("hidden_test/.git/dummy.mp4", "git content");
+  fixture.create_file("hidden_test/.sublift_cache/remux/cached.mp4", "cache content");
+  fixture.create_file("hidden_test/.hidden_dir/video.mp4", "hidden sub video");
+  fixture.create_file("hidden_test/.hidden_video.mp4", "dotfile video");
+
+  nlohmann::json req = {{"path", "hidden_test"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].size() == 1);
+  REQUIRE(j["accepted"][0]["name"] == "visible.mp4");
+  REQUIRE(j["skipped"].get<int>() >= 4);
+}
+
+TEST_CASE("TC-SCN-10: Filtering unsupported extensions (.txt, .cpp, .ts excluded)", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("ext_test/good.mp4", "mp4 video");
+  fixture.create_file("ext_test/good.webm", "webm video");
+  fixture.create_file("ext_test/notes.txt", "text note");
+  fixture.create_file("ext_test/code.cpp", "c++ code");
+  fixture.create_file("ext_test/stream.ts", "mpeg ts video - forbidden");
+  fixture.create_file("ext_test/data.json", "json data");
+
+  SECTION("Directory scan filters non-media and .ts files") {
+    nlohmann::json req = {{"path", "ext_test"}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto j = nlohmann::json::parse(res->body);
+    REQUIRE(j["accepted"].size() == 2);
+    REQUIRE(j["skipped"].get<int>() >= 4);
+
+    for (const auto& item : j["accepted"]) {
+      std::string fmt = item["format"].get<std::string>();
+      REQUIRE((fmt == "mp4" || fmt == "webm"));
+      REQUIRE(fmt != "ts");
+    }
+  }
+
+  SECTION("Direct unsupported file path submission is rejected") {
+    nlohmann::json req = {{"path", "ext_test/notes.txt"}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() == 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+
+  SECTION("Direct .ts file path submission is rejected due to security policy") {
+    nlohmann::json req = {{"path", "ext_test/stream.ts"}};
+    auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    if (res->status == 200) {
+      auto j = nlohmann::json::parse(res->body);
+      REQUIRE(j["accepted"].empty());
+      REQUIRE(j["rejected"].size() == 1);
+    } else {
+      REQUIRE((res->status == 400 || res->status == 403));
+    }
+  }
+}
+
+TEST_CASE("TC-SCN-11: Duplicate path deduplication in request", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  fixture.create_file("dup_test/clip.mp4", "media content");
+
+  nlohmann::json req = {{"paths", {"dup_test/clip.mp4", "dup_test/clip.mp4", "./dup_test/clip.mp4"}}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].size() == 1);
+  REQUIRE(j["accepted"][0]["name"] == "clip.mp4");
+  REQUIRE((j["rejected"].size() >= 1 || j["skipped"].get<int>() >= 2));
+}
+
+TEST_CASE("TC-SCN-12: Empty directory scan returning structured empty accepted list", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+  std::error_code ec;
+  std::filesystem::create_directories(fixture.canonical_temp_dir / "empty_dir", ec);
+
+  nlohmann::json req = {{"path", "empty_dir"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  REQUIRE(res->status == 200);
+
+  auto j = nlohmann::json::parse(res->body);
+  REQUIRE(j["accepted"].is_array());
+  REQUIRE(j["accepted"].empty());
+  REQUIRE(j["rejected"].size() >= 1);
+}
+
+TEST_CASE("TC-SCN-13: Non-existent path returning structured rejection or 404", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+
+  nlohmann::json req = {{"path", "completely_nonexistent_directory_xyz"}};
+  auto res = fixture.cli->Post("/api/video/scan-path", req.dump(), "application/json");
+  REQUIRE(res != nullptr);
+  if (res->status == 200) {
+    auto j = nlohmann::json::parse(res->body);
+    REQUIRE(j["accepted"].empty());
+    REQUIRE(j["rejected"].size() >= 1);
+  } else {
+    REQUIRE((res->status == 404 || res->status == 400));
+  }
+}
+
+TEST_CASE("TC-SCN-14: Malformed JSON request body returning HTTP 400", "[server][scan-path]") {
+  ScanServerFixture fixture(true);
+
+  SECTION("Broken JSON string") {
+    auto res = fixture.cli->Post("/api/video/scan-path", "{broken json", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+  }
+
+  SECTION("Missing required path/paths field") {
+    auto res = fixture.cli->Post("/api/video/scan-path", "{}", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+  }
+
+  SECTION("Non-string path field") {
+    auto res = fixture.cli->Post("/api/video/scan-path", R"({"path": 12345})", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+  }
+
+  SECTION("Non-array paths field") {
+    auto res = fixture.cli->Post("/api/video/scan-path", R"({"paths": "not an array"})", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 400);
+  }
+}
+
+
 

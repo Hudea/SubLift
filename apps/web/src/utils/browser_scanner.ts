@@ -63,7 +63,11 @@ export class BrowserDirectoryScanner {
     const rejected: BatchScanRejection[] = [];
     const visitedPaths = new Set<string>();
 
-    if ('length' in items && items.length > 0 && 'webkitGetAsEntry' in (items[0] as any)) {
+    if (
+      'length' in items &&
+      items.length > 0 &&
+      typeof (items[0] as any)?.webkitGetAsEntry === 'function'
+    ) {
       const transferItems = items as DataTransferItemList;
       const rootEntries: FileSystemEntry[] = [];
       for (let i = 0; i < transferItems.length; i++) {
@@ -83,17 +87,34 @@ export class BrowserDirectoryScanner {
         );
       }
     } else {
-      // 普通 FileList (无 webkitGetAsEntry 时 fallback)
+      // 普通 FileList (如 <input webkitdirectory> 或普通文件选择)
       const fileList = items as FileList;
       for (let i = 0; i < fileList.length; i++) {
         const file = fileList[i];
-        if (file.name.startsWith('.')) {
+        const relPath = ((file as any).webkitRelativePath as string) || '';
+
+        // 检查文件名或相对路径中是否包含隐藏项
+        const isHidden =
+          file.name.startsWith('.') ||
+          (relPath && relPath.split('/').some((seg) => seg.startsWith('.')));
+        if (isHidden) {
           skipped++;
           continue;
         }
+
+        // 检查 macOS package bundle (.app, .photoslibrary)
+        if (relPath && (relPath.includes('.app/') || relPath.includes('.photoslibrary/'))) {
+          skipped++;
+          continue;
+        }
+
         const ext = (file.name.split('.').pop() || '').toLowerCase();
         if (this.SUPPORTED_EXTENSIONS.has(ext)) {
-          validFiles.push({ file });
+          let relativeDir: string | undefined = undefined;
+          if (relPath && relPath.includes('/')) {
+            relativeDir = relPath.substring(0, relPath.lastIndexOf('/') + 1);
+          }
+          validFiles.push({ file, relativeDir });
         } else {
           rejected.push({
             pathOrName: file.name,
@@ -134,19 +155,26 @@ export class BrowserDirectoryScanner {
     visitedPaths.add(fullVirtualPath);
 
     if (entry.isFile) {
-      const file = await new Promise<File>((resolve, reject) => {
-        (entry as FileSystemFileEntry).file(resolve, reject);
-      });
-      const ext = (file.name.split('.').pop() || '').toLowerCase();
-      if (this.SUPPORTED_EXTENSIONS.has(ext)) {
-        outFiles.push({
-          file,
-          relativeDir: currentPath ? `${currentPath.replace(/^\//, '')}/` : undefined,
+      try {
+        const file = await new Promise<File>((resolve, reject) => {
+          (entry as FileSystemFileEntry).file(resolve, reject);
         });
-      } else {
+        const ext = (file.name.split('.').pop() || '').toLowerCase();
+        if (this.SUPPORTED_EXTENSIONS.has(ext)) {
+          outFiles.push({
+            file,
+            relativeDir: currentPath ? `${currentPath.replace(/^\//, '')}/` : undefined,
+          });
+        } else {
+          outRejected.push({
+            pathOrName: file.name,
+            reason: { kind: 'unsupportedFormat', extension: ext },
+          });
+        }
+      } catch (err: any) {
         outRejected.push({
-          pathOrName: file.name,
-          reason: { kind: 'unsupportedFormat', extension: ext },
+          pathOrName: entry.name,
+          reason: { kind: 'unreadable', detail: err?.message || String(err) },
         });
       }
     } else if (entry.isDirectory) {

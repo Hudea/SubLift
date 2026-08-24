@@ -175,4 +175,237 @@ describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 
     expect(task.progressPct).toBe(0);
     expect(task.entries.length).toBe(0);
   });
+
+  it('startQueue processes multiple waiting tasks sequentially with SSE events', async () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([
+      { videoPath: '/path/to/seq1.mp4' },
+      { videoPath: '/path/to/seq2.mp4' },
+    ]);
+
+    const sseCallbacks: Record<string, SseJobCallbacks> = {};
+    let jobCounter = 0;
+    SubLiftApiClient.createJob = async () => {
+      jobCounter++;
+      const jid = `job-seq-${jobCounter}`;
+      return { job_id: jid, status: 'running' };
+    };
+    SubLiftApiClient.subscribeJobEvents = (id, callbacks) => {
+      sseCallbacks[id] = callbacks;
+      return () => {
+        delete sseCallbacks[id];
+      };
+    };
+
+    batchStore.startQueue();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(batchStore.isQueueRunning).toBe(true);
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[0].id);
+    expect(batchStore.tasks[0].status).toBe('extracting');
+
+    // Progress event
+    sseCallbacks['job-seq-1']?.onProgress?.({
+      job_id: 'job-seq-1',
+      stage: 'extracting',
+      pct: 0.5,
+      eta_ms: 5000,
+    });
+    expect(batchStore.tasks[0].progressPct).toBe(50);
+
+    // Push entry event
+    sseCallbacks['job-seq-1']?.onPushEntry?.({
+      job_id: 'job-seq-1',
+      entry: { index: 1, start_ms: 100, end_ms: 500, text: 'Hello', confidence: 0.99 },
+    });
+    expect(batchStore.tasks[0].entries.length).toBe(1);
+
+    // Done event for task 1
+    sseCallbacks['job-seq-1']?.onDone?.({
+      job_id: 'job-seq-1',
+      status: 'completed',
+      total_entries: 1,
+      elapsed_ms: 1200,
+      video_path: '/path/to/seq1.mp4',
+    });
+    await new Promise((r) => setTimeout(r, 15));
+
+    expect(batchStore.tasks[0].status).toBe('completed');
+    expect(batchStore.tasks[0].progressPct).toBe(100);
+
+    // Queue advances to task 2
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[1].id);
+    expect(batchStore.tasks[1].status).toBe('extracting');
+
+    // Done event for task 2
+    sseCallbacks['job-seq-2']?.onDone?.({
+      job_id: 'job-seq-2',
+      status: 'completed',
+      total_entries: 0,
+      elapsed_ms: 800,
+      video_path: '/path/to/seq2.mp4',
+    });
+    await new Promise((r) => setTimeout(r, 15));
+
+    expect(batchStore.tasks[1].status).toBe('completed');
+    expect(batchStore.currentRunningId).toBeNull();
+    expect(batchStore.isQueueRunning).toBe(false);
+  });
+
+  it('handles SSE pipeline error and transitions task to failed with error message while continuing queue', async () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([
+      { videoPath: '/path/to/err1.mp4' },
+      { videoPath: '/path/to/ok2.mp4' },
+    ]);
+
+    const sseCallbacks: Record<string, SseJobCallbacks> = {};
+    let jobCounter = 0;
+    SubLiftApiClient.createJob = async () => {
+      jobCounter++;
+      return { job_id: `job-err-${jobCounter}`, status: 'running' };
+    };
+    SubLiftApiClient.subscribeJobEvents = (id, callbacks) => {
+      sseCallbacks[id] = callbacks;
+      return () => {
+        delete sseCallbacks[id];
+      };
+    };
+
+    batchStore.startQueue();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[0].id);
+
+    // Trigger error on task 1
+    sseCallbacks['job-err-1']?.onError?.('Decoder corrupted frame');
+    await new Promise((r) => setTimeout(r, 15));
+
+    expect(batchStore.tasks[0].status).toBe('failed');
+    expect(batchStore.tasks[0].error).toBe('Decoder corrupted frame');
+
+    // Queue advances to task 2
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[1].id);
+    expect(batchStore.tasks[1].status).toBe('extracting');
+
+    sseCallbacks['job-err-2']?.onDone?.({
+      job_id: 'job-err-2',
+      status: 'completed',
+      total_entries: 0,
+      elapsed_ms: 500,
+      video_path: '/path/to/ok2.mp4',
+    });
+    await new Promise((r) => setTimeout(r, 15));
+
+    expect(batchStore.tasks[1].status).toBe('completed');
+    expect(batchStore.isQueueRunning).toBe(false);
+  });
+
+  it('handles cancelTask while running, aborting backend job and moving to next task', async () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([
+      { videoPath: '/path/to/cancel1.mp4' },
+      { videoPath: '/path/to/next2.mp4' },
+    ]);
+
+    let cancelledJobId = '';
+    SubLiftApiClient.createJob = async () => ({ job_id: 'job-cancel-test', status: 'running' });
+    SubLiftApiClient.cancelJob = async (id: string) => {
+      cancelledJobId = id;
+    };
+    SubLiftApiClient.subscribeJobEvents = () => () => {};
+
+    batchStore.startQueue();
+    await new Promise((r) => setTimeout(r, 10));
+
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[0].id);
+
+    await batchStore.cancelTask(batchStore.tasks[0].id);
+    expect(batchStore.tasks[0].status).toBe('cancelled');
+    expect(cancelledJobId).toBe('job-cancel-test');
+
+    await new Promise((r) => setTimeout(r, 15));
+    // Advanced to task 2
+    expect(batchStore.currentRunningId).toBe(batchStore.tasks[1].id);
+  });
+
+  it('clearCompleted removes completed, cancelled, interrupted and skipped tasks while keeping waiting and failed tasks', () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([
+      { videoPath: '/path/to/w.mp4' },
+      { videoPath: '/path/to/c.mp4' },
+      { videoPath: '/path/to/f.mp4' },
+      { videoPath: '/path/to/cn.mp4' },
+      { videoPath: '/path/to/s.mp4' },
+      { videoPath: '/path/to/int.mp4' },
+    ]);
+
+    batchStore.tasks[1].status = 'completed';
+    batchStore.tasks[2].status = 'failed';
+    batchStore.tasks[3].status = 'cancelled';
+    batchStore.tasks[4].status = 'skipped';
+    batchStore.tasks[5].status = 'interrupted';
+
+    expect(batchStore.canClearCompleted).toBe(true);
+
+    batchStore.clearCompleted();
+    expect(batchStore.tasks.length).toBe(2);
+    expect(batchStore.tasks[0].videoPath).toBe('/path/to/w.mp4');
+    expect(batchStore.tasks[1].videoPath).toBe('/path/to/f.mp4');
+  });
+
+  it('setScanSummary manages summary state with accepted, skipped, and rejected counts', () => {
+    const batchStore = useBatchStore();
+    expect(batchStore.lastScanSummary).toBeNull();
+
+    batchStore.setScanSummary({
+      accepted: [{ videoPath: '/path/to/v.mp4', name: 'v.mp4' }],
+      skipped: 3,
+      rejected: [{ pathOrName: 'bad.txt', reason: { kind: 'unsupportedFormat', extension: 'txt' } }],
+    });
+
+    expect(batchStore.lastScanSummary).not.toBeNull();
+    expect(batchStore.lastScanSummary?.accepted.length).toBe(1);
+    expect(batchStore.lastScanSummary?.skipped).toBe(3);
+    expect(batchStore.lastScanSummary?.rejected.length).toBe(1);
+
+    batchStore.setScanSummary(null);
+    expect(batchStore.lastScanSummary).toBeNull();
+  });
+
+  it('preserves outputExists and planningError from addBatchItems in inspectorModel', () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([
+      {
+        videoPath: '/path/to/movie.mp4',
+        outputPath: '/custom/path/movie.srt',
+        outputExists: true,
+        planningError: 'Warning: Companion subtitle already exists on disk',
+      },
+    ]);
+
+    expect(batchStore.tasks[0].outputExists).toBe(true);
+    expect(batchStore.tasks[0].outputPath).toBe('/custom/path/movie.srt');
+    expect(batchStore.tasks[0].planningError).toBe('Warning: Companion subtitle already exists on disk');
+
+    const model = batchStore.inspectorModel;
+    expect(model).not.toBeNull();
+    expect(model?.outputFileExists).toBe(true);
+    expect(model?.outputExistsWarning).toContain('该字幕已存在');
+    expect(model?.planningError).toContain('Companion subtitle already exists');
+    expect(model?.canEditConfiguration).toBe(true);
+  });
+
+  it('clearAll resets all tasks and queue state', () => {
+    const batchStore = useBatchStore();
+    batchStore.addBatchItems([{ videoPath: '/path/to/v1.mp4' }, { videoPath: '/path/to/v2.mp4' }]);
+    batchStore.isQueueRunning = true;
+    batchStore.currentRunningId = 'task-1';
+
+    batchStore.clearAll();
+    expect(batchStore.tasks.length).toBe(0);
+    expect(batchStore.isQueueRunning).toBe(false);
+    expect(batchStore.currentRunningId).toBeNull();
+    expect(batchStore.selectedTaskId).toBeNull();
+  });
 });

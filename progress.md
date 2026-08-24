@@ -2,9 +2,9 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-08-23
+- **最后更新：** 2026-08-24
 - **当前 Phase：** [Phase 12](docs/phases/phase12.json) — `in-progress`（legacy Feature 结构）
-- **当前 Feature：** 12510 — `in-progress`，Web 批量任务中心交互增强与受控文件夹扫描
+- **当前 Feature：** 12510 — `done`，Web 批量任务中心交互增强与受控文件夹扫描（下一项待收口：12511）
 - **已冻结里程碑：** [Phase 13](docs/phases/phase13.json) 已在 `main` 完成验收并置 `done`，不因 Phase 12 收口而重开。
 - **进度真源：** [`phases.json`](phases.json) → `detail_file`；本文件只提供当前工作与阻塞导航。
 

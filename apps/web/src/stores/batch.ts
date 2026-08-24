@@ -65,7 +65,9 @@ export const useBatchStore = defineStore('batch', () => {
   const activeTaskCount = computed(() => stats.value.waiting + stats.value.active);
   const canStartAll = computed(() => stats.value.waiting > 0 && !isQueueRunning.value);
   const canPause = computed(() => isQueueRunning.value);
-  const canClearCompleted = computed(() => stats.value.completed > 0 || stats.value.cancelled > 0);
+  const canClearCompleted = computed(
+    () => stats.value.completed > 0 || stats.value.cancelled > 0 || stats.value.skipped > 0
+  );
   const canExportAll = computed(() => stats.value.completed > 0);
 
   // 4.1 Filtered Tasks Projection (Search + Status Filter)
@@ -171,6 +173,9 @@ export const useBatchStore = defineStore('batch', () => {
       videoPath: string;
       name?: string;
       importRootPath?: string;
+      outputPath?: string;
+      outputExists?: boolean;
+      planningError?: string;
       config?: Partial<BatchTaskConfig>;
     }>
   ) {
@@ -200,7 +205,9 @@ export const useBatchStore = defineStore('batch', () => {
         videoPath: cleanPath,
         name,
         importRootPath: item.importRootPath,
-        outputPath: `${cleanPath.replace(/\.[^/.]+$/, '')}.srt`,
+        outputPath: item.outputPath || `${cleanPath.replace(/\.[^/.]+$/, '')}.srt`,
+        outputExists: item.outputExists,
+        planningError: item.planningError,
         status: 'waiting',
         progressPct: 0,
         stage: 'waiting',
@@ -505,7 +512,11 @@ export const useBatchStore = defineStore('batch', () => {
 
   function clearCompleted() {
     tasks.value = tasks.value.filter(
-      (t) => t.status !== 'completed' && t.status !== 'cancelled' && t.status !== 'skipped'
+      (t) =>
+        t.status !== 'completed' &&
+        t.status !== 'cancelled' &&
+        t.status !== 'interrupted' &&
+        t.status !== 'skipped'
     );
     if (selectedTaskId.value && !tasks.value.some((t) => t.id === selectedTaskId.value)) {
       selectedTaskId.value = tasks.value[0]?.id || null;

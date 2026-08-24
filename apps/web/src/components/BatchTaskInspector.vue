@@ -100,6 +100,12 @@
       </div>
     </div>
 
+    <!-- 规划提示 Warning Callout -->
+    <div v-if="inspector.planningError" class="sl-inspector-warning-box">
+      <div class="sl-warning-title">⚠️ 任务规划提示</div>
+      <div class="sl-warning-content">{{ inspector.planningError }}</div>
+    </div>
+
     <!-- 错误诊断 Callout -->
     <div v-if="inspector.failureMessage" class="sl-inspector-error-box">
       <div class="sl-error-title">⚠️ 任务执行失败</div>
@@ -323,7 +329,27 @@ function handleQualityChange(e: Event) {
   cursor: not-allowed;
 }
 
-/* Error Box */
+/* Warning & Error Box */
+.sl-inspector-warning-box {
+  background: rgba(255, 159, 10, 0.1);
+  border: 1px solid rgba(255, 159, 10, 0.25);
+  border-radius: var(--sl-radius-md, 8px);
+  padding: 10px 14px;
+}
+
+.sl-warning-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ff9f0a;
+  margin-bottom: 4px;
+}
+
+.sl-warning-content {
+  font-size: 12px;
+  color: var(--sl-text-secondary, #8e8e93);
+  word-break: break-all;
+}
+
 .sl-inspector-error-box {
   background: rgba(255, 69, 58, 0.1);
   border: 1px solid rgba(255, 69, 58, 0.25);
