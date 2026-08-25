@@ -6,11 +6,13 @@
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
+#include <filesystem>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <vector>
@@ -30,7 +32,8 @@ enum class JobStatus {
   Running,
   Completed,
   Failed,
-  Cancelled
+  Cancelled,
+  Interrupted
 };
 
 [[nodiscard]] inline std::string to_string(JobStatus status) {
@@ -40,8 +43,19 @@ enum class JobStatus {
     case JobStatus::Completed: return "completed";
     case JobStatus::Failed: return "failed";
     case JobStatus::Cancelled: return "cancelled";
+    case JobStatus::Interrupted: return "interrupted";
   }
   return "unknown";
+}
+
+[[nodiscard]] inline JobStatus job_status_from_string(std::string_view str) {
+  if (str == "queued") return JobStatus::Queued;
+  if (str == "running") return JobStatus::Running;
+  if (str == "completed") return JobStatus::Completed;
+  if (str == "failed") return JobStatus::Failed;
+  if (str == "cancelled") return JobStatus::Cancelled;
+  if (str == "interrupted") return JobStatus::Interrupted;
+  return JobStatus::Interrupted;
 }
 
 struct RegionBox {
@@ -75,7 +89,45 @@ struct JobConfig {
   std::string engine{"paddle"};
   double fps{2.0};
   double confidence_threshold{0.0};
+  std::optional<std::string> script;
   RegionBox region_box;
+
+  [[nodiscard]] nlohmann::json to_json() const {
+    nlohmann::json j = {
+      {"video_path", video_path},
+      {"engine", engine},
+      {"fps", fps},
+      {"confidence_threshold", confidence_threshold},
+      {"region_box", region_box.to_json()}
+    };
+    if (script.has_value()) {
+      j["script"] = *script;
+    }
+    return j;
+  }
+
+  static JobConfig from_json(const nlohmann::json& j) {
+    JobConfig cfg;
+    if (j.contains("video_path") && j["video_path"].is_string()) {
+      cfg.video_path = j["video_path"].get<std::string>();
+    }
+    if (j.contains("engine") && j["engine"].is_string()) {
+      cfg.engine = j["engine"].get<std::string>();
+    }
+    if (j.contains("fps") && j["fps"].is_number()) {
+      cfg.fps = j["fps"].get<double>();
+    }
+    if (j.contains("confidence_threshold") && j["confidence_threshold"].is_number()) {
+      cfg.confidence_threshold = j["confidence_threshold"].get<double>();
+    }
+    if (j.contains("script") && j["script"].is_string()) {
+      cfg.script = j["script"].get<std::string>();
+    }
+    if (j.contains("region_box") && j["region_box"].is_object()) {
+      cfg.region_box = RegionBox::from_json(j["region_box"]);
+    }
+    return cfg;
+  }
 };
 
 struct JobEvent {
@@ -158,13 +210,45 @@ struct JobContext {
   [[nodiscard]] bool is_terminal() const {
     std::lock_guard<std::mutex> lock(state_mutex);
     return status == JobStatus::Completed || status == JobStatus::Failed ||
-           status == JobStatus::Cancelled;
+           status == JobStatus::Cancelled || status == JobStatus::Interrupted;
+  }
+
+  [[nodiscard]] nlohmann::json to_json() const {
+    std::lock_guard<std::mutex> lock(state_mutex);
+    auto to_ms = [](const std::chrono::system_clock::time_point& tp) -> std::int64_t {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
+    };
+
+    nlohmann::json entries_json = nlohmann::json::array();
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+      const auto& e = entries[i];
+      entries_json.push_back({
+        {"index", i + 1},
+        {"start_ms", e.start_ms},
+        {"end_ms", e.end_ms},
+        {"text", e.text},
+        {"confidence", e.confidence}
+      });
+    }
+
+    return {
+      {"job_id", job_id},
+      {"config", config.to_json()},
+      {"status", to_string(status)},
+      {"created_at_ms", to_ms(created_at)},
+      {"started_at_ms", to_ms(started_at)},
+      {"ended_at_ms", to_ms(ended_at)},
+      {"error_message", error_message},
+      {"entries", entries_json}
+    };
   }
 };
 
 class JobManager {
  public:
-  explicit JobManager(std::size_t max_concurrent_jobs = 1, std::size_t max_history_jobs = 50);
+  explicit JobManager(std::size_t max_concurrent_jobs = 1,
+                      std::size_t max_history_jobs = 50,
+                      std::filesystem::path state_file_path = {});
   ~JobManager();
 
   JobManager(const JobManager&) = delete;
@@ -173,9 +257,18 @@ class JobManager {
   JobManager& operator=(JobManager&&) = delete;
 
   [[nodiscard]] std::shared_ptr<JobContext> create_job(const JobConfig& config);
+  [[nodiscard]] std::shared_ptr<JobContext> create_completed_job(const JobConfig& config,
+                                                                 std::vector<sublift::SubtitleEntry> entries = {});
   [[nodiscard]] std::shared_ptr<JobContext> get_job(const std::string& job_id) const;
+  [[nodiscard]] std::vector<std::shared_ptr<JobContext>> get_all_jobs() const;
   bool cancel_job(const std::string& job_id);
   void shutdown();
+
+  void set_state_file_path(const std::filesystem::path& path);
+  [[nodiscard]] std::filesystem::path get_state_file_path() const;
+
+  void save_state();
+  void load_state();
 
   [[nodiscard]] static std::string generate_uuid_v4();
 
@@ -183,9 +276,12 @@ class JobManager {
   void worker_loop();
   void execute_job(const std::shared_ptr<JobContext>& job);
   void enforce_lru_cleanup_locked();
+  void save_state_locked();
+  void load_state_locked();
 
   std::size_t max_concurrent_jobs_;
   std::size_t max_history_jobs_;
+  std::filesystem::path state_file_path_;
 
   mutable std::mutex mutex_;
   std::condition_variable queue_cv_;
@@ -202,3 +298,4 @@ class JobManager {
 };
 
 }  // namespace sublift::server
+

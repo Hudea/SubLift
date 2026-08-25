@@ -14,6 +14,7 @@
 
 #include "sublift/adapters/ffmpeg.hpp"
 #include "sublift/server/http_server.hpp"
+#include "sublift/server/path_sandbox.hpp"
 #include "sublift/server/routes.hpp"
 
 namespace {
@@ -31,6 +32,22 @@ struct TempTestFile {
   ~TempTestFile() {
     std::error_code ec;
     std::filesystem::remove(path, ec);
+  }
+};
+
+struct TempTestDir {
+  std::filesystem::path path;
+
+  explicit TempTestDir(const std::string& dirname_prefix) {
+    auto now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
+    path = std::filesystem::temp_directory_path() / (dirname_prefix + "_" + std::to_string(now_ns));
+    std::error_code ec;
+    std::filesystem::create_directories(path, ec);
+  }
+
+  ~TempTestDir() {
+    std::error_code ec;
+    std::filesystem::remove_all(path, ec);
   }
 };
 
@@ -134,6 +151,66 @@ TEST_CASE("RegionBox parsing clamps to the [0,1] contract", "[server][jobs]") {
   REQUIRE(box.y == 0.0);
   REQUIRE(box.width == 1.0);
   REQUIRE(box.height == 0.0);
+}
+
+TEST_CASE("Unified JobConfig DTO serialization, clamping and script support", "[server][jobs]") {
+  nlohmann::json full_cfg = {
+      {"video_path", "/path/to/movie.mp4"},
+      {"engine", "paddle"},
+      {"fps", 8.0},
+      {"confidence_threshold", 0.35},
+      {"script", "Hans"},
+      {"region_box", {{"x", 0.05}, {"y", 0.75}, {"width", 0.90}, {"height", 0.20}}}
+  };
+
+  auto cfg = sublift::server::JobConfig::from_json(full_cfg);
+  REQUIRE(cfg.video_path == "/path/to/movie.mp4");
+  REQUIRE(cfg.engine == "paddle");
+  REQUIRE(cfg.fps == 8.0);
+  REQUIRE(cfg.confidence_threshold == 0.35);
+  REQUIRE(cfg.script.has_value());
+  REQUIRE(cfg.script.value() == "Hans");
+  REQUIRE(cfg.region_box.x == 0.05);
+  REQUIRE(cfg.region_box.y == 0.75);
+  REQUIRE(cfg.region_box.width == 0.90);
+  REQUIRE(cfg.region_box.height == 0.20);
+
+  auto serialized = cfg.to_json();
+  REQUIRE(serialized["video_path"] == "/path/to/movie.mp4");
+  REQUIRE(serialized["engine"] == "paddle");
+  REQUIRE(serialized["fps"] == 8.0);
+  REQUIRE(serialized["confidence_threshold"] == 0.35);
+  REQUIRE(serialized["script"] == "Hans");
+  REQUIRE(serialized["region_box"]["x"] == 0.05);
+  REQUIRE(serialized["region_box"]["y"] == 0.75);
+
+  // Without optional script
+  nlohmann::json no_script_cfg = {
+      {"video_path", "/path/to/no_script.mp4"},
+      {"engine", "vision"},
+      {"fps", 5.0},
+      {"confidence_threshold", 0.0}
+  };
+  auto cfg2 = sublift::server::JobConfig::from_json(no_script_cfg);
+  REQUIRE(cfg2.video_path == "/path/to/no_script.mp4");
+  REQUIRE(!cfg2.script.has_value());
+  REQUIRE(cfg2.region_box.x == 0.0);
+  REQUIRE(cfg2.region_box.y == 0.7);
+  auto serialized2 = cfg2.to_json();
+  REQUIRE(!serialized2.contains("script"));
+
+  // In-memory JobManager preservation
+  sublift::server::JobManager manager(1, 10);
+  auto job = manager.create_job(cfg);
+  REQUIRE(job != nullptr);
+  REQUIRE(job->config.script == "Hans");
+  REQUIRE(job->config.fps == 8.0);
+  REQUIRE(job->config.confidence_threshold == 0.35);
+
+  auto job_json = job->to_json();
+  REQUIRE(job_json["config"]["script"] == "Hans");
+  REQUIRE(job_json["config"]["fps"] == 8.0);
+  REQUIRE(job_json["config"]["confidence_threshold"] == 0.35);
 }
 
 TEST_CASE("Server Video Resolve Fingerprint Lookup", "[server][resolve]") {
@@ -266,7 +343,9 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
   }
   TempTestFile temp_video("sublift_test_video_stream.mp4", dummy_data);
 
-  sublift::server::HttpServer server;
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = std::filesystem::temp_directory_path().string();
+  sublift::server::HttpServer server(std::move(cfg));
   int port = server.bind_to_any_port("127.0.0.1");
   REQUIRE(port > 0);
 
@@ -421,7 +500,9 @@ TEST_CASE("Server Video Stream HTTP 206 Partial Content", "[server][video_stream
 }
 
 TEST_CASE("Server Video Frame Extraction", "[server][video_frame]") {
-  sublift::server::HttpServer server;
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = std::filesystem::temp_directory_path().string();
+  sublift::server::HttpServer server(std::move(cfg));
   int port = server.bind_to_any_port("127.0.0.1");
   REQUIRE(port > 0);
 
@@ -538,7 +619,9 @@ TEST_CASE("SRT Time and Formatting Utilities", "[server][srt]") {
 }
 
 TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
-  sublift::server::HttpServer server;
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = std::filesystem::temp_directory_path().string();
+  sublift::server::HttpServer server(std::move(cfg));
   int port = server.bind_to_any_port("127.0.0.1");
   REQUIRE(port > 0);
 
@@ -826,7 +909,9 @@ TEST_CASE("Workspace Configuration API Endpoints", "[server][workspace_api]") {
 }
 
 TEST_CASE("Server Auto ROI Detection", "[server][detect_region]") {
-  sublift::server::HttpServer server;
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = std::filesystem::temp_directory_path().string();
+  sublift::server::HttpServer server(std::move(cfg));
   int port = server.bind_to_any_port("127.0.0.1");
   REQUIRE(port > 0);
 
@@ -1435,5 +1520,1498 @@ TEST_CASE("TC-SCN-14: Malformed JSON request body returning HTTP 400", "[server]
   }
 }
 
+// ===========================================================================
+// Milestone 1 (Feature 12511): 统一媒体沙箱与 Native Server 信任边界全面测试
+// ===========================================================================
+
+namespace {
+
+struct SandboxMatrixFixture {
+  std::filesystem::path base_temp;
+  std::filesystem::path ws_a;
+  std::filesystem::path ws_b;
+  std::filesystem::path outside_dir;
+  std::filesystem::path config_file;
+
+  std::filesystem::path file_a;
+  std::filesystem::path file_b;
+  std::filesystem::path file_outside;
+  std::filesystem::path ts_file_a;
+  std::filesystem::path cache_file_a;
+  std::filesystem::path symlink_outside_a;
+  std::filesystem::path symlink_inside_a;
+  std::filesystem::path symlink_to_cache_a;
+
+  std::unique_ptr<sublift::server::HttpServer> server;
+  std::unique_ptr<std::thread> server_thread;
+  std::unique_ptr<httplib::Client> cli;
+  int port{0};
+
+  explicit SandboxMatrixFixture(bool configure_ws_a_initially = true) {
+    auto now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
+    base_temp = std::filesystem::temp_directory_path() /
+                ("sublift_sb_matrix_" + std::to_string(::getpid()) + "_" + std::to_string(now_ns));
+    ws_a = base_temp / "workspace_a";
+    ws_b = base_temp / "workspace_b";
+    outside_dir = base_temp / "outside_dir";
+    config_file = base_temp / "ws_config.json";
+
+    std::filesystem::create_directories(ws_a);
+    std::filesystem::create_directories(ws_b);
+    std::filesystem::create_directories(outside_dir);
+    std::filesystem::create_directories(ws_a / ".sublift_cache" / "remux");
+
+    file_a = ws_a / "video_a.mp4";
+    file_b = ws_b / "video_b.mp4";
+    file_outside = outside_dir / "video_outside.mp4";
+    ts_file_a = ws_a / "secret.ts";
+    cache_file_a = ws_a / ".sublift_cache" / "remux" / "internal_cached.mp4";
+
+    auto write_file = [](const std::filesystem::path& p, const std::string& content) {
+      std::ofstream f(p, std::ios::binary);
+      f << content;
+    };
+
+    write_file(file_a, "dummy mp4 content A for testing video stream and jobs 1234567890");
+    write_file(file_b, "dummy mp4 content B for testing video stream and jobs 1234567890");
+    write_file(file_outside, "dummy mp4 content OUTSIDE for testing video stream 1234567890");
+    write_file(ts_file_a, "const secret = 42; // TypeScript source");
+    write_file(cache_file_a, "dummy remuxed mp4 in cache directory");
+
+    std::error_code sym_ec;
+    symlink_outside_a = ws_a / "symlink_outside.mp4";
+    std::filesystem::create_symlink(file_outside, symlink_outside_a, sym_ec);
+
+    symlink_inside_a = ws_a / "symlink_inside.mp4";
+    std::filesystem::create_symlink(file_a, symlink_inside_a, sym_ec);
+
+    symlink_to_cache_a = ws_a / "symlink_cache.mp4";
+    std::filesystem::create_symlink(cache_file_a, symlink_to_cache_a, sym_ec);
+
+    sublift::server::ServerConfig cfg;
+    cfg.port = 0;
+    cfg.cors_origin = "*";
+    cfg.config_file = config_file.string();
+    if (configure_ws_a_initially) {
+      cfg.media_dir = ws_a.string();
+    } else {
+      cfg.media_dir = "";
+    }
+
+    server = std::make_unique<sublift::server::HttpServer>(std::move(cfg));
+    port = server->bind_to_any_port("127.0.0.1");
+    server_thread = std::make_unique<std::thread>([this]() {
+      server->listen_after_bind();
+    });
+    server->wait_until_ready();
+
+    cli = std::make_unique<httplib::Client>("127.0.0.1", port);
+    cli->set_connection_timeout(std::chrono::seconds(3));
+    cli->set_read_timeout(std::chrono::seconds(5));
+  }
+
+  ~SandboxMatrixFixture() {
+    if (server) {
+      server->stop();
+    }
+    if (server_thread && server_thread->joinable()) {
+      server_thread->join();
+    }
+    std::error_code ec;
+    std::filesystem::remove_all(base_temp, ec);
+  }
+
+  void switch_workspace(const std::filesystem::path& new_ws) {
+    nlohmann::json req = {{"media_dir", new_ws.string()}};
+    auto res = cli->Post("/api/config/workspace", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+  }
+
+  void clear_workspace() {
+    auto res = cli->Post("/api/config/workspace/clear", "", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+  }
+};
+
+}  // namespace
+
+TEST_CASE("PathSandbox direct security unit assertions", "[server][path_sandbox]") {
+  auto now_ns = std::chrono::steady_clock::now().time_since_epoch().count();
+  auto root_a = std::filesystem::temp_directory_path() / ("sublift_sandbox_unit_a_" + std::to_string(now_ns));
+  auto root_b = std::filesystem::temp_directory_path() / ("sublift_sandbox_unit_b_" + std::to_string(now_ns));
+  std::filesystem::create_directories(root_a);
+  std::filesystem::create_directories(root_b);
+  std::filesystem::create_directories(root_a / ".sublift_cache");
+
+  auto vid_a = root_a / "test.mp4";
+  auto vid_b = root_b / "test.mp4";
+  auto ts_a = root_a / "test.ts";
+  auto cache_vid = root_a / ".sublift_cache" / "test.mp4";
+
+  {
+    std::ofstream(vid_a) << "vid a";
+    std::ofstream(vid_b) << "vid b";
+    std::ofstream(ts_a) << "ts a";
+    std::ofstream(cache_vid) << "cache vid";
+  }
+
+  std::error_code ec;
+  auto sym_out = root_a / "sym_out.mp4";
+  std::filesystem::create_symlink(vid_b, sym_out, ec);
+  auto sym_in = root_a / "sym_in.mp4";
+  std::filesystem::create_symlink(vid_a, sym_in, ec);
+  auto sym_cache = root_a / "sym_cache.mp4";
+  std::filesystem::create_symlink(cache_vid, sym_cache, ec);
+
+  // 1. Fail-closed on unconfigured root
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(vid_a.string(), std::nullopt),
+                    sublift::server::PathSecurityException);
+
+  // 2. Valid file inside root passes
+  auto validated = sublift::server::resolve_and_validate_media_path(vid_a.string(), root_a);
+  REQUIRE(validated == std::filesystem::canonical(vid_a));
+
+  // 3. Relative path inside root resolves correctly
+  auto rel_val = sublift::server::resolve_and_validate_media_path("test.mp4", root_a);
+  REQUIRE(rel_val == std::filesystem::canonical(vid_a));
+
+  // 4. File outside root fails
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(vid_b.string(), root_a),
+                    sublift::server::PathSecurityException);
+
+  // 5. Traversal escape fails
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path("../test.mp4", root_a),
+                    sublift::server::PathSecurityException);
+
+  // 6. External symlink fails
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(sym_out.string(), root_a),
+                    sublift::server::PathSecurityException);
+
+  // 7. Internal symlink passes
+  auto sym_in_val = sublift::server::resolve_and_validate_media_path(sym_in.string(), root_a);
+  REQUIRE(sym_in_val == std::filesystem::canonical(vid_a));
+
+  // 8. .sublift_cache direct and symlink access fail
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(cache_vid.string(), root_a),
+                    sublift::server::PathSecurityException);
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(sym_cache.string(), root_a),
+                    sublift::server::PathSecurityException);
+
+  // 9. Non-media extension fails
+  REQUIRE_THROWS_AS(sublift::server::resolve_and_validate_media_path(ts_a.string(), root_a),
+                    sublift::server::PathSecurityException);
+
+  std::filesystem::remove_all(root_a, ec);
+  std::filesystem::remove_all(root_b, ec);
+}
+
+TEST_CASE("Unified Media Sandbox Security Matrix Across All 7 Routes", "[server][sandbox_matrix]") {
+  SECTION("Route 1: GET /api/video/stream") {
+    // A. Unconfigured workspace fails closed
+    {
+      SandboxMatrixFixture fix(false);
+      auto res = fix.cli->Get("/api/video/stream?path=" + fix.file_a.string());
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 400);
+    }
+    // B. Matrix on configured workspace
+    {
+      SandboxMatrixFixture fix(true);
+      // Valid file in ws_a -> 200 OK
+      auto r_ok = fix.cli->Get("/api/video/stream?path=" + fix.file_a.string());
+      REQUIRE(r_ok != nullptr);
+      REQUIRE(r_ok->status == 200);
+
+      // Relative path -> 200 OK
+      auto r_rel = fix.cli->Get("/api/video/stream?path=video_a.mp4");
+      REQUIRE(r_rel != nullptr);
+      REQUIRE(r_rel->status == 200);
+
+      // Internal symlink -> 200 OK
+      auto r_sym_in = fix.cli->Get("/api/video/stream?path=" + fix.symlink_inside_a.string());
+      REQUIRE(r_sym_in != nullptr);
+      REQUIRE(r_sym_in->status == 200);
+
+      // Outside path -> 400
+      auto r_out = fix.cli->Get("/api/video/stream?path=" + fix.file_outside.string());
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 400);
+
+      // Traversal -> 400
+      auto r_trav = fix.cli->Get("/api/video/stream?path=../../outside_dir/video_outside.mp4");
+      REQUIRE(r_trav != nullptr);
+      REQUIRE(r_trav->status == 400);
+
+      // External symlink -> 400
+      auto r_sym_out = fix.cli->Get("/api/video/stream?path=" + fix.symlink_outside_a.string());
+      REQUIRE(r_sym_out != nullptr);
+      REQUIRE(r_sym_out->status == 400);
+
+      // Non-media extension -> 400
+      auto r_ts = fix.cli->Get("/api/video/stream?path=" + fix.ts_file_a.string());
+      REQUIRE(r_ts != nullptr);
+      REQUIRE(r_ts->status == 400);
+
+      // .sublift_cache direct -> 400
+      auto r_cache = fix.cli->Get("/api/video/stream?path=" + fix.cache_file_a.string());
+      REQUIRE(r_cache != nullptr);
+      REQUIRE(r_cache->status == 400);
+
+      // .sublift_cache symlink -> 400
+      auto r_cache_sym = fix.cli->Get("/api/video/stream?path=" + fix.symlink_to_cache_a.string());
+      REQUIRE(r_cache_sym != nullptr);
+      REQUIRE(r_cache_sym->status == 400);
+
+      // Dynamic switch to ws_b
+      fix.switch_workspace(fix.ws_b);
+      auto r_new = fix.cli->Get("/api/video/stream?path=" + fix.file_b.string());
+      REQUIRE(r_new != nullptr);
+      REQUIRE(r_new->status == 200);
+
+      // Old ws_a file immediately rejected
+      auto r_old = fix.cli->Get("/api/video/stream?path=" + fix.file_a.string());
+      REQUIRE(r_old != nullptr);
+      REQUIRE(r_old->status == 400);
+    }
+  }
+
+  SECTION("Route 2: GET /api/video/frame") {
+    // Unconfigured
+    {
+      SandboxMatrixFixture fix(false);
+      auto res = fix.cli->Get("/api/video/frame?path=" + fix.file_a.string());
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 400);
+    }
+    // Configured matrix
+    {
+      SandboxMatrixFixture fix(true);
+      auto r_out = fix.cli->Get("/api/video/frame?path=" + fix.file_outside.string());
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 400);
+
+      auto r_trav = fix.cli->Get("/api/video/frame?path=../outside_dir/video_outside.mp4");
+      REQUIRE(r_trav != nullptr);
+      REQUIRE(r_trav->status == 400);
+
+      auto r_sym = fix.cli->Get("/api/video/frame?path=" + fix.symlink_outside_a.string());
+      REQUIRE(r_sym != nullptr);
+      REQUIRE(r_sym->status == 400);
+
+      auto r_ts = fix.cli->Get("/api/video/frame?path=" + fix.ts_file_a.string());
+      REQUIRE(r_ts != nullptr);
+      REQUIRE(r_ts->status == 400);
+
+      auto r_cache = fix.cli->Get("/api/video/frame?path=" + fix.cache_file_a.string());
+      REQUIRE(r_cache != nullptr);
+      REQUIRE(r_cache->status == 400);
+
+      fix.switch_workspace(fix.ws_b);
+      auto r_old = fix.cli->Get("/api/video/frame?path=" + fix.file_a.string());
+      REQUIRE(r_old != nullptr);
+      REQUIRE(r_old->status == 400);
+    }
+  }
+
+  SECTION("Route 3: POST /api/video/detect-region") {
+    // Unconfigured
+    {
+      SandboxMatrixFixture fix(false);
+      nlohmann::json body = {{"video_path", fix.file_a.string()}};
+      auto res = fix.cli->Post("/api/video/detect-region", body.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 400);
+    }
+    // Configured matrix
+    {
+      SandboxMatrixFixture fix(true);
+      auto post_dr = [&](const std::string& p) {
+        nlohmann::json b = {{"video_path", p}};
+        return fix.cli->Post("/api/video/detect-region", b.dump(), "application/json");
+      };
+
+      auto r_out = post_dr(fix.file_outside.string());
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 400);
+
+      auto r_trav = post_dr("../outside_dir/video_outside.mp4");
+      REQUIRE(r_trav != nullptr);
+      REQUIRE(r_trav->status == 400);
+
+      auto r_sym = post_dr(fix.symlink_outside_a.string());
+      REQUIRE(r_sym != nullptr);
+      REQUIRE(r_sym->status == 400);
+
+      auto r_ts = post_dr(fix.ts_file_a.string());
+      REQUIRE(r_ts != nullptr);
+      REQUIRE(r_ts->status == 400);
+
+      auto r_cache = post_dr(fix.cache_file_a.string());
+      REQUIRE(r_cache != nullptr);
+      REQUIRE(r_cache->status == 400);
+
+      fix.switch_workspace(fix.ws_b);
+      auto r_old = post_dr(fix.file_a.string());
+      REQUIRE(r_old != nullptr);
+      REQUIRE(r_old->status == 400);
+    }
+  }
+
+  SECTION("Route 4: POST /api/video/resolve") {
+    auto to_hex = [](const unsigned char* p, size_t n) {
+      static const char* kHex = "0123456789abcdef";
+      std::string out;
+      out.reserve(n * 2);
+      for (size_t i = 0; i < n; ++i) {
+        out.push_back(kHex[p[i] >> 4]);
+        out.push_back(kHex[p[i] & 0xf]);
+      }
+      return out;
+    };
+
+    std::string content_a = "dummy mp4 content A for testing video stream and jobs 1234567890";
+    std::string head_a = to_hex(reinterpret_cast<const unsigned char*>(content_a.data()), content_a.size());
+    std::string content_b = "dummy mp4 content B for testing video stream and jobs 1234567890";
+    std::string head_b = to_hex(reinterpret_cast<const unsigned char*>(content_b.data()), content_b.size());
+
+    // Unconfigured
+    {
+      SandboxMatrixFixture fix(false);
+      nlohmann::json b = {{"name", "video_a.mp4"}, {"size", content_a.size()}, {"head_hex", head_a}};
+      auto res = fix.cli->Post("/api/video/resolve", b.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 404);
+    }
+    // Configured
+    {
+      SandboxMatrixFixture fix(true);
+      // Valid file in ws_a resolves
+      nlohmann::json b_a = {{"name", "video_a.mp4"}, {"size", content_a.size()}, {"head_hex", head_a}};
+      auto r_a = fix.cli->Post("/api/video/resolve", b_a.dump(), "application/json");
+      REQUIRE(r_a != nullptr);
+      REQUIRE(r_a->status == 200);
+      auto j_a = nlohmann::json::parse(r_a->body);
+      std::error_code ec;
+      REQUIRE(j_a["path"] == std::filesystem::canonical(fix.file_a, ec).string());
+
+      // File outside does not resolve
+      nlohmann::json b_out = {{"name", "video_outside.mp4"}, {"size", content_a.size()}, {"head_hex", head_a}};
+      auto r_out = fix.cli->Post("/api/video/resolve", b_out.dump(), "application/json");
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 404);
+
+      // Non-media file .ts does not resolve
+      nlohmann::json b_ts = {{"name", "secret.ts"}, {"size", 10}, {"head_hex", "0011223344"}};
+      auto r_ts = fix.cli->Post("/api/video/resolve", b_ts.dump(), "application/json");
+      REQUIRE(r_ts != nullptr);
+      REQUIRE(r_ts->status == 404);
+
+      // Switch to ws_b: video_a.mp4 no longer resolves, video_b.mp4 resolves
+      fix.switch_workspace(fix.ws_b);
+      auto r_a_switched = fix.cli->Post("/api/video/resolve", b_a.dump(), "application/json");
+      REQUIRE(r_a_switched != nullptr);
+      REQUIRE(r_a_switched->status == 404);
+
+      nlohmann::json b_b = {{"name", "video_b.mp4"}, {"size", content_b.size()}, {"head_hex", head_b}};
+      auto r_b = fix.cli->Post("/api/video/resolve", b_b.dump(), "application/json");
+      REQUIRE(r_b != nullptr);
+      REQUIRE(r_b->status == 200);
+    }
+  }
+
+  SECTION("Route 5: POST /api/video/scan-path") {
+    // Unconfigured
+    {
+      SandboxMatrixFixture fix(false);
+      nlohmann::json b = {{"path", fix.ws_a.string()}};
+      auto res = fix.cli->Post("/api/video/scan-path", b.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 400);
+    }
+    // Configured
+    {
+      SandboxMatrixFixture fix(true);
+      // Valid scan of ws_a
+      nlohmann::json b_a = {{"path", fix.ws_a.string()}};
+      auto r_a = fix.cli->Post("/api/video/scan-path", b_a.dump(), "application/json");
+      REQUIRE(r_a != nullptr);
+      REQUIRE(r_a->status == 200);
+      auto j_a = nlohmann::json::parse(r_a->body);
+      REQUIRE(j_a["accepted"].size() == 1);
+      REQUIRE(j_a["accepted"][0]["name"] == "video_a.mp4");
+
+      // Scan outside path
+      nlohmann::json b_out = {{"path", fix.outside_dir.string()}};
+      auto r_out = fix.cli->Post("/api/video/scan-path", b_out.dump(), "application/json");
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 200);
+      auto j_out = nlohmann::json::parse(r_out->body);
+      REQUIRE(j_out["accepted"].empty());
+      REQUIRE(j_out["rejected"].size() >= 1);
+
+      // Switch to ws_b: scanning ws_a is now rejected
+      fix.switch_workspace(fix.ws_b);
+      auto r_a_after = fix.cli->Post("/api/video/scan-path", b_a.dump(), "application/json");
+      REQUIRE(r_a_after != nullptr);
+      REQUIRE(r_a_after->status == 200);
+      auto j_a_after = nlohmann::json::parse(r_a_after->body);
+      REQUIRE(j_a_after["accepted"].empty());
+      REQUIRE(j_a_after["rejected"].size() >= 1);
+    }
+  }
+
+  SECTION("Route 6: POST /api/jobs") {
+    // Unconfigured
+    {
+      SandboxMatrixFixture fix(false);
+      nlohmann::json b = {{"video_path", fix.file_a.string()}, {"engine", "mock"}};
+      auto res = fix.cli->Post("/api/jobs", b.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      REQUIRE(res->status == 400);
+    }
+    // Configured matrix
+    {
+      SandboxMatrixFixture fix(true);
+      auto post_job = [&](const std::string& p) {
+        nlohmann::json b = {{"video_path", p}, {"engine", "mock"}};
+        return fix.cli->Post("/api/jobs", b.dump(), "application/json");
+      };
+
+      // Valid job creation in ws_a -> 201 Created
+      auto r_ok = post_job(fix.file_a.string());
+      REQUIRE(r_ok != nullptr);
+      REQUIRE(r_ok->status == 201);
+
+      // Outside path -> 400
+      auto r_out = post_job(fix.file_outside.string());
+      REQUIRE(r_out != nullptr);
+      REQUIRE(r_out->status == 400);
+
+      // Traversal -> 400
+      auto r_trav = post_job("../outside_dir/video_outside.mp4");
+      REQUIRE(r_trav != nullptr);
+      REQUIRE(r_trav->status == 400);
+
+      // External symlink -> 400
+      auto r_sym = post_job(fix.symlink_outside_a.string());
+      REQUIRE(r_sym != nullptr);
+      REQUIRE(r_sym->status == 400);
+
+      // Non-media extension -> 400
+      auto r_ts = post_job(fix.ts_file_a.string());
+      REQUIRE(r_ts != nullptr);
+      REQUIRE(r_ts->status == 400);
+
+      // .sublift_cache -> 400
+      auto r_cache = post_job(fix.cache_file_a.string());
+      REQUIRE(r_cache != nullptr);
+      REQUIRE(r_cache->status == 400);
+
+      // Switch to ws_b
+      fix.switch_workspace(fix.ws_b);
+      auto r_old = post_job(fix.file_a.string());
+      REQUIRE(r_old != nullptr);
+      REQUIRE(r_old->status == 400);
+
+      auto r_new = post_job(fix.file_b.string());
+      REQUIRE(r_new != nullptr);
+      REQUIRE(r_new->status == 201);
+    }
+  }
+
+  SECTION("Route 7: GET /api/jobs/:id/export") {
+    SandboxMatrixFixture fix(true);
+    // 1. Create and finish a job in ws_a
+    nlohmann::json b = {{"video_path", fix.file_a.string()}, {"engine", "mock"}};
+    auto r_job = fix.cli->Post("/api/jobs", b.dump(), "application/json");
+    REQUIRE(r_job != nullptr);
+    REQUIRE(r_job->status == 201);
+    auto j_job = nlohmann::json::parse(r_job->body);
+    std::string job_id = j_job["job_id"].get<std::string>();
+
+    // Mark job completed with test entries to test export endpoint
+    auto job_ptr = fix.server->job_manager()->get_job(job_id);
+    REQUIRE(job_ptr != nullptr);
+    {
+      std::lock_guard<std::mutex> lk(job_ptr->state_mutex);
+      job_ptr->status = sublift::server::JobStatus::Completed;
+      job_ptr->entries.push_back({.start_ms = 1000, .end_ms = 2000, .text = "Test subtitle"});
+    }
+
+    // Export succeeds while in ws_a
+    auto r_exp = fix.cli->Get("/api/jobs/" + job_id + "/export");
+    REQUIRE(r_exp != nullptr);
+    REQUIRE(r_exp->status == 200);
+
+    // Switch workspace to ws_b -> export for old ws_a job is immediately rejected (400)
+    fix.switch_workspace(fix.ws_b);
+    auto r_exp_switched = fix.cli->Get("/api/jobs/" + job_id + "/export");
+    REQUIRE(r_exp_switched != nullptr);
+    REQUIRE(r_exp_switched->status == 400);
+
+    // Switch back to ws_a -> export succeeds again
+    fix.switch_workspace(fix.ws_a);
+    auto r_exp_restored = fix.cli->Get("/api/jobs/" + job_id + "/export");
+    REQUIRE(r_exp_restored != nullptr);
+    REQUIRE(r_exp_restored->status == 200);
+  }
+}
+
+TEST_CASE("JobManager State Snapshot Persistence and Recovery", "[server][job_persistence]") {
+  TempTestDir temp_ws("sublift_jm_test");
+  std::filesystem::path state_path = temp_ws.path / ".sublift_cache" / "jobs_state.v1.json";
+
+  SECTION("State snapshot is written and reloaded across JobManager instances") {
+    // 1. Manually write a state file representing completed job
+    {
+      std::error_code ec;
+      std::filesystem::create_directories(state_path.parent_path(), ec);
+      nlohmann::json j = {
+          {"version", 1},
+          {"updated_at_ms", 1724500000000LL},
+          {"jobs", nlohmann::json::array({
+              {
+                  {"job_id", "test-job-completed-1"},
+                  {"config", {
+                      {"video_path", (temp_ws.path / "sample.mp4").string()},
+                      {"engine", "mock"},
+                      {"fps", 5.0},
+                      {"confidence_threshold", 0.8},
+                      {"region_box", {{"x", 0.1}, {"y", 0.6}, {"width", 0.8}, {"height", 0.3}}}
+                  }},
+                  {"status", "completed"},
+                  {"created_at_ms", 1724500000000LL},
+                  {"started_at_ms", 1724500001000LL},
+                  {"ended_at_ms", 1724500005000LL},
+                  {"error_message", ""},
+                  {"entries", nlohmann::json::array({
+                      {{"index", 1}, {"start_ms", 1000}, {"end_ms", 2500}, {"text", "First entry"}, {"confidence", 0.95}},
+                      {{"index", 2}, {"start_ms", 2600}, {"end_ms", 4000}, {"text", "Second entry"}, {"confidence", 0.98}}
+                  })}
+              }
+          })}
+      };
+      std::ofstream ofs(state_path);
+      ofs << j.dump(2);
+    }
+
+    // Now reload into a fresh JobManager instance pointing to the state file
+    {
+      sublift::server::JobManager jm(1, 50, state_path);
+      auto loaded_job = jm.get_job("test-job-completed-1");
+      REQUIRE(loaded_job != nullptr);
+      REQUIRE(loaded_job->job_id == "test-job-completed-1");
+      REQUIRE(loaded_job->status == sublift::server::JobStatus::Completed);
+      REQUIRE(loaded_job->config.engine == "mock");
+      REQUIRE(loaded_job->config.fps == 5.0);
+      REQUIRE(loaded_job->config.confidence_threshold == 0.8);
+      REQUIRE(loaded_job->config.region_box.x == 0.1);
+      REQUIRE(loaded_job->config.region_box.y == 0.6);
+      REQUIRE(loaded_job->config.region_box.width == 0.8);
+      REQUIRE(loaded_job->config.region_box.height == 0.3);
+      REQUIRE(loaded_job->entries.size() == 2);
+      REQUIRE(loaded_job->entries[0].text == "First entry");
+      REQUIRE(loaded_job->entries[1].text == "Second entry");
+
+      // Verify saving back produces a valid file
+      jm.save_state();
+      REQUIRE(std::filesystem::exists(state_path));
+    }
+  }
+
+  SECTION("Incomplete jobs (Queued / Running) transition to Interrupted and are NOT auto-restarted") {
+    // Write state file with queued and running jobs
+    {
+      std::error_code ec;
+      std::filesystem::create_directories(state_path.parent_path(), ec);
+      nlohmann::json j = {
+          {"version", 1},
+          {"updated_at_ms", 1724500000000LL},
+          {"jobs", nlohmann::json::array({
+              {
+                  {"job_id", "job-queued-1"},
+                  {"config", {{"video_path", "/nonexistent/v1.mp4"}, {"engine", "mock"}}},
+                  {"status", "queued"},
+                  {"created_at_ms", 100LL},
+                  {"started_at_ms", 0LL},
+                  {"ended_at_ms", 0LL},
+                  {"error_message", ""},
+                  {"entries", nlohmann::json::array()}
+              },
+              {
+                  {"job_id", "job-running-1"},
+                  {"config", {{"video_path", "/nonexistent/v2.mp4"}, {"engine", "mock"}}},
+                  {"status", "running"},
+                  {"created_at_ms", 100LL},
+                  {"started_at_ms", 200LL},
+                  {"ended_at_ms", 0LL},
+                  {"error_message", ""},
+                  {"entries", nlohmann::json::array()}
+              }
+          })}
+      };
+      std::ofstream ofs(state_path);
+      ofs << j.dump(2);
+    }
+
+    // Reload into a fresh JobManager
+    {
+      sublift::server::JobManager jm(1, 50, state_path);
+      auto l1 = jm.get_job("job-queued-1");
+      REQUIRE(l1 != nullptr);
+      REQUIRE(l1->status == sublift::server::JobStatus::Interrupted);
+
+      auto l2 = jm.get_job("job-running-1");
+      REQUIRE(l2 != nullptr);
+      REQUIRE(l2->status == sublift::server::JobStatus::Interrupted);
+
+      // Verify neither job was executed / no background task running
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      REQUIRE(l1->status == sublift::server::JobStatus::Interrupted);
+      REQUIRE(l2->status == sublift::server::JobStatus::Interrupted);
+    }
+  }
+
+  SECTION("Bounded LRU history maintains max_history_jobs limit") {
+    // Write state file with 15 completed jobs
+    nlohmann::json jobs_arr = nlohmann::json::array();
+    for (int i = 0; i < 15; ++i) {
+      jobs_arr.push_back({
+          {"job_id", "job-lru-" + std::to_string(i)},
+          {"config", {{"video_path", "/test/video.mp4"}, {"engine", "mock"}}},
+          {"status", "completed"},
+          {"created_at_ms", 100LL + i},
+          {"started_at_ms", 200LL + i},
+          {"ended_at_ms", 300LL + i},
+          {"error_message", ""},
+          {"entries", nlohmann::json::array()}
+      });
+    }
+
+    {
+      std::error_code ec;
+      std::filesystem::create_directories(state_path.parent_path(), ec);
+      nlohmann::json j = {
+          {"version", 1},
+          {"updated_at_ms", 1724500000000LL},
+          {"jobs", jobs_arr}
+      };
+      std::ofstream ofs(state_path);
+      ofs << j.dump(2);
+    }
+
+    sublift::server::JobManager jm(1, 10, state_path);
+    auto all_jobs = jm.get_all_jobs();
+    REQUIRE(all_jobs.size() <= 10);
+
+    // Oldest jobs (10-14) should have been evicted
+    REQUIRE(jm.get_job("job-lru-14") == nullptr);
+    REQUIRE(jm.get_job("job-lru-13") == nullptr);
+    // Newest jobs (0-9) should still exist
+    REQUIRE(jm.get_job("job-lru-0") != nullptr);
+    REQUIRE(jm.get_job("job-lru-9") != nullptr);
+  }
+
+  SECTION("Corrupted or malformed state file is handled gracefully") {
+    // Write corrupted JSON
+    {
+      std::ofstream ofs(state_path);
+      ofs << "{ \"version\": 1, \"jobs\": [ { invalid json }";
+    }
+
+    sublift::server::JobManager jm(1, 50, state_path);
+    auto all_jobs = jm.get_all_jobs();
+    REQUIRE(all_jobs.empty());
+
+    // Write unsupported version
+    {
+      std::ofstream ofs(state_path);
+      ofs << "{ \"version\": 999, \"jobs\": [] }";
+    }
+    sublift::server::JobManager jm_bad_ver(1, 50, state_path);
+    REQUIRE(jm_bad_ver.get_all_jobs().empty());
+  }
+}
+
+TEST_CASE("Server SSE Last-Event-ID and Cursor Resumption", "[server][sse_resume]") {
+  TempTestDir temp_ws("sublift_sse_test");
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = temp_ws.path.string();
+  sublift::server::HttpServer server(std::move(cfg));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(5));
+
+  // Create a job in JobManager
+  sublift::server::JobConfig jcfg{
+      .video_path = (temp_ws.path / "test.mp4").string(),
+      .engine = "mock"
+  };
+  auto job = server.job_manager()->create_job(jcfg);
+  REQUIRE(job != nullptr);
+
+  // Publish 5 distinct progress events
+  job->event_stream->publish("progress", {{"stage", "step1"}, {"pct", 0.2}});
+  job->event_stream->publish("progress", {{"stage", "step2"}, {"pct", 0.4}});
+  job->event_stream->publish("progress", {{"stage", "step3"}, {"pct", 0.6}});
+  job->event_stream->publish("progress", {{"stage", "step4"}, {"pct", 0.8}});
+  job->event_stream->publish("done", {{"ok", true}, {"total_entries", 0}, {"elapsed_ms", 100}});
+
+  {
+    std::lock_guard<std::mutex> lk(job->state_mutex);
+    job->status = sublift::server::JobStatus::Completed;
+  }
+
+  SECTION("SSE with Last-Event-ID header resumes from given sequence ID") {
+    httplib::Headers headers = {{"Last-Event-ID", "3"}};
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events").c_str(), headers,
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    // Should contain events 4 and 5 (step4 and done), but NOT step1, step2, step3
+    REQUIRE(response_body.find("id: 4") != std::string::npos);
+    REQUIRE(response_body.find("id: 5") != std::string::npos);
+    REQUIRE(response_body.find("step4") != std::string::npos);
+    REQUIRE(response_body.find("id: 1") == std::string::npos);
+    REQUIRE(response_body.find("step1") == std::string::npos);
+    REQUIRE(response_body.find("id: 2") == std::string::npos);
+    REQUIRE(response_body.find("id: 3") == std::string::npos);
+  }
+
+  SECTION("SSE with cursor query parameter resumes from given sequence ID") {
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=3").c_str(),
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    REQUIRE(response_body.find("id: 4") != std::string::npos);
+    REQUIRE(response_body.find("id: 5") != std::string::npos);
+    REQUIRE(response_body.find("step4") != std::string::npos);
+    REQUIRE(response_body.find("id: 1") == std::string::npos);
+    REQUIRE(response_body.find("id: 2") == std::string::npos);
+    REQUIRE(response_body.find("id: 3") == std::string::npos);
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+TEST_CASE("Server SSE 10 Events Resumption and Cursor Greater Than Latest", "[server][sse_resume][empirical]") {
+  TempTestDir temp_ws("sublift_sse_empirical_test");
+  sublift::server::ServerConfig cfg;
+  cfg.media_dir = temp_ws.path.string();
+  sublift::server::HttpServer server(std::move(cfg));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(5));
+
+  SECTION("Push 10 events, connect with Last-Event-ID: 4, verify exactly 5..10 received") {
+    sublift::server::JobConfig jcfg{
+        .video_path = (temp_ws.path / "test10.mp4").string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_job(jcfg);
+    REQUIRE(job != nullptr);
+
+    // Push 10 events
+    for (int i = 1; i <= 9; ++i) {
+      job->event_stream->publish("progress", {{"step", i}, {"pct", i * 0.1}});
+    }
+    job->event_stream->publish("done", {{"ok", true}, {"total_entries", 0}, {"elapsed_ms", 500}});
+
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      job->status = sublift::server::JobStatus::Completed;
+    }
+
+    httplib::Headers headers = {{"Last-Event-ID", "4"}};
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events").c_str(), headers,
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    // Verify 1..4 are NOT in response
+    for (int i = 1; i <= 4; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") == std::string::npos);
+    }
+    // Verify 5..10 ARE in response
+    for (int i = 5; i <= 10; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") != std::string::npos);
+    }
+  }
+
+  SECTION("Push 10 events, connect with ?cursor=4, verify exactly 5..10 received") {
+    sublift::server::JobConfig jcfg{
+        .video_path = (temp_ws.path / "test10_cursor.mp4").string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_job(jcfg);
+    REQUIRE(job != nullptr);
+
+    for (int i = 1; i <= 9; ++i) {
+      job->event_stream->publish("progress", {{"step", i}, {"pct", i * 0.1}});
+    }
+    job->event_stream->publish("done", {{"ok", true}, {"total_entries", 0}, {"elapsed_ms", 500}});
+
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      job->status = sublift::server::JobStatus::Completed;
+    }
+
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=4").c_str(),
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    for (int i = 1; i <= 4; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") == std::string::npos);
+    }
+    for (int i = 5; i <= 10; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") != std::string::npos);
+    }
+  }
+
+  SECTION("Connect with cursor greater than latest event, stream waits for new events without replaying old ones") {
+    std::filesystem::path test_mp4 = temp_ws.path / "test_wait.mp4";
+    if (sublift::ffmpeg::available()) {
+      std::string ffmpeg_bin = sublift::ffmpeg::resolve_ffmpeg_bin();
+      std::string cmd = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=0.5:size=128x128:rate=10 -pix_fmt yuv420p " + test_mp4.string() + " > /dev/null 2>&1";
+      (void)std::system(cmd.c_str());
+    } else {
+      std::ofstream ofs(test_mp4, std::ios::binary);
+      ofs << "dummy_video_payload";
+    }
+
+    sublift::server::JobConfig jcfg{
+        .video_path = test_mp4.string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_job(jcfg);
+    REQUIRE(job != nullptr);
+
+    // Wait for the background worker to finish the initial extraction
+    int wait_c = 0;
+    while (!job->is_terminal() && wait_c < 50) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      wait_c++;
+    }
+
+    // Now record the latest sequence ID produced so far
+    auto initial_history = job->event_stream->get_all_history();
+    REQUIRE(!initial_history.empty());
+    std::uint64_t latest_seq = initial_history.back().seq_id;
+
+    // Reset status to Running to simulate ongoing streaming work
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      job->status = sublift::server::JobStatus::Running;
+    }
+
+    // Background thread that pushes new events (latest_seq + 1, latest_seq + 2, and done) after a short delay
+    std::thread publisher_thread([job, latest_seq]() {
+      std::this_thread::sleep_for(std::chrono::milliseconds(80));
+      job->event_stream->publish("progress", {{"step", "resumed_1"}, {"pct", 0.85}});
+      std::this_thread::sleep_for(std::chrono::milliseconds(80));
+      job->event_stream->publish("progress", {{"step", "resumed_2"}, {"pct", 0.95}});
+      std::this_thread::sleep_for(std::chrono::milliseconds(80));
+      job->event_stream->publish("done", {{"ok", true}, {"total_entries", 0}, {"elapsed_ms", 600}});
+      {
+        std::lock_guard<std::mutex> lk(job->state_mutex);
+        job->status = sublift::server::JobStatus::Completed;
+      }
+    });
+
+    // Client connects with cursor = latest_seq (greater than or equal to previous events)
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=" + std::to_string(latest_seq)).c_str(),
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    if (publisher_thread.joinable()) {
+      publisher_thread.join();
+    }
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    // Verify previous initial events were NOT replayed
+    for (std::uint64_t i = 1; i <= latest_seq; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") == std::string::npos);
+    }
+    // Verify newly published events WERE received
+    REQUIRE(response_body.find("id: " + std::to_string(latest_seq + 1) + "\n") != std::string::npos);
+    REQUIRE(response_body.find("id: " + std::to_string(latest_seq + 2) + "\n") != std::string::npos);
+    REQUIRE(response_body.find("id: " + std::to_string(latest_seq + 3) + "\n") != std::string::npos);
+    REQUIRE(response_body.find("resumed_1") != std::string::npos);
+    REQUIRE(response_body.find("resumed_2") != std::string::npos);
+  }
+
+  SECTION("Completed job with cursor greater than latest returns clean stream without old events") {
+    sublift::server::JobConfig jcfg{
+        .video_path = (temp_ws.path / "test_completed.mp4").string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_job(jcfg);
+    REQUIRE(job != nullptr);
+
+    for (int i = 1; i <= 5; ++i) {
+      job->event_stream->publish("progress", {{"step", i}, {"pct", i * 0.2}});
+    }
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      job->status = sublift::server::JobStatus::Completed;
+    }
+
+    // Connect with cursor = 10 (greater than latest seq_id = 5)
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=10").c_str(),
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    // Should NOT contain any event ids 1..5
+    for (int i = 1; i <= 5; ++i) {
+      REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") == std::string::npos);
+    }
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+TEST_CASE("Server Atomic Disk Save and Conflict Policies (Feature 12514)", "[server][save][export]") {
+  TempTestDir temp_ws("sublift_ws_save_m4");
+  std::error_code ec;
+
+  // Create a synthetic media file inside workspace
+  auto video_file = temp_ws.path / "sample_video.mp4";
+  {
+    std::ofstream ofs(video_file, std::ios::binary);
+    ofs << "fake-mp4-data";
+  }
+
+  sublift::server::HttpServer server;
+  server.workspace_manager()->set_media_directory(temp_ws.path.string());
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(5));
+
+  SECTION("Single job atomic save with temporary file, fsync, and atomic rename") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 1000, .end_ms = 2500, .text = "First line of subtitles", .confidence = 0.95},
+        {.start_ms = 3000, .end_ms = 5000, .text = "Second line of subtitles", .confidence = 0.98}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+    REQUIRE(job != nullptr);
+
+    // Default target path: companion sample_video.srt
+    auto companion_srt = temp_ws.path / "sample_video.srt";
+    REQUIRE_FALSE(std::filesystem::exists(companion_srt, ec));
+
+    auto res = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), "{}", "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto res_json = nlohmann::json::parse(res->body);
+    REQUIRE(res_json["status"] == "saved");
+    REQUIRE(res_json["job_id"] == job->job_id);
+    REQUIRE(res_json["empty_result"] == false);
+    REQUIRE(std::filesystem::equivalent(std::filesystem::path(res_json["saved_path"].get<std::string>()), companion_srt));
+
+    // Verify file exists on disk and content is valid SRT
+    REQUIRE(std::filesystem::exists(companion_srt, ec));
+    std::ifstream ifs(companion_srt);
+    std::string srt_content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    REQUIRE(srt_content.find("First line of subtitles") != std::string::npos);
+    REQUIRE(srt_content.find("Second line of subtitles") != std::string::npos);
+    REQUIRE(srt_content.find("00:00:01,000 --> 00:00:02,500") != std::string::npos);
+  }
+
+  SECTION("Conflict policy 'skip' avoids overwriting existing file") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 0, .end_ms = 1000, .text = "New subtitle data", .confidence = 1.0}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+
+    auto target_srt = temp_ws.path / "existing_skip.srt";
+    {
+      std::ofstream ofs(target_srt);
+      ofs << "ORIGINAL UNTOUCHED CONTENT";
+    }
+
+    nlohmann::json body = {
+        {"target_path", target_srt.string()},
+        {"conflict_policy", "skip"}
+    };
+
+    auto res = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto res_json = nlohmann::json::parse(res->body);
+    REQUIRE(res_json["status"] == "skipped");
+
+    // Verify original content was untouched
+    std::ifstream ifs(target_srt);
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    REQUIRE(content == "ORIGINAL UNTOUCHED CONTENT");
+  }
+
+  SECTION("Conflict policy 'deterministic_rename' automatically generates _1, _2 suffixes") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Renamed subtitle", .confidence = 1.0}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+
+    auto base_srt = temp_ws.path / "conflict_video.srt";
+    auto rename_1_srt = temp_ws.path / "conflict_video_1.srt";
+    auto rename_2_srt = temp_ws.path / "conflict_video_2.srt";
+
+    // Pre-create conflict_video.srt and conflict_video_1.srt
+    {
+      std::ofstream ofs0(base_srt);
+      ofs0 << "base";
+      std::ofstream ofs1(rename_1_srt);
+      ofs1 << "v1";
+    }
+
+    nlohmann::json body = {
+        {"target_path", base_srt.string()},
+        {"conflict_policy", "deterministic_rename"}
+    };
+
+    auto res = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto res_json = nlohmann::json::parse(res->body);
+    REQUIRE(res_json["status"] == "saved");
+    REQUIRE(std::filesystem::equivalent(std::filesystem::path(res_json["saved_path"].get<std::string>()), rename_2_srt));
+    REQUIRE(std::filesystem::exists(rename_2_srt, ec));
+  }
+
+  SECTION("Conflict policy 'replace' atomically replaces existing file") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Replacement text", .confidence = 1.0}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+
+    auto target_srt = temp_ws.path / "replace_me.srt";
+    {
+      std::ofstream ofs(target_srt);
+      ofs << "OLD DATA TO BE OVERWRITTEN";
+    }
+
+    nlohmann::json body = {
+        {"target_path", target_srt.string()},
+        {"conflict_policy", "replace"}
+    };
+
+    auto res = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto res_json = nlohmann::json::parse(res->body);
+    REQUIRE(res_json["status"] == "saved");
+    REQUIRE(std::filesystem::equivalent(std::filesystem::path(res_json["saved_path"].get<std::string>()), target_srt));
+
+    std::ifstream ifs(target_srt);
+    std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
+    REQUIRE(content.find("Replacement text") != std::string::npos);
+    REQUIRE(content.find("OLD DATA") == std::string::npos);
+  }
+
+  SECTION("Empty subtitle protection: 0-entry jobs do not write empty file unless allow_empty is true") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, {});
+
+    auto empty_target = temp_ws.path / "empty_result.srt";
+
+    // 1. Default (allow_empty: false)
+    nlohmann::json body1 = {
+        {"target_path", empty_target.string()},
+        {"allow_empty", false}
+    };
+    auto res1 = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body1.dump(), "application/json");
+    REQUIRE(res1 != nullptr);
+    REQUIRE(res1->status == 200);
+    auto json1 = nlohmann::json::parse(res1->body);
+    REQUIRE(json1["status"] == "empty_result");
+    REQUIRE(json1["empty_result"] == true);
+    REQUIRE_FALSE(std::filesystem::exists(empty_target, ec)); // File not written!
+
+    // 2. Explicit (allow_empty: true)
+    nlohmann::json body2 = {
+        {"target_path", empty_target.string()},
+        {"allow_empty", true}
+    };
+    auto res2 = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body2.dump(), "application/json");
+    REQUIRE(res2 != nullptr);
+    REQUIRE(res2->status == 200);
+    auto json2 = nlohmann::json::parse(res2->body);
+    REQUIRE(json2["status"] == "saved");
+    REQUIRE(std::filesystem::exists(empty_target, ec)); // File written because requested
+  }
+
+  SECTION("Sandbox Security: Rejects directory traversal and out-of-bounds writes") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Test", .confidence = 1.0}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+
+    // Negative 1: Path traversal with .. escaping workspace
+    nlohmann::json body_traversal = {
+        {"target_path", (temp_ws.path / "../escaped.srt").string()}
+    };
+    auto res_trav = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body_traversal.dump(), "application/json");
+    REQUIRE(res_trav != nullptr);
+    REQUIRE(res_trav->status == 400);
+
+    // Negative 2: Writing inside .sublift_cache
+    nlohmann::json body_cache = {
+        {"target_path", (temp_ws.path / ".sublift_cache" / "hacked.srt").string()}
+    };
+    auto res_cache = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body_cache.dump(), "application/json");
+    REQUIRE(res_cache != nullptr);
+    REQUIRE(res_cache->status == 400);
+
+    // Negative 3: Invalid non-subtitle extension (.exe)
+    nlohmann::json body_ext = {
+        {"target_path", (temp_ws.path / "malicious.exe").string()}
+    };
+    auto res_ext = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), body_ext.dump(), "application/json");
+    REQUIRE(res_ext != nullptr);
+    REQUIRE(res_ext->status == 400);
+  }
+
+  SECTION("POST /api/export/batch-save executes atomic batch save across multiple jobs") {
+    auto vid1 = temp_ws.path / "batch_vid1.mp4";
+    auto vid2 = temp_ws.path / "batch_vid2.mp4";
+    {
+      std::ofstream(vid1) << "1";
+      std::ofstream(vid2) << "2";
+    }
+
+    std::vector<sublift::SubtitleEntry> entries1 = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Batch Sub 1", .confidence = 1.0}
+    };
+    std::vector<sublift::SubtitleEntry> entries2 = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Batch Sub 2", .confidence = 1.0}
+    };
+    auto job1 = server.job_manager()->create_completed_job({.video_path = vid1.string(), .engine = "mock"}, std::move(entries1));
+    auto job2 = server.job_manager()->create_completed_job({.video_path = vid2.string(), .engine = "mock"}, std::move(entries2));
+
+    nlohmann::json batch_req = {
+        {"job_ids", {job1->job_id, job2->job_id}},
+        {"conflict_policy", "deterministic_rename"}
+    };
+
+    auto res = cli.Post("/api/export/batch-save", batch_req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto batch_json = nlohmann::json::parse(res->body);
+    REQUIRE(batch_json["total"] == 2);
+    REQUIRE(batch_json["saved"] == 2);
+    REQUIRE(batch_json["failed"] == 0);
+    REQUIRE(batch_json["results"].is_array());
+    REQUIRE(batch_json["results"].size() == 2);
+
+    auto srt1 = temp_ws.path / "batch_vid1.srt";
+    auto srt2 = temp_ws.path / "batch_vid2.srt";
+    REQUIRE(std::filesystem::exists(srt1, ec));
+    REQUIRE(std::filesystem::exists(srt2, ec));
+  }
+
+  SECTION("Error recovery: failed write or path violation leaves no residual .tmp files") {
+    sublift::server::JobConfig cfg{
+        .video_path = video_file.string(),
+        .engine = "mock"
+    };
+    std::vector<sublift::SubtitleEntry> entries = {
+        {.start_ms = 0, .end_ms = 1000, .text = "Error recovery test", .confidence = 1.0}
+    };
+    auto job = server.job_manager()->create_completed_job(cfg, std::move(entries));
+
+    // 1. Attempt save to illegal path
+    nlohmann::json bad_req = {{"target_path", (temp_ws.path / "../illegal.srt").string()}};
+    auto res_bad = cli.Post(("/api/jobs/" + job->job_id + "/save").c_str(), bad_req.dump(), "application/json");
+    REQUIRE(res_bad != nullptr);
+    REQUIRE(res_bad->status == 400);
+
+    // 2. Verify no temporary files (.*.tmp.*) exist in temp_ws
+    for (const auto& entry : std::filesystem::directory_iterator(temp_ws.path)) {
+      std::string filename = entry.path().filename().string();
+      REQUIRE(filename.find(".tmp.") == std::string::npos);
+    }
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
+
+TEST_CASE("Feature 12511: Unified Media Sandbox and Workspace Trust Boundary Matrix", "[server][sandbox][workspace][12511]") {
+  TempTestDir ws1("sublift_ws1");
+  TempTestDir ws2("sublift_ws2");
+  TempTestDir outside_dir("sublift_outside");
+
+  std::error_code ec;
+  auto ws1_vid = ws1.path / "video1.mp4";
+  auto ws2_vid = ws2.path / "video2.mp4";
+  auto outside_vid = outside_dir.path / "outside.mp4";
+  auto invalid_txt = ws1.path / "notes.txt";
+  auto ts_code = ws1.path / "app.ts";
+
+  if (sublift::ffmpeg::available()) {
+    std::string ffmpeg_bin = sublift::ffmpeg::resolve_ffmpeg_bin();
+    std::string cmd1 = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=1.0:size=320x240:rate=10 -pix_fmt yuv420p " + ws1_vid.string() + " > /dev/null 2>&1";
+    std::string cmd2 = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=1.0:size=320x240:rate=10 -pix_fmt yuv420p " + ws2_vid.string() + " > /dev/null 2>&1";
+    std::string cmd3 = ffmpeg_bin + " -y -f lavfi -i testsrc=duration=1.0:size=320x240:rate=10 -pix_fmt yuv420p " + outside_vid.string() + " > /dev/null 2>&1";
+    (void)std::system(cmd1.c_str());
+    (void)std::system(cmd2.c_str());
+    (void)std::system(cmd3.c_str());
+  } else {
+    std::ofstream(ws1_vid) << "dummy mp4 content 1";
+    std::ofstream(ws2_vid) << "dummy mp4 content 2";
+    std::ofstream(outside_vid) << "dummy outside mp4";
+  }
+  std::ofstream(invalid_txt) << "some text notes";
+  std::ofstream(ts_code) << "console.log('hello');";
+
+  // Create an out-of-bounds symlink inside ws1 pointing to outside_vid
+  auto symlink_escape = ws1.path / "symlink_escape.mp4";
+  std::filesystem::create_symlink(outside_vid, symlink_escape, ec);
+
+  // Create a sublift_cache internal file
+  auto cache_file = ws1.path / ".sublift_cache" / "remux" / "cached.mp4";
+  std::filesystem::create_directories(cache_file.parent_path(), ec);
+  {
+    std::ofstream(cache_file) << "internal cache";
+  }
+
+  sublift::server::ServerConfig config;
+  config.media_dir = ws1.path.string();
+  sublift::server::HttpServer server(std::move(config));
+
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&]() {
+    server.listen_after_bind();
+  });
+  server.wait_until_ready();
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(std::chrono::seconds(2));
+  cli.set_read_timeout(std::chrono::seconds(5));
+
+  SECTION("TC-SBX-01: Valid media in configured workspace succeeds across endpoints") {
+    // 1. stream
+    auto res_stream = cli.Get(("/api/video/stream?path=" + ws1_vid.string()).c_str());
+    REQUIRE(res_stream != nullptr);
+    REQUIRE(res_stream->status == 200);
+
+    // 2. detect-region
+    nlohmann::json detect_body = {{"video_path", ws1_vid.string()}};
+    auto res_detect = cli.Post("/api/video/detect-region", detect_body.dump(), "application/json");
+    REQUIRE(res_detect != nullptr);
+    REQUIRE(res_detect->status == 200);
+
+    // 3. jobs creation
+    nlohmann::json job_body = {{"video_path", ws1_vid.string()}, {"engine", "mock"}};
+    auto res_job = cli.Post("/api/jobs", job_body.dump(), "application/json");
+    REQUIRE(res_job != nullptr);
+    REQUIRE(res_job->status == 201);
+  }
+
+  SECTION("TC-SBX-02: Out-of-workspace absolute path rejected fail-closed") {
+    // 1. stream
+    auto res_stream = cli.Get(("/api/video/stream?path=" + outside_vid.string()).c_str());
+    REQUIRE(res_stream != nullptr);
+    REQUIRE(res_stream->status == 400);
+
+    // 2. frame
+    auto res_frame = cli.Get(("/api/video/frame?path=" + outside_vid.string()).c_str());
+    REQUIRE(res_frame != nullptr);
+    REQUIRE(res_frame->status == 400);
+
+    // 3. detect-region
+    nlohmann::json detect_body = {{"video_path", outside_vid.string()}};
+    auto res_detect = cli.Post("/api/video/detect-region", detect_body.dump(), "application/json");
+    REQUIRE(res_detect != nullptr);
+    REQUIRE(res_detect->status == 400);
+
+    // 4. jobs
+    nlohmann::json job_body = {{"video_path", outside_vid.string()}, {"engine", "mock"}};
+    auto res_job = cli.Post("/api/jobs", job_body.dump(), "application/json");
+    REQUIRE(res_job != nullptr);
+    REQUIRE(res_job->status == 400);
+  }
+
+  SECTION("TC-SBX-03: Relative path traversal .. escaping workspace rejected") {
+    std::string escape_path = (ws1.path / "../" / outside_dir.path.filename() / "outside.mp4").string();
+
+    auto res_stream = cli.Get(("/api/video/stream?path=" + escape_path).c_str());
+    REQUIRE(res_stream != nullptr);
+    REQUIRE(res_stream->status == 400);
+
+    nlohmann::json job_body = {{"video_path", escape_path}, {"engine", "mock"}};
+    auto res_job = cli.Post("/api/jobs", job_body.dump(), "application/json");
+    REQUIRE(res_job != nullptr);
+    REQUIRE(res_job->status == 400);
+  }
+
+  SECTION("TC-SBX-04: Symlink pointing outside workspace rejected") {
+    auto res_stream = cli.Get(("/api/video/stream?path=" + symlink_escape.string()).c_str());
+    REQUIRE(res_stream != nullptr);
+    REQUIRE(res_stream->status == 400);
+
+    nlohmann::json detect_body = {{"video_path", symlink_escape.string()}};
+    auto res_detect = cli.Post("/api/video/detect-region", detect_body.dump(), "application/json");
+    REQUIRE(res_detect != nullptr);
+    REQUIRE(res_detect->status == 400);
+  }
+
+  SECTION("TC-SBX-05: Non-media extensions (.txt, .ts) rejected") {
+    auto res_txt = cli.Get(("/api/video/stream?path=" + invalid_txt.string()).c_str());
+    REQUIRE(res_txt != nullptr);
+    REQUIRE(res_txt->status == 400);
+
+    auto res_ts = cli.Get(("/api/video/stream?path=" + ts_code.string()).c_str());
+    REQUIRE(res_ts != nullptr);
+    REQUIRE(res_ts->status == 400);
+  }
+
+  SECTION("TC-SBX-06: Direct access to .sublift_cache internal assets rejected") {
+    auto res_cache = cli.Get(("/api/video/stream?path=" + cache_file.string()).c_str());
+    REQUIRE(res_cache != nullptr);
+    REQUIRE(res_cache->status == 400);
+  }
+
+  SECTION("TC-SBX-07: Dynamic workspace switch immediately invalidates old root and authorizes new root") {
+    // Before switch: ws1 is authorized, ws2 is unauthorized
+    auto res_ws1_before = cli.Get(("/api/video/stream?path=" + ws1_vid.string()).c_str());
+    REQUIRE(res_ws1_before->status == 200);
+
+    auto res_ws2_before = cli.Get(("/api/video/stream?path=" + ws2_vid.string()).c_str());
+    REQUIRE(res_ws2_before->status == 400);
+
+    // Switch workspace to ws2
+    nlohmann::json switch_body = {{"media_dir", ws2.path.string()}};
+    auto res_switch = cli.Post("/api/config/workspace", switch_body.dump(), "application/json");
+    REQUIRE(res_switch != nullptr);
+    REQUIRE(res_switch->status == 200);
+
+    // After switch: ws1 is now rejected (old root), ws2 is now authorized
+    auto res_ws1_after = cli.Get(("/api/video/stream?path=" + ws1_vid.string()).c_str());
+    REQUIRE(res_ws1_after->status == 400);
+
+    auto res_ws2_after = cli.Get(("/api/video/stream?path=" + ws2_vid.string()).c_str());
+    REQUIRE(res_ws2_after->status == 200);
+
+    nlohmann::json job_ws2 = {{"video_path", ws2_vid.string()}, {"engine", "mock"}};
+    auto res_job_ws2 = cli.Post("/api/jobs", job_ws2.dump(), "application/json");
+    REQUIRE(res_job_ws2->status == 201);
+  }
+
+  SECTION("TC-SBX-08: Clearing workspace causes all media endpoints to fail-closed") {
+    auto res_clear = cli.Post("/api/config/workspace/clear", "{}", "application/json");
+    REQUIRE(res_clear != nullptr);
+    REQUIRE(res_clear->status == 200);
+
+    auto res_stream = cli.Get(("/api/video/stream?path=" + ws1_vid.string()).c_str());
+    REQUIRE(res_stream != nullptr);
+    REQUIRE(res_stream->status == 400);
+
+    nlohmann::json job_body = {{"video_path", ws1_vid.string()}, {"engine", "mock"}};
+    auto res_job = cli.Post("/api/jobs", job_body.dump(), "application/json");
+    REQUIRE(res_job != nullptr);
+    REQUIRE(res_job->status == 400);
+  }
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+}
 
 

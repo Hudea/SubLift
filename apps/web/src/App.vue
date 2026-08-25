@@ -1,7 +1,7 @@
 <template>
   <!-- 1. 服务初始化连接中 -->
-  <div v-if="!systemStore.isReady && systemStore.isLoading" class="sl-app-loading">
-    <div class="sl-loading-spinner"></div>
+  <div v-if="!systemStore.isReady && systemStore.isLoading" class="sl-app-loading" role="status" aria-live="polite">
+    <div class="sl-loading-spinner" aria-hidden="true"></div>
     <span class="sl-loading-text">正在连接 SubLift 核心服务…</span>
   </div>
 

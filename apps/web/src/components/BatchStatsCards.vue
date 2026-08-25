@@ -1,10 +1,16 @@
 <template>
-  <div class="sl-stats-grid">
+  <div class="sl-stats-grid" role="tablist" aria-label="任务状态分类筛选">
     <!-- 全部 -->
     <div 
       class="sl-stat-card"
       :class="{ 'is-active': batchStore.statusFilter === 'all' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'all'"
+      tabindex="0"
+      :aria-label="`全部任务: ${batchStore.stats.total} 项`"
       @click="batchStore.statusFilter = 'all'"
+      @keydown.enter="batchStore.statusFilter = 'all'"
+      @keydown.space.prevent="batchStore.statusFilter = 'all'"
     >
       <div class="sl-stat-label">全部任务</div>
       <div class="sl-stat-value">{{ batchStore.stats.total }}</div>
@@ -15,10 +21,16 @@
     <div 
       class="sl-stat-card sl-stat-card--waiting"
       :class="{ 'is-active': batchStore.statusFilter === 'waiting' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'waiting'"
+      tabindex="0"
+      :aria-label="`等待中任务: ${batchStore.stats.waiting} 项`"
       @click="batchStore.statusFilter = 'waiting'"
+      @keydown.enter="batchStore.statusFilter = 'waiting'"
+      @keydown.space.prevent="batchStore.statusFilter = 'waiting'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--waiting"></span>
+        <span class="sl-dot sl-dot--waiting" aria-hidden="true"></span>
         等待中
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.waiting }}</div>
@@ -29,10 +41,16 @@
     <div 
       class="sl-stat-card sl-stat-card--running"
       :class="{ 'is-active': batchStore.statusFilter === 'running' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'running'"
+      tabindex="0"
+      :aria-label="`进行中任务: ${batchStore.stats.active} 项`"
       @click="batchStore.statusFilter = 'running'"
+      @keydown.enter="batchStore.statusFilter = 'running'"
+      @keydown.space.prevent="batchStore.statusFilter = 'running'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--running" :class="{ 'is-pulsing': batchStore.stats.active > 0 }"></span>
+        <span class="sl-dot sl-dot--running" :class="{ 'is-pulsing': batchStore.stats.active > 0 }" aria-hidden="true"></span>
         进行中
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.active }}</div>
@@ -43,10 +61,16 @@
     <div 
       class="sl-stat-card sl-stat-card--completed"
       :class="{ 'is-active': batchStore.statusFilter === 'completed' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'completed'"
+      tabindex="0"
+      :aria-label="`已完成任务: ${batchStore.stats.completed} 项`"
       @click="batchStore.statusFilter = 'completed'"
+      @keydown.enter="batchStore.statusFilter = 'completed'"
+      @keydown.space.prevent="batchStore.statusFilter = 'completed'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--completed"></span>
+        <span class="sl-dot sl-dot--completed" aria-hidden="true"></span>
         已完成
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.completed }}</div>
@@ -57,10 +81,16 @@
     <div 
       class="sl-stat-card sl-stat-card--failed"
       :class="{ 'is-active': batchStore.statusFilter === 'failed' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'failed'"
+      tabindex="0"
+      :aria-label="`失败任务: ${batchStore.stats.failed} 项`"
       @click="batchStore.statusFilter = 'failed'"
+      @keydown.enter="batchStore.statusFilter = 'failed'"
+      @keydown.space.prevent="batchStore.statusFilter = 'failed'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--failed"></span>
+        <span class="sl-dot sl-dot--failed" aria-hidden="true"></span>
         失败
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.failed }}</div>
@@ -71,10 +101,16 @@
     <div 
       class="sl-stat-card sl-stat-card--cancelled"
       :class="{ 'is-active': batchStore.statusFilter === 'cancelled' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'cancelled'"
+      tabindex="0"
+      :aria-label="`已取消任务: ${batchStore.stats.cancelled} 项`"
       @click="batchStore.statusFilter = 'cancelled'"
+      @keydown.enter="batchStore.statusFilter = 'cancelled'"
+      @keydown.space.prevent="batchStore.statusFilter = 'cancelled'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--cancelled"></span>
+        <span class="sl-dot sl-dot--cancelled" aria-hidden="true"></span>
         已取消
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.cancelled }}</div>
@@ -85,10 +121,16 @@
     <div 
       class="sl-stat-card sl-stat-card--skipped"
       :class="{ 'is-active': batchStore.statusFilter === 'skipped' }"
+      role="tab"
+      :aria-selected="batchStore.statusFilter === 'skipped'"
+      tabindex="0"
+      :aria-label="`已跳过任务: ${batchStore.stats.skipped} 项`"
       @click="batchStore.statusFilter = 'skipped'"
+      @keydown.enter="batchStore.statusFilter = 'skipped'"
+      @keydown.space.prevent="batchStore.statusFilter = 'skipped'"
     >
       <div class="sl-stat-label">
-        <span class="sl-dot sl-dot--skipped"></span>
+        <span class="sl-dot sl-dot--skipped" aria-hidden="true"></span>
         已跳过
       </div>
       <div class="sl-stat-value">{{ batchStore.stats.skipped }}</div>
@@ -106,20 +148,20 @@ const batchStore = useBatchStore();
 <style scoped>
 .sl-stats-grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
   width: 100%;
 }
 
-@media (max-width: 1200px) {
+@media (max-width: 1100px) {
   .sl-stats-grid {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 768px) {
   .sl-stats-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -128,17 +170,23 @@ const batchStore = useBatchStore();
   background: var(--sl-surface-card, #1c1c1e);
   border: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.08));
   border-radius: var(--sl-radius-md, 8px);
-  padding: 12px 14px;
+  padding: 10px 12px;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
   overflow: hidden;
   user-select: none;
+  outline: none;
 }
 
 .sl-stat-card:hover {
   background: var(--sl-surface-elevated, #242426);
   border-color: var(--sl-border-standard, rgba(255, 255, 255, 0.15));
   transform: translateY(-1px);
+}
+
+.sl-stat-card:focus-visible {
+  outline: 2px solid var(--sl-color-accent, #0a84ff);
+  outline-offset: 2px;
 }
 
 .sl-stat-card.is-active {
@@ -153,12 +201,12 @@ const batchStore = useBatchStore();
   color: var(--sl-text-secondary, #8e8e93);
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 6px;
+  gap: 5px;
+  margin-bottom: 4px;
 }
 
 .sl-stat-value {
-  font-size: var(--sl-font-size-xl, 22px);
+  font-size: var(--sl-font-size-lg, 18px);
   font-weight: 700;
   color: var(--sl-text-primary, #ffffff);
   line-height: 1.1;

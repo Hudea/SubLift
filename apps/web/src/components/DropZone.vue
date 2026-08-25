@@ -1,15 +1,15 @@
 <template>
-  <div class="sl-video-selector">
+  <div class="sl-video-selector" role="region" aria-label="视频载入选择区">
     <div class="sl-selector-container">
       <!-- 顶部模式说明与工作区胶囊 -->
       <div class="sl-selector-header">
-        <div class="sl-header-icon-box">
+        <div class="sl-header-icon-box" aria-hidden="true">
           <svg class="sl-header-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <rect x="2" y="2" width="20" height="20" rx="4" stroke-width="1.8"/>
             <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/>
           </svg>
         </div>
-        <h2 class="sl-selector-title">载入单视频进行字幕提取</h2>
+        <h2 id="sl-single-selector-title" class="sl-selector-title">载入单视频进行字幕提取</h2>
         <p class="sl-selector-subtitle">
           单视频模式需指定具体物理文件：请从当前工作区选择，或直接输入本地绝对路径。
         </p>
@@ -18,7 +18,7 @@
       <!-- 双通道选择区（等高对称双卡片） -->
       <div class="sl-selector-grid">
         <!-- 通道 1：从工作区选择 -->
-        <div class="sl-channel-card">
+        <div class="sl-channel-card" role="region" aria-label="从工作区选择视频">
           <div class="sl-card-header">
             <div class="sl-card-title-group">
               <span class="sl-channel-tag">通道一</span>
@@ -29,17 +29,18 @@
               class="sl-refresh-btn"
               :disabled="isLoadingVideos"
               title="刷新工作区视频列表"
+              aria-label="刷新工作区视频列表"
               @click="fetchVideos"
             >
-              <svg class="sl-refresh-icon" :class="{ 'is-spinning': isLoadingVideos }" viewBox="0 0 16 16" fill="currentColor">
+              <svg class="sl-refresh-icon" :class="{ 'is-spinning': isLoadingVideos }" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                 <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
                 <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
               </svg>
             </button>
           </div>
 
-          <div class="sl-ws-indicator" :title="systemStore.currentMediaDir">
-            <svg class="sl-ws-indicator-icon" viewBox="0 0 16 16" fill="currentColor">
+          <div class="sl-ws-indicator" :title="systemStore.currentMediaDir" :aria-label="`当前工作区：${systemStore.currentMediaDir || '未配置'}`">
+            <svg class="sl-ws-indicator-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M.54 3.87.5 3a2 2 0 0 1 2-2h3.672a2 2 0 0 1 1.414.586l.828.828A2 2 0 0 0 9.828 3h3.982a2 2 0 0 1 1.992 2.181l-.637 7A2 2 0 0 1 13.174 14H2.826a2 2 0 0 1-1.991-1.819l-.637-7a1.99 1.99 0 0 1 .342-1.31zM2.19 4a1 1 0 0 0-.996 1.09l.637 7a1 1 0 0 0 .995.91h10.348a1 1 0 0 0 .995-.91l.637-7A1 1 0 0 0 13.81 4H2.19zm4.69-1.707A1 1 0 0 0 6.172 2H2.5a1 1 0 0 0-1 .981l.006.139C1.72 3.042 1.95 3 2.19 3h11.62c.24 0 .47.042.684.12l.006-.139A1 1 0 0 0 13.5 2H9.828a1 1 0 0 0-.707-.293l-.828-.828A1 1 0 0 0 7.586 1H6.172a1 1 0 0 0-.707.293l-.585.586z"/>
             </svg>
             <span class="sl-ws-indicator-path">{{ systemStore.currentMediaDir || '未配置工作区' }}</span>
@@ -52,29 +53,32 @@
               type="text"
               placeholder="搜索工作区内的视频..."
               class="sl-search-input"
+              aria-label="搜索工作区内的视频"
             />
           </div>
 
           <!-- 视频列表 -->
-          <div class="sl-video-list-box">
-            <div v-if="isLoadingVideos" class="sl-empty-state">
+          <div class="sl-video-list-box" role="region" aria-label="工作区视频列表">
+            <div v-if="isLoadingVideos" class="sl-empty-state" role="status">
               <span>正在扫描工作区视频…</span>
             </div>
 
-            <div v-else-if="filteredVideos.length === 0" class="sl-empty-state">
+            <div v-else-if="filteredVideos.length === 0" class="sl-empty-state" role="status">
               <span v-if="workspaceVideos.length === 0">当前工作区内未发现支持的视频文件</span>
               <span v-else>无匹配搜索结果</span>
             </div>
 
-            <div v-else class="sl-video-items">
+            <div v-else class="sl-video-items" role="list">
               <button
                 v-for="vid in filteredVideos"
                 :key="vid.path"
                 type="button"
                 class="sl-video-item"
+                role="listitem"
+                :aria-label="`载入视频 ${vid.name}, 大小 ${formatSize(vid.size_bytes)}`"
                 @click="selectWorkspaceVideo(vid)"
               >
-                <div class="sl-video-item-icon">
+                <div class="sl-video-item-icon" aria-hidden="true">
                   <svg viewBox="0 0 16 16" fill="currentColor">
                     <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm11.5 5.5-5-3A.5.5 0 0 0 5.75 5v6a.5.5 0 0 0 .75.433l5-3a.5.5 0 0 0 0-.866z"/>
                   </svg>
@@ -83,14 +87,14 @@
                   <span class="sl-video-name" :title="vid.name">{{ vid.name }}</span>
                   <span class="sl-video-meta">{{ vid.relative_path }} · {{ formatSize(vid.size_bytes) }}</span>
                 </div>
-                <span class="sl-select-badge">选择载入</span>
+                <span class="sl-select-badge" aria-hidden="true">选择载入</span>
               </button>
             </div>
           </div>
         </div>
 
         <!-- 通道 2：粘贴绝对路径 -->
-        <div class="sl-channel-card sl-channel-card-manual">
+        <div class="sl-channel-card sl-channel-card-manual" role="region" aria-label="输入绝对路径载入视频">
           <div class="sl-card-header">
             <div class="sl-card-title-group">
               <span class="sl-channel-tag">通道二</span>
@@ -104,28 +108,31 @@
 
           <form class="sl-manual-form" @submit.prevent="submitManualPath">
             <div class="sl-manual-input-wrapper">
-              <label class="sl-manual-label">视频绝对路径</label>
+              <label for="manual-video-path-input" class="sl-manual-label">视频绝对路径</label>
               <div class="sl-manual-input-group">
-                <svg class="sl-input-icon" viewBox="0 0 16 16" fill="currentColor">
+                <svg class="sl-input-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
                   <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
                 </svg>
                 <input
+                  id="manual-video-path-input"
                   v-model="manualPath"
                   type="text"
                   placeholder="例如: /Users/name/Movies/demo.mp4"
                   class="sl-manual-input"
+                  aria-label="视频物理绝对路径"
                   autofocus
                 />
               </div>
             </div>
 
-            <div v-if="manualError" class="sl-manual-error">
+            <div v-if="manualError" class="sl-manual-error" role="alert" aria-live="assertive">
               {{ manualError }}
             </div>
 
             <button
               type="submit"
               class="sl-manual-submit-btn"
+              aria-label="载入视频进入工作台"
               :disabled="!manualPath.trim()"
             >
               载入视频进入工作台

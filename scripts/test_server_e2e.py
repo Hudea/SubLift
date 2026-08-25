@@ -838,6 +838,107 @@ class TestSubLiftServerE2E(unittest.TestCase):
                 Path(golden_path).write_text(srt_body, encoding="utf-8")
                 print(f"\n[golden] recorded first-run baseline -> {golden_path}")
 
+    def test_jobs_08_state_persistence_and_restart_recovery(self) -> None:
+        """TC-JOB-08: Job state is persisted in cache dir and query endpoints return detail."""
+        cache_dir = os.path.join(self.temp_dir, ".sublift_cache")
+        state_file = os.path.join(cache_dir, "jobs_state.v1.json")
+
+        # Submit a job
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+        }
+        status, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        # Wait for execution and verify state file exists
+        time.sleep(0.5)
+        self.assertTrue(os.path.exists(state_file), f"State file {state_file} should exist")
+
+        # Query GET /api/jobs and GET /api/jobs/:id
+        st_list, _, body_list = self.req("GET", "/api/jobs")
+        self.assertEqual(st_list, 200)
+        jobs_list = json.loads(body_list.decode("utf-8"))
+        self.assertTrue(any(j["job_id"] == job_id for j in jobs_list))
+
+        st_detail, _, body_detail = self.req("GET", f"/api/jobs/{job_id}")
+        self.assertEqual(st_detail, 200)
+        detail = json.loads(body_detail.decode("utf-8"))
+        self.assertEqual(detail["job_id"], job_id)
+
+    def test_jobs_09_sse_resumption_with_cursor_and_last_event_id(self) -> None:
+        """TC-JOB-09: SSE event stream supports resumption via cursor param and Last-Event-ID header."""
+        if not self.ffmpeg_available:
+            self.skipTest("FFmpeg toolchain not available for video extraction test")
+
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+        }
+        status, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        # Wait for job to complete
+        time.sleep(1.0)
+
+        # Resume with cursor=1
+        st1, _, body1 = self.req("GET", f"/api/jobs/{job_id}/events?cursor=1")
+        self.assertEqual(st1, 200)
+        stream_text1 = body1.decode("utf-8", errors="replace")
+        self.assertIn("id: ", stream_text1)
+        self.assertNotIn("id: 1\n", stream_text1)
+
+        # Resume with Last-Event-ID: 1
+        st2, _, body2 = self.req("GET", f"/api/jobs/{job_id}/events", headers={"Last-Event-ID": "1"})
+        self.assertEqual(st2, 200)
+        stream_text2 = body2.decode("utf-8", errors="replace")
+        self.assertIn("id: ", stream_text2)
+        self.assertNotIn("id: 1\n", stream_text2)
+
+    def test_jobs_10_unified_job_config_with_script_and_confidence(self) -> None:
+        """TC-JOB-10: POST /api/jobs accepts full unified JobConfig (script, confidence, region_box) and preserves it."""
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 8.0,
+            "confidence_threshold": 0.45,
+            "script": "Hans",
+            "region_box": {"x": 0.05, "y": 0.72, "width": 0.9, "height": 0.22},
+        }
+        status, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        # Detail query
+        st_detail, _, body_detail = self.req("GET", f"/api/jobs/{job_id}")
+        self.assertEqual(st_detail, 200)
+        detail = json.loads(body_detail.decode("utf-8"))
+        cfg = detail.get("config", {})
+        self.assertEqual(cfg.get("fps"), 8.0)
+        self.assertEqual(cfg.get("confidence_threshold"), 0.45)
+        self.assertEqual(cfg.get("script"), "Hans")
+        self.assertEqual(cfg.get("region_box", {}).get("x"), 0.05)
+        self.assertEqual(cfg.get("region_box", {}).get("y"), 0.72)
+
     # -------------------------------------------------------------------------
     # 5. Security & Sandbox Boundary Tests (Feature 12502 / 12504)
     # -------------------------------------------------------------------------
@@ -1149,8 +1250,25 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertGreaterEqual(len(res["rejected"]), 1)
         self.assertEqual(res["rejected"][0]["reason"]["kind"], "unreadable")
 
-        # Non-media file
-        req_file = json.dumps({"path": "/etc/hosts"})
+        # Out-of-workspace path (/etc/hosts) rejected as unreadable / security restricted
+        req_outside = json.dumps({"path": "/etc/hosts"})
+        st_out, _, body_out = self.req(
+            "POST",
+            "/api/video/scan-path",
+            body=req_outside,
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st_out, 200)
+        res_out = json.loads(body_out.decode("utf-8"))
+        self.assertEqual(len(res_out["accepted"]), 0)
+        self.assertGreaterEqual(len(res_out["rejected"]), 1)
+        self.assertEqual(res_out["rejected"][0]["reason"]["kind"], "unreadable")
+
+        # Non-media file inside workspace
+        non_media_path = os.path.join(self.temp_dir, "notes.txt")
+        with open(non_media_path, "w", encoding="utf-8") as f:
+            f.write("text content")
+        req_file = json.dumps({"path": non_media_path})
         st_file, _, body_file = self.req(
             "POST",
             "/api/video/scan-path",
@@ -1162,6 +1280,239 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertEqual(len(res_file["accepted"]), 0)
         self.assertGreaterEqual(len(res_file["rejected"]), 1)
         self.assertEqual(res_file["rejected"][0]["reason"]["kind"], "unsupportedFormat")
+
+    # -------------------------------------------------------------------------
+    # 9. Atomic Disk Save & Conflict Policies (Feature 12514)
+    # -------------------------------------------------------------------------
+
+    def test_save_01_single_job_atomic_save(self) -> None:
+        """TC-SAV-01: POST /api/jobs/:id/save saves subtitle file atomically to disk."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # 1. Create a job with region_box and confidence 0.0 to ensure entries
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+            "confidence_threshold": 0.0,
+            "region_box": {"x": 0.0, "y": 0.5, "width": 1.0, "height": 0.5},
+        }
+        status, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        # Wait for completion
+        for _ in range(60):
+            time.sleep(0.1)
+            exp_st, _, _ = self.req("GET", f"/api/jobs/{job_id}/export")
+            if exp_st == 200:
+                break
+
+        # 2. Trigger atomic save
+        target_srt = os.path.join(self.temp_dir, "saved_synth_test.srt")
+        if os.path.exists(target_srt):
+            os.remove(target_srt)
+
+        save_payload = {
+            "target_path": target_srt,
+            "conflict_policy": "deterministic_rename",
+            "allow_empty": False,
+        }
+        st_save, _, body_save = self.req(
+            "POST",
+            f"/api/jobs/{job_id}/save",
+            body=json.dumps(save_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st_save, 200)
+        save_data = json.loads(body_save.decode("utf-8"))
+        self.assertEqual(save_data["status"], "saved")
+        self.assertEqual(save_data["job_id"], job_id)
+        self.assertFalse(save_data["empty_result"])
+        self.assertTrue(os.path.exists(target_srt))
+
+        # Check saved SRT content
+        with open(target_srt, "r", encoding="utf-8") as f:
+            content = f.read()
+            self.assertIn("mock_ocr", content)
+
+    def test_save_02_conflict_policies(self) -> None:
+        """TC-SAV-02: Test conflict policies: skip, deterministic_rename, replace."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # Create completed job with entries
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+            "confidence_threshold": 0.0,
+            "region_box": {"x": 0.0, "y": 0.5, "width": 1.0, "height": 0.5},
+        }
+        st, _, body = self.req("POST", "/api/jobs", body=json.dumps(job_payload), headers={"Content-Type": "application/json"})
+        self.assertEqual(st, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        for _ in range(60):
+            time.sleep(0.1)
+            if self.req("GET", f"/api/jobs/{job_id}/export")[0] == 200:
+                break
+
+        base_file = os.path.join(self.temp_dir, "conflict_test.srt")
+        with open(base_file, "w", encoding="utf-8") as f:
+            f.write("ORIGINAL_CONTENT")
+
+        # 1. Skip policy: should not overwrite
+        skip_req = {"target_path": base_file, "conflict_policy": "skip"}
+        st_skip, _, body_skip = self.req("POST", f"/api/jobs/{job_id}/save", body=json.dumps(skip_req), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_skip, 200)
+        data_skip = json.loads(body_skip.decode("utf-8"))
+        self.assertEqual(data_skip["status"], "skipped")
+        with open(base_file, "r", encoding="utf-8") as f:
+            self.assertEqual(f.read(), "ORIGINAL_CONTENT")
+
+        # 2. Deterministic rename: should create conflict_test_1.srt
+        rename_req = {"target_path": base_file, "conflict_policy": "deterministic_rename"}
+        st_ren, _, body_ren = self.req("POST", f"/api/jobs/{job_id}/save", body=json.dumps(rename_req), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_ren, 200)
+        data_ren = json.loads(body_ren.decode("utf-8"))
+        self.assertEqual(data_ren["status"], "saved")
+        renamed_file = os.path.join(self.temp_dir, "conflict_test_1.srt")
+        self.assertTrue(os.path.exists(renamed_file))
+        self.assertEqual(os.path.realpath(data_ren["saved_path"]), os.path.realpath(renamed_file))
+
+        # 3. Replace policy: should overwrite base_file
+        replace_req = {"target_path": base_file, "conflict_policy": "replace"}
+        st_rep, _, body_rep = self.req("POST", f"/api/jobs/{job_id}/save", body=json.dumps(replace_req), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_rep, 200)
+        data_rep = json.loads(body_rep.decode("utf-8"))
+        self.assertEqual(data_rep["status"], "saved")
+        with open(base_file, "r", encoding="utf-8") as f:
+            self.assertIn("mock_ocr", f.read())
+
+    def test_save_03_empty_subtitle_handling(self) -> None:
+        """TC-SAV-03: Empty subtitle protection avoids writing 0-byte files unless allowed."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # 1. Job without region box / high threshold produces 0 entries
+        empty_payload = {"video_path": self.api(self.synth_mp4_path), "engine": "mock", "fps": 5.0}
+        st_e, _, body_e = self.req("POST", "/api/jobs", body=json.dumps(empty_payload), headers={"Content-Type": "application/json"})
+        job_id_empty = json.loads(body_e.decode("utf-8"))["job_id"]
+
+        for _ in range(60):
+            time.sleep(0.1)
+            if self.req("GET", f"/api/jobs/{job_id_empty}/export")[0] == 200:
+                break
+
+        empty_target_1 = os.path.join(self.temp_dir, "empty_no_allow.srt")
+        if os.path.exists(empty_target_1):
+            os.remove(empty_target_1)
+
+        # allow_empty: False -> returns status 'empty_result' and file is NOT created
+        req_save_1 = {"target_path": empty_target_1, "allow_empty": False}
+        st_s1, _, body_s1 = self.req("POST", f"/api/jobs/{job_id_empty}/save", body=json.dumps(req_save_1), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_s1, 200)
+        data_s1 = json.loads(body_s1.decode("utf-8"))
+        self.assertEqual(data_s1["status"], "empty_result")
+        self.assertTrue(data_s1["empty_result"])
+        self.assertFalse(os.path.exists(empty_target_1))
+
+        # allow_empty: True -> writes empty file
+        empty_target_2 = os.path.join(self.temp_dir, "empty_allowed.srt")
+        if os.path.exists(empty_target_2):
+            os.remove(empty_target_2)
+        req_save_2 = {"target_path": empty_target_2, "allow_empty": True}
+        st_s2, _, body_s2 = self.req("POST", f"/api/jobs/{job_id_empty}/save", body=json.dumps(req_save_2), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_s2, 200)
+        data_s2 = json.loads(body_s2.decode("utf-8"))
+        self.assertEqual(data_s2["status"], "saved")
+        self.assertTrue(os.path.exists(empty_target_2))
+
+    def test_save_04_batch_save_endpoint(self) -> None:
+        """TC-SAV-04: POST /api/export/batch-save executes atomic batch save across multiple jobs."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        # Create two jobs with entries
+        job_ids = []
+        for _ in range(2):
+            job_payload = {
+                "video_path": self.api(self.synth_mp4_path),
+                "engine": "mock",
+                "fps": 5.0,
+                "confidence_threshold": 0.0,
+                "region_box": {"x": 0.0, "y": 0.5, "width": 1.0, "height": 0.5},
+            }
+            st, _, body = self.req("POST", "/api/jobs", body=json.dumps(job_payload), headers={"Content-Type": "application/json"})
+            self.assertEqual(st, 201)
+            job_ids.append(json.loads(body.decode("utf-8"))["job_id"])
+
+        for jid in job_ids:
+            for _ in range(60):
+                time.sleep(0.1)
+                if self.req("GET", f"/api/jobs/{jid}/export")[0] == 200:
+                    break
+
+        batch_req = {
+            "job_ids": job_ids,
+            "conflict_policy": "deterministic_rename",
+            "allow_empty": False,
+        }
+        st_b, _, body_b = self.req("POST", "/api/export/batch-save", body=json.dumps(batch_req), headers={"Content-Type": "application/json"})
+        self.assertEqual(st_b, 200)
+        data_b = json.loads(body_b.decode("utf-8"))
+        self.assertEqual(data_b["total"], 2)
+        self.assertEqual(data_b["saved"], 2)
+        self.assertEqual(data_b["failed"], 0)
+        self.assertEqual(len(data_b["results"]), 2)
+
+    def test_save_05_sandbox_security_rejection(self) -> None:
+        """TC-SAV-05: POST /api/jobs/:id/save rejects path traversal, cache directory, and bad extensions."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        job_payload = {"video_path": self.api(self.synth_mp4_path), "engine": "mock", "fps": 5.0}
+        st, _, body = self.req("POST", "/api/jobs", body=json.dumps(job_payload), headers={"Content-Type": "application/json"})
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+
+        for _ in range(60):
+            time.sleep(0.1)
+            if self.req("GET", f"/api/jobs/{job_id}/export")[0] == 200:
+                break
+
+        # 1. Directory traversal outside workspace
+        st1, _, _ = self.req(
+            "POST",
+            f"/api/jobs/{job_id}/save",
+            body=json.dumps({"target_path": os.path.join(self.temp_dir, "../escaped_save.srt")}),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st1, 400)
+
+        # 2. Writing to .sublift_cache
+        st2, _, _ = self.req(
+            "POST",
+            f"/api/jobs/{job_id}/save",
+            body=json.dumps({"target_path": os.path.join(self.temp_dir, ".sublift_cache", "hack.srt")}),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st2, 400)
+
+        # 3. Bad extension (.exe)
+        st3, _, _ = self.req(
+            "POST",
+            f"/api/jobs/{job_id}/save",
+            body=json.dumps({"target_path": os.path.join(self.temp_dir, "virus.exe")}),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st3, 400)
 
 
 def print_banner(text: str) -> None:

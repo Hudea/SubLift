@@ -1,28 +1,32 @@
 <template>
-  <div class="sl-setup-wrapper">
-    <div class="sl-setup-card">
+  <main class="sl-setup-wrapper" role="main">
+    <div class="sl-setup-card" role="region" aria-labelledby="sl-setup-title">
       <div class="sl-setup-header">
-        <div class="sl-setup-icon-box">
+        <div class="sl-setup-icon-box" aria-hidden="true">
           <svg class="sl-setup-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
             <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <h1 class="sl-setup-title">请指定视频所在的文件夹路径：</h1>
-        <p class="sl-setup-desc">
+        <h1 id="sl-setup-title" class="sl-setup-title">请指定视频所在的文件夹路径：</h1>
+        <p id="sl-setup-desc" class="sl-setup-desc">
           指定媒体处理工作区后，该目录及子目录内的视频可直接原地零拷贝极速提取，并在该目录下就近创建 <code>.sublift_cache</code> 缓存。
         </p>
       </div>
 
-      <form class="sl-setup-form" @submit.prevent="handleSetup">
+      <form class="sl-setup-form" aria-describedby="sl-setup-desc" @submit.prevent="handleSetup">
         <div class="sl-input-group">
-          <svg class="sl-input-icon" viewBox="0 0 16 16" fill="currentColor">
+          <svg class="sl-input-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M14 4.5V14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h5.5L14 4.5zm-3 0A1.5 1.5 0 0 1 9.5 3V1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.5h-2z"/>
           </svg>
+          <label for="workspace-path-input" class="sl-sr-only">视频工作区文件夹路径</label>
           <input
+            id="workspace-path-input"
             v-model="inputPath"
             type="text"
             placeholder="例如: /Users/name/Movies 或 /Volumes/Data/videos"
             class="sl-setup-input"
+            aria-label="视频工作区文件夹路径"
+            aria-required="true"
             autofocus
             :disabled="isSubmitting"
             @keydown.enter="handleSetup"
@@ -30,7 +34,7 @@
         </div>
 
         <!-- 快捷填入预设 -->
-        <div class="sl-presets-row">
+        <div class="sl-presets-row" role="group" aria-label="常用建议预设路径">
           <span class="sl-presets-label">常用建议：</span>
           <div class="sl-preset-chips">
             <button
@@ -38,6 +42,7 @@
               :key="preset.path"
               type="button"
               class="sl-preset-chip"
+              :aria-label="`快捷填入 ${preset.label}`"
               :disabled="isSubmitting"
               @click="inputPath = preset.path"
             >
@@ -47,8 +52,8 @@
         </div>
 
         <!-- 错误提示 -->
-        <div v-if="errorMessage" class="sl-setup-error">
-          <svg class="sl-error-icon" viewBox="0 0 16 16" fill="currentColor">
+        <div v-if="errorMessage" class="sl-setup-error" role="alert" aria-live="assertive">
+          <svg class="sl-error-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
             <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
             <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
           </svg>
@@ -59,6 +64,7 @@
         <button
           type="button"
           class="sl-setup-submit-btn"
+          aria-label="进入工作台"
           :disabled="!inputPath.trim() || isSubmitting"
           @click="handleSetup"
         >
@@ -71,7 +77,7 @@
         <p>macOS 可在 Finder 选中文件夹后按 <code>⌥⌘C</code> 快速复制绝对路径</p>
       </div>
     </div>
-  </div>
+  </main>
 </template>
 
 <script setup lang="ts">
@@ -114,6 +120,8 @@ async function handleSetup() {
   width: 100vw;
   background: var(--sl-surface-ground);
   padding: 24px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .sl-setup-card {
@@ -125,6 +133,7 @@ async function handleSetup() {
   padding: 40px 36px;
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05);
   backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
   gap: 28px;
@@ -314,5 +323,24 @@ async function handleSetup() {
   padding: 1px 5px;
   border-radius: 3px;
   color: var(--sl-text-secondary);
+}
+
+.sl-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .sl-setup-card {
+    padding: 24px 20px;
+    gap: 20px;
+  }
 }
 </style>

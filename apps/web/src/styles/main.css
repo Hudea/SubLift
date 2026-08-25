@@ -17,7 +17,6 @@ html, body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  user-select: none;
 }
 
 #app {
@@ -29,6 +28,40 @@ button, input, select, textarea {
   font-family: inherit;
   font-size: inherit;
   color: inherit;
+}
+
+/* Accessible Focus States */
+:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+/* Text Selection Highlighting */
+::selection {
+  background-color: rgba(10, 132, 255, 0.4);
+  color: #ffffff;
+}
+
+/* Ensure Subtitle Text, Timestamps, File Paths, Logs, Task IDs, and Errors are Selectable */
+p, span, h1, h2, h3, h4, h5, h6,
+code, pre, blockquote, label,
+.sl-selectable,
+.sl-row-text,
+.sl-time-cell,
+.sl-timecode,
+.sl-file-title,
+.sl-file-subpath,
+.sl-ins-path,
+.sl-meta-chip,
+.sl-status-banner-text,
+.sl-warning-content,
+.sl-error-content,
+.sl-ws-text,
+.sl-summary-text,
+.sl-rej-name,
+.sl-result-summary {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* Scrollbar Style */
@@ -48,4 +81,27 @@ button, input, select, textarea {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.25);
+}
+
+/* Motion Sensitivity (WCAG 2.2.2 & 2.3.3) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .sl-loading-spinner,
+  .sl-btn-spinner,
+  .sl-aux-spinner,
+  .sl-scanning-spinner,
+  .sl-spinner,
+  .sl-beacon-light,
+  .sl-live-dot,
+  .sl-dot.is-pulsing {
+    animation: none !important;
+  }
 }

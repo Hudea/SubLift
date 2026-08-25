@@ -1,4 +1,15 @@
 import type { SubtitleEntry, OcrEngineName, NormalizedRegionBox } from './api';
+import type { RoiPolicy, SamplingQuality, ExtractionConfig } from './config';
+export type { RoiPolicy, SamplingQuality, ExtractionConfig } from './config';
+export {
+  SAMPLING_QUALITY_MAP,
+  QUALITY_FPS_MAP,
+  DEFAULT_BOTTOM_ROI,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  createDefaultExtractionConfig,
+  qualityToFps,
+  fpsToQuality,
+} from './config';
 
 /**
  * 08102 / 08308 对齐：9 状态批量任务状态机
@@ -14,20 +25,6 @@ export type BatchTaskStatus =
   | 'interrupted'
   | 'skipped';
 
-/**
- * 采样质量 3 档分级（UI 统一展示中文名与基准 FPS）
- */
-export type SamplingQuality = 'fast' | 'balanced' | 'fine';
-
-export const SAMPLING_QUALITY_MAP: Record<
-  SamplingQuality,
-  { fps: number; label: string; desc: string }
-> = {
-  fast: { fps: 5.0, label: '快速', desc: '5 FPS 采样，更快完成，适合常规字幕' },
-  balanced: { fps: 8.0, label: '平衡', desc: '8 FPS 采样，速度与短字幕召回更均衡' },
-  fine: { fps: 12.0, label: '精细', desc: '12 FPS 采样，更高采样密度' },
-};
-
 /** 状态投影过滤器 */
 export type BatchTaskStatusFilter =
   | 'all'
@@ -38,17 +35,18 @@ export type BatchTaskStatusFilter =
   | 'cancelled'
   | 'skipped';
 
-export interface BatchTaskConfig {
-  engine: OcrEngineName;
-  quality: SamplingQuality;
-  confidence_threshold?: number;
-  region_box?: NormalizedRegionBox;
-}
+export interface BatchTaskConfig extends ExtractionConfig {}
 
 export interface BatchTaskResult {
   entryCount: number;
-  outputPath: string;
+  outputPath: string; // 规划/预期输出路径
+  savedPath?: string; // 实际已落盘的最终文件绝对路径
+  diskStatus?: 'unwritten' | 'saved' | 'skipped' | 'empty_result' | 'failed'; // 真实磁盘落盘状态
+  emptyResult?: boolean; // 是否为空字幕（0 条目）
+  savedAt?: number;
   runtimeIdentity?: string;
+  roiSource?: string;
+  effectiveRegion?: NormalizedRegionBox | null;
 }
 
 export interface BatchTaskItem {
@@ -57,6 +55,9 @@ export interface BatchTaskItem {
   name: string;
   importRootPath?: string; // 来源根目录，用于计算 locationDisplay
   outputPath?: string; // 预期输出 SRT 路径
+  savedPath?: string; // 实际落盘文件路径
+  diskStatus?: 'unwritten' | 'saved' | 'skipped' | 'empty_result' | 'failed';
+  emptyResult?: boolean;
   outputExists?: boolean; // 输出目标是否已存在（预警）
   planningError?: string; // 规划错误提示
   status: BatchTaskStatus;
@@ -90,15 +91,27 @@ export interface TaskInspectorModel {
   locationFullPath: string;
   outputFolderDisplay: string;
   outputFilename: string;
-  outputFullPath?: string;
+  outputFullPath?: string; // 规划路径
+  savedFullPath?: string; // 实际落盘路径
+  diskStatus: 'unwritten' | 'saved' | 'skipped' | 'empty_result' | 'failed';
+  diskStatusDisplay: string;
+  emptyResult: boolean;
   outputFileExists: boolean;
   planningError?: string;
   outputExistsWarning?: string;
   engine: OcrEngineName;
   quality: SamplingQuality;
+  confidence_threshold: number;
+  roi_policy: RoiPolicy;
+  roi_source_display: string;
+  region_box?: NormalizedRegionBox | null;
+  script?: string;
   engineDisplay: string;
   qualityDisplay: string;
+  roiPolicyDisplay: string;
   canEditConfiguration: boolean;
+  isEngineAvailable: boolean;
+  engineUnavailableReason?: string;
   failureMessage?: string;
   runtimeIdentity?: string;
   entryCount: number;
@@ -107,6 +120,7 @@ export interface TaskInspectorModel {
   canRemove: boolean;
   canReorder: boolean;
   canStartSingle: boolean;
+  canSaveToDisk: boolean;
 }
 
 export type BatchInputRejectionReason =

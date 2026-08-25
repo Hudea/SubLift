@@ -1,21 +1,23 @@
 <template>
-  <div class="sl-batch-ingestion-wrap">
+  <div class="sl-batch-ingestion-wrap" role="region" aria-label="批量视频导入区">
     <!-- 1. 主拖拽与导入面板 -->
     <div 
       class="sl-batch-dropzone"
       :class="{ 'is-dragover': isDragOver, 'is-processing': isScanning }"
+      tabindex="0"
+      aria-label="拖拽视频文件或文件夹到此处批量添加"
       @dragover.prevent="isDragOver = true"
       @dragleave.prevent="isDragOver = false"
       @drop.prevent="handleDrop"
     >
       <div class="sl-dropzone-left">
-        <div class="sl-icon-pill" @click="triggerFileInput">
-          <svg v-if="!isScanning" class="sl-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <div class="sl-icon-pill" role="button" aria-label="选择文件" tabindex="0" @click="triggerFileInput" @keydown.enter="triggerFileInput">
+          <svg v-if="!isScanning" class="sl-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-width="1.8" stroke-linecap="round"/>
             <polyline points="17 8 12 3 7 8" stroke-width="1.8" stroke-linecap="round"/>
             <line x1="12" y1="3" x2="12" y2="15" stroke-width="1.8" stroke-linecap="round"/>
           </svg>
-          <div v-else class="sl-scanning-spinner"></div>
+          <div v-else class="sl-scanning-spinner" aria-hidden="true"></div>
         </div>
 
         <div class="sl-drop-text-group">
@@ -27,11 +29,12 @@
           </div>
         </div>
 
-        <div class="sl-btn-action-group">
+        <div class="sl-btn-action-group" role="group" aria-label="导入操作按钮">
           <button 
             type="button" 
             class="sl-ws-action-btn" 
             :disabled="isScanning"
+            aria-label="选择视频文件"
             @click.stop="triggerFileInput"
           >
             📄 选择文件
@@ -40,6 +43,7 @@
             type="button" 
             class="sl-ws-action-btn" 
             :disabled="isScanning"
+            aria-label="选择视频文件夹"
             @click.stop="triggerDirInput"
           >
             📂 选择文件夹
@@ -48,6 +52,7 @@
             type="button" 
             class="sl-ws-import-btn" 
             :disabled="isScanning"
+            aria-label="从工作区导入全部视频"
             @click.stop="importAllFromWorkspace"
           >
             📁 导入工作区视频
@@ -60,6 +65,7 @@
           type="file" 
           multiple 
           accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/x-msvideo,.mp4,.mov,.webm,.mkv,.avi,.m4v,.flv"
+          aria-label="上传视频文件"
           style="display: none"
           @change="handleFileSelect"
         />
@@ -69,12 +75,13 @@
           webkitdirectory 
           directory 
           multiple
+          aria-label="上传视频文件夹"
           style="display: none"
           @change="handleDirSelect"
         />
       </div>
 
-      <div class="sl-dropzone-divider"></div>
+      <div class="sl-dropzone-divider" aria-hidden="true"></div>
 
       <!-- 绝对路径多行批量录入内嵌框 -->
       <div class="sl-dropzone-right">
@@ -83,10 +90,13 @@
           placeholder="或直接粘贴本地视频/工作区绝对路径 (支持换行多路径):&#10;/path/to/video1.mp4&#10;/path/to/video2.mov"
           class="sl-batch-path-textarea"
           rows="2"
+          aria-label="粘贴本地视频或工作区绝对路径列表"
           :disabled="isScanning"
         ></textarea>
         <button 
+          type="button"
           class="sl-batch-add-btn" 
+          aria-label="加入队列"
           :disabled="!batchPathText.trim() || isScanning"
           @click="submitBatchPaths"
         >
@@ -97,9 +107,9 @@
 
     <!-- 2. 扫描摘要横幅 (ScanSummaryBanner) -->
     <transition name="sl-slide-fade">
-      <div v-if="batchStore.lastScanSummary" class="sl-scan-summary-banner">
+      <div v-if="batchStore.lastScanSummary" class="sl-scan-summary-banner" role="status" aria-live="polite">
         <div class="sl-summary-left">
-          <span class="sl-summary-icon">📋</span>
+          <span class="sl-summary-icon" aria-hidden="true">📋</span>
           <span class="sl-summary-text">
             扫描完成：已接受 <strong>{{ batchStore.lastScanSummary.accepted.length }}</strong> 项，
             跳过 <strong>{{ batchStore.lastScanSummary.skipped }}</strong> 项隐藏/系统文件
@@ -114,6 +124,7 @@
             v-if="batchStore.lastScanSummary.rejected.length > 0"
             type="button" 
             class="sl-summary-btn-link"
+            aria-label="查看或收起被拒绝项详情"
             @click="isDetailsExpanded = !isDetailsExpanded"
           >
             {{ isDetailsExpanded ? '收起详情' : '查看被拒绝项' }}
@@ -122,6 +133,7 @@
             type="button" 
             class="sl-summary-close-btn"
             title="关闭提示"
+            aria-label="关闭扫描摘要提示"
             @click="batchStore.setScanSummary(null)"
           >
             ✕
@@ -129,11 +141,12 @@
         </div>
 
         <!-- 折叠的拒绝明细 -->
-        <div v-if="isDetailsExpanded && batchStore.lastScanSummary.rejected.length > 0" class="sl-summary-details">
+        <div v-if="isDetailsExpanded && batchStore.lastScanSummary.rejected.length > 0" class="sl-summary-details" role="list" aria-label="被拒绝项列表">
           <div 
             v-for="(rej, idx) in batchStore.lastScanSummary.rejected" 
             :key="idx"
             class="sl-summary-rej-row"
+            role="listitem"
           >
             <span class="sl-rej-name">• {{ rej.pathOrName }}</span>
             <span class="sl-rej-reason">({{ formatRejectionReason(rej.reason) }})</span>

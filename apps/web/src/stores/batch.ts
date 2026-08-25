@@ -2,7 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { SubLiftApiClient } from '../api/client';
 import { useSystemStore } from './system';
-import { exportSrtFile } from '../utils/srt_formatter';
+import { exportSrtFile, exportBatchZip } from '../utils/srt_formatter';
+import type { NormalizedRegionBox, JobConflictPolicy } from '../types/api';
 import {
   type BatchTaskItem,
   type BatchQueueStats,
@@ -11,7 +12,11 @@ import {
   type BatchTaskStatusFilter,
   type BatchScanSummary,
   type TaskInspectorModel,
+  type RoiPolicy,
   SAMPLING_QUALITY_MAP,
+  DEFAULT_BOTTOM_ROI,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  qualityToFps,
 } from '../types/batch';
 import { BatchTaskStatusGuard } from '../utils/batch_guards';
 
@@ -37,7 +42,9 @@ export const useBatchStore = defineStore('batch', () => {
   const defaultBatchConfig = computed<BatchTaskConfig>(() => ({
     engine: systemStore.preferredEngine,
     quality: 'fast', // 默认 5.0 FPS（快速），符合 SubLift GT 锚点
-    confidence_threshold: 0.0,
+    confidence_threshold: DEFAULT_CONFIDENCE_THRESHOLD,
+    roi_policy: 'auto',
+    region_box: null,
   }));
 
   // 4. Statistics & Projection
@@ -69,6 +76,7 @@ export const useBatchStore = defineStore('batch', () => {
     () => stats.value.completed > 0 || stats.value.cancelled > 0 || stats.value.skipped > 0
   );
   const canExportAll = computed(() => stats.value.completed > 0);
+  const canBatchSave = computed(() => tasks.value.some((t) => t.status === 'completed' && !!t.jobId));
 
   // 4.1 Filtered Tasks Projection (Search + Status Filter)
   const filteredTasks = computed<BatchTaskItem[]>(() => {
@@ -133,10 +141,41 @@ export const useBatchStore = defineStore('batch', () => {
       skipped: '已跳过',
     };
 
+    const roiPolicyMap: Record<RoiPolicy, string> = {
+      auto: '智能识别 (逐视频独立分析)',
+      fixed: '固定选区',
+      default: '默认区域 (底边 30%)',
+    };
+
     const outPath = task.outputPath || `${task.videoPath.replace(/\.[^/.]+$/, '')}.srt`;
     const outParts = outPath.replace(/\\/g, '/').split('/');
     const outFilename = outParts.pop() || '';
     const outFolder = outParts.pop() || '';
+
+    const isEngineAvailable =
+      task.config.engine === 'mock' ||
+      (!systemStore.systemInfo ||
+        systemStore.systemInfo.engines.some((e) => e.name === task.config.engine && e.available));
+
+    let roiSourceDisplay = '默认底边 30%';
+    if (task.result?.roiSource) {
+      roiSourceDisplay = task.result.roiSource;
+    } else if (task.config.roi_policy === 'auto') {
+      roiSourceDisplay = '准备阶段独立检测';
+    } else if (task.config.roi_policy === 'fixed') {
+      roiSourceDisplay = '用户固定选区';
+    }
+
+    const diskStatus = task.diskStatus || task.result?.diskStatus || 'unwritten';
+    const diskStatusMap: Record<string, string> = {
+      unwritten: '未落盘 (建议路径)',
+      saved: '已落盘',
+      skipped: '跳过落盘 (已存在同名文件)',
+      empty_result: '空字幕 (未落盘)',
+      failed: '落盘失败',
+    };
+    const emptyResult = task.emptyResult ?? (task.status === 'completed' && task.entries.length === 0);
+    const savedFullPath = task.savedPath || task.result?.savedPath;
 
     return {
       id: task.id,
@@ -148,14 +187,28 @@ export const useBatchStore = defineStore('batch', () => {
       outputFolderDisplay: outFolder,
       outputFilename: outFilename,
       outputFullPath: outPath,
+      savedFullPath,
+      diskStatus,
+      diskStatusDisplay: diskStatusMap[diskStatus] || diskStatus,
+      emptyResult,
       outputFileExists: !!task.outputExists,
       planningError: task.planningError,
-      outputExistsWarning: task.outputExists ? '该字幕已存在，导出时将原子覆盖' : undefined,
+      outputExistsWarning: task.outputExists ? '该字幕已存在，导出时将按策略处理' : undefined,
       engine: task.config.engine,
       quality: task.config.quality,
+      confidence_threshold: task.config.confidence_threshold ?? 0.0,
+      roi_policy: task.config.roi_policy ?? 'auto',
+      roi_source_display: roiSourceDisplay,
+      region_box: task.result?.effectiveRegion ?? task.config.region_box ?? null,
+      script: task.config.script,
       engineDisplay: engineMap[task.config.engine] || task.config.engine,
-      qualityDisplay: SAMPLING_QUALITY_MAP[task.config.quality]?.label || task.config.quality,
+      qualityDisplay: `${SAMPLING_QUALITY_MAP[task.config.quality]?.label || task.config.quality} (${qualityToFps(task.config.quality)} FPS)`,
+      roiPolicyDisplay: roiPolicyMap[task.config.roi_policy || 'auto'] || task.config.roi_policy,
       canEditConfiguration: BatchTaskStatusGuard.canEditConfig(task.status),
+      isEngineAvailable,
+      engineUnavailableReason: !isEngineAvailable
+        ? `当前环境未就绪 ${engineMap[task.config.engine] || task.config.engine}，严格禁止静默回退`
+        : undefined,
       failureMessage: task.error || undefined,
       runtimeIdentity: task.result?.runtimeIdentity,
       entryCount: task.entries.length,
@@ -164,6 +217,7 @@ export const useBatchStore = defineStore('batch', () => {
       canRemove: BatchTaskStatusGuard.canRemove(task.status),
       canReorder: BatchTaskStatusGuard.canReorder(task.status),
       canStartSingle: BatchTaskStatusGuard.canStartSingle(task.status),
+      canSaveToDisk: task.status === 'completed' && !!task.jobId,
     };
   });
 
@@ -334,6 +388,17 @@ export const useBatchStore = defineStore('batch', () => {
     task.entries = [];
     task.error = null;
 
+    // 1. 冻结不可变配置快照：任务开始后配置与策略完全锁定，杜绝隐式漂移
+    const frozenConfig: Readonly<BatchTaskConfig> = Object.freeze({
+      engine: task.config.engine,
+      quality: task.config.quality,
+      confidence_threshold: task.config.confidence_threshold ?? DEFAULT_CONFIDENCE_THRESHOLD,
+      roi_policy: task.config.roi_policy ?? 'auto',
+      region_box: task.config.region_box ? Object.freeze({ ...task.config.region_box }) : null,
+      script: task.config.script,
+    });
+    task.config = frozenConfig as BatchTaskConfig;
+
     let shouldAdvanceImmediately = false;
 
     const finalizeIfCurrent = () => {
@@ -353,14 +418,80 @@ export const useBatchStore = defineStore('batch', () => {
       }
     };
 
+    // 2. 严格 Fail-Closed 引擎可用性校验（杜绝静默回退/切换）
+    const isEngineAvailable =
+      frozenConfig.engine === 'mock' ||
+      (!systemStore.systemInfo ||
+        systemStore.systemInfo.engines.some((e) => e.name === frozenConfig.engine && e.available));
+
+    if (!isEngineAvailable) {
+      task.status = 'failed';
+      task.stage = 'failed';
+      task.error = `OCR 引擎不可用: ${frozenConfig.engine} (严格禁止静默回退)`;
+      if (singleRunTaskId.value === task.id) {
+        singleRunTaskId.value = null;
+        isQueueRunning.value = false;
+      }
+      currentRunningId.value = null;
+      isDispatching = false;
+      if (autoAdvance && isQueueRunning.value && singleRunTaskId.value === null) {
+        queueMicrotask(() => processNext());
+      }
+      return;
+    }
+
     try {
-      const targetFps = SAMPLING_QUALITY_MAP[task.config.quality]?.fps || 5.0;
+      // 3. 逐任务显式 ROI 策略执行
+      let targetRegionBox: NormalizedRegionBox | null = null;
+      let roiSource = '默认底边 30%';
+
+      if (frozenConfig.roi_policy === 'auto') {
+        task.stage = 'detecting_region';
+        try {
+          const detRes = await SubLiftApiClient.detectSubtitleRegion(
+            task.videoPath,
+            undefined,
+            frozenConfig.engine
+          );
+          if (detRes && detRes.detected && detRes.suggested_box) {
+            targetRegionBox = detRes.suggested_box;
+            roiSource = detRes.preview_text
+              ? `自动检测：“${detRes.preview_text}”`
+              : '自动检测推荐选区';
+          } else {
+            targetRegionBox = { ...DEFAULT_BOTTOM_ROI };
+            roiSource = '自动检测未命中字幕，回退默认底边 30%';
+          }
+        } catch {
+          targetRegionBox = { ...DEFAULT_BOTTOM_ROI };
+          roiSource = '智能检测异常，已使用默认底边 30%';
+        }
+      } else if (frozenConfig.roi_policy === 'fixed') {
+        targetRegionBox = frozenConfig.region_box
+          ? { ...frozenConfig.region_box }
+          : { ...DEFAULT_BOTTOM_ROI };
+        roiSource = '用户固定选区';
+      } else {
+        // default 策略：明确使用底层流水线标准 30% 底部区域
+        targetRegionBox = { ...DEFAULT_BOTTOM_ROI };
+        roiSource = '默认底边 30%';
+      }
+
+      if ((task.status as string) === 'cancelled') {
+        currentRunningId.value = null;
+        cleanupSse();
+        shouldAdvanceImmediately = autoAdvance && singleRunTaskId.value === null;
+        return;
+      }
+
+      const targetFps = qualityToFps(frozenConfig.quality);
       const resp = await SubLiftApiClient.createJob({
         video_path: task.videoPath,
-        engine: task.config.engine,
+        engine: frozenConfig.engine,
         fps: targetFps,
-        confidence_threshold: task.config.confidence_threshold || 0.0,
-        region_box: task.config.region_box,
+        confidence_threshold: frozenConfig.confidence_threshold,
+        region_box: targetRegionBox,
+        script: frozenConfig.script,
       });
 
       if ((task.status as string) === 'cancelled') {
@@ -383,8 +514,16 @@ export const useBatchStore = defineStore('batch', () => {
           }
         },
         onPushEntry: (data) => {
-          if (task.status === 'extracting') {
-            task.entries.push(data.entry);
+          if (task.status === 'extracting' && data && data.entry) {
+            const entry = data.entry;
+            const exists = task.entries.some(
+              (e) =>
+                e.index === entry.index ||
+                (e.start_ms === entry.start_ms && e.end_ms === entry.end_ms && e.text === entry.text)
+            );
+            if (!exists) {
+              task.entries.push(entry);
+            }
           }
         },
         onDone: (data) => {
@@ -394,10 +533,18 @@ export const useBatchStore = defineStore('batch', () => {
             task.stage = 'completed';
             task.progressPct = 100;
             task.elapsedMs = data.elapsed_ms;
+            const entryCount = data.total_entries;
+            const emptyResult = entryCount === 0 || task.entries.length === 0;
+            task.emptyResult = emptyResult;
+            task.diskStatus = 'unwritten';
             task.result = {
-              entryCount: data.total_entries,
+              entryCount,
               outputPath: task.outputPath || `${task.videoPath.replace(/\.[^/.]+$/, '')}.srt`,
-              runtimeIdentity: `${task.config.engine.toUpperCase()} Engine`,
+              runtimeIdentity: `${frozenConfig.engine.toUpperCase()} Engine`,
+              roiSource,
+              effectiveRegion: targetRegionBox,
+              diskStatus: 'unwritten',
+              emptyResult,
             };
           }
           finalizeIfCurrent();
@@ -539,14 +686,91 @@ export const useBatchStore = defineStore('batch', () => {
     exportSrtFile(task.entries, cleanName);
   }
 
-  function exportAllCompleted() {
+  async function saveTaskToDisk(
+    id: string,
+    policy: JobConflictPolicy = 'deterministic_rename',
+    allowEmpty: boolean = false
+  ) {
+    const task = tasks.value.find((t) => t.id === id);
+    if (!task || !task.jobId || task.status !== 'completed') return null;
+
+    try {
+      const resp = await SubLiftApiClient.saveJobToDisk(task.jobId, {
+        target_path: task.outputPath,
+        conflict_policy: policy,
+        allow_empty: allowEmpty,
+      });
+
+      task.diskStatus = resp.status;
+      task.savedPath = resp.saved_path || undefined;
+      task.emptyResult = resp.empty_result;
+
+      if (task.result) {
+        task.result.diskStatus = resp.status;
+        task.result.savedPath = resp.saved_path || undefined;
+        task.result.emptyResult = resp.empty_result;
+        task.result.savedAt = Date.now();
+      }
+      return resp;
+    } catch (err: unknown) {
+      task.diskStatus = 'failed';
+      if (task.result) {
+        task.result.diskStatus = 'failed';
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * 将全部已完成任务打包为单一 ZIP 归档一次性下载（杜绝 setTimeout 连续多个下载 hack）
+   */
+  function downloadBatchZip(zipFilename: string = 'subtitles_batch.zip'): boolean {
     const completed = tasks.value.filter((t) => t.status === 'completed' && t.entries.length > 0);
-    completed.forEach((task, idx) => {
-      window.setTimeout(() => {
-        const cleanName = task.name.replace(/\.[^/.]+$/, '');
-        exportSrtFile(task.entries, cleanName);
-      }, idx * 150);
+    if (completed.length === 0) return false;
+
+    const items = completed.map((task) => ({
+      name: task.name,
+      entries: task.entries,
+    }));
+    return exportBatchZip(items, zipFilename);
+  }
+
+  /**
+   * 服务端批量原子落盘保存
+   */
+  async function batchSaveToDisk(
+    policy: JobConflictPolicy = 'deterministic_rename',
+    allowEmpty: boolean = false
+  ) {
+    const completedTasks = tasks.value.filter((t) => t.status === 'completed' && t.jobId);
+    if (completedTasks.length === 0) return null;
+
+    const jobIds = completedTasks.map((t) => t.jobId as string);
+    const resp = await SubLiftApiClient.batchSaveToDisk({
+      job_ids: jobIds,
+      conflict_policy: policy,
+      allow_empty: allowEmpty,
     });
+
+    for (const res of resp.results) {
+      const targetTask = tasks.value.find((t) => t.jobId === res.job_id);
+      if (targetTask) {
+        targetTask.diskStatus = res.status;
+        targetTask.savedPath = res.saved_path || undefined;
+        targetTask.emptyResult = res.empty_result;
+        if (targetTask.result) {
+          targetTask.result.diskStatus = res.status;
+          targetTask.result.savedPath = res.saved_path || undefined;
+          targetTask.result.emptyResult = res.empty_result;
+          targetTask.result.savedAt = Date.now();
+        }
+      }
+    }
+    return resp;
+  }
+
+  function exportAllCompleted(zipFilename: string = 'subtitles_batch.zip') {
+    return downloadBatchZip(zipFilename);
   }
 
   function setScanSummary(summary: BatchScanSummary | null) {
@@ -572,6 +796,7 @@ export const useBatchStore = defineStore('batch', () => {
     canPause,
     canClearCompleted,
     canExportAll,
+    canBatchSave,
     addBatchItems,
     selectTask,
     updateTaskConfig,
@@ -586,6 +811,9 @@ export const useBatchStore = defineStore('batch', () => {
     clearCompleted,
     clearAll,
     exportTaskSrt,
+    saveTaskToDisk,
+    downloadBatchZip,
+    batchSaveToDisk,
     exportAllCompleted,
     setScanSummary,
   };

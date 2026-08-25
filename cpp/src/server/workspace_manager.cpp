@@ -1,8 +1,11 @@
 #include "sublift/server/workspace_manager.hpp"
 
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <iostream>
+#include <unistd.h>
 #include <nlohmann/json.hpp>
 
 #include "sublift/server/path_sandbox.hpp"
@@ -256,6 +259,169 @@ void WorkspaceManager::save_persisted_config() {
   if (f) {
     f << j.dump(2) << std::endl;
   }
+}
+
+DiskSaveResult WorkspaceManager::save_subtitles_atomic(
+    const std::string& target_path_str,
+    const std::string& srt_content,
+    ConflictPolicy policy,
+    bool allow_empty,
+    int entry_count) {
+  std::optional<std::filesystem::path> allowed_root = get_media_dir();
+
+  std::filesystem::path validated_target;
+  try {
+    validated_target = resolve_and_validate_output_path(target_path_str, allowed_root);
+  } catch (const PathSecurityException& e) {
+    return DiskSaveResult{
+        .success = false,
+        .status = "error",
+        .target_path = target_path_str,
+        .saved_path = "",
+        .error_message = std::string("Path Security Error: ") + e.what(),
+        .empty_result = false,
+        .entry_count = entry_count
+    };
+  }
+
+  // 空字幕保护机制：若字幕条目为 0 或内容空白，且未显式指定 allow_empty，则不落盘虚假 0 字节文件
+  bool is_blank = true;
+  for (char c : srt_content) {
+    if (!std::isspace(static_cast<unsigned char>(c))) {
+      is_blank = false;
+      break;
+    }
+  }
+
+  if ((entry_count == 0 || is_blank) && !allow_empty) {
+    return DiskSaveResult{
+        .success = true,
+        .status = "empty_result",
+        .target_path = validated_target.string(),
+        .saved_path = "",
+        .error_message = "",
+        .empty_result = true,
+        .entry_count = 0
+    };
+  }
+
+  std::error_code ec;
+  std::filesystem::path final_target = validated_target;
+
+  // 冲突解决策略
+  if (std::filesystem::exists(validated_target, ec)) {
+    if (policy == ConflictPolicy::Skip) {
+      return DiskSaveResult{
+          .success = true,
+          .status = "skipped",
+          .target_path = validated_target.string(),
+          .saved_path = "",
+          .error_message = "File already exists and conflict policy is skip",
+          .empty_result = false,
+          .entry_count = entry_count
+      };
+    } else if (policy == ConflictPolicy::DeterministicRename) {
+      std::string stem = validated_target.stem().string();
+      std::string ext = validated_target.extension().string();
+      auto parent = validated_target.parent_path();
+      int counter = 1;
+      while (std::filesystem::exists(final_target, ec) && counter < 10000) {
+        final_target = parent / (stem + "_" + std::to_string(counter) + ext);
+        counter++;
+      }
+    } else if (policy == ConflictPolicy::Replace) {
+      final_target = validated_target;
+    }
+  }
+
+  // 确保父目录存在
+  auto parent_dir = final_target.parent_path();
+  std::filesystem::create_directories(parent_dir, ec);
+  if (ec) {
+    return DiskSaveResult{
+        .success = false,
+        .status = "error",
+        .target_path = validated_target.string(),
+        .saved_path = "",
+        .error_message = "Failed to create parent directory: " + ec.message(),
+        .empty_result = false,
+        .entry_count = entry_count
+    };
+  }
+
+  // 原子写过程：同目录下临时文件 -> fsync -> rename
+  std::string temp_template_str = (parent_dir / ("." + final_target.filename().string() + ".tmp.XXXXXX")).string();
+  std::vector<char> temp_buf(temp_template_str.begin(), temp_template_str.end());
+  temp_buf.push_back('\0');
+
+  int fd = ::mkstemp(temp_buf.data());
+  if (fd == -1) {
+    return DiskSaveResult{
+        .success = false,
+        .status = "error",
+        .target_path = validated_target.string(),
+        .saved_path = "",
+        .error_message = std::string("Failed to create temporary file: ") + std::strerror(errno),
+        .empty_result = false,
+        .entry_count = entry_count
+    };
+  }
+
+  std::filesystem::path temp_file_path(temp_buf.data());
+
+  // 写入数据
+  size_t total_written = 0;
+  const char* data_ptr = srt_content.data();
+  size_t data_len = srt_content.size();
+
+  while (total_written < data_len) {
+    ssize_t w = ::write(fd, data_ptr + total_written, data_len - total_written);
+    if (w < 0) {
+      if (errno == EINTR) continue;
+      int err = errno;
+      ::close(fd);
+      std::filesystem::remove(temp_file_path, ec);
+      return DiskSaveResult{
+          .success = false,
+          .status = "error",
+          .target_path = validated_target.string(),
+          .saved_path = "",
+          .error_message = std::string("Failed to write to temporary file: ") + std::strerror(err),
+          .empty_result = false,
+          .entry_count = entry_count
+      };
+    }
+    total_written += static_cast<size_t>(w);
+  }
+
+  // 刷盘落盘保障
+  ::fsync(fd);
+  ::close(fd);
+
+  // 原子重命名
+  std::filesystem::rename(temp_file_path, final_target, ec);
+  if (ec) {
+    std::filesystem::remove(temp_file_path, ec);
+    return DiskSaveResult{
+        .success = false,
+        .status = "error",
+        .target_path = validated_target.string(),
+        .saved_path = "",
+        .error_message = "Failed to atomically rename temporary file: " + ec.message(),
+        .empty_result = false,
+        .entry_count = entry_count
+    };
+  }
+
+  return DiskSaveResult{
+      .success = true,
+      .status = "saved",
+      .target_path = validated_target.string(),
+      .saved_path = final_target.string(),
+      .error_message = "",
+      .empty_result = false,
+      .entry_count = entry_count
+  };
 }
 
 }  // namespace sublift::server

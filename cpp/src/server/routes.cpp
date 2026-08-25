@@ -229,19 +229,6 @@ std::vector<std::filesystem::path> collect_search_roots(
     roots.emplace_back(env_root);
     return roots;
   }
-  std::error_code ec;
-  auto cwd = std::filesystem::current_path(ec);
-  if (!ec) {
-    roots.push_back(cwd);
-  }
-  if (const char* home = std::getenv("HOME"); home && *home) {
-    for (std::string_view sub : {"Movies", "Downloads", "Desktop", "Documents"}) {
-      roots.emplace_back(std::filesystem::path(home) / std::string(sub));
-    }
-  }
-  const char* tmp = std::getenv("TMPDIR");
-  if (!tmp || !*tmp) tmp = "/tmp";
-  roots.emplace_back(tmp);
   return roots;
 }
 
@@ -381,7 +368,7 @@ void register_routes(httplib::Server& server,
   });
 
   // POST /api/config/workspace (Feature 12508)
-  server.Post("/api/config/workspace", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
+  server.Post("/api/config/workspace", [workspace_manager, job_manager](const httplib::Request& req, httplib::Response& res) {
     if (!workspace_manager) {
       res.status = 500;
       res.set_content(R"({"error":"WorkspaceManager not available"})", "application/json; charset=utf-8");
@@ -412,6 +399,10 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    if (job_manager) {
+      job_manager->set_state_file_path(workspace_manager->get_cache_dir() / "jobs_state.v1.json");
+    }
+
     auto info = workspace_manager->get_workspace_info();
     nlohmann::json j = {
         {"configured", info.configured},
@@ -423,9 +414,12 @@ void register_routes(httplib::Server& server,
   });
 
   // Clear workspace
-  auto handle_clear_workspace = [workspace_manager](const httplib::Request&, httplib::Response& res) {
+  auto handle_clear_workspace = [workspace_manager, job_manager](const httplib::Request&, httplib::Response& res) {
     if (workspace_manager) {
       workspace_manager->clear_workspace();
+      if (job_manager) {
+        job_manager->set_state_file_path("");
+      }
       auto info = workspace_manager->get_workspace_info();
       nlohmann::json j = {
           {"configured", false},
@@ -442,7 +436,7 @@ void register_routes(httplib::Server& server,
   server.Delete("/api/config/workspace", handle_clear_workspace);
 
   // GET /api/video/frame?path=<video_path>&time_s=<time_s>
-  server.Get("/api/video/frame", [](const httplib::Request& req, httplib::Response& res) {
+  server.Get("/api/video/frame", [workspace_manager](const httplib::Request& req, httplib::Response& res) {
     if (!req.has_param("path")) {
       res.status = 400;
       nlohmann::json err = {{"error", "Missing 'path' query parameter"}};
@@ -450,9 +444,14 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    std::optional<std::filesystem::path> allowed_root = std::nullopt;
+    if (workspace_manager) {
+      allowed_root = workspace_manager->get_media_dir();
+    }
+
     std::filesystem::path video_path;
     try {
-      video_path = resolve_and_validate_media_path(req.get_param_value("path"));
+      video_path = resolve_and_validate_media_path(req.get_param_value("path"), allowed_root);
     } catch (const PathSecurityException& se) {
       res.status = 400;
       nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
@@ -489,9 +488,14 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    std::optional<std::filesystem::path> allowed_root = std::nullopt;
+    if (workspace_manager) {
+      allowed_root = workspace_manager->get_media_dir();
+    }
+
     std::filesystem::path video_path;
     try {
-      video_path = resolve_and_validate_media_path(req.get_param_value("path"));
+      video_path = resolve_and_validate_media_path(req.get_param_value("path"), allowed_root);
     } catch (const PathSecurityException& se) {
       res.status = 400;
       nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
@@ -1001,9 +1005,14 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    std::optional<std::filesystem::path> allowed_root = std::nullopt;
+    if (workspace_manager) {
+      allowed_root = workspace_manager->get_media_dir();
+    }
+
     std::filesystem::path video_path;
     try {
-      video_path = resolve_and_validate_media_path(body["video_path"].get<std::string>());
+      video_path = resolve_and_validate_media_path(body["video_path"].get<std::string>(), allowed_root);
     } catch (const PathSecurityException& se) {
       res.status = 400;
       nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
@@ -1064,10 +1073,15 @@ void register_routes(httplib::Server& server,
         return;
       }
 
+      std::optional<std::filesystem::path> allowed_root = std::nullopt;
+      if (workspace_manager) {
+        allowed_root = workspace_manager->get_media_dir();
+      }
+
       JobConfig cfg;
       std::string raw_path = body_json["video_path"].get<std::string>();
       try {
-        cfg.video_path = resolve_and_validate_media_path(raw_path).string();
+        cfg.video_path = resolve_and_validate_media_path(raw_path, allowed_root).string();
       } catch (const PathSecurityException& se) {
         res.status = 400;
         nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
@@ -1083,6 +1097,9 @@ void register_routes(httplib::Server& server,
       }
       if (body_json.contains("confidence_threshold") && body_json["confidence_threshold"].is_number()) {
         cfg.confidence_threshold = body_json["confidence_threshold"].get<double>();
+      }
+      if (body_json.contains("script") && body_json["script"].is_string()) {
+        cfg.script = body_json["script"].get<std::string>();
       }
       if (body_json.contains("region_box") && body_json["region_box"].is_object()) {
         cfg.region_box = RegionBox::from_json(body_json["region_box"]);
@@ -1120,7 +1137,40 @@ void register_routes(httplib::Server& server,
     }
   });
 
-  // GET /api/jobs/:id/events (SSE Realtime stream)
+  // GET /api/jobs (List recent jobs)
+  server.Get("/api/jobs", [job_manager](const httplib::Request&, httplib::Response& res) {
+    if (!job_manager) {
+      res.status = 500;
+      return;
+    }
+    auto jobs = job_manager->get_all_jobs();
+    nlohmann::json arr = nlohmann::json::array();
+    for (const auto& j : jobs) {
+      arr.push_back(j->to_json());
+    }
+    res.status = 200;
+    res.set_content(arr.dump(), "application/json; charset=utf-8");
+  });
+
+  // GET /api/jobs/:id (Get job detail)
+  server.Get(R"(/api/jobs/([^/]+))", [job_manager](const httplib::Request& req, httplib::Response& res) {
+    if (!job_manager) {
+      res.status = 500;
+      return;
+    }
+    std::string job_id = req.matches[1];
+    auto job = job_manager->get_job(job_id);
+    if (!job) {
+      res.status = 404;
+      nlohmann::json err = {{"error", "Job not found: " + job_id}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+    res.status = 200;
+    res.set_content(job->to_json().dump(), "application/json; charset=utf-8");
+  });
+
+  // GET /api/jobs/:id/events (SSE Realtime stream with Last-Event-ID / cursor resumption)
   server.Get(R"(/api/jobs/([^/]+)/events)", [job_manager](const httplib::Request& req, httplib::Response& res) {
     if (!job_manager) {
       res.status = 500;
@@ -1141,7 +1191,18 @@ void register_routes(httplib::Server& server,
     res.set_header("Connection", "keep-alive");
     res.set_header("X-Accel-Buffering", "no");
 
-    auto last_seq_ptr = std::make_shared<std::uint64_t>(0);
+    std::uint64_t start_seq = 0;
+    if (req.has_header("Last-Event-ID")) {
+      try {
+        start_seq = std::stoull(req.get_header_value("Last-Event-ID"));
+      } catch (...) {}
+    } else if (req.has_param("cursor")) {
+      try {
+        start_seq = std::stoull(req.get_param_value("cursor"));
+      } catch (...) {}
+    }
+
+    auto last_seq_ptr = std::make_shared<std::uint64_t>(start_seq);
 
     res.set_chunked_content_provider(
         "text/event-stream; charset=utf-8",
@@ -1203,9 +1264,65 @@ void register_routes(httplib::Server& server,
   });
 
   // GET /api/jobs/:id/export (Export SRT)
-  server.Get(R"(/api/jobs/([^/]+)/export)", [job_manager](const httplib::Request& req, httplib::Response& res) {
+  server.Get(R"(/api/jobs/([^/]+)/export)", [job_manager, workspace_manager](const httplib::Request& req, httplib::Response& res) {
     if (!job_manager) {
       res.status = 500;
+      return;
+    }
+
+    std::string job_id = req.matches[1];
+    auto job = job_manager->get_job(job_id);
+    if (!job) {
+      res.status = 404;
+      nlohmann::json err = {{"error", "Job not found: " + job_id}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    std::optional<std::filesystem::path> allowed_root = std::nullopt;
+    if (workspace_manager) {
+      allowed_root = workspace_manager->get_media_dir();
+    }
+
+    try {
+      resolve_and_validate_media_path(job->config.video_path, allowed_root);
+    } catch (const PathSecurityException& se) {
+      res.status = 400;
+      nlohmann::json err = {{"error", std::string("Path Security Error: ") + se.what()}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    std::vector<sublift::SubtitleEntry> entries_copy;
+    JobStatus current_status;
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      current_status = job->status;
+      entries_copy = job->entries;
+    }
+
+    if (current_status != JobStatus::Completed) {
+      res.status = 409;
+      nlohmann::json err = {{"error", "Job is not completed yet (current status: " + to_string(current_status) + ")"}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    std::string srt_content = format_entries_to_srt(entries_copy);
+
+    std::filesystem::path video_p = job->config.video_path;
+    std::string srt_filename = video_p.stem().string() + ".srt";
+
+    res.set_header("Content-Disposition", "attachment; filename=\"" + srt_filename + "\"");
+    res.set_content(srt_content, "text/plain; charset=utf-8");
+  });
+
+  // POST /api/jobs/:id/save (Atomic save to disk within workspace)
+  server.Post(R"(/api/jobs/([^/]+)/save)", [job_manager, workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    if (!job_manager || !workspace_manager) {
+      res.status = 500;
+      nlohmann::json err = {{"error", "JobManager or WorkspaceManager unavailable"}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
       return;
     }
 
@@ -1233,13 +1350,191 @@ void register_routes(httplib::Server& server,
       return;
     }
 
+    std::string target_path = "";
+    ConflictPolicy policy = ConflictPolicy::DeterministicRename;
+    bool allow_empty = false;
+
+    if (!req.body.empty()) {
+      try {
+        auto body_json = nlohmann::json::parse(req.body);
+        if (body_json.contains("target_path") && body_json["target_path"].is_string()) {
+          target_path = body_json["target_path"].get<std::string>();
+        }
+        if (body_json.contains("conflict_policy") && body_json["conflict_policy"].is_string()) {
+          policy = parse_conflict_policy(body_json["conflict_policy"].get<std::string>());
+        }
+        if (body_json.contains("allow_empty") && body_json["allow_empty"].is_boolean()) {
+          allow_empty = body_json["allow_empty"].get<bool>();
+        }
+      } catch (const std::exception& e) {
+        res.status = 400;
+        nlohmann::json err = {{"error", std::string("Malformed JSON: ") + e.what()}};
+        res.set_content(err.dump(), "application/json; charset=utf-8");
+        return;
+      }
+    }
+
+    if (target_path.empty()) {
+      std::filesystem::path video_p = job->config.video_path;
+      target_path = video_p.replace_extension(".srt").string();
+    }
+
     std::string srt_content = format_entries_to_srt(entries_copy);
+    int entry_count = static_cast<int>(entries_copy.size());
 
-    std::filesystem::path video_p = job->config.video_path;
-    std::string srt_filename = video_p.stem().string() + ".srt";
+    DiskSaveResult result = workspace_manager->save_subtitles_atomic(
+        target_path, srt_content, policy, allow_empty, entry_count);
 
-    res.set_header("Content-Disposition", "attachment; filename=\"" + srt_filename + "\"");
-    res.set_content(srt_content, "text/plain; charset=utf-8");
+    if (!result.success) {
+      res.status = 400;
+      nlohmann::json err = {
+          {"error", result.error_message},
+          {"target_path", result.target_path}
+      };
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    res.status = 200;
+    nlohmann::json resp = {
+        {"job_id", job_id},
+        {"status", result.status},
+        {"target_path", result.target_path},
+        {"saved_path", result.saved_path},
+        {"empty_result", result.empty_result},
+        {"entry_count", result.entry_count}
+    };
+    res.set_content(resp.dump(), "application/json; charset=utf-8");
+  });
+
+  // POST /api/export/batch-save (Batch atomic save to disk with conflict policies)
+  server.Post("/api/export/batch-save", [job_manager, workspace_manager](const httplib::Request& req, httplib::Response& res) {
+    if (!job_manager || !workspace_manager) {
+      res.status = 500;
+      nlohmann::json err = {{"error", "JobManager or WorkspaceManager unavailable"}};
+      res.set_content(err.dump(), "application/json; charset=utf-8");
+      return;
+    }
+
+    std::vector<std::string> job_ids;
+    ConflictPolicy policy = ConflictPolicy::DeterministicRename;
+    bool allow_empty = false;
+
+    if (!req.body.empty()) {
+      try {
+        auto body_json = nlohmann::json::parse(req.body);
+        if (body_json.contains("job_ids") && body_json["job_ids"].is_array()) {
+          for (const auto& item : body_json["job_ids"]) {
+            if (item.is_string()) {
+              job_ids.push_back(item.get<std::string>());
+            }
+          }
+        }
+        if (body_json.contains("conflict_policy") && body_json["conflict_policy"].is_string()) {
+          policy = parse_conflict_policy(body_json["conflict_policy"].get<std::string>());
+        }
+        if (body_json.contains("allow_empty") && body_json["allow_empty"].is_boolean()) {
+          allow_empty = body_json["allow_empty"].get<bool>();
+        }
+      } catch (const std::exception& e) {
+        res.status = 400;
+        nlohmann::json err = {{"error", std::string("Malformed JSON: ") + e.what()}};
+        res.set_content(err.dump(), "application/json; charset=utf-8");
+        return;
+      }
+    }
+
+    if (job_ids.empty()) {
+      auto all_jobs = job_manager->get_all_jobs();
+      for (const auto& j : all_jobs) {
+        if (j->status == JobStatus::Completed) {
+          job_ids.push_back(j->job_id);
+        }
+      }
+    }
+
+    nlohmann::json results_arr = nlohmann::json::array();
+    int saved_count = 0;
+    int skipped_count = 0;
+    int empty_count = 0;
+    int failed_count = 0;
+
+    for (const auto& jid : job_ids) {
+      auto job = job_manager->get_job(jid);
+      if (!job) {
+        failed_count++;
+        results_arr.push_back({
+            {"job_id", jid},
+            {"status", "failed"},
+            {"error", "Job not found"}
+        });
+        continue;
+      }
+
+      std::vector<sublift::SubtitleEntry> entries_copy;
+      JobStatus st;
+      {
+        std::lock_guard<std::mutex> lk(job->state_mutex);
+        st = job->status;
+        entries_copy = job->entries;
+      }
+
+      if (st != JobStatus::Completed) {
+        failed_count++;
+        results_arr.push_back({
+            {"job_id", jid},
+            {"status", "failed"},
+            {"error", "Job not completed (status: " + to_string(st) + ")"}
+        });
+        continue;
+      }
+
+      std::filesystem::path video_p = job->config.video_path;
+      std::string target_path = video_p.replace_extension(".srt").string();
+      std::string srt_content = format_entries_to_srt(entries_copy);
+      int entry_count = static_cast<int>(entries_copy.size());
+
+      DiskSaveResult save_res = workspace_manager->save_subtitles_atomic(
+          target_path, srt_content, policy, allow_empty, entry_count);
+
+      if (!save_res.success) {
+        failed_count++;
+        results_arr.push_back({
+            {"job_id", jid},
+            {"status", "failed"},
+            {"target_path", save_res.target_path},
+            {"error", save_res.error_message}
+        });
+      } else {
+        if (save_res.status == "saved") {
+          saved_count++;
+        } else if (save_res.status == "skipped") {
+          skipped_count++;
+        } else if (save_res.status == "empty_result") {
+          empty_count++;
+        }
+
+        results_arr.push_back({
+            {"job_id", jid},
+            {"status", save_res.status},
+            {"target_path", save_res.target_path},
+            {"saved_path", save_res.saved_path},
+            {"empty_result", save_res.empty_result},
+            {"entry_count", save_res.entry_count}
+        });
+      }
+    }
+
+    nlohmann::json resp = {
+        {"total", static_cast<int>(job_ids.size())},
+        {"saved", saved_count},
+        {"skipped", skipped_count},
+        {"empty_results", empty_count},
+        {"failed", failed_count},
+        {"results", results_arr}
+    };
+    res.status = 200;
+    res.set_content(resp.dump(), "application/json; charset=utf-8");
   });
 
   // Mount static directory if provided

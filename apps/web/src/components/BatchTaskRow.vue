@@ -2,12 +2,21 @@
   <tr 
     class="sl-task-row" 
     :class="[`is-${task.status}`, { 'is-selected': isSelected }]"
+    tabindex="0"
+    role="row"
+    :aria-label="`任务 ${task.name}，状态 ${getStageLabel(task)}，进度 ${task.progressPct}%`"
     @click="handleRowClick"
+    @keydown.enter="handleRowClick"
+    @keydown.space.prevent="handleRowClick"
   >
     <!-- 1. 状态指示灯与名称 -->
     <td class="sl-cell-name">
       <div class="sl-name-wrapper">
-        <span class="sl-beacon-light" :class="`sl-beacon--${task.status}`"></span>
+        <span 
+          class="sl-beacon-light" 
+          :class="`sl-beacon--${task.status}`"
+          :aria-label="`状态指示: ${getStageLabel(task)}`"
+        ></span>
         <div class="sl-file-meta">
           <div class="sl-file-title-wrap">
             <span class="sl-file-title" :title="task.videoPath">{{ task.name }}</span>
@@ -28,14 +37,22 @@
     <!-- 3. 引擎与采样配置快照 -->
     <td class="sl-cell-config">
       <div class="sl-tag-group">
-        <span class="sl-tag sl-tag--engine">{{ formatEngine(task.config.engine) }}</span>
-        <span class="sl-tag sl-tag--quality">{{ formatQuality(task.config.quality) }}</span>
+        <span class="sl-tag sl-tag--engine" :aria-label="`引擎: ${formatEngine(task.config.engine)}`">{{ formatEngine(task.config.engine) }}</span>
+        <span class="sl-tag sl-tag--quality" :aria-label="`采样: ${formatQuality(task.config.quality)}`">{{ formatQuality(task.config.quality) }}</span>
+        <span class="sl-tag sl-tag--roi" :aria-label="`选区: ${formatRoiPolicy(task.config.roi_policy)}`">{{ formatRoiPolicy(task.config.roi_policy) }}</span>
       </div>
     </td>
 
     <!-- 4. 实时进度与状态 -->
     <td class="sl-cell-progress">
-      <div class="sl-progress-wrapper">
+      <div 
+        class="sl-progress-wrapper"
+        role="progressbar"
+        :aria-valuenow="task.progressPct"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        :aria-label="`任务进度 ${task.progressPct}%`"
+      >
         <div class="sl-progress-header">
           <span class="sl-stage-text">{{ getStageLabel(task) }}</span>
           <span v-if="task.progressPct > 0" class="sl-pct-text">{{ task.progressPct }}%</span>
@@ -52,26 +69,27 @@
 
     <!-- 5. 字幕条目 -->
     <td class="sl-cell-entries">
-      <span v-if="task.entries.length > 0" class="sl-entry-badge">
+      <span v-if="task.entries.length > 0" class="sl-entry-badge" :aria-label="`已生成 ${task.entries.length} 句字幕`">
         {{ task.entries.length }} 句
       </span>
-      <span v-else class="sl-muted-text">—</span>
+      <span v-else class="sl-muted-text" aria-label="暂无字幕条目">—</span>
     </td>
 
     <!-- 6. 耗时 -->
     <td class="sl-cell-time">
       <div class="sl-time-wrapper">
-        <span v-if="task.elapsedMs > 0">{{ formatDuration(task.elapsedMs) }}</span>
-        <span v-else class="sl-muted-text">—</span>
+        <span v-if="task.elapsedMs > 0" :aria-label="`耗时 ${formatDuration(task.elapsedMs)}`">{{ formatDuration(task.elapsedMs) }}</span>
+        <span v-else class="sl-muted-text" aria-label="耗时未知">—</span>
       </div>
     </td>
 
     <!-- 7. 行级操作按钮 -->
     <td class="sl-cell-actions" @click.stop>
-      <div class="sl-action-buttons">
+      <div class="sl-action-buttons" role="group" aria-label="行级操作">
         <!-- 启动单项 (仅 waiting 可用) -->
         <button
           v-if="task.status === 'waiting'"
+          type="button"
           class="sl-btn-icon sl-btn-icon--primary"
           title="立即单独启动此任务"
           aria-label="立即单独启动此任务"
@@ -84,6 +102,7 @@
         <!-- 上移 (仅 waiting 可用) -->
         <button
           v-if="task.status === 'waiting'"
+          type="button"
           class="sl-btn-icon"
           title="上移排队顺序"
           aria-label="上移排队顺序"
@@ -95,6 +114,7 @@
         <!-- 下移 (仅 waiting 可用) -->
         <button
           v-if="task.status === 'waiting'"
+          type="button"
           class="sl-btn-icon"
           title="下移排队顺序"
           aria-label="下移排队顺序"
@@ -106,6 +126,7 @@
         <!-- 取消 (处理中或排队中) -->
         <button
           v-if="BatchTaskStatusGuard.canCancel(task.status)"
+          type="button"
           class="sl-btn-icon sl-btn-icon--warning"
           title="取消任务"
           aria-label="取消任务"
@@ -117,6 +138,7 @@
         <!-- 重试 (失败、取消或中断) -->
         <button
           v-if="BatchTaskStatusGuard.canRetry(task.status)"
+          type="button"
           class="sl-btn-icon sl-btn-icon--primary"
           title="重新排队"
           aria-label="重新排队"
@@ -128,6 +150,7 @@
         <!-- 单任务下载 SRT (完成态) -->
         <button
           v-if="task.status === 'completed' && task.entries.length > 0"
+          type="button"
           class="sl-btn-icon sl-btn-icon--accent"
           title="下载 SRT 字幕"
           aria-label="下载 SRT 字幕"
@@ -139,6 +162,7 @@
         <!-- 移除任务 -->
         <button
           v-if="BatchTaskStatusGuard.canRemove(task.status)"
+          type="button"
           class="sl-btn-icon sl-btn-icon--danger"
           title="从队列中移除"
           aria-label="从队列中移除"
@@ -194,6 +218,18 @@ function formatQuality(quality: SamplingQuality): string {
   return SAMPLING_QUALITY_MAP[quality]?.label || quality;
 }
 
+function formatRoiPolicy(policy?: string): string {
+  switch (policy) {
+    case 'fixed':
+      return '固定ROI';
+    case 'default':
+      return '默认ROI';
+    case 'auto':
+    default:
+      return '自动ROI';
+  }
+}
+
 function getStageLabel(task: BatchTaskItem): string {
   switch (task.status) {
     case 'waiting':
@@ -231,11 +267,16 @@ function formatDuration(ms: number): string {
   border-bottom: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.06));
   transition: background-color 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
-  user-select: none;
+  outline: none;
 }
 
 .sl-task-row:hover {
   background-color: var(--sl-surface-elevated, #242426);
+}
+
+.sl-task-row:focus-visible {
+  outline: 2px solid var(--sl-color-accent, #0a84ff);
+  outline-offset: -2px;
 }
 
 .sl-task-row.is-selected {
@@ -244,7 +285,7 @@ function formatDuration(ms: number): string {
 }
 
 td {
-  padding: 10px 14px;
+  padding: 8px 12px;
   vertical-align: middle;
   font-size: var(--sl-font-size-xs, 12px);
 }
@@ -253,7 +294,7 @@ td {
 .sl-name-wrapper {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -303,7 +344,9 @@ td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 240px;
+  max-width: 220px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .sl-out-exists-tag {
@@ -325,7 +368,9 @@ td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 260px;
+  max-width: 240px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* 2. Location */
@@ -340,7 +385,9 @@ td {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 140px;
+  max-width: 120px;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* 3. Config */
@@ -352,11 +399,13 @@ td {
 
 .sl-tag {
   font-size: 11px;
-  padding: 2px 6px;
+  padding: 2px 5px;
   border-radius: 4px;
   background: var(--sl-surface-elevated, #2c2c2e);
   border: 1px solid var(--sl-border-subtle, rgba(255, 255, 255, 0.1));
   color: var(--sl-text-secondary, #8e8e93);
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .sl-tag--engine {
@@ -367,12 +416,16 @@ td {
   color: #ffd60a;
 }
 
+.sl-tag--roi {
+  color: #30d158;
+}
+
 /* 4. Progress */
 .sl-progress-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  width: 130px;
+  gap: 3px;
+  width: 120px;
 }
 
 .sl-progress-header {
@@ -419,6 +472,8 @@ td {
   font-size: 11px;
   font-weight: 500;
   color: #30d158;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .sl-muted-text {
@@ -429,13 +484,15 @@ td {
 .sl-time-wrapper {
   color: var(--sl-text-secondary, #8e8e93);
   font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* 7. Actions */
 .sl-action-buttons {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .sl-btn-icon {

@@ -1,10 +1,16 @@
 #include "sublift/server/job_manager.hpp"
 
 #include <cmath>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <random>
 #include <sstream>
+
+#if defined(_POSIX_C_SOURCE) || defined(__APPLE__) || defined(__linux__)
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include "bridge.hpp"
 #include "detector_factory.hpp"
@@ -36,9 +42,17 @@ std::string JobManager::generate_uuid_v4() {
   return oss.str();
 }
 
-JobManager::JobManager(std::size_t max_concurrent_jobs, std::size_t max_history_jobs)
+JobManager::JobManager(std::size_t max_concurrent_jobs,
+                       std::size_t max_history_jobs,
+                       std::filesystem::path state_file_path)
     : max_concurrent_jobs_(std::max<std::size_t>(1, max_concurrent_jobs)),
-      max_history_jobs_(std::max<std::size_t>(10, max_history_jobs)) {
+      max_history_jobs_(std::max<std::size_t>(10, max_history_jobs)),
+      state_file_path_(std::move(state_file_path)) {
+  if (!state_file_path_.empty()) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    load_state_locked();
+  }
+
   worker_threads_.reserve(max_concurrent_jobs_);
   for (std::size_t i = 0; i < max_concurrent_jobs_; ++i) {
     worker_threads_.emplace_back(&JobManager::worker_loop, this);
@@ -69,6 +83,11 @@ void JobManager::shutdown() {
     }
   }
   worker_threads_.clear();
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    save_state_locked();
+  }
 }
 
 std::shared_ptr<JobContext> JobManager::create_job(const JobConfig& config) {
@@ -84,9 +103,32 @@ std::shared_ptr<JobContext> JobManager::create_job(const JobConfig& config) {
     history_lru_list_.push_front(job->job_id);
     pending_queue_.push_back(job);
     enforce_lru_cleanup_locked();
+    save_state_locked();
   }
 
   queue_cv_.notify_one();
+  return job;
+}
+
+std::shared_ptr<JobContext> JobManager::create_completed_job(const JobConfig& config,
+                                                             std::vector<sublift::SubtitleEntry> entries) {
+  auto job = std::make_shared<JobContext>();
+  job->job_id = generate_uuid_v4();
+  job->config = config;
+  job->created_at = std::chrono::system_clock::now();
+  job->started_at = job->created_at;
+  job->ended_at = job->created_at;
+  job->status = JobStatus::Completed;
+  job->entries = std::move(entries);
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    jobs_map_[job->job_id] = job;
+    history_lru_list_.push_front(job->job_id);
+    enforce_lru_cleanup_locked();
+    save_state_locked();
+  }
+
   return job;
 }
 
@@ -97,6 +139,19 @@ std::shared_ptr<JobContext> JobManager::get_job(const std::string& job_id) const
     return it->second;
   }
   return nullptr;
+}
+
+std::vector<std::shared_ptr<JobContext>> JobManager::get_all_jobs() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  std::vector<std::shared_ptr<JobContext>> result;
+  result.reserve(history_lru_list_.size());
+  for (const auto& id : history_lru_list_) {
+    auto it = jobs_map_.find(id);
+    if (it != jobs_map_.end()) {
+      result.push_back(it->second);
+    }
+  }
+  return result;
 }
 
 bool JobManager::cancel_job(const std::string& job_id) {
@@ -127,7 +182,222 @@ bool JobManager::cancel_job(const std::string& job_id) {
     }
   }
 
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    save_state_locked();
+  }
+
   return true;
+}
+
+void JobManager::set_state_file_path(const std::filesystem::path& path) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  state_file_path_ = path;
+  if (!state_file_path_.empty()) {
+    load_state_locked();
+  }
+}
+
+std::filesystem::path JobManager::get_state_file_path() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return state_file_path_;
+}
+
+void JobManager::save_state() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  save_state_locked();
+}
+
+void JobManager::load_state() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  load_state_locked();
+}
+
+void JobManager::save_state_locked() {
+  if (state_file_path_.empty()) return;
+
+  std::error_code ec;
+  auto parent_dir = state_file_path_.parent_path();
+  if (!parent_dir.empty()) {
+    std::filesystem::create_directories(parent_dir, ec);
+  }
+
+  nlohmann::json root;
+  root["version"] = 1;
+  root["updated_at_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+
+  nlohmann::json jobs_array = nlohmann::json::array();
+  for (const auto& job_id : history_lru_list_) {
+    auto it = jobs_map_.find(job_id);
+    if (it != jobs_map_.end()) {
+      jobs_array.push_back(it->second->to_json());
+    }
+  }
+  root["jobs"] = jobs_array;
+
+  auto tmp_path = (parent_dir.empty() ? std::filesystem::path(".") : parent_dir) /
+                  ("." + state_file_path_.filename().string() + ".tmp." + generate_uuid_v4());
+
+  {
+    std::ofstream ofs(tmp_path, std::ios::out | std::ios::trunc);
+    if (!ofs) return;
+    ofs << root.dump(2) << "\n";
+    ofs.flush();
+  }
+
+#if defined(_POSIX_C_SOURCE) || defined(__APPLE__) || defined(__linux__)
+  int fd = ::open(tmp_path.c_str(), O_RDWR);
+  if (fd >= 0) {
+#if defined(__APPLE__) && defined(F_FULLFSYNC)
+    ::fcntl(fd, F_FULLFSYNC);
+#else
+    ::fsync(fd);
+#endif
+    ::close(fd);
+  }
+#endif
+
+  std::filesystem::rename(tmp_path, state_file_path_, ec);
+  if (ec) {
+    std::filesystem::remove(tmp_path, ec);
+  }
+}
+
+void JobManager::load_state_locked() {
+  if (state_file_path_.empty()) return;
+
+  std::error_code ec;
+  if (!std::filesystem::exists(state_file_path_, ec) ||
+      !std::filesystem::is_regular_file(state_file_path_, ec)) {
+    return;
+  }
+
+  std::ifstream ifs(state_file_path_);
+  if (!ifs) return;
+
+  nlohmann::json root;
+  try {
+    ifs >> root;
+  } catch (...) {
+    // Corrupted state file: gracefully ignore
+    return;
+  }
+
+  if (!root.is_object() || !root.contains("version") || !root.contains("jobs") || !root["jobs"].is_array()) {
+    return;
+  }
+
+  int version = 0;
+  if (root["version"].is_number_integer()) {
+    version = root["version"].get<int>();
+  }
+  if (version != 1) {
+    return;
+  }
+
+  auto from_ms = [](std::int64_t ms) -> std::chrono::system_clock::time_point {
+    return std::chrono::system_clock::time_point(std::chrono::milliseconds(ms));
+  };
+
+  bool state_changed = false;
+
+  for (const auto& job_json : root["jobs"]) {
+    if (!job_json.is_object() || !job_json.contains("job_id") || !job_json["job_id"].is_string()) {
+      continue;
+    }
+
+    std::string job_id = job_json["job_id"].get<std::string>();
+    if (job_id.empty() || jobs_map_.find(job_id) != jobs_map_.end()) {
+      continue;
+    }
+
+    auto job = std::make_shared<JobContext>();
+    job->job_id = job_id;
+
+    if (job_json.contains("config") && job_json["config"].is_object()) {
+      job->config = JobConfig::from_json(job_json["config"]);
+    }
+
+    std::string status_str = "interrupted";
+    if (job_json.contains("status") && job_json["status"].is_string()) {
+      status_str = job_json["status"].get<std::string>();
+    }
+
+    if (status_str == "queued" || status_str == "running") {
+      // Incomplete jobs MUST transition to Interrupted and remain paused!
+      job->status = JobStatus::Interrupted;
+      state_changed = true;
+    } else {
+      job->status = job_status_from_string(status_str);
+    }
+
+    if (job_json.contains("created_at_ms") && job_json["created_at_ms"].is_number_integer()) {
+      job->created_at = from_ms(job_json["created_at_ms"].get<std::int64_t>());
+    }
+    if (job_json.contains("started_at_ms") && job_json["started_at_ms"].is_number_integer()) {
+      job->started_at = from_ms(job_json["started_at_ms"].get<std::int64_t>());
+    }
+    if (job_json.contains("ended_at_ms") && job_json["ended_at_ms"].is_number_integer()) {
+      job->ended_at = from_ms(job_json["ended_at_ms"].get<std::int64_t>());
+    }
+    if (job_json.contains("error_message") && job_json["error_message"].is_string()) {
+      job->error_message = job_json["error_message"].get<std::string>();
+    }
+
+    if (job_json.contains("entries") && job_json["entries"].is_array()) {
+      for (const auto& ej : job_json["entries"]) {
+        if (!ej.is_object()) continue;
+        sublift::SubtitleEntry entry;
+        if (ej.contains("start_ms") && ej["start_ms"].is_number_integer()) {
+          entry.start_ms = ej["start_ms"].get<std::int64_t>();
+        }
+        if (ej.contains("end_ms") && ej["end_ms"].is_number_integer()) {
+          entry.end_ms = ej["end_ms"].get<std::int64_t>();
+        }
+        if (ej.contains("text") && ej["text"].is_string()) {
+          entry.text = ej["text"].get<std::string>();
+        }
+        if (ej.contains("confidence") && ej["confidence"].is_number()) {
+          entry.confidence = ej["confidence"].get<double>();
+        }
+        job->entries.push_back(std::move(entry));
+      }
+    }
+
+    // Populate terminal event in job's event stream
+    if (job->status == JobStatus::Completed) {
+      auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(job->ended_at - job->started_at).count();
+      job->event_stream->publish("done", {
+          {"ok", true},
+          {"total_entries", job->entries.size()},
+          {"elapsed_ms", std::max<std::int64_t>(0, elapsed_ms)}
+      });
+    } else if (job->status == JobStatus::Interrupted) {
+      job->event_stream->publish("error", {
+          {"error", "Job was interrupted by server shutdown"}
+      });
+    } else if (job->status == JobStatus::Failed) {
+      job->event_stream->publish("error", {
+          {"error", job->error_message.empty() ? "Job failed" : job->error_message}
+      });
+    } else if (job->status == JobStatus::Cancelled) {
+      job->event_stream->publish("cancelled", {
+          {"cancelled", true},
+          {"reason", "Cancelled"}
+      });
+    }
+
+    jobs_map_[job->job_id] = job;
+    history_lru_list_.push_back(job->job_id);
+    // NOTICE: Do NOT add to pending_queue_!
+  }
+
+  enforce_lru_cleanup_locked();
+
+  if (state_changed) {
+    save_state_locked();
+  }
 }
 
 void JobManager::enforce_lru_cleanup_locked() {
@@ -169,6 +439,10 @@ void JobManager::worker_loop() {
       job->status = JobStatus::Cancelled;
       job->ended_at = std::chrono::system_clock::now();
       job->event_stream->publish("cancelled", {{"reason", "Cancelled prior to run"}});
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        save_state_locked();
+      }
       continue;
     }
 
@@ -183,6 +457,10 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
     std::lock_guard<std::mutex> job_lock(job->state_mutex);
     job->status = JobStatus::Running;
     job->started_at = std::chrono::system_clock::now();
+  }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    save_state_locked();
   }
 
   std::mutex done_mutex;
@@ -356,6 +634,11 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
     job->error_message = e.what();
     job->ended_at = std::chrono::system_clock::now();
     job->event_stream->publish("error", {{"error", e.what()}});
+  }
+
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    save_state_locked();
   }
 }
 

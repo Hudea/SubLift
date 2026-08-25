@@ -7,24 +7,29 @@
   <!-- 2. 已载入视频时：标准双栏工作台（紧凑顶栏快速设置） -->
   <div v-else class="sl-workbench-layout">
     <!-- 左侧区域：视频播放器舞台 + 顶栏流水线设置 -->
-    <section class="sl-left-pane">
+    <section class="sl-left-pane" aria-label="视频播放与识别配置区">
       <!-- 顶栏：更换视频 + 视频标题 + 引擎下拉 + 采样下拉 + 提取按钮 (SwiftUI 紧凑模式) -->
-      <div class="sl-workbench-top-bar">
+      <div class="sl-workbench-top-bar" role="toolbar" aria-label="工作台主操作栏">
         <div class="sl-top-bar-left">
           <button
             class="sl-change-video-btn"
             :disabled="workbenchStore.isLocked"
             title="返回重新选择或输入其他视频"
+            aria-label="更换视频"
             @click="handleBackToSelector"
           >
-            <svg class="sl-back-arrow" viewBox="0 0 16 16" fill="currentColor">
+            <svg class="sl-back-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
             </svg>
             <span>更换视频</span>
           </button>
 
-          <div class="sl-active-video-badge" :title="workbenchStore.videoPath">
-            <svg class="sl-badge-icon" viewBox="0 0 16 16" fill="currentColor">
+          <div 
+            class="sl-active-video-badge" 
+            :title="workbenchStore.videoPath"
+            :aria-label="`当前视频：${workbenchStore.videoName}`"
+          >
+            <svg class="sl-badge-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm11.5 5.5-5-3A.5.5 0 0 0 5.75 5v6a.5.5 0 0 0 .75.433l5-3a.5.5 0 0 0 0-.866z"/>
             </svg>
             <span class="sl-badge-name">{{ workbenchStore.videoName }}</span>
@@ -39,12 +44,13 @@
               class="sl-native-select"
               :disabled="workbenchStore.isLocked"
               title="选择 OCR 提取引擎"
+              aria-label="选择 OCR 提取引擎"
             >
               <option v-for="eng in productionEngines" :key="eng.name" :value="eng.name">
                 {{ eng.name === 'vision' ? 'Apple Vision' : eng.name === 'paddle' ? 'PaddleOCR' : 'Mock' }}
               </option>
             </select>
-            <svg class="sl-select-arrow" viewBox="0 0 16 16" fill="currentColor">
+            <svg class="sl-select-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
             </svg>
           </div>
@@ -56,12 +62,13 @@
               class="sl-native-select"
               :disabled="workbenchStore.isLocked"
               title="选择采样质量"
+              aria-label="选择采样质量"
             >
               <option :value="5.0">快速</option>
               <option :value="8.0">平衡</option>
               <option :value="12.0">精细</option>
             </select>
-            <svg class="sl-select-arrow" viewBox="0 0 16 16" fill="currentColor">
+            <svg class="sl-select-arrow" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
             </svg>
           </div>
@@ -71,37 +78,85 @@
             v-if="!workbenchStore.isLocked"
             class="sl-extract-btn"
             :disabled="!workbenchStore.canStart"
-            title="开始提取字幕"
-            @click="workbenchStore.startExtraction"
+            :title="workbenchStore.state === 'Review' ? '重新提取字幕 (将覆盖当前草稿)' : '开始提取字幕'"
+            :aria-label="workbenchStore.state === 'Review' ? '重新提取字幕' : '开始提取字幕'"
+            @click="handleStartExtractionClick"
           >
-            <svg class="sl-btn-icon" viewBox="0 0 16 16" fill="currentColor">
+            <svg class="sl-btn-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/>
             </svg>
-            <span>开始提取</span>
+            <span>{{ workbenchStore.state === 'Review' ? '重新提取' : '开始提取' }}</span>
           </button>
 
           <button
             v-else
             class="sl-cancel-btn"
             title="取消当前提取任务"
+            aria-label="取消当前提取任务"
             @click="workbenchStore.cancelExtraction"
           >
-            <div class="sl-btn-spinner"></div>
-            <span>取消提取 ({{ Math.round(workbenchStore.progress.pct) }}%)</span>
+            <div class="sl-btn-spinner" aria-hidden="true"></div>
+            <span>取消提取 ({{ workbenchStore.progressPct }}%)</span>
           </button>
         </div>
       </div>
 
+      <!-- 重新提取确认弹窗 (Feature 12515) -->
+      <div
+        v-if="showReExtractConfirm"
+        ref="reextractModalRef"
+        class="sl-modal-backdrop"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="reextract-title"
+        aria-describedby="reextract-desc"
+        @click.self="showReExtractConfirm = false"
+      >
+        <div class="sl-modal-card" tabindex="-1">
+          <h3 id="reextract-title" class="sl-modal-title">⚠️ 确认重新提取？</h3>
+          <p id="reextract-desc" class="sl-modal-desc">
+            检测到当前已有编辑/审阅的字幕草稿。重新提取将丢弃现有的字幕草稿并重新逐帧识别。确定要继续吗？
+          </p>
+          <div class="sl-modal-actions">
+            <button
+              type="button"
+              class="sl-modal-btn sl-modal-btn--cancel"
+              aria-label="取消重新提取"
+              @click="showReExtractConfirm = false"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              class="sl-modal-btn sl-modal-btn--confirm"
+              aria-label="确认重新提取"
+              @click="handleConfirmReExtract"
+            >
+              确认重新提取
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- 提取进度条（运行中展示） -->
-      <div v-if="workbenchStore.state === 'Processing'" class="sl-progress-strip">
-        <div class="sl-progress-fill" :style="{ width: `${workbenchStore.progress.pct}%` }"></div>
+      <div 
+        v-if="workbenchStore.state === 'Processing'" 
+        class="sl-progress-strip"
+        role="progressbar"
+        aria-label="视频字幕提取进度"
+        :aria-valuenow="workbenchStore.progressPct"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      >
+        <div class="sl-progress-fill" :style="{ width: `${workbenchStore.progressPct}%` }"></div>
       </div>
 
       <div
         v-if="statusBanner"
         class="sl-status-banner"
         :class="bannerKind"
-        role="status"
+        :role="workbenchStore.state === 'Failed' ? 'alert' : 'status'"
+        :aria-live="workbenchStore.state === 'Failed' ? 'assertive' : 'polite'"
       >
         <span class="sl-status-banner-text">{{ statusBanner }}</span>
         <button class="sl-status-banner-dismiss" aria-label="关闭提示" @click="dismissed = true">×</button>
@@ -121,13 +176,13 @@
       </div>
 
       <!-- 底部快捷辅助操作（ROI 智能识别与快速复位） -->
-      <div class="sl-quick-aux-bar">
+      <div class="sl-quick-aux-bar" role="toolbar" aria-label="字幕选区辅助工具栏">
         <div class="sl-aux-left">
-          <span v-if="workbenchStore.isDetectingRegion" class="sl-aux-detecting">
-            <span class="sl-aux-spinner"></span>
+          <span v-if="workbenchStore.isDetectingRegion" class="sl-aux-detecting" role="status" aria-live="polite">
+            <span class="sl-aux-spinner" aria-hidden="true"></span>
             <span>正在智能探测字幕区域…</span>
           </span>
-          <span v-else-if="workbenchStore.roiDetectionFeedback" class="sl-aux-feedback">
+          <span v-else-if="workbenchStore.roiDetectionFeedback" class="sl-aux-feedback" role="status" aria-live="polite">
             {{ workbenchStore.roiDetectionFeedback }}
           </span>
           <span v-else class="sl-aux-hint">
@@ -139,6 +194,7 @@
             class="sl-aux-btn sl-aux-btn--highlight"
             :disabled="workbenchStore.isLocked || workbenchStore.isDetectingRegion || !workbenchStore.videoPath"
             title="全视频多点智能扫描字幕所在区域并自动吸附"
+            aria-label="全视频智能识别字幕区"
             @click="handleAutoDetect"
           >
             ✨ 智能识别字幕区
@@ -147,6 +203,7 @@
             class="sl-aux-btn sl-aux-btn--highlight"
             :disabled="workbenchStore.isLocked || workbenchStore.isDetectingRegion || !workbenchStore.videoPath"
             title="对当前播放画面截帧并吸附文字选区"
+            aria-label="识别当前播放画面字幕区"
             @click="handleDetectCurrentPlayhead"
           >
             🎯 识别当前画面
@@ -155,6 +212,7 @@
             class="sl-aux-btn"
             :disabled="workbenchStore.isLocked"
             title="重置选区为画面底部 30%"
+            aria-label="重置选区为画面底部 30%"
             @click="workbenchStore.resetDefaultBottomRoi"
           >
             底部 30%
@@ -163,6 +221,7 @@
             class="sl-aux-btn"
             :disabled="workbenchStore.isLocked"
             title="设置选区为全画幅 100%"
+            aria-label="设置选区为全画幅 100%"
             @click="workbenchStore.updateRegionBox({ x: 0, y: 0, width: 1, height: 1 })"
           >
             全画幅
@@ -172,7 +231,7 @@
     </section>
 
     <!-- 右侧区域：全高宽屏实时字幕与精修工作区 -->
-    <section class="sl-right-pane">
+    <section class="sl-right-pane" aria-label="字幕列表与编辑精修区">
       <LiveTranscript @seek="handleTranscriptSeek" />
     </section>
   </div>
@@ -186,11 +245,21 @@ import RoiOverlay from '../components/RoiOverlay.vue';
 import LiveTranscript from '../components/LiveTranscript.vue';
 import { useWorkbenchStore } from '../stores/workbench';
 import { useSystemStore } from '../stores/system';
+import { useModalA11y } from '../composables/useModalA11y';
 
 const workbenchStore = useWorkbenchStore();
 const systemStore = useSystemStore();
 const playerRef = ref<InstanceType<typeof VideoPlayer> | null>(null);
 const dismissed = ref(false);
+const showReExtractConfirm = ref(false);
+const reextractModalRef = ref<HTMLElement | null>(null);
+
+useModalA11y(showReExtractConfirm, reextractModalRef, {
+  initialFocusSelector: '.sl-modal-btn--cancel',
+  onClose: () => {
+    showReExtractConfirm.value = false;
+  },
+});
 
 const productionEngines = computed(() => {
   const list = systemStore.availableEngines.filter((e) => e.name !== 'mock');
@@ -223,6 +292,25 @@ watch(
   }
 );
 
+function handleStartExtractionClick() {
+  const existingDraft = workbenchStore.loadDraftFromStorage(workbenchStore.videoPath);
+  const hasExisting =
+    (existingDraft && existingDraft.entries.length > 0) ||
+    workbenchStore.entries.length > 0 ||
+    workbenchStore.hasUserEdits;
+
+  if (hasExisting && (workbenchStore.state === 'Review' || workbenchStore.hasUserEdits || workbenchStore.draftStatus === 'dirty')) {
+    showReExtractConfirm.value = true;
+    return;
+  }
+  workbenchStore.startExtraction();
+}
+
+function handleConfirmReExtract() {
+  showReExtractConfirm.value = false;
+  workbenchStore.startExtraction({ force: true });
+}
+
 function handleTranscriptSeek(timeSec: number) {
   playerRef.value?.seekTo(timeSec);
 }
@@ -254,13 +342,14 @@ function handleDetectCurrentPlayhead() {
 
 .sl-workbench-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(380px, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
+  gap: 12px;
   width: 100%;
   height: calc(100vh - 48px);
-  padding: 14px 16px;
+  padding: 10px 14px;
   background: var(--sl-surface-ground);
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 @media (max-width: 960px) {
@@ -274,10 +363,11 @@ function handleDetectCurrentPlayhead() {
 .sl-left-pane {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   height: 100%;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* 顶栏工具条：极简 macOS 紧凑风格 */
@@ -285,15 +375,16 @@ function handleDetectCurrentPlayhead() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 2px 0;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .sl-top-bar-left {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
 }
@@ -306,7 +397,7 @@ function handleDetectCurrentPlayhead() {
   border: 1px solid var(--sl-border-standard);
   color: var(--sl-text-secondary);
   border-radius: var(--sl-radius-sm);
-  padding: 6px 12px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -337,8 +428,8 @@ function handleDetectCurrentPlayhead() {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--sl-border-subtle);
   border-radius: var(--sl-radius-sm);
-  padding: 5px 10px;
-  max-width: 320px;
+  padding: 4px 8px;
+  max-width: 240px;
   overflow: hidden;
 }
 
@@ -378,7 +469,7 @@ function handleDetectCurrentPlayhead() {
   border: 1px solid var(--sl-border-standard);
   color: var(--sl-text-primary);
   border-radius: var(--sl-radius-sm);
-  padding: 6px 26px 6px 10px;
+  padding: 5px 24px 5px 8px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -398,7 +489,7 @@ function handleDetectCurrentPlayhead() {
 
 .sl-select-arrow {
   position: absolute;
-  right: 8px;
+  right: 6px;
   width: 10px;
   height: 10px;
   color: var(--sl-text-tertiary);
@@ -414,8 +505,8 @@ function handleDetectCurrentPlayhead() {
   border: none;
   border-radius: var(--sl-radius-sm);
   color: #ffffff;
-  padding: 6px 14px;
-  font-size: 12.5px;
+  padding: 5px 12px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
@@ -446,7 +537,7 @@ function handleDetectCurrentPlayhead() {
   border: 1px solid rgba(255, 69, 58, 0.35);
   border-radius: var(--sl-radius-sm);
   color: #ff453a;
-  padding: 6px 12px;
+  padding: 5px 10px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -493,11 +584,11 @@ function handleDetectCurrentPlayhead() {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border-radius: var(--sl-radius-sm);
   border: 1px solid var(--sl-border-standard);
   background: var(--sl-surface-card);
-  font-size: var(--sl-font-size-sm);
+  font-size: var(--sl-font-size-xs);
   flex-shrink: 0;
 }
 
@@ -533,8 +624,8 @@ function handleDetectCurrentPlayhead() {
 .sl-video-stage-container {
   width: 100%;
   aspect-ratio: 16 / 9;
-  max-height: calc(100vh - 170px);
-  min-height: 280px;
+  max-height: calc(100vh - 160px);
+  min-height: 200px;
   border-radius: var(--sl-radius-md);
   overflow: hidden;
   flex-shrink: 0;
@@ -551,16 +642,18 @@ function handleDetectCurrentPlayhead() {
   gap: 8px;
   padding: 2px 4px;
   flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .sl-aux-hint {
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--sl-text-tertiary);
 }
 
 .sl-aux-right {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .sl-aux-btn {
@@ -572,6 +665,7 @@ function handleDetectCurrentPlayhead() {
   font-size: 11px;
   cursor: pointer;
   transition: var(--sl-transition-snappy);
+  white-space: nowrap;
 }
 
 .sl-aux-btn:hover:not(:disabled) {
@@ -601,7 +695,7 @@ function handleDetectCurrentPlayhead() {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: 11px;
   color: #5ac8fa;
 }
 
@@ -615,7 +709,7 @@ function handleDetectCurrentPlayhead() {
 }
 
 .sl-aux-feedback {
-  font-size: 11.5px;
+  font-size: 11px;
   color: #30d158;
   animation: sl-feedback-fade 3s ease-out forwards;
 }
@@ -632,5 +726,78 @@ function handleDetectCurrentPlayhead() {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* 重新提取确认弹窗 (Feature 12515) */
+.sl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.sl-modal-card {
+  background: var(--sl-surface-elevated, #2c2c2e);
+  border: 1px solid var(--sl-border-standard, rgba(255, 255, 255, 0.15));
+  border-radius: var(--sl-radius-lg, 12px);
+  padding: 24px;
+  max-width: 440px;
+  width: 90%;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
+  outline: none;
+}
+
+.sl-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #ff9f0a;
+  margin: 0 0 12px 0;
+}
+
+.sl-modal-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sl-text-secondary, #8e8e93);
+  margin: 0 0 20px 0;
+}
+
+.sl-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sl-modal-btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: var(--sl-radius-sm, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sl-modal-btn--cancel {
+  background: var(--sl-surface-base, #1c1c1e);
+  border: 1px solid var(--sl-border-standard, rgba(255, 255, 255, 0.15));
+  color: var(--sl-text-primary, #ffffff);
+}
+
+.sl-modal-btn--cancel:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sl-modal-btn--confirm {
+  background: var(--sl-color-error, #ff453a);
+  border: 1px solid rgba(255, 69, 58, 0.4);
+  color: #ffffff;
+}
+
+.sl-modal-btn--confirm:hover {
+  background: #e0382e;
 }
 </style>

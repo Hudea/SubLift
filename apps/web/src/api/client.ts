@@ -6,6 +6,10 @@ import type {
   FileFingerprintDTO,
   WorkspaceConfigDTO,
   RegionDetectionDTO,
+  JobSaveRequest,
+  JobSaveResponse,
+  BatchSaveRequest,
+  BatchSaveResponse,
 } from '../types/api';
 
 const API_BASE = '/api';
@@ -188,8 +192,81 @@ export class SubLiftApiClient {
     return res.text();
   }
 
-  static subscribeJobEvents(jobId: string, callbacks: SseJobCallbacks): () => void {
-    const eventSource = new EventSource(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/events`);
+  /**
+   * 服务端受控原子落盘保存单个任务字幕 (Feature 12514)
+   */
+  static async saveJobToDisk(
+    jobId: string,
+    options?: JobSaveRequest
+  ): Promise<JobSaveResponse> {
+    const res = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(options || {}),
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(errJson.error || `Failed to save subtitles: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  /**
+   * 服务端受控原子批量落盘保存字幕 (Feature 12514)
+   */
+  static async batchSaveToDisk(
+    options?: BatchSaveRequest
+  ): Promise<BatchSaveResponse> {
+    const res = await fetch(`${API_BASE}/export/batch-save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(options || {}),
+    });
+    if (!res.ok) {
+      const errJson = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(errJson.error || `Failed to batch save subtitles: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  static async getJobs(): Promise<import('../types/api').JobDetailDTO[]> {
+    const res = await fetch(`${API_BASE}/jobs`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch jobs: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  static async getJob(jobId: string): Promise<import('../types/api').JobDetailDTO> {
+    const res = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to fetch job: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  static subscribeJobEvents(
+    jobId: string,
+    callbacks: SseJobCallbacks,
+    options?: import('../types/api').SubscribeJobEventsOptions
+  ): () => void {
+    let url = `${API_BASE}/jobs/${encodeURIComponent(jobId)}/events`;
+    if (options?.lastEventId !== undefined && options.lastEventId !== null && options.lastEventId !== '') {
+      url += `?cursor=${encodeURIComponent(String(options.lastEventId))}`;
+    }
+    const eventSource = new EventSource(url);
 
     if (callbacks.onProgress) {
       eventSource.addEventListener('progress', (e: MessageEvent) => {

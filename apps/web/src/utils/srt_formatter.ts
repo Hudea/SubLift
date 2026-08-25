@@ -1,5 +1,6 @@
 import type { SubtitleEntry } from '../types/api';
 import { formatSrtTimestamp } from './timecode';
+import { createZipArchive, downloadZipBlob } from './zip';
 
 /**
  * 将 SubtitleEntry 列表格式化为标准规范的 UTF-8 SRT 字幕文本
@@ -116,7 +117,7 @@ export function parseSrt(srtText: string): SubtitleEntry[] {
 }
 
 /**
- * 触发浏览器客户端直接下载 SRT 文件 (Blob URL)
+ * 触发浏览器客户端直接下载单个 SRT 文件 (Blob URL)
  */
 export function exportSrtFile(entries: SubtitleEntry[], baseFilename: string): void {
   const content = formatSrt(entries);
@@ -132,4 +133,32 @@ export function exportSrtFile(entries: SubtitleEntry[], baseFilename: string): v
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+export interface BatchSrtItem {
+  name: string;
+  entries: SubtitleEntry[];
+}
+
+/**
+ * 将多个任务的字幕打包为单一 ZIP 归档并触发单次浏览器下载（杜绝连续触发多个下载的 hack）
+ */
+export function exportBatchZip(items: BatchSrtItem[], zipFilename: string = 'subtitles_batch.zip'): boolean {
+  const validItems = items.filter((item) => item.entries && item.entries.length > 0);
+  if (validItems.length === 0) {
+    return false;
+  }
+
+  const zipFiles = validItems.map((item) => {
+    const cleanName = (item.name || 'subtitles').replace(/\.[^/.]+$/, '');
+    const srtText = formatSrt(item.entries);
+    return {
+      name: `${cleanName}.srt`,
+      content: srtText,
+    };
+  });
+
+  const zipBlob = createZipArchive(zipFiles);
+  downloadZipBlob(zipBlob, zipFilename);
+  return true;
 }

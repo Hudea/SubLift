@@ -42,7 +42,8 @@ export interface JobConfig {
   engine: OcrEngineName;
   fps: number;
   confidence_threshold: number;
-  region_box?: NormalizedRegionBox;
+  region_box?: NormalizedRegionBox | null;
+  script?: string;
 }
 
 export interface CreateJobResponse {
@@ -88,6 +89,21 @@ export interface SseJobCallbacks {
   onCancelled?: (reason: string) => void;
 }
 
+export interface SubscribeJobEventsOptions {
+  lastEventId?: number | string;
+}
+
+export interface JobDetailDTO {
+  job_id: string;
+  config: JobConfig;
+  status: string;
+  created_at_ms: number;
+  started_at_ms: number;
+  ended_at_ms: number;
+  error_message: string;
+  entries: SubtitleEntry[];
+}
+
 /** 本机指纹反查（Feature 12507）：文件名 + 大小 + 首尾 4KB 原始字节 hex */
 export interface FileFingerprintDTO {
   name: string;
@@ -110,5 +126,47 @@ export interface WorkspaceVideoFileDTO {
   path: string;
   relative_path: string;
   size_bytes: number;
+}
+
+export type JobConflictPolicy = 'skip' | 'deterministic_rename' | 'replace';
+
+export interface JobSaveRequest {
+  target_path?: string;
+  conflict_policy?: JobConflictPolicy;
+  allow_empty?: boolean;
+}
+
+export interface JobSaveResponse {
+  job_id: string;
+  status: 'saved' | 'skipped' | 'empty_result';
+  target_path: string;
+  saved_path: string;
+  empty_result: boolean;
+  entry_count: number;
+}
+
+export interface BatchSaveRequest {
+  job_ids?: string[];
+  conflict_policy?: JobConflictPolicy;
+  allow_empty?: boolean;
+}
+
+export interface BatchSaveResultItem {
+  job_id: string;
+  status: 'saved' | 'skipped' | 'empty_result' | 'failed';
+  target_path?: string;
+  saved_path?: string;
+  empty_result?: boolean;
+  entry_count?: number;
+  error?: string;
+}
+
+export interface BatchSaveResponse {
+  total: number;
+  saved: number;
+  skipped: number;
+  empty_results: number;
+  failed: number;
+  results: BatchSaveResultItem[];
 }
 

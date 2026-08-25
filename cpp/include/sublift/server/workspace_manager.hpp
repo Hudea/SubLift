@@ -22,6 +22,37 @@ struct WorkspaceVideoFile {
   std::uintmax_t size_bytes = 0;
 };
 
+enum class ConflictPolicy {
+  DeterministicRename,
+  Skip,
+  Replace
+};
+
+inline ConflictPolicy parse_conflict_policy(const std::string& str) {
+  if (str == "skip") return ConflictPolicy::Skip;
+  if (str == "replace") return ConflictPolicy::Replace;
+  return ConflictPolicy::DeterministicRename;
+}
+
+inline std::string to_string(ConflictPolicy policy) {
+  switch (policy) {
+    case ConflictPolicy::Skip: return "skip";
+    case ConflictPolicy::Replace: return "replace";
+    case ConflictPolicy::DeterministicRename: return "deterministic_rename";
+  }
+  return "deterministic_rename";
+}
+
+struct DiskSaveResult {
+  bool success = false;
+  std::string status;  // "saved", "skipped", "error", "empty_result"
+  std::string target_path;
+  std::string saved_path;
+  std::string error_message;
+  bool empty_result = false;
+  int entry_count = 0;
+};
+
 class WorkspaceManager {
  public:
   explicit WorkspaceManager(const std::string& initial_dir = "",
@@ -53,6 +84,14 @@ class WorkspaceManager {
 
   /// 获取抽帧 JPEG 缓存目录 (<media_dir>/.sublift_cache/frames)
   [[nodiscard]] std::filesystem::path get_frames_cache_dir() const;
+
+  /// 原子落盘保存字幕文件（临时文件 -> fsync -> rename），支持冲突策略与空字幕检测
+  [[nodiscard]] DiskSaveResult save_subtitles_atomic(
+      const std::string& target_path_str,
+      const std::string& srt_content,
+      ConflictPolicy policy = ConflictPolicy::DeterministicRename,
+      bool allow_empty = false,
+      int entry_count = 0);
 
  private:
   void load_persisted_config();

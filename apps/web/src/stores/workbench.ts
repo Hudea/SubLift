@@ -11,6 +11,15 @@ import type {
   SseProgressData,
   FileFingerprintDTO,
 } from '../types/api';
+import {
+  type ExtractionConfig,
+  type SamplingQuality,
+  type RoiPolicy,
+  DEFAULT_BOTTOM_ROI,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  qualityToFps,
+  fpsToQuality,
+} from '../types/config';
 
 export type WorkbenchState =
   | 'Empty'
@@ -19,6 +28,16 @@ export type WorkbenchState =
   | 'Review'
   | 'Failed'
   | 'Cancelled';
+
+export type DraftStatus = 'saved' | 'dirty' | 'saving' | 'failed';
+
+export interface VersionedSubtitleDraft {
+  version: 1;
+  videoPath: string;
+  jobId?: string | null;
+  entries: SubtitleEntry[];
+  savedAt: number;
+}
 
 export const useWorkbenchStore = defineStore('workbench', () => {
   const systemStore = useSystemStore();
@@ -37,16 +56,20 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const previewSrc = ref<string>('');
   let pendingFingerprint: FileFingerprintDTO | null = null;
 
-  // 3. Extraction configuration
-  const selectedEngine = ref<OcrEngineName>('vision');
-  const targetFps = ref<number>(5.0);
-  const confidenceThreshold = ref<number>(0.0);
-  const regionBox = ref<NormalizedRegionBox>({
-    x: 0.0,
-    y: 0.7,
-    width: 1.0,
-    height: 0.3,
+  // 3. Extraction configuration (Harmonized with Feature 12513 truth source)
+  const selectedEngine = ref<OcrEngineName>(systemStore.preferredEngine);
+  const quality = ref<SamplingQuality>('fast');
+  const targetFps = computed<number>({
+    get: () => qualityToFps(quality.value),
+    set: (v: number) => {
+      quality.value = fpsToQuality(v);
+    },
   });
+  const confidenceThreshold = ref<number>(DEFAULT_CONFIDENCE_THRESHOLD);
+  const roiPolicy = ref<RoiPolicy>('auto');
+  const regionBox = ref<NormalizedRegionBox>({ ...DEFAULT_BOTTOM_ROI });
+  const script = ref<string | undefined>(undefined);
+  const activeConfigSnapshot = ref<Readonly<ExtractionConfig> | null>(null);
 
   // 3.5 Region Detection State (Feature 12509)
   const isDetectingRegion = ref<boolean>(false);
@@ -60,10 +83,179 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     pct: 0,
     eta_ms: 0,
   });
+  const progressPct = computed(() => Math.round((progress.value.pct ?? 0) * 100));
   const entries = ref<SubtitleEntry[]>([]);
   const activeEntryIndex = ref<number | null>(null);
 
   const errorMessage = ref<string | null>(null);
+
+  // 5. Versioned Draft State Machine & History Stack (Feature 12515)
+  const draftStatus = ref<DraftStatus>('saved');
+  const draftSavedAt = ref<number | null>(null);
+  const draftError = ref<string | null>(null);
+  const hasUserEdits = ref<boolean>(false);
+
+  const undoStack = ref<SubtitleEntry[][]>([]);
+  const redoStack = ref<SubtitleEntry[][]>([]);
+  const maxHistorySize = 50;
+  let autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const canUndo = computed(() => undoStack.value.length > 0 && !isLocked.value);
+  const canRedo = computed(() => redoStack.value.length > 0 && !isLocked.value);
+  const hasDraft = computed(() => entries.value.length > 0 || hasUserEdits.value);
+
+  // Persistence helpers
+  function getDraftStorageKey(keyPath: string): string {
+    return `sublift_draft:${keyPath.trim()}`;
+  }
+
+  function saveDraftToStorage(targetPath?: string): boolean {
+    const path = (targetPath || videoPath.value || '').trim();
+    if (!path) return false;
+
+    draftStatus.value = 'saving';
+    const payload: VersionedSubtitleDraft = {
+      version: 1,
+      videoPath: path,
+      jobId: activeJobId.value,
+      entries: JSON.parse(JSON.stringify(entries.value)),
+      savedAt: Date.now(),
+    };
+
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(getDraftStorageKey(path), JSON.stringify(payload));
+      }
+      draftStatus.value = 'saved';
+      draftSavedAt.value = payload.savedAt;
+      draftError.value = null;
+      return true;
+    } catch (err: any) {
+      draftStatus.value = 'failed';
+      draftError.value = err?.message || '草稿自动保存失败';
+      return false;
+    }
+  }
+
+  function loadDraftFromStorage(targetPath?: string): VersionedSubtitleDraft | null {
+    const path = (targetPath || videoPath.value || '').trim();
+    if (!path || typeof localStorage === 'undefined') return null;
+
+    try {
+      const raw = localStorage.getItem(getDraftStorageKey(path));
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      if (data && data.version === 1 && Array.isArray(data.entries)) {
+        return data as VersionedSubtitleDraft;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  function clearDraftFromStorage(targetPath?: string): void {
+    const path = (targetPath || videoPath.value || '').trim();
+    if (!path || typeof localStorage === 'undefined') return;
+    try {
+      localStorage.removeItem(getDraftStorageKey(path));
+    } catch {
+      // Ignore errors
+    }
+  }
+
+  function hasPersistedDraft(targetPath?: string): boolean {
+    return !!loadDraftFromStorage(targetPath);
+  }
+
+  function scheduleAutoSave(debounceMs = 300): void {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    draftStatus.value = 'dirty';
+    autoSaveTimer = setTimeout(() => {
+      saveDraftToStorage();
+    }, debounceMs);
+  }
+
+  function saveDraftNow(): boolean {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
+    return saveDraftToStorage();
+  }
+
+  function restoreDraft(targetPath?: string): boolean {
+    const draft = loadDraftFromStorage(targetPath);
+    if (!draft) return false;
+
+    entries.value = JSON.parse(JSON.stringify(draft.entries));
+    draftStatus.value = 'saved';
+    draftSavedAt.value = draft.savedAt;
+    draftError.value = null;
+    hasUserEdits.value = true;
+    clearHistory();
+    globalSubtitleSearcher.resetCache();
+    if (state.value === 'Ready' || state.value === 'Empty') {
+      state.value = 'Review';
+    }
+    return true;
+  }
+
+  function discardDraft(targetPath?: string): void {
+    clearDraftFromStorage(targetPath);
+    entries.value = [];
+    clearHistory();
+    hasUserEdits.value = false;
+    draftStatus.value = 'saved';
+    draftSavedAt.value = null;
+    draftError.value = null;
+    globalSubtitleSearcher.resetCache();
+    if (state.value === 'Review') {
+      state.value = 'Ready';
+    }
+  }
+
+  // History Stack operations
+  function recordHistory(): void {
+    const snapshot = JSON.parse(JSON.stringify(entries.value));
+    undoStack.value.push(snapshot);
+    if (undoStack.value.length > maxHistorySize) {
+      undoStack.value.shift();
+    }
+    redoStack.value = [];
+    hasUserEdits.value = true;
+    scheduleAutoSave();
+  }
+
+  function undo(): boolean {
+    if (!canUndo.value) return false;
+    const currentSnapshot = JSON.parse(JSON.stringify(entries.value));
+    redoStack.value.push(currentSnapshot);
+    const prev = undoStack.value.pop()!;
+    entries.value = prev;
+    globalSubtitleSearcher.resetCache();
+    scheduleAutoSave();
+    return true;
+  }
+
+  function redo(): boolean {
+    if (!canRedo.value) return false;
+    const currentSnapshot = JSON.parse(JSON.stringify(entries.value));
+    undoStack.value.push(currentSnapshot);
+    const next = redoStack.value.pop()!;
+    entries.value = next;
+    globalSubtitleSearcher.resetCache();
+    scheduleAutoSave();
+    return true;
+  }
+
+  function clearHistory(): void {
+    undoStack.value = [];
+    redoStack.value = [];
+  }
 
   // Computed state locks
   const isLocked = computed(() => state.value === 'Processing');
@@ -95,7 +287,6 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     releasePreviewSrc();
     videoPath.value = path.trim();
     videoName.value = name || videoPath.value.split(/[/\\]/).pop() || 'video.mp4';
-    entries.value = [];
     activeJobId.value = null;
     errorMessage.value = null;
     roiDetectionFeedback.value = null;
@@ -103,7 +294,31 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     detectionGeneration++;
     resetDefaultBottomRoi();
     globalSubtitleSearcher.resetCache();
-    state.value = 'Ready';
+    clearHistory();
+
+    // Check for saved draft for this video
+    const draft = loadDraftFromStorage(videoPath.value);
+    if (draft && draft.entries.length > 0) {
+      entries.value = JSON.parse(JSON.stringify(draft.entries));
+      draftStatus.value = 'saved';
+      draftSavedAt.value = draft.savedAt;
+      hasUserEdits.value = true;
+      state.value = 'Review';
+    } else {
+      entries.value = [];
+      draftStatus.value = 'saved';
+      draftSavedAt.value = null;
+      hasUserEdits.value = false;
+      state.value = 'Ready';
+    }
+
+    if (
+      systemStore.availableEngines.length > 0 &&
+      !systemStore.availableEngines.some((e) => e.name === selectedEngine.value) &&
+      selectedEngine.value !== 'mock'
+    ) {
+      selectedEngine.value = systemStore.preferredEngine;
+    }
 
     // 载入视频后自动静默触发一次多点智能识别 (Feature 12509 方案 A)
     autoDetectSubtitleRegion({ silent: true });
@@ -220,10 +435,47 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activeEntryIndex.value = globalSubtitleSearcher.findActiveIndex(entries.value, timeMs);
   }
 
+  function getExtractionConfig(): ExtractionConfig {
+    return {
+      engine: selectedEngine.value,
+      quality: quality.value,
+      confidence_threshold: confidenceThreshold.value,
+      roi_policy: roiPolicy.value,
+      region_box: { ...regionBox.value },
+      script: script.value,
+    };
+  }
+
   let cancelRequested = false;
 
-  async function startExtraction() {
+  async function startExtraction(options?: { force?: boolean }) {
     if (!canStart.value) return;
+
+    // 0. 审阅草稿覆盖防护（Feature 12515）：当存在已编辑条目或已落盘草稿时，必须显式确认 force: true
+    const existingDraft = loadDraftFromStorage(videoPath.value);
+    const hasExistingDraft =
+      (existingDraft && existingDraft.entries.length > 0) ||
+      entries.value.length > 0 ||
+      hasUserEdits.value;
+
+    if (hasExistingDraft && !options?.force && (state.value === 'Review' || hasUserEdits.value || draftStatus.value === 'dirty')) {
+      const err = '当前存在已编辑的字幕审阅草稿，重新提取需要显式确认以避免覆盖草稿';
+      errorMessage.value = err;
+      throw new Error(err);
+    }
+
+    // 1. 严格 Fail-Closed 引擎可用性校验（杜绝静默回退/切换）
+    const isEngineAvailable =
+      selectedEngine.value === 'mock' ||
+      (!systemStore.systemInfo ||
+        systemStore.systemInfo.engines.some((e) => e.name === selectedEngine.value && e.available));
+
+    if (!isEngineAvailable) {
+      const err = `所选 OCR 引擎不可用: ${selectedEngine.value} (严格禁止静默回退)`;
+      errorMessage.value = err;
+      state.value = 'Failed';
+      throw new Error(err);
+    }
 
     // blob 预览模式下先确保拿到服务端路径：优先用挂载的路径，
     // 其次用拖入时的指纹反查；都没有则明确引导，绝不拿空路径发起任务。
@@ -244,6 +496,24 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       videoPath.value = resolved;
     }
 
+    // 2. 冻结不可变配置快照
+    const frozenConfig: Readonly<ExtractionConfig> = Object.freeze({
+      engine: selectedEngine.value,
+      quality: quality.value,
+      confidence_threshold: confidenceThreshold.value,
+      roi_policy: roiPolicy.value,
+      region_box: Object.freeze({ ...regionBox.value }),
+      script: script.value,
+    });
+    activeConfigSnapshot.value = frozenConfig;
+
+    // 清除既有草稿与历史记录（显式重新提取）
+    clearDraftFromStorage(videoPath.value);
+    clearHistory();
+    hasUserEdits.value = false;
+    draftStatus.value = 'saved';
+    draftSavedAt.value = null;
+
     cancelRequested = false;
     state.value = 'Processing';
     entries.value = [];
@@ -254,10 +524,11 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     try {
       const resp = await SubLiftApiClient.createJob({
         video_path: videoPath.value,
-        engine: selectedEngine.value,
-        fps: targetFps.value,
-        confidence_threshold: confidenceThreshold.value,
-        region_box: regionBox.value,
+        engine: frozenConfig.engine,
+        fps: qualityToFps(frozenConfig.quality),
+        confidence_threshold: frozenConfig.confidence_threshold,
+        region_box: frozenConfig.region_box ? { ...frozenConfig.region_box } : null,
+        script: frozenConfig.script,
       });
 
       // 取消窗口防御：createJob 往返期间用户点了取消（当时还没有 job id），
@@ -277,13 +548,33 @@ export const useWorkbenchStore = defineStore('workbench', () => {
           progress.value = data;
         },
         onPushEntry: (data) => {
-          entries.value.push(data.entry);
+          // Ownership Separation & Late Event Isolation (Feature 12515):
+          // 如果用户已进入 Review 状态或已发生用户手动编辑，丢弃迟到的 SSE 推送，绝不覆盖用户草稿
+          if (state.value === 'Review' || hasUserEdits.value) {
+            return;
+          }
+
+          if (data && data.entry) {
+            const entry = data.entry;
+            const exists = entries.value.some(
+              (e) =>
+                e.index === entry.index ||
+                (e.start_ms === entry.start_ms && e.end_ms === entry.end_ms && e.text === entry.text)
+            );
+            if (!exists) {
+              entries.value.push(entry);
+            }
+          }
         },
         onDone: (_data) => {
           state.value = 'Review';
           if (sseUnsubscribe) {
             sseUnsubscribe();
             sseUnsubscribe = null;
+          }
+          // 提取完成后自动固化初始版本草稿
+          if (videoPath.value && entries.value.length > 0) {
+            saveDraftToStorage();
           }
         },
         onError: (err) => {
@@ -338,20 +629,27 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     if (isLocked.value) return;
     const target = entries.value.find((e) => e.index === index);
     if (target) {
+      recordHistory();
       Object.assign(target, updated);
       if (updated.start_ms !== undefined || updated.end_ms !== undefined) {
         entries.value.sort((a, b) => a.start_ms - b.start_ms);
         globalSubtitleSearcher.resetCache();
       }
+      scheduleAutoSave();
     }
   }
 
   function removeSubtitleEntry(index: number) {
     if (isLocked.value) return;
-    entries.value = entries.value.filter((e) => e.index !== index);
-    globalSubtitleSearcher.resetCache();
-    if (activeEntryIndex.value === index) {
-      activeEntryIndex.value = null;
+    const exists = entries.value.some((e) => e.index === index);
+    if (exists) {
+      recordHistory();
+      entries.value = entries.value.filter((e) => e.index !== index);
+      globalSubtitleSearcher.resetCache();
+      if (activeEntryIndex.value === index) {
+        activeEntryIndex.value = null;
+      }
+      scheduleAutoSave();
     }
   }
 
@@ -371,6 +669,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       confidence: 1.0,
     };
 
+    recordHistory();
     if (idx >= 0) {
       entries.value.splice(idx + 1, 0, newEntry);
     } else {
@@ -378,6 +677,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     }
     entries.value.sort((a, b) => a.start_ms - b.start_ms);
     globalSubtitleSearcher.resetCache();
+    scheduleAutoSave();
     return newEntry;
   }
 
@@ -388,12 +688,14 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     const cur = entries.value[idx];
     const next = entries.value[idx + 1];
 
+    recordHistory();
     cur.end_ms = Math.max(cur.end_ms, next.end_ms);
     cur.text = `${cur.text.trim()} ${next.text.trim()}`;
     cur.confidence = Math.round(((cur.confidence + next.confidence) / 2) * 100) / 100;
 
     entries.value.splice(idx + 1, 1);
     globalSubtitleSearcher.resetCache();
+    scheduleAutoSave();
   }
 
   function downloadSrt() {
@@ -407,6 +709,10 @@ export const useWorkbenchStore = defineStore('workbench', () => {
       sseUnsubscribe();
       sseUnsubscribe = null;
     }
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = null;
+    }
     releasePreviewSrc();
     state.value = 'Empty';
     videoPath.value = '';
@@ -418,9 +724,21 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     roiDetectionFeedback.value = null;
     isDetectingRegion.value = false;
     roiModifiedByUser.value = false;
+    selectedEngine.value = systemStore.preferredEngine;
+    quality.value = 'fast';
+    confidenceThreshold.value = DEFAULT_CONFIDENCE_THRESHOLD;
+    roiPolicy.value = 'auto';
+    activeConfigSnapshot.value = null;
     detectionGeneration++;
     resetDefaultBottomRoi();
     globalSubtitleSearcher.resetCache();
+
+    // Reset draft and history state
+    clearHistory();
+    hasUserEdits.value = false;
+    draftStatus.value = 'saved';
+    draftSavedAt.value = null;
+    draftError.value = null;
   }
 
   return {
@@ -431,19 +749,46 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     needsServerPath,
     currentTimeMs,
     selectedEngine,
+    quality,
     targetFps,
     confidenceThreshold,
+    roiPolicy,
     regionBox,
+    script,
+    activeConfigSnapshot,
     isDetectingRegion,
     roiModifiedByUser,
     roiDetectionFeedback,
     progress,
+    progressPct,
     entries,
     activeEntryIndex,
     errorMessage,
     isLocked,
     canStart,
     canExport,
+    // Draft & History exports (Feature 12515)
+    draftStatus,
+    draftSavedAt,
+    draftError,
+    hasUserEdits,
+    hasDraft,
+    canUndo,
+    canRedo,
+    undoStack,
+    redoStack,
+    getDraftStorageKey,
+    saveDraftToStorage,
+    loadDraftFromStorage,
+    clearDraftFromStorage,
+    hasPersistedDraft,
+    saveDraftNow,
+    restoreDraft,
+    discardDraft,
+    undo,
+    redo,
+    clearHistory,
+    // Core actions
     loadVideo,
     loadVideoBlob,
     attachServerPath,
@@ -451,6 +796,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     resetDefaultBottomRoi,
     autoDetectSubtitleRegion,
     updatePlaybackTime,
+    getExtractionConfig,
     startExtraction,
     cancelExtraction,
     updateSubtitleEntry,

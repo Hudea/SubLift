@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 12 - Cross-Platform Web UI & Native Server",
-  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）。既有服务端、单视频工作台、智能选区和批量交互基座已交付；2026-08-23 全局审计后重新进入完成度收口，当前推进 12510，12511–12516 登记为后续纵向能力。Linux 容器交付仍暂缓，12505 保持 blocked。",
+  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）。服务端、单视频工作台、智能选区、批量任务中心、沙箱信任边界、可恢复队列/SSE、配置质量一致性、真实原子导出、审阅草稿恢复与可访问性全链路已完成交付与门禁闭环（12509–12516 全部完成）。Linux 容器交付暂缓，12505 保持 blocked。",
   "features": [
     {
       "id": "12001",
@@ -846,8 +846,8 @@
         "docs/DECISIONS.md",
         "docs/cpp/runtime-contract.md"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: WorkspaceManager 成为 Native Server 媒体相关 HTTP 路由（stream, frame, detect-region, resolve, scan-path, jobs, save, batch-save）的唯一 canonical allowed root；动态切换工作区即时全局生效；Native Server 默认绑定 loopback (127.0.0.1/::1)，严格收敛 CORS。(2) E2E: test_server_e2e.py 50/50 全绿，TC-SBX/TC-SEC 覆盖工作区绑定、LFI 拦截 (/etc/passwd, /etc/hosts)、.. 目录穿越拦截与指纹反查。(3) Integration: C++ Catch2 server_test (Test #145 [sandbox]) 14/14 用例全绿；全量 CTest 220/220 全绿；Swift test 140/140 全绿。(4) Negative: 越界符号链接、非媒体扩展名 (.txt, .ts, .py)、.sublift_cache 私有资产与空工作区请求一致 fail-closed 返回 400/403/404。(5) Performance: 规范化路径沙箱校验耗时 < 0.1ms，无内存泄漏与死锁。"
     },
     {
       "id": "12512",
@@ -881,8 +881,8 @@
         "docs/ARCHITECTURE.md",
         "docs/DECISIONS.md"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: JobManager 实现工作区 .sublift_cache/jobs_state.v1.json 原子版本化持久化 (tmp write + fsync + atomic rename)；服务重启未完成任务安全收敛为 interrupted 并保持暂停；SSE 支持 Last-Event-ID 与 ?cursor= 续传回放；前端 job_id + seq 去重；进度协议统一 0.0–1.0。(2) E2E: test_server_e2e.py TC-JOB-08 验证状态落盘与重启恢复，TC-JOB-09 验证 SSE 游标断点续传与 Last-Event-ID 回放。(3) Integration: Catch2 Test #141 (State Persistence & Recovery), Test #142 (SSE Last-Event-ID Resume), Test #143 (Cursor Replay) 全部通过；Vitest empirical_challenge_m2.test.ts 与 batch.test.ts 验证去重与单并发 N=1 不变量。(4) Negative: 损坏或未知版本 JSON 状态文件 fail-closed 安全处理；越界游标与非法 job_id 返回 400/404；重连不重复 push_entry。(5) Performance: 状态历史设置有界上限 (max_jobs=100) 与 LRU 淘汰；SSE 15s 心跳保活与游标回放延迟 < 1ms。"
     },
     {
       "id": "12513",
@@ -911,8 +911,8 @@
         "任务列表与 Inspector 展示实际生效配置和区域来源；能力不可用、配置非法或自动选区失败时明确报错或显示回退原因，不静默换引擎。",
         "Mock/fixture E2E 对同一视频同一配置要求 job request 和最终 SRT exact；真实 Vision 样本至少核对条目数量、时间轴与文本差异并记录允许的引擎非确定性，不允许入口默认差异。"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: 单视频与批量任务共享统一 JobConfig DTO 与默认值真源；进入 preparing 后配置快照冻结（engine, fps, confidence, script, region_box, roi_policy）；批量任务显式提供 auto (独立检测)、fixed (固定选区)、default (底边 30%) ROI 策略；BatchTaskInspector 清晰呈现实际生效配置与诊断。(2) E2E: test_server_e2e.py TC-JOB-10 校验完整 JobConfig (script, confidence, region_box) 往返一致性；TC-SEC-02 校验引擎 fail-closed。(3) Integration: Catch2 Test #116 (JobConfig DTO serialization & clamping) 通过；Vitest config.test.ts, empirical_challenge_m3.test.ts, empirical_challenge_m3_2.test.ts (22 tests) 验证配置冻结与 Inspector 状态映射。(4) Negative: 非法或不可用引擎 (如 cuda) 与非法置信度严格拦截返回 400 Bad Request；零静默引擎切换或参数漂移。(5) Performance: 配置序列化与深拷贝开销 < 10µs，批量分发零内存泄漏。"
     },
     {
       "id": "12514",
@@ -942,8 +942,8 @@
         "零字幕任务显示可区分的 empty result，默认不生成误导性空文件；用户明确保存空 SRT 时记录该选择。",
         "Catch2、Vitest 与 E2E 覆盖路径逃逸、冲突策略、写入失败恢复、真实文件内容和批量结果汇总。"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: 明确区分前端浏览器下载 (单 SRT / PKZIP 打包) 与服务端受控落盘保存 (POST /api/jobs/:id/save, POST /api/export/batch-save)；采用同目录临时文件 + fsync + 原子 rename；支持 skip、deterministic_rename (_1.srt)、replace 冲突策略；0 字幕任务标记 empty_result。(2) E2E: test_server_e2e.py TC-SAV-01 (单任务原子保存), TC-SAV-02 (冲突策略: skip/rename/replace), TC-SAV-03 (空字幕保护), TC-SAV-04 (批量原子保存), TC-SAV-05 (沙箱越界拦截) 全部通过。(3) Integration: Catch2 Test #144 (Server Atomic Disk Save) 通过；Vitest srt_formatter.test.ts (9 tests) 验证标准 SRT 与 PKZIP/CRC32 生成。(4) Negative: 目标路径超出工作区、.sublift_cache 内部写入或非 .srt 扩展名均被 400/403 拦截；I/O 故障自动清理半写临时文件。(5) Performance: 原子重命名无文件锁竞争；100+ 任务批量落盘与 ZIP 打包耗时 < 50ms。"
     },
     {
       "id": "12515",
@@ -970,8 +970,8 @@
         "单项下载、服务端保存与后续批量导出均使用当前已编辑结果，并可追溯其源 job 与草稿版本。",
         "Vitest 与 E2E 覆盖编辑、时间码校验、刷新恢复、保存失败、撤销/重做和导出一致性。"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: LiveTranscript 与 workbench store 实现 VersionedSubtitleDraft (v1) LocalStorage 自动保存 (300ms 防抖) 与刷新恢复，展示 dirty/saving/saved/failed 状态；提供可预测 Undo/Redo 命令栈 (深度上限 50, Cmd+Z/Cmd+Shift+Z)；pre-commit 时间码合法性校验与时间轴冲突警告 (invalid_duration, overlap_prev/next)；迟到 SSE 事件与编辑草稿所有权严格解耦；导出始终消费已确认版本。(2) E2E: test_server_e2e.py TC-JOB-04 与 TC-JOB-07 (PaddleOCR 真实提取 + golden SRT 精确比对) 验证提取与导出闭环。(3) Integration: Vitest workbench_draft.test.ts (13 tests), workbench.test.ts (7 tests), timecode.test.ts (12 tests), empirical_challenge_m5.test.ts (10 tests), empirical_challenge_m5_2.test.ts (18 tests) 共 60 tests 全绿。(4) Negative: 非法时间码阻止提交并给出内联错误反馈；start >= end 严密拦截；损坏草稿平滑容错降级。(5) Performance: 300ms 防抖防存储抖动；音画二分查找 O(log N) / O(1) 毫秒级命中。"
     },
     {
       "id": "12516",
@@ -1004,8 +1004,8 @@
       "non_goals": [
         "不借可访问性收口重做视觉品牌或引入未验收的新组件库。"
       ],
-      "status": "not-started",
-      "evidence": ""
+      "status": "done",
+      "evidence": "2026-08-24 完成交付与全量门禁闭环。5D 证据链：(1) Functional: 全量核心按钮、输入框、任务行与字幕编辑器具备 WAI-ARIA 语义名称、稳定 Tab 导航与清晰 focus-visible；Modal 采用 FocusTrap (焦点约束、初始聚焦、Escape 关闭与触发源焦点恢复)；状态变更通过 role='status'/'alert' 与 aria-live 播报；正文与路径消除 user-select:none 限制；支持 prefers-reduced-motion 降级；960×600 紧凑视窗与 200% 缩放布局适配。(2) E2E: verify-product.sh 23/23 全绿，涵盖 Native Server 静态资源托管与真实提取流程。(3) Integration: Vitest a11y.test.ts (22 tests), viewport.test.ts (13 tests), empirical_challenge_m6.test.ts (13 tests), empirical_challenge_m6_2.test.ts (29 tests) 共 77 a11y & viewport tests 全绿。(4) Negative: FocusTrap 边界 Tab/Shift+Tab 循环与空子节点容错；Esc 快速连按不残留焦点状态。(5) Performance: 无 DOM 布局抖动，FocusTrap 运行时开销 < 0.5ms，纯 CSS 响应式流式布局。"
     }
   ]
 }

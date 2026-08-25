@@ -69,6 +69,16 @@ function animateToBox(target: NormalizedRegionBox, durationMs = 280) {
     animRafId = null;
   }
 
+  const isReduced = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (isReduced) {
+    localBox.x = target.x;
+    localBox.y = target.y;
+    localBox.width = target.width;
+    localBox.height = target.height;
+    scheduleRender();
+    return;
+  }
+
   const start = { ...localBox };
   const startTime = performance.now();
 
