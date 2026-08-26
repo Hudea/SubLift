@@ -19,6 +19,7 @@
 | 需求 / 范围 / 验收 | `docs/REQUIREMENTS.md` |
 | 历史技术决策 | `docs/DECISIONS.md` |
 | 踩过的坑 | `docs/HURDLES.md` |
+| 测试全景 / 运行测试决策 | `docs/TESTMAP.md` |
 | 当前该做什么 | `phases.json` → 对应 Phase 的 `detail_file` |
 | 历史功能组或旧链接 | `feature-list.json`（只读兼容查询） |
 

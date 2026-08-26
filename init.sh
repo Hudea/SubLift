@@ -13,6 +13,7 @@ required_files=(
   "AGENTS.md"
   "progress.md"
   "phases.json"
+  "docs/TESTMAP.md"
 )
 
 for path in "${required_files[@]}"; do

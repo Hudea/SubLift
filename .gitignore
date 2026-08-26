@@ -90,3 +90,4 @@ playground.xcworkspace
 # Package.resolved
 .build/
 .swiftpm/
+.agents
