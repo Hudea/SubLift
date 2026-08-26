@@ -75,7 +75,7 @@
 | **Native Server** (`cpp/src/server/`) | `./build/cpp/bin/sublift_tests "[server]"` | `./scripts/verify-web-server.sh` | 验证 HTTP/SSE 路由、媒体沙箱根、任务队列与 SRT 导出 |
 | **macOS 客户端** (`apps/macos/`) | `swift test --package-path apps/macos --filter <TestCase>` | `cd apps/macos && swift test` | 验证 SwiftUI 状态管理、批量任务中心、工作台交互与 IPC 通信 |
 | **Web 前端** (`apps/web/`) | `npx --prefix apps/web vitest run <file>` | `npm --prefix apps/web test && npm --prefix apps/web run build` | 验证 Pinia Stores、ROI 遮罩、实时字幕、A11y 与静态构建 |
-| **离线工具与基准** (`src/sublift/`, `src/sublift_offline/`) | `uv run pytest tests/<test_file>.py` | `./scripts/verify-offline.sh` | 验证隔离离线命名空间、Benchmark 评分与 Oracle 算法对齐 |
+| **离线工具与基准** (`src/sublift/`, `src/sublift_offline/`) | `uv run pytest tests/<test_file>.py` | `./scripts/verify-offline.sh` | 验证隔离离线命名空间、Benchmark 评分与 parity 门禁包装；冻结 Oracle 算法单测已移除，产品语义由 C++ `[parity]` 锁定 |
 
 ---
 
@@ -100,7 +100,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 | `apps/macos/Tests/SubLiftMacTests/` | XCTest<br>(Swift 5.9+) | **Active Gate** | macOS 客户端全量测试（批量任务队列、调度器、工作台状态、无障碍、IPC 客户端等 39 个测试套件） | `cd apps/macos && swift test` |
 | `apps/web/src/**/*.test.ts` | Vitest<br>(TypeScript / Vue 3) | **Active Gate** | Web 前端全量测试（Pinia Stores、ROI 映射、时间码、SRT 格式化、无障碍、批量任务等 21 个测试文件） | `npm --prefix apps/web test` |
 | `scripts/test_server_e2e.py` | Python 3.12+<br>(urllib / requests) | **Core E2E** | Web Native Server 核心接口端到端回归套件（HTTP/SSE、沙箱安全、Mock/Paddle 提取比对） | `uv run python scripts/test_server_e2e.py` |
-| `tests/` | Pytest<br>(Python 3.12+) | **Active Gate** / **Frozen Parity** | Python 离线工具、算法对齐与 Benchmark 模块单元测试（30 个测试套件） | `uv run pytest -m "not integration" --no-cov` |
+| `tests/` | Pytest<br>(Python 3.12+) | **Active Gate** | 隔离离线工具、Benchmark 与 parity 门禁包装（12 个测试文件）。冻结 Oracle 算法单测已移除，不在 pytest 中为退役产品 Python 背书 | `uv run pytest -m "not integration" --no-cov` |
 
 ### 3.2 对齐与黄金集资产 (Frozen Parity)
 

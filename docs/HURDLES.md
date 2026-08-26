@@ -252,7 +252,7 @@
 - **当前缓解**：无显式 profile 时默认 `auto`；GUI 按选中候选文字推断 `cjk/latin/auto`。该缓解降低了主路径误删概率，但不能覆盖 Vision 候选拆分或用户漏选英文候选的情况。
 - **验证计划**：建立短时、确定性的多语种 GT 回归集，覆盖英文位于句首/句中/句尾、带空格/无空格、不同字幕位置；通过 GUI 真实选区与 path mode 记录实际 script 推断和最终文本。只有真实主路径复现后再升级优先级。
 - **候选方案**：文字系统仅参与选行评分，不直接删除字符；扩展 `SubtitleProfile` 的水平范围，或使用 token/substring 级 bounding box，以用户选区几何和多帧空间稳定性区分字幕与横幅。完整方案实施前不得用品牌/缩写白名单代替。
-- **相关文件**：`src/sublift/pipeline/line_select.py`（CJK 边界清理）、`apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift`（script 推断）、`tests/test_line_select.py`、`apps/macos/Tests/SubLiftMacTests/RegionGeometryTests.swift`
+- **相关文件**：`src/sublift/pipeline/line_select.py`（冻结 Oracle 的 CJK 边界清理）、`apps/macos/Sources/SubLiftMac/Core/VideoCoordinateMapper.swift`（script 推断）、`cpp/tests/line_select_test.cpp`、`apps/macos/Tests/SubLiftMacTests/RegionGeometryTests.swift`
 
 ---
 
