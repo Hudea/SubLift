@@ -107,6 +107,45 @@ describe('useWorkbenchStore - Milestone 5 (Feature 12515: 字幕审阅草稿与�
       expect(store.hasUserEdits).toBe(true);
     });
 
+    it('isolates drafts by video path and ignores corrupt storage', () => {
+      const store = useWorkbenchStore();
+      store.loadVideo('/workspace/video_a.mp4');
+      store.entries = [{ index: 1, start_ms: 1200, end_ms: 3400, text: 'Video A', confidence: 0.95 }];
+      store.updateSubtitleEntry(1, { text: 'Video A (Edited)' });
+      store.saveDraftNow();
+
+      store.loadVideo('/workspace/video_b.mp4');
+      expect(store.entries.length).toBe(0);
+      expect(store.hasUserEdits).toBe(false);
+
+      store.loadVideo('/workspace/video_a.mp4');
+      expect(store.entries[0].text).toBe('Video A (Edited)');
+      expect(store.state).toBe('Review');
+
+      const badPath = '/workspace/corrupted_video.mp4';
+      const key = store.getDraftStorageKey(badPath);
+      localStorage.setItem(key, '{ "version": 1, "entries": [ { invalid');
+      expect(() => store.loadVideo(badPath)).not.toThrow();
+      expect(store.entries.length).toBe(0);
+      expect(store.state).toBe('Ready');
+      expect(store.hasPersistedDraft(badPath)).toBe(false);
+
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          version: 2,
+          videoPath: badPath,
+          entries: [{ index: 1, start_ms: 100, end_ms: 200, text: 'V2', confidence: 1 }],
+        })
+      );
+      expect(() => store.loadVideo(badPath)).not.toThrow();
+      expect(store.entries.length).toBe(0);
+
+      localStorage.setItem(key, JSON.stringify({ version: 1, videoPath: badPath, entries: 'not-an-array' }));
+      expect(() => store.loadVideo(badPath)).not.toThrow();
+      expect(store.entries.length).toBe(0);
+    });
+
     it('handles localStorage quota/failure gracefully with status failed', () => {
       vi.stubGlobal('localStorage', {
         getItem: () => null,
@@ -258,6 +297,26 @@ describe('useWorkbenchStore - Milestone 5 (Feature 12515: 字幕审阅草稿与�
       store.redo();
       expect(store.entries.length).toBe(1);
       expect(store.entries[0].text).toBe('Hello World');
+    });
+
+    it('caps undo history at 50 and ignores extra undos past the start', () => {
+      const store = useWorkbenchStore();
+      store.loadVideo('/workspace/history_cap.mp4');
+      store.entries = [{ index: 1, start_ms: 1000, end_ms: 2000, text: 'Step 0', confidence: 1.0 }];
+
+      for (let i = 1; i <= 55; i += 1) {
+        store.updateSubtitleEntry(1, { text: `Step ${i}` });
+      }
+      expect(store.undoStack.length).toBe(50);
+      expect(store.entries[0].text).toBe('Step 55');
+
+      for (let i = 0; i < 50; i += 1) {
+        expect(store.undo()).toBe(true);
+      }
+      expect(store.canUndo).toBe(false);
+      expect(store.entries[0].text).toBe('Step 5');
+      expect(store.undo()).toBe(false);
+      expect(store.entries[0].text).toBe('Step 5');
     });
 
     it('clears redo stack when a new mutation branch occurs after undo', () => {

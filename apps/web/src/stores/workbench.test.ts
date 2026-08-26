@@ -30,17 +30,23 @@ describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
     const store = useWorkbenchStore();
     expect(store.progressPct).toBe(0);
 
-    store.progress = { stage: 'extracting', pct: 0.125, eta_ms: 5000 };
-    expect(store.progressPct).toBe(13);
-
-    store.progress = { stage: 'extracting', pct: 0.5, eta_ms: 2500 };
-    expect(store.progressPct).toBe(50);
-
-    store.progress = { stage: 'extracting', pct: 0.999, eta_ms: 10 };
-    expect(store.progressPct).toBe(100);
-
-    store.progress = { stage: 'done', pct: 1.0 };
-    expect(store.progressPct).toBe(100);
+    const edges: [number | undefined, number][] = [
+      [0.0, 0],
+      [0.001, 0],
+      [0.0049, 0],
+      [0.005, 1],
+      [0.125, 13],
+      [0.5, 50],
+      [0.9949, 99],
+      [0.995, 100],
+      [0.999, 100],
+      [1.0, 100],
+      [undefined, 0],
+    ];
+    for (const [pct, expected] of edges) {
+      store.progress = { stage: 'extracting', pct: pct as number };
+      expect(store.progressPct).toBe(expected);
+    }
   });
 
   it('deduplicates incoming subtitle entries on replayed SSE events', async () => {
@@ -76,6 +82,25 @@ describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
     expect(store.entries.length).toBe(1);
 
     // Next entry
+    sse.cb?.onPushEntry?.({
+      job_id: 'wb-job-1',
+      entry: { index: 2, start_ms: 1600, end_ms: 3000, text: 'Next line', confidence: 0.92 },
+    });
+    expect(store.entries.length).toBe(2);
+
+    // Same timestamps+text with a new index, or same index with different text, stay collapsed
+    sse.cb?.onPushEntry?.({
+      job_id: 'wb-job-1',
+      entry: { index: 99, start_ms: 500, end_ms: 1500, text: 'Hello subtitle', confidence: 0.99 },
+    });
+    expect(store.entries.length).toBe(2);
+    sse.cb?.onPushEntry?.({
+      job_id: 'wb-job-1',
+      entry: { index: 1, start_ms: 99999, end_ms: 100000, text: 'Replaced text', confidence: 0.1 },
+    });
+    expect(store.entries.length).toBe(2);
+    expect(store.entries[0].text).toBe('Hello subtitle');
+
     sse.cb?.onPushEntry?.({
       job_id: 'wb-job-1',
       entry: { index: 2, start_ms: 1600, end_ms: 3000, text: 'Next line', confidence: 0.92 },
@@ -144,6 +169,14 @@ describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
       expect(capturedJobConfig.fps).toBe(12.0);
       expect(capturedJobConfig.confidence_threshold).toBe(0.3);
       expect(capturedJobConfig.region_box).toEqual({ x: 0.1, y: 0.75, width: 0.8, height: 0.2 });
+
+      store.quality = 'fast';
+      store.selectedEngine = 'paddle';
+      store.confidenceThreshold = 0.99;
+      expect(store.activeConfigSnapshot?.quality).toBe('fine');
+      expect(store.activeConfigSnapshot?.engine).toBe('vision');
+      expect(store.activeConfigSnapshot?.confidence_threshold).toBe(0.3);
+      expect(capturedJobConfig.fps).toBe(12.0);
     });
 
     it('fails closed when selected OCR engine is unavailable (no silent fallback)', async () => {

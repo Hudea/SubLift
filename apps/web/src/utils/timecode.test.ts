@@ -119,5 +119,24 @@ describe('timecode utils', () => {
       const conflicts = detectTimelineConflicts(entries);
       expect(conflicts.size).toBe(0);
     });
+
+    it('accepts 1ms duration and touching boundaries, flags containment', () => {
+      expect(validateTimecodeRange(3000, 3001).valid).toBe(true);
+      expect(detectTimelineConflicts([{ index: 1, start_ms: 3000, end_ms: 3001, text: '1ms' }]).size).toBe(0);
+
+      expect(
+        detectTimelineConflicts([
+          { index: 1, start_ms: 5000, end_ms: 10000, text: 'A' },
+          { index: 2, start_ms: 10000, end_ms: 15000, text: 'B' },
+        ]).size
+      ).toBe(0);
+
+      const contained = detectTimelineConflicts([
+        { index: 1, start_ms: 1000, end_ms: 10000, text: 'Outer' },
+        { index: 2, start_ms: 3000, end_ms: 6000, text: 'Inner' },
+      ]);
+      expect(contained.get(1)?.some((w) => w.type === 'overlap_next')).toBe(true);
+      expect(contained.get(2)?.some((w) => w.type === 'overlap_prev')).toBe(true);
+    });
   });
 });

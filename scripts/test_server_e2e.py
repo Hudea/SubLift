@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import http.client
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -35,12 +37,14 @@ class SubLiftServerProcess:
         host: str = "127.0.0.1",
         static_dir: str | None = None,
         extra_env: dict[str, str] | None = None,
+        media_dir: str | None = None,
     ) -> None:
         self.binary_path = binary_path
         self.port = port
         self.host = host
         self.static_dir = static_dir
         self.extra_env = extra_env or {}
+        self.media_dir = media_dir
         self.process: subprocess.Popen[str] | None = None
 
     def start(self, timeout_sec: float = 5.0) -> None:
@@ -50,6 +54,8 @@ class SubLiftServerProcess:
         cmd = [self.binary_path, "--host", self.host, "-p", str(self.port)]
         if self.static_dir:
             cmd.extend(["--static-dir", self.static_dir])
+        if self.media_dir:
+            cmd.extend(["--media-dir", self.media_dir])
 
         # The E2E suite asserts permissive CORS headers (TC-SYS-01 / TC-CORS-01);
         # opt the self-spawned server into CORS so those assertions stay meaningful.
@@ -91,6 +97,10 @@ class SubLiftServerProcess:
                 except subprocess.TimeoutExpired:
                     self.process.kill()
                     self.process.wait(timeout=1.0)
+            if self.process.stdout:
+                self.process.stdout.close()
+            if self.process.stderr:
+                self.process.stderr.close()
             self.process = None
 
 
@@ -134,11 +144,13 @@ class TestSubLiftServerE2E(unittest.TestCase):
     expect_cors: bool = False
     workspace_root: str = ""
     api_path_prefix: str = ""
+    server_binary: str = ""
 
     @classmethod
     def setUpClass(cls) -> None:
         project_root = Path(__file__).resolve().parents[1]
         binary_path = str(project_root / "build" / "cpp" / "bin" / "sublift_server")
+        cls.server_binary = binary_path
         static_dir = str(project_root / "apps" / "web" / "dist")
 
         # Remote-server mode: fixtures may live in a client-side directory that
@@ -272,6 +284,38 @@ class TestSubLiftServerE2E(unittest.TestCase):
             return quote(host_path, safe="/")
         rel = os.path.relpath(host_path, self.workspace_root).replace(os.sep, "/")
         return quote(self.api_path_prefix.rstrip("/") + "/" + rel, safe="/")
+
+    def _require_local_binary(self) -> str:
+        if not self.server_binary or not os.path.isfile(self.server_binary):
+            self.skipTest("local sublift_server binary required for sidecar state tests")
+        if os.environ.get("SUBLIFT_SERVER_URL"):
+            self.skipTest("sidecar restart tests cannot run against SUBLIFT_SERVER_URL")
+        return self.server_binary
+
+    def _start_sidecar(self, media_dir: str) -> SubLiftServerProcess:
+        sidecar = SubLiftServerProcess(
+            self._require_local_binary(),
+            find_free_port(),
+            media_dir=media_dir,
+            extra_env={"SUBLIFT_ALLOWED_MEDIA_ROOT": media_dir, "SUBLIFT_CORS_ORIGIN": "*"},
+        )
+        sidecar.start()
+        return sidecar
+
+    def _sidecar_req(
+        self,
+        sidecar: SubLiftServerProcess,
+        method: str,
+        path: str,
+        headers: dict[str, str] | None = None,
+        body: str | bytes | None = None,
+    ) -> tuple[int, dict[str, str], bytes]:
+        return make_request(sidecar.host, sidecar.port, method, path, headers, body)
+
+    @staticmethod
+    def _event_ids(body: bytes) -> list[int]:
+        text = body.decode("utf-8", errors="replace")
+        return [int(match) for match in re.findall(r"id:\s*(\d+)", text)]
 
     # -------------------------------------------------------------------------
     # 1. /api/system/info & OPTIONS CORS Tests
@@ -909,6 +953,23 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertIn("id: ", stream_text2)
         self.assertNotIn("id: 1\n", stream_text2)
 
+        full_st, _, full_body = self.req("GET", f"/api/jobs/{job_id}/events")
+        self.assertEqual(full_st, 200)
+        full_ids = self._event_ids(full_body)
+        self.assertGreaterEqual(len(full_ids), 2)
+        high_cursor = max(full_ids) + 10
+        high_st, _, high_body = self.req(
+            "GET", f"/api/jobs/{job_id}/events?cursor={high_cursor}"
+        )
+        self.assertEqual(high_st, 200)
+        self.assertEqual(self._event_ids(high_body), [])
+
+        bad_st, _, bad_body = self.req(
+            "GET", f"/api/jobs/{job_id}/events?cursor=invalid_not_number"
+        )
+        self.assertEqual(bad_st, 200)
+        self.assertEqual(self._event_ids(bad_body), full_ids)
+
     def test_jobs_10_unified_job_config_with_script_and_confidence(self) -> None:
         """TC-JOB-10: POST /api/jobs accepts full unified JobConfig (script, confidence, region_box) and preserves it."""
         job_payload = {
@@ -938,6 +999,242 @@ class TestSubLiftServerE2E(unittest.TestCase):
         self.assertEqual(cfg.get("script"), "Hans")
         self.assertEqual(cfg.get("region_box", {}).get("x"), 0.05)
         self.assertEqual(cfg.get("region_box", {}).get("y"), 0.72)
+
+        omitted = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+        }
+        json_headers = {"Content-Type": "application/json"}
+        st_om, _, body_om = self.req(
+            "POST", "/api/jobs", body=json.dumps(omitted), headers=json_headers
+        )
+        self.assertEqual(st_om, 201)
+        omit_id = json.loads(body_om.decode("utf-8"))["job_id"]
+        st_od, _, body_od = self.req("GET", f"/api/jobs/{omit_id}")
+        self.assertEqual(st_od, 200)
+        omit_cfg = json.loads(body_od.decode("utf-8")).get("config", {})
+        self.assertTrue(omit_cfg.get("script") in (None, ""))
+        self.assertAlmostEqual(float(omit_cfg.get("confidence_threshold", 0.0)), 0.0)
+
+        clamped = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+            "region_box": {"x": -0.5, "y": 1.8, "width": -0.2, "height": 5.0},
+        }
+        st_c, _, body_c = self.req(
+            "POST", "/api/jobs", body=json.dumps(clamped), headers=json_headers
+        )
+        self.assertEqual(st_c, 201)
+        clamp_id = json.loads(body_c.decode("utf-8"))["job_id"]
+        _, _, body_cd = self.req("GET", f"/api/jobs/{clamp_id}")
+        box = json.loads(body_cd.decode("utf-8")).get("config", {}).get("region_box", {})
+        self.assertEqual(box.get("x"), 0.0)
+        self.assertEqual(box.get("y"), 1.0)
+        self.assertEqual(box.get("width"), 0.0)
+        self.assertEqual(box.get("height"), 1.0)
+
+        for bad_engine in ("python", ""):
+            bad_payload = {"video_path": self.api(self.synth_mp4_path), "engine": bad_engine}
+            st_bad, _, _ = self.req(
+                "POST", "/api/jobs", body=json.dumps(bad_payload), headers=json_headers
+            )
+            self.assertEqual(st_bad, 400, f"engine {bad_engine!r} must fail closed")
+
+    def test_jobs_11_reload_interrupted_corrupt_and_lru(self) -> None:
+        """Queued/running jobs become interrupted; corrupt state is fail-closed; LRU caps at 50."""
+        media_dir = tempfile.mkdtemp(prefix="sublift_e2e_state_")
+        cache_dir = Path(media_dir) / ".sublift_cache"
+        cache_dir.mkdir(parents=True)
+        state_file = cache_dir / "jobs_state.v1.json"
+        video = str(Path(media_dir) / "sample.mp4")
+        Path(video).write_bytes(b"not-a-real-mp4")
+
+        try:
+            state_file.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "updated_at_ms": 1,
+                        "jobs": [
+                            {
+                                "job_id": "job-queued-crash-1",
+                                "config": {"video_path": video, "engine": "mock", "fps": 3.0},
+                                "status": "queued",
+                                "entries": [],
+                            },
+                            {
+                                "job_id": "job-running-crash-2",
+                                "config": {"video_path": video, "engine": "mock"},
+                                "status": "running",
+                                "entries": [],
+                            },
+                            {
+                                "job_id": "job-completed-crash-3",
+                                "config": {"video_path": video, "engine": "mock"},
+                                "status": "completed",
+                                "entries": [
+                                    {
+                                        "index": 1,
+                                        "start_ms": 1000,
+                                        "end_ms": 2500,
+                                        "text": "Hello SubLift First Line",
+                                        "confidence": 0.96,
+                                    }
+                                ],
+                            },
+                            {
+                                "job_id": "job-failed-crash-4",
+                                "config": {"video_path": video, "engine": "mock"},
+                                "status": "failed",
+                                "error_message": "Original failure reason preserved",
+                                "entries": [],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            sidecar = self._start_sidecar(media_dir)
+            try:
+                st, _, body = self._sidecar_req(sidecar, "GET", "/api/jobs")
+                self.assertEqual(st, 200)
+                jobs = {j["job_id"]: j for j in json.loads(body.decode("utf-8"))}
+                self.assertEqual(jobs["job-queued-crash-1"]["status"], "interrupted")
+                self.assertEqual(jobs["job-running-crash-2"]["status"], "interrupted")
+                self.assertEqual(jobs["job-completed-crash-3"]["status"], "completed")
+                completed = jobs["job-completed-crash-3"]
+                self.assertEqual(completed["entries"][0]["text"], "Hello SubLift First Line")
+                failed = jobs["job-failed-crash-4"]
+                self.assertEqual(failed["error_message"], "Original failure reason preserved")
+                export_path = "/api/jobs/job-completed-crash-3/export"
+                st_exp, _, exp_body = self._sidecar_req(sidecar, "GET", export_path)
+                self.assertEqual(st_exp, 200)
+                self.assertIn("Hello SubLift First Line", exp_body.decode("utf-8"))
+                queued_events = "/api/jobs/job-queued-crash-1/events"
+                st_sse, _, sse_body = self._sidecar_req(sidecar, "GET", queued_events)
+                self.assertEqual(st_sse, 200)
+                self.assertIn("interrupted", sse_body.decode("utf-8").lower())
+            finally:
+                sidecar.stop()
+
+            state_file.write_text("{ \"version\": 1, \"jobs\": [ { broken", encoding="utf-8")
+            sidecar = self._start_sidecar(media_dir)
+            try:
+                st, _, body = self._sidecar_req(sidecar, "GET", "/api/jobs")
+                self.assertEqual(st, 200)
+                self.assertEqual(json.loads(body.decode("utf-8")), [])
+            finally:
+                sidecar.stop()
+
+            mixed = {
+                "version": 1,
+                "jobs": [
+                    "invalid",
+                    {"invalid": True},
+                    {
+                        "job_id": "valid-surviving-job-1",
+                        "status": "completed",
+                        "config": {"video_path": video, "engine": "mock"},
+                        "entries": [
+                            {
+                                "start_ms": 100,
+                                "end_ms": 500,
+                                "text": "Valid entry",
+                                "confidence": 0.9,
+                            }
+                        ],
+                    },
+                    {
+                        "job_id": "valid-surviving-job-2",
+                        "status": "queued",
+                        "config": {"video_path": video, "engine": "mock"},
+                        "entries": [],
+                    },
+                ],
+            }
+            state_file.write_text(json.dumps(mixed), encoding="utf-8")
+            sidecar = self._start_sidecar(media_dir)
+            try:
+                st, _, body = self._sidecar_req(sidecar, "GET", "/api/jobs")
+                self.assertEqual(st, 200)
+                ids = {j["job_id"] for j in json.loads(body.decode("utf-8"))}
+                self.assertEqual(ids, {"valid-surviving-job-1", "valid-surviving-job-2"})
+            finally:
+                sidecar.stop()
+
+            state_file.write_text(
+                json.dumps(
+                    {
+                        "version": 1,
+                        "jobs": [
+                            {
+                                "job_id": f"job-lru-{i:02d}",
+                                "config": {"video_path": video, "engine": "mock"},
+                                "status": "completed",
+                                "created_at_ms": 1000 + i,
+                                "entries": [],
+                            }
+                            for i in range(60)
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            sidecar = self._start_sidecar(media_dir)
+            try:
+                st, _, body = self._sidecar_req(sidecar, "GET", "/api/jobs")
+                self.assertEqual(st, 200)
+                self.assertEqual(len(json.loads(body.decode("utf-8"))), 50)
+            finally:
+                sidecar.stop()
+            saved = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(saved.get("jobs", [])), 50)
+        finally:
+            shutil.rmtree(media_dir, ignore_errors=True)
+
+    def test_jobs_12_job_config_survives_restart(self) -> None:
+        """JobConfig fields persist across a clean server restart."""
+        if not self.ffmpeg_available:
+            self.skipTest("FFmpeg toolchain not available for video extraction test")
+        media_dir = tempfile.mkdtemp(prefix="sublift_e2e_restart_")
+        try:
+            video = os.path.join(media_dir, "restart.mp4")
+            shutil.copy2(self.synth_mp4_path, video)
+            sidecar = self._start_sidecar(media_dir)
+            job_id = ""
+            try:
+                payload = {
+                    "video_path": video,
+                    "engine": "mock",
+                    "fps": 8.0,
+                    "confidence_threshold": 0.42,
+                    "script": "Hans",
+                    "region_box": {"x": 0.12, "y": 0.78, "width": 0.76, "height": 0.18},
+                }
+                st, _, body = self._sidecar_req(
+                    sidecar, "POST", "/api/jobs", body=json.dumps(payload),
+                    headers={"Content-Type": "application/json"},
+                )
+                self.assertEqual(st, 201)
+                job_id = json.loads(body.decode("utf-8"))["job_id"]
+                time.sleep(0.3)
+            finally:
+                sidecar.stop()
+
+            sidecar = self._start_sidecar(media_dir)
+            try:
+                st, _, body = self._sidecar_req(sidecar, "GET", f"/api/jobs/{job_id}")
+                self.assertEqual(st, 200)
+                cfg = json.loads(body.decode("utf-8")).get("config", {})
+                self.assertEqual(cfg.get("script"), "Hans")
+                self.assertAlmostEqual(float(cfg.get("confidence_threshold", -1)), 0.42)
+                self.assertAlmostEqual(float(cfg.get("region_box", {}).get("x", -1)), 0.12)
+            finally:
+                sidecar.stop()
+        finally:
+            shutil.rmtree(media_dir, ignore_errors=True)
 
     # -------------------------------------------------------------------------
     # 5. Security & Sandbox Boundary Tests (Feature 12502 / 12504)
@@ -1513,6 +1810,70 @@ class TestSubLiftServerE2E(unittest.TestCase):
             headers={"Content-Type": "application/json"},
         )
         self.assertEqual(st3, 400)
+
+        nul_path = os.path.join(self.temp_dir, "test.srt") + "\x00.mp4"
+        st_nul, _, _ = self.req(
+            "POST",
+            f"/api/jobs/{job_id}/save",
+            body=json.dumps({"target_path": nul_path}),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertIn(st_nul, (400, 404))
+
+    def test_save_06_concurrent_replace_and_skip(self) -> None:
+        """Concurrent save requests stay consistent and leave no leftover temp files."""
+        if not self.synth_mp4_path or not os.path.exists(self.synth_mp4_path):
+            self.skipTest("Synthesized test video not available")
+
+        job_payload = {
+            "video_path": self.api(self.synth_mp4_path),
+            "engine": "mock",
+            "fps": 5.0,
+            "confidence_threshold": 0.0,
+            "region_box": {"x": 0.0, "y": 0.5, "width": 1.0, "height": 0.5},
+        }
+        st, _, body = self.req(
+            "POST",
+            "/api/jobs",
+            body=json.dumps(job_payload),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(st, 201)
+        job_id = json.loads(body.decode("utf-8"))["job_id"]
+        for _ in range(60):
+            time.sleep(0.1)
+            if self.req("GET", f"/api/jobs/{job_id}/export")[0] == 200:
+                break
+
+        replace_target = os.path.join(self.temp_dir, "concurrent_replace.srt")
+
+        def _save(policy: str, target: str) -> tuple[int, str]:
+            payload = {"target_path": target, "conflict_policy": policy, "allow_empty": False}
+            status, _, resp = self.req(
+                "POST",
+                f"/api/jobs/{job_id}/save",
+                body=json.dumps(payload),
+                headers={"Content-Type": "application/json"},
+            )
+            return status, resp.decode("utf-8", errors="replace")
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(lambda _: _save("replace", replace_target), range(8)))
+        self.assertTrue(all(status == 200 for status, _ in results))
+        self.assertTrue(all(json.loads(body)["status"] == "saved" for _, body in results))
+        self.assertTrue(os.path.exists(replace_target))
+        self.assertIn("-->", Path(replace_target).read_text(encoding="utf-8"))
+        leftovers = [name for name in os.listdir(self.temp_dir) if ".tmp." in name]
+        self.assertEqual(leftovers, [])
+
+        skip_target = os.path.join(self.temp_dir, "concurrent_skip.srt")
+        Path(skip_target).write_text("INITIAL PRE-EXISTING CONTENT", encoding="utf-8")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            skip_results = list(pool.map(lambda _: _save("skip", skip_target), range(8)))
+        self.assertTrue(all(status == 200 for status, _ in skip_results))
+        self.assertTrue(all(json.loads(body)["status"] == "skipped" for _, body in skip_results))
+        skip_text = Path(skip_target).read_text(encoding="utf-8")
+        self.assertEqual(skip_text, "INITIAL PRE-EXISTING CONTENT")
 
 
 def print_banner(text: str) -> None:

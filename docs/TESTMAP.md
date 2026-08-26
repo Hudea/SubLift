@@ -98,7 +98,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 | `scripts/verify-web-server.sh` | Bash | **Active Gate** | Web Native Server 本地验收门禁：Server 构建、静态前端构建、Server Catch2 测试、Python E2E 与 Vitest | `./scripts/verify-web-server.sh` |
 | `cpp/tests/` | Catch2 v3<br>(C++20 / ObjC++) | **Active Gate** | Native C++ 全量单元测试（Core / Pipeline / Adapters / Worker / Server / CLI）与 Parity 黄金集比对 | `ctest --test-dir build/cpp --output-on-failure` |
 | `apps/macos/Tests/SubLiftMacTests/` | XCTest<br>(Swift 5.9+) | **Active Gate** | macOS 客户端全量测试（批量任务队列、调度器、工作台状态、无障碍、IPC 客户端等 39 个测试套件） | `cd apps/macos && swift test` |
-| `apps/web/src/**/*.test.ts` | Vitest<br>(TypeScript / Vue 3) | **Active Gate** | Web 前端全量测试（Pinia Stores、ROI 映射、时间码、SRT 格式化、无障碍、批量任务等 21 个测试文件） | `npm --prefix apps/web test` |
+| `apps/web/src/**/*.test.ts` | Vitest<br>(TypeScript / Vue 3) | **Active Gate** | Web 前端全量测试（Pinia Stores、ROI 映射、时间码、SRT 格式化、无障碍、批量任务） | `npm --prefix apps/web test` |
 | `scripts/test_server_e2e.py` | Python 3.12+<br>(urllib / requests) | **Core E2E** | Web Native Server 核心接口端到端回归套件（HTTP/SSE、沙箱安全、Mock/Paddle 提取比对） | `uv run python scripts/test_server_e2e.py` |
 | `tests/` | Pytest<br>(Python 3.12+) | **Active Gate** | 隔离离线工具、Benchmark 与 parity 门禁包装（12 个测试文件）。冻结 Oracle 算法单测已移除，不在 pytest 中为退役产品 Python 背书 | `uv run pytest -m "not integration" --no-cov` |
 
@@ -118,11 +118,8 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 
 | 资产路径 / 目录 | 框架 / 语言 | 生命周期状态 | 目标范围 | 执行命令 |
 |---|---|---|---|---|
-| `scripts/challenge_m2_e2e.py` | Python 3.12+ | **Milestone Challenge** | Phase M2 端到端流水线挑战用例 | `uv run python scripts/challenge_m2_e2e.py` |
-| `scripts/challenge_m2_persistence.py` | Python 3.12+ | **Milestone Challenge** | Phase M2 状态与结果持久化挑战用例 | `uv run python scripts/challenge_m2_persistence.py` |
-| `scripts/challenge_m3_config.py` | Python 3.12+ | **Milestone Challenge** | Phase M3 配置流转与校验挑战用例 | `uv run python scripts/challenge_m3_config.py` |
-| `scripts/empirical_challenge_m4.py` | Python 3.12+ | **Milestone Challenge** | Phase M4 实证性能与识别质量挑战用例 | `uv run python scripts/empirical_challenge_m4.py` |
-| `apps/web/src/**/empirical_challenge_*.test.ts` | Vitest (TS) | **Milestone Challenge** | Phase M2/M3/M5/M6 Web Store、View 与组件状态实证挑战测试（含 `components/`, `stores/`, `views/` 7 个文件） | `npx --prefix apps/web vitest run apps/web/src/components/empirical_challenge_m6.test.ts` |
+| `scripts/challenges/` | Python 3.12+ | **archive-only** | Phase 12 里程碑挑战原稿。独有断言已吸收进 `scripts/test_server_e2e.py`（JOB-09/10/11/12、SAV-05/06） | 不进入任何 verify 门 |
+| `apps/web/src/**/empirical_challenge_*.challenge.ts` | TypeScript | **archive-only** | Phase 12 里程碑挑战原稿；已改名退出 Vitest。独有断言已吸收进 `workbench` / `batch` / `workbench_draft` / `timecode` 正规套件 | 不进入 `npm test` / `verify-product` |
 
 ### 3.4 诊断工具与基准资产 (Diagnostics & Benchmarks)
 
@@ -153,7 +150,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 ### 4.2 技术债收敛行动清单
 
 - [ ] **TD-01: 里程碑挑战脚本收敛 (Milestone Challenge Consolidation)**
-  - **现状**：`scripts/challenge_m*.py` 及 Web 端的 `empirical_challenge_m*.test.ts` 散落于各目录，属于各阶段遗留的实证验收资产。
+  - **现状**：Web `empirical_challenge_*.challenge.ts` 与 `scripts/challenges/` 已标 archive-only；独有断言已分别吸收进 Vitest 正规套件与 `test_server_e2e.py`。
   - **收敛路径**：在后续重构轮次中，将具有长期回归价值的用例整合入标准 E2E 套件（如 `test_server_e2e.py`）或标准 Vitest 测试中；无须重复运行的历史用例按归档流程统一管理，保持当前文件只读保留。
 - [ ] **TD-02: Parity 门禁原生化演进 (Native Parity Gate Convergence)**
   - **现状**：`scripts/parity/check_cutover_gate.py` 依赖 Python 运行时与历史 Oracle 依赖。

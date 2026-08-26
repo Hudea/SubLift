@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useBatchStore } from './batch';
+import { useSystemStore } from './system';
 import { SubLiftApiClient } from '../api/client';
+import { DEFAULT_BOTTOM_ROI } from '../types/config';
 import type { SseJobCallbacks } from '../types/api';
 
 describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 & Phase 8)', () => {
@@ -698,6 +700,319 @@ describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 
       expect(inspector?.isEngineAvailable).toBe(false);
       expect(inspector?.engineUnavailableReason).toContain('严格禁止静默回退');
       expect(inspector?.failureMessage).toContain('严格禁止静默回退');
+    });
+
+    it('falls back to default ROI when auto detection misses or throws', async () => {
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([
+        { videoPath: '/path/to/auto_miss.mp4', config: { roi_policy: 'auto', engine: 'mock' } },
+        { videoPath: '/path/to/auto_throw.mp4', config: { roi_policy: 'auto', engine: 'mock' } },
+      ]);
+
+      SubLiftApiClient.detectSubtitleRegion = async (path) => {
+        if (path.endsWith('auto_throw.mp4')) {
+          throw new Error('500 detector timeout');
+        }
+        return {
+          detected: false,
+          sample_time_s: 1.0,
+          suggested_box: null as never,
+          preview_text: '',
+          confidence: 0,
+          total_candidates: 0,
+        };
+      };
+      const boxes: unknown[] = [];
+      SubLiftApiClient.createJob = async (cfg) => {
+        boxes.push(cfg.region_box);
+        return { job_id: `job-auto-fallback-${boxes.length}`, status: 'running' };
+      };
+      SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+        callbacks.onDone?.({ job_id: _id, total_entries: 0, elapsed_ms: 100 });
+        return () => {};
+      };
+
+      await batchStore.startSingle(batchStore.tasks[0].id);
+      await batchStore.startSingle(batchStore.tasks[1].id);
+
+      expect(boxes).toEqual([DEFAULT_BOTTOM_ROI, DEFAULT_BOTTOM_ROI]);
+      expect(batchStore.tasks[0].result?.roiSource).toContain('未命中字幕');
+      expect(batchStore.tasks[1].result?.roiSource).toContain('智能检测异常');
+      expect(batchStore.tasks[0].result?.effectiveRegion).toEqual(DEFAULT_BOTTOM_ROI);
+      expect(batchStore.tasks[1].result?.effectiveRegion).toEqual(DEFAULT_BOTTOM_ROI);
+    });
+
+    it('keeps per-video auto ROI boxes from mixing across a queue', async () => {
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([
+        { videoPath: '/ws/batch_vid_1.mp4', config: { roi_policy: 'auto', engine: 'mock' } },
+        { videoPath: '/ws/batch_vid_2.mp4', config: { roi_policy: 'auto', engine: 'mock' } },
+      ]);
+
+      const detectCalls: string[] = [];
+      SubLiftApiClient.detectSubtitleRegion = async (path) => {
+        detectCalls.push(path);
+        const suggested_box =
+          path === '/ws/batch_vid_1.mp4'
+            ? { x: 0.1, y: 0.8, width: 0.8, height: 0.15 }
+            : { x: 0.05, y: 0.7, width: 0.9, height: 0.25 };
+        return {
+          detected: true,
+          sample_time_s: 1.0,
+          suggested_box,
+          preview_text: path.endsWith('1.mp4') ? 'Box 1' : 'Box 2',
+          confidence: 0.9,
+          total_candidates: 1,
+        };
+      };
+      const createdBoxes: unknown[] = [];
+      SubLiftApiClient.createJob = async (cfg) => {
+        createdBoxes.push(cfg.region_box);
+        return { job_id: `job-auto-iso-${createdBoxes.length}`, status: 'running' };
+      };
+      SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+        callbacks.onDone?.({ job_id: _id, total_entries: 0, elapsed_ms: 80 });
+        return () => {};
+      };
+
+      await batchStore.startSingle(batchStore.tasks[0].id);
+      await batchStore.startSingle(batchStore.tasks[1].id);
+
+      expect(detectCalls).toEqual(['/ws/batch_vid_1.mp4', '/ws/batch_vid_2.mp4']);
+      expect(createdBoxes[0]).toEqual({ x: 0.1, y: 0.8, width: 0.8, height: 0.15 });
+      expect(createdBoxes[1]).toEqual({ x: 0.05, y: 0.7, width: 0.9, height: 0.25 });
+      expect(batchStore.tasks[0].result?.effectiveRegion).toEqual(createdBoxes[0]);
+      expect(batchStore.tasks[1].result?.effectiveRegion).toEqual(createdBoxes[1]);
+    });
+
+    it('uses default ROI when fixed policy omits region_box', async () => {
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([
+        { videoPath: '/ws/fixed_null_box.mp4', config: { roi_policy: 'fixed', region_box: null, engine: 'mock' } },
+      ]);
+      let capturedBox: unknown = null;
+      SubLiftApiClient.createJob = async (cfg) => {
+        capturedBox = cfg.region_box;
+        return { job_id: 'job-fixed-null', status: 'running' };
+      };
+      SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+        callbacks.onDone?.({ job_id: _id, total_entries: 0, elapsed_ms: 80 });
+        return () => {};
+      };
+
+      await batchStore.startSingle(batchStore.tasks[0].id);
+      expect(capturedBox).toEqual(DEFAULT_BOTTOM_ROI);
+    });
+
+    it('keeps queued task snapshots when store defaults change mid-queue', async () => {
+      const systemStore = useSystemStore();
+      systemStore.systemInfo = {
+        version: 'v0.1.0',
+        runtime: 'cpp',
+        capabilities: [],
+        engines: [
+          { name: 'vision', available: true, detail: 'Apple Vision' },
+          { name: 'paddle', available: true, detail: 'Paddle' },
+          { name: 'mock', available: true, detail: 'Mock' },
+        ],
+        ffmpeg: { available: true },
+      };
+
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([
+        { videoPath: '/ws/task1.mp4', config: { engine: 'vision', quality: 'fast', confidence_threshold: 0.1 } },
+        {
+          videoPath: '/ws/task2_custom.mp4',
+          config: { engine: 'paddle', quality: 'fine', confidence_threshold: 0.6, script: 'Hant' },
+        },
+      ]);
+
+      const executed: Array<{ engine?: string; fps: number; confidence_threshold?: number; script?: string }> = [];
+      const sse: Record<string, SseJobCallbacks> = {};
+      let seq = 0;
+      SubLiftApiClient.createJob = async (cfg) => {
+        seq += 1;
+        executed.push(cfg);
+        return { job_id: `job-queue-imm-${seq}`, status: 'running' };
+      };
+      SubLiftApiClient.subscribeJobEvents = (id, callbacks) => {
+        sse[id] = callbacks;
+        return () => {};
+      };
+
+      batchStore.startQueue();
+      await new Promise((r) => setTimeout(r, 15));
+      expect(batchStore.currentRunningId).toBe(batchStore.tasks[0].id);
+
+      systemStore.systemInfo = {
+        ...systemStore.systemInfo!,
+        engines: [
+          { name: 'vision', available: false, detail: 'Vision unavailable' },
+          { name: 'paddle', available: true, detail: 'Paddle' },
+          { name: 'mock', available: true, detail: 'Mock' },
+        ],
+      };
+      expect(batchStore.defaultBatchConfig.engine).toBe('paddle');
+
+      sse['job-queue-imm-1']?.onDone?.({ job_id: 'job-queue-imm-1', total_entries: 0, elapsed_ms: 80 });
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(executed).toHaveLength(2);
+      expect(executed[0].engine).toBe('vision');
+      expect(executed[0].fps).toBe(5.0);
+      expect(executed[1].engine).toBe('paddle');
+      expect(executed[1].fps).toBe(12.0);
+      expect(executed[1].confidence_threshold).toBe(0.6);
+      expect(executed[1].script).toBe('Hant');
+    });
+
+    it('skips an unavailable engine in the queue and resets startSingle running state', async () => {
+      const systemStore = useSystemStore();
+      systemStore.systemInfo = {
+        version: 'v0.1.0',
+        runtime: 'cpp',
+        capabilities: [],
+        engines: [
+          { name: 'vision', available: true, detail: 'Apple Vision' },
+          { name: 'paddle', available: false, detail: 'PaddleOCR models missing' },
+          { name: 'mock', available: true, detail: 'Mock' },
+        ],
+        ffmpeg: { available: true },
+      };
+
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([
+        { videoPath: '/test/v1_vision.mp4', config: { engine: 'vision', quality: 'fast' } },
+        { videoPath: '/test/v2_paddle_unavailable.mp4', config: { engine: 'paddle', quality: 'fast' } },
+        { videoPath: '/test/v3_mock.mp4', config: { engine: 'mock', quality: 'fast' } },
+      ]);
+
+      const executed: string[] = [];
+      SubLiftApiClient.createJob = async (dto) => {
+        executed.push(`${dto.video_path} [${dto.engine}]`);
+        return { job_id: `job-${dto.engine}-${executed.length}`, status: 'running' };
+      };
+      SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+        queueMicrotask(() => {
+          callbacks.onDone?.({ job_id: _id, total_entries: 1, elapsed_ms: 40 });
+        });
+        return () => {};
+      };
+
+      batchStore.startQueue();
+      for (let i = 0; i < 20; i += 1) {
+        await new Promise((r) => setTimeout(r, 10));
+        if (!batchStore.isQueueRunning && batchStore.stats.waiting === 0 && batchStore.stats.active === 0) {
+          break;
+        }
+      }
+
+      expect(batchStore.tasks[0].status).toBe('completed');
+      expect(batchStore.tasks[1].status).toBe('failed');
+      expect(batchStore.tasks[1].error).toContain('OCR 引擎不可用: paddle');
+      expect(batchStore.tasks[2].status).toBe('completed');
+      expect(executed).toEqual(['/test/v1_vision.mp4 [vision]', '/test/v3_mock.mp4 [mock]']);
+      expect(batchStore.isQueueRunning).toBe(false);
+
+      batchStore.addBatchItems([{ videoPath: '/test/v_paddle_lone.mp4', config: { engine: 'paddle' } }]);
+      const loneTask = batchStore.tasks[batchStore.tasks.length - 1];
+      const started = await batchStore.startSingle(loneTask.id);
+      expect(started).toBe(true);
+      expect(loneTask.status).toBe('failed');
+      expect(batchStore.currentRunningId).toBeNull();
+      expect(batchStore.isQueueRunning).toBe(false);
+    });
+
+    it('does not leak inspector state when switching selected tasks', () => {
+      const systemStore = useSystemStore();
+      systemStore.systemInfo = {
+        version: 'v0.1.0',
+        runtime: 'cpp',
+        capabilities: [],
+        engines: [
+          { name: 'vision', available: true, detail: 'Apple Vision' },
+          { name: 'paddle', available: false, detail: 'PaddleOCR models missing' },
+          { name: 'mock', available: true, detail: 'Mock Engine' },
+        ],
+        ffmpeg: { available: true },
+      };
+
+      const batchStore = useBatchStore();
+      const fixedBox = { x: 0.2, y: 0.6, width: 0.6, height: 0.25 };
+      batchStore.addBatchItems([
+        { videoPath: '/path/A/movie.mp4', config: { engine: 'vision', quality: 'fine', roi_policy: 'auto' } },
+        {
+          videoPath: '/path/B/clip.mp4',
+          config: { engine: 'paddle', quality: 'fast', roi_policy: 'fixed', region_box: fixedBox },
+        },
+        { videoPath: '/path/C/doc.mp4', config: { engine: 'mock', quality: 'balanced', roi_policy: 'default' } },
+      ]);
+
+      batchStore.tasks[0].status = 'completed';
+      batchStore.tasks[0].entries = [{ index: 1, start_ms: 0, end_ms: 1000, text: 'Line 1', confidence: 0.99 }];
+      batchStore.tasks[0].result = {
+        entryCount: 42,
+        outputPath: '/path/A/movie.srt',
+        runtimeIdentity: 'VISION Engine',
+        roiSource: '自动检测：“Movie Line”',
+        effectiveRegion: { x: 0.05, y: 0.78, width: 0.9, height: 0.18 },
+      };
+      batchStore.tasks[1].status = 'failed';
+      batchStore.tasks[1].error = 'OCR 引擎不可用: paddle (严格禁止静默回退)';
+
+      batchStore.selectTask(batchStore.tasks[0].id);
+      expect(batchStore.inspectorModel?.filename).toBe('movie.mp4');
+      expect(batchStore.inspectorModel?.entryCount).toBe(1);
+      expect(batchStore.inspectorModel?.roi_source_display).toBe('自动检测：“Movie Line”');
+      expect(batchStore.inspectorModel?.failureMessage).toBeUndefined();
+
+      batchStore.selectTask(batchStore.tasks[1].id);
+      expect(batchStore.inspectorModel?.filename).toBe('clip.mp4');
+      expect(batchStore.inspectorModel?.status).toBe('failed');
+      expect(batchStore.inspectorModel?.failureMessage).toContain('OCR 引擎不可用: paddle');
+      expect(batchStore.inspectorModel?.region_box).toEqual(fixedBox);
+      expect(batchStore.inspectorModel?.entryCount).toBe(0);
+
+      batchStore.selectTask(batchStore.tasks[2].id);
+      expect(batchStore.inspectorModel?.filename).toBe('doc.mp4');
+      expect(batchStore.inspectorModel?.status).toBe('waiting');
+      expect(batchStore.inspectorModel?.failureMessage).toBeUndefined();
+      expect(batchStore.inspectorModel?.roi_source_display).toBe('默认底边 30%');
+      expect(batchStore.inspectorModel?.canEditConfiguration).toBe(true);
+
+      batchStore.selectTask(null);
+      expect(batchStore.inspectorModel).toBeNull();
+    });
+
+    it('converts batch progress edge floats with the same rounding as workbench', async () => {
+      const batchStore = useBatchStore();
+      batchStore.addBatchItems([{ videoPath: '/ws/edge_progress.mp4' }]);
+      const sse: { cb: SseJobCallbacks | null } = { cb: null };
+      SubLiftApiClient.createJob = async () => ({ job_id: 'batch-job-edge', status: 'running' });
+      SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+        sse.cb = callbacks;
+        return () => {};
+      };
+
+      const runPromise = batchStore.startSingle(batchStore.tasks[0].id);
+      await new Promise((r) => setTimeout(r, 10));
+
+      const edges: [number, number][] = [
+        [0.0, 0],
+        [0.001, 0],
+        [0.005, 1],
+        [0.5, 50],
+        [0.999, 100],
+        [1.0, 100],
+      ];
+      for (const [pct, expected] of edges) {
+        sse.cb?.onProgress?.({ job_id: 'batch-job-edge', stage: 'extracting', pct });
+        expect(batchStore.tasks[0].progressPct).toBe(expected);
+      }
+
+      sse.cb?.onDone?.({ job_id: 'batch-job-edge', total_entries: 0, elapsed_ms: 40 });
+      await runPromise;
+      expect(batchStore.tasks[0].progressPct).toBe(100);
     });
   });
 
