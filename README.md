@@ -52,7 +52,8 @@ ctest --test-dir build/cpp --output-on-failure
 脚本，也不因为缺少 `python` / `uv` / `.venv` 而跳过产品必测项。
 
 隔离离线工具入口是 `./scripts/verify-offline.sh`。`./scripts/verify-standard.sh`
-仍可用于过渡全仓（Native + Oracle）；不得据此把 Python 解释为产品依赖。
+是显式过渡混门（Native + Oracle + cutover），不是默认提交门；不得据此把 Python
+解释为产品依赖。
 
 ### 可选的过渡工具
 
@@ -181,8 +182,9 @@ cmake --build build/cpp
 ctest --test-dir build/cpp --output-on-failure
 (cd apps/macos && swift test)
 npm --prefix apps/web test
-./scripts/verify-product.sh   # Python-free 产品门
-./scripts/verify-standard.sh  # 过渡全仓 / Oracle；仍包含 Python 检查
+./scripts/verify-product.sh   # Python-free 产品门（提交/合并默认）
+./scripts/verify-offline.sh   # 隔离离线工具
+./scripts/verify-standard.sh  # 显式过渡混门 / 历史 cutover；非默认
 ```
 
 仅在维护隔离的 Python benchmark、诊断或历史 Oracle 时才运行：

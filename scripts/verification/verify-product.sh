@@ -5,7 +5,8 @@
 # It must not install Python dependencies, must not run Python scripts, and
 # must not skip a required product check because python/uv/.venv are missing.
 #
-# Isolated Oracle/parity/benchmark tools remain on ./scripts/verify-standard.sh.
+# Isolated Oracle/benchmark tools: ./scripts/verify-offline.sh
+# Historical cutover mixed gate (not default): ./scripts/verify-standard.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -284,7 +285,8 @@ echo " Summary"
 echo "=============================="
 printf "passed: ${GREEN}%d${NC}  failed: ${RED}%d${NC}\n" "$pass" "$fail"
 echo "Product gate: ./scripts/verification/verify-product.sh"
-echo "Oracle/parity transition gate: ./scripts/verify-standard.sh"
+echo "Offline tools: ./scripts/verify-offline.sh"
+echo "Explicit cutover mixed gate (not default): ./scripts/verify-standard.sh"
 
 if [ "$fail" -gt 0 ]; then
   printf "${RED}Python-free product verification failed.${NC}\n"

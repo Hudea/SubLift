@@ -83,8 +83,8 @@ ctest --test-dir build/cpp -R vision --output-on-failure
 | Catch2 Filter Tag | Use Catch tag `[vision][integration]` or `ctest -R vision` to filter Vision integration tests |
 | Threading | `VisionOcrEngine::recognize` is **not thread-safe**; callers must serialize (no concurrent recognize) |
 | Pixel path | Product/parity path is **RGB24**. BGR24/Gray8 are best-effort conversions only |
-| C++ parity L0 vs L4 | C++ `[parity][vision]` 离线读取已提交 golden，覆盖 box/clamp/sort/empty 结构。过渡期 `verify-standard.sh` 仍额外运行历史 `dump_vision.py --check`；它不是 Native-only 产品门。**L4** live Vision text/conf 只作可选报告。 |
-| Dual-matrix | `./scripts/verify-standard.sh` 在 macOS 默认以 **VISION=ON** 配置 Debug C++（`SUBLIFT_VERIFY_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub），并运行 core/ffmpeg/mock 与 parity。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
+| C++ parity L0 vs L4 | C++ `[parity][vision]` 离线读取已提交 golden，覆盖 box/clamp/sort/empty 结构。产品门是 `./scripts/verify-product.sh`。显式过渡混门 `verify-standard.sh` 仍可额外跑历史 `dump_vision.py --check`；它不是 Native-only 产品门。**L4** live Vision text/conf 只作可选报告。 |
+| Dual-matrix | 产品门与本地 cmake 在 macOS 默认以 **VISION=ON** 配置 Debug C++。显式过渡混门 `verify-standard.sh` 同样如此（`SUBLIFT_VERIFY_SKIP_VISION=1` 时改为 stub；非 macOS 也使用 stub）。若要聚焦 Vision smoke，可另行 `cmake -S cpp -B build/cpp -G Ninja -DSUBLIFT_ENABLE_VISION=ON` 后运行 `ctest -R 'vision|parity.*vision'`。 |
 
 ## sublift_worker CLI
 

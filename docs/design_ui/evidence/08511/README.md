@@ -24,7 +24,7 @@
 | T06 | `MIXED` + `COMPACT=1` + `WINDOW_WIDTH=960` |
 | T07 | `WAITING` + `SELECT=1` + `OUTPUT_ROOT=/tmp/SubLiftSRT` |
 
-重拍：`bash scripts/capture-08511-evidence.sh`（直接启动 DEBUG 二进制，禁止 `open -g`）。
+重拍脚本已移除。本目录截图即 08511 验收证据。
 
 ## 未执行
 

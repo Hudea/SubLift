@@ -79,6 +79,6 @@ Idle ──start_job(no path)─────► FrameAccepting ──finalize─
 
 ## 6. 验证
 
-`tests/fixtures/ipc/` 保存协议序列夹具；C++ protocol/worker 测试覆盖 framing、schema、握手、
+协议帧格式见上文。C++ protocol/worker 测试覆盖 framing、schema、握手、
 engine mismatch、path/frame mode、取消、非法输入和断连；Swift 集成测试验证
 `PipelineClient` 可直接驱动目标 Worker。

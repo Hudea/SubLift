@@ -8,4 +8,5 @@ It does not install Python packages, does not run Python scripts, and does not
 skip a required product check because `python`, `uv`, or `.venv` are missing.
 
 Isolated Oracle, parity, and benchmark tools use `../verify-offline.sh`.
-`../verify-standard.sh` remains the transitional mixed Native + Oracle gate.
+`../verify-standard.sh` is an explicit transitional mixed Native + Oracle +
+cutover gate. It is not the default submit/merge entry.

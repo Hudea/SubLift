@@ -62,7 +62,9 @@
   │
   └─► 提交 / 合并前全量验证
         ├─► 产品主门禁 (Python-Free): ./scripts/verify-product.sh
-        └─► 过渡全仓门 (含 Python Oracle): ./scripts/verify-standard.sh
+        └─► 若改了离线工具: ./scripts/verify-offline.sh
+
+显式过渡混门（非默认，含历史 cutover）: ./scripts/verify-standard.sh
 ```
 
 ### 2.1 模块验证详表
@@ -83,9 +85,10 @@
 
 SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五类：
 - `Active Gate`：当前主干必须通过的活跃质量门禁与单元测试；
+- `Transitional Mixed`：显式过渡混门，不是提交/合并默认入口；
 - `Core E2E`：覆盖系统端到端链路与集成契约的核心用例；
 - `Frozen Parity`：用于保障 Native C++ 与历史 Oracle 行为 100% 一致的冻结黄金集比对；
-- `Milestone Challenge`：针对特定开发阶段/实证挑战的验证资产；
+- `Milestone Challenge` / `archive-only`：阶段挑战原稿，不进产品门；
 - `Diagnostics`：用于性能分析、算法调试与超参数扫描的离线诊断工具。
 
 ### 3.1 质量门禁与测试套件总览
@@ -94,7 +97,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 |---|---|---|---|---|
 | `scripts/verify-product.sh`<br>`scripts/verification/verify-product.sh` | Bash | **Active Gate** | 产品主门禁（Python-Free）：C++ Debug 构建、CTest、Swift 测试、Web Vitest、Web Build、CLI 提取及 Web Server HTTP/SSE/SRT 导出 | `./scripts/verify-product.sh` |
 | `scripts/verify-offline.sh`<br>`scripts/verification/verify-offline.sh` | Bash | **Active Gate** | 离线工具门禁：uv extras 同步、命名空间隔离、Ruff、Mypy、Pytest 单元测试与无归档生成检查 | `./scripts/verify-offline.sh` |
-| `scripts/verify-standard.sh` | Bash | **Active Gate** | 过渡全仓综合门禁：涵盖 Python 静态检查、C++ 构建、Pytest、Cutover Parity 与 Web E2E | `./scripts/verify-standard.sh` |
+| `scripts/verify-standard.sh` | Bash | **Transitional Mixed** | 显式过渡混门（非默认）：离线静态检查 + C++ 构建 + pytest + 历史 cutover + Vitest/E2E。不是产品门，也不替代 `verify-offline.sh` | 须显式调用 `./scripts/verify-standard.sh` |
 | `scripts/verify-web-server.sh` | Bash | **Active Gate** | Web Native Server 本地验收门禁：Server 构建、静态前端构建、Server Catch2 测试、Python E2E 与 Vitest | `./scripts/verify-web-server.sh` |
 | `cpp/tests/` | Catch2 v3<br>(C++20 / ObjC++) | **Active Gate** | Native C++ 全量单元测试（Core / Pipeline / Adapters / Worker / Server / CLI）与 Parity 黄金集比对 | `ctest --test-dir build/cpp --output-on-failure` |
 | `apps/macos/Tests/SubLiftMacTests/` | XCTest<br>(Swift 5.9+) | **Active Gate** | macOS 客户端全量测试（批量任务队列、调度器、工作台状态、无障碍、IPC 客户端等 39 个测试套件） | `cd apps/macos && swift test` |
@@ -116,29 +119,23 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 
 ### 3.3 里程碑挑战与实证测试 (Milestone Challenge)
 
-| 资产路径 / 目录 | 框架 / 语言 | 生命周期状态 | 目标范围 | 执行命令 |
-|---|---|---|---|---|
-| `scripts/challenges/` | Python 3.12+ | **archive-only** | Phase 12 里程碑挑战原稿。独有断言已吸收进 `scripts/test_server_e2e.py`（JOB-09/10/11/12、SAV-05/06） | 不进入任何 verify 门 |
-| `apps/web/src/**/empirical_challenge_*.challenge.ts` | TypeScript | **archive-only** | Phase 12 里程碑挑战原稿；已改名退出 Vitest。独有断言已吸收进 `workbench` / `batch` / `workbench_draft` / `timecode` 正规套件 | 不进入 `npm test` / `verify-product` |
+工作树已无挑战原稿。独有断言在 `apps/web` 正规 Vitest 与 `scripts/test_server_e2e.py`；原文只在 Git 历史。
 
 ### 3.4 诊断工具与基准资产 (Diagnostics & Benchmarks)
 
+低频人工诊断只在 `scripts/diagnostics/`。根目录三个 `compare_roi_ab` / `measure_perf_overhead` / `run_benchmark_manifest` 是 historical shim，不是诊断套件；canonical 入口是 `uv run sublift-benchmark`。产物写到调用方指定目录或 `debug/benchmark/`。
+
 | 资产路径 / 目录 | 框架 / 语言 | 生命周期状态 | 目标范围 | 执行命令 |
 |---|---|---|---|---|
-| `scripts/diagnostics/compare_detectors.py` | Python 3.12+ | **Diagnostics** | 文本检测器效果与耗时对比诊断 | `uv run python scripts/diagnostics/compare_detectors.py` |
-| `scripts/diagnostics/ocr_compare.py` | Python 3.12+ | **Diagnostics** | Paddle 与 Apple Vision OCR 识别精度与性能对比 | `uv run python scripts/diagnostics/ocr_compare.py` |
-| `scripts/diagnostics/run_timeline.py` | Python 3.12+ | **Diagnostics** | 时间线切分与字幕段生命周期可视化诊断 | `uv run python scripts/diagnostics/run_timeline.py` |
-| `scripts/diagnostics/run_trace.py` | Python 3.12+ | **Diagnostics** | 完整流水线执行时序与 Trace 分析 | `uv run python scripts/diagnostics/run_trace.py` |
-| `scripts/diagnostics/scan_params.py` | Python 3.12+ | **Diagnostics** | 变化检测与 OCR 超参数网格搜索 | `uv run python scripts/diagnostics/scan_params.py` |
-| `scripts/diagnostics/audit_python_ipc.py` | Python 3.12+ | **Diagnostics** | Python IPC 协议通信与消息交互审计 | `uv run python scripts/diagnostics/audit_python_ipc.py` |
-| `scripts/diagnostics/extract_frames.py` | Python 3.12+ | **Diagnostics** | 抽帧诊断与代表帧图像导出 | `uv run python scripts/diagnostics/extract_frames.py` |
-| `scripts/diagnostics/long_video_ux.py` | Python 3.12+ | **Diagnostics** | 长视频提取交互体验与进度流转诊断 | `uv run python scripts/diagnostics/long_video_ux.py` |
-| `scripts/compare_roi_ab.py` | Python 3.12+ | **Diagnostics** | ROI 裁剪与全画幅抽帧 A/B 质量比对 | `uv run python scripts/compare_roi_ab.py` |
-| `scripts/measure_perf_overhead.py` | Python 3.12+ | **Diagnostics** | 流水线各阶段耗时与系统开销微基准测量 | `uv run python scripts/measure_perf_overhead.py` |
-| `scripts/cleanup_local_artifacts.py` | Python 3.12+ | **Diagnostics** | 本地测试产生的临时运行产物清理 | `uv run python scripts/cleanup_local_artifacts.py` |
-| `scripts/run_benchmark_manifest.py` | Python 3.12+ | **Diagnostics** | Benchmark 数据集清单批量评测执行器 | `uv run python scripts/run_benchmark_manifest.py` |
-| `scripts/capture-08511-evidence.sh` | Bash | **Diagnostics** | Phase 8 UI 交互验收证据捕获辅助脚本 | `./scripts/capture-08511-evidence.sh` |
-| `benchmark/configs/`<br>`benchmark/datasets/`<br>`benchmark/baselines/` | JSON / SRT / ASS / MD | **Diagnostics** | 评测数据集、矩阵配置与质量/性能归因基线文档 | 由 Benchmark 运行时消费 |
+| `scripts/diagnostics/compare_detectors.py` | Python 3.12+ | **Diagnostics** | 文本检测器裁剪对照（需显式 `--video --out`） | `uv run python scripts/diagnostics/compare_detectors.py --help` |
+| `scripts/diagnostics/ocr_compare.py` | Python 3.12+ | **Diagnostics** | Paddle 与 Apple Vision 逐段人工对照 | `uv run python scripts/diagnostics/ocr_compare.py --help` |
+| `scripts/diagnostics/run_timeline.py` | Python 3.12+ | **Diagnostics** | 变化点与时间轴查看 | `uv run python scripts/diagnostics/run_timeline.py --help` |
+| `scripts/diagnostics/run_trace.py` | Python 3.12+ | **Diagnostics** | 打轴决策 trace 记录与比较 | `uv run python scripts/diagnostics/run_trace.py --help` |
+| `scripts/diagnostics/scan_params.py` | Python 3.12+ | **Diagnostics** | 历史短字幕专项参数扫描 | `uv run python scripts/diagnostics/scan_params.py --help` |
+| `scripts/diagnostics/extract_frames.py` | Python 3.12+ | **Diagnostics** | 从指定视频抽取有限帧 | `uv run python scripts/diagnostics/extract_frames.py --help` |
+| `scripts/compare_roi_ab.py`<br>`scripts/measure_perf_overhead.py`<br>`scripts/run_benchmark_manifest.py` | Python 3.12+ | **historical shim** | 只转发 `sublift-benchmark compare-roi` / `overhead` / `run` | `uv run sublift-benchmark --help` |
+| `scripts/cleanup_local_artifacts.py` | Python 3.12+ | **Diagnostics** | 本机生成物卫生（默认 dry-run） | `uv run python scripts/cleanup_local_artifacts.py` |
+| `benchmark/configs/`<br>`benchmark/datasets/`<br>`benchmark/baselines/` | JSON / SRT / ASS / MD | **Diagnostics** | 评测数据集、矩阵配置与质量/性能归因基线 | 由 `sublift-benchmark` 消费 |
 
 ---
 
@@ -149,15 +146,15 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 
 ### 4.2 技术债收敛行动清单
 
-- [ ] **TD-01: 里程碑挑战脚本收敛 (Milestone Challenge Consolidation)**
-  - **现状**：Web `empirical_challenge_*.challenge.ts` 与 `scripts/challenges/` 已标 archive-only；独有断言已分别吸收进 Vitest 正规套件与 `test_server_e2e.py`。
-  - **收敛路径**：在后续重构轮次中，将具有长期回归价值的用例整合入标准 E2E 套件（如 `test_server_e2e.py`）或标准 Vitest 测试中；无须重复运行的历史用例按归档流程统一管理，保持当前文件只读保留。
+- [x] **TD-01: 里程碑挑战脚本收敛 (Milestone Challenge Consolidation)**
+  - **现状**：独有断言已吸收进 Vitest 正规套件与 `test_server_e2e.py`；挑战原稿已从工作树删除，历史只在 Git。
+  - **收敛路径**：已完成。勿再新增 `scripts/challenge_*` 或 `empirical_challenge_*.test.ts`。
 - [ ] **TD-02: Parity 门禁原生化演进 (Native Parity Gate Convergence)**
   - **现状**：`scripts/parity/check_cutover_gate.py` 依赖 Python 运行时与历史 Oracle 依赖。
   - **收敛路径**：持续完善 `cpp/tests/parity/` 下的纯 C++ Catch2 黄金集比对用例，逐步使 `./scripts/verify-product.sh` 成为唯一自闭环的产品级验收门禁，降低对 Python 环境的依赖。
 - [ ] **TD-03: 诊断脚本命名空间与输出规范化 (Diagnostics Standardization)**
-  - **现状**：部分诊断脚本位于 `scripts/` 根目录，部分位于 `scripts/diagnostics/`，输出路径散落。
-  - **收敛路径**：将离线诊断工具统一规范至 `sublift_offline` 命令空间或统一的 CLI 工具下，输出产物严格限定在 `debug/benchmark/` 目录中。
+  - **现状**：可跑诊断只在 `scripts/diagnostics/`；根上三个脚本是 historical shim；Python IPC 诊断桩已删除。物理目录与 `sublift_offline` 子命令尚未合并。
+  - **收敛路径**：后续若再收，只把仍可跑的诊断挂到 `sublift-offline` / `sublift-benchmark`，产物限定 `debug/benchmark/`；三个 historical shim 保持根路径以免断转发单测。
 - [ ] **TD-04: 测试数据集与黄金文件治理 (Dataset & Golden Governance)**
   - **现状**：部分测试集依赖本地生成的临时视频。
   - **收敛路径**：测试用例一律采用 `ffmpeg lavfi` 合成轻量视频或固定尺寸测试图片，严禁向 Git 仓库提交大体积视频二进制资产；所有 Parity 黄金输出保持只读不可变。

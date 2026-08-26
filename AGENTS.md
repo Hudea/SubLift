@@ -49,7 +49,7 @@
 - Web：`npm --prefix apps/web test`
 - 隔离 Python 工具（仅修改对应树时）：`uv sync --extra oracle --extra vision --extra paddle`，然后 `uv run ruff check .`、`uv run mypy src tests`、`uv run pytest -m "not integration" --no-cov`
 
-`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。产品行为以 `./scripts/verify-product.sh` 为准。可选 Python 工具走 `./scripts/verify-offline.sh`；`scripts/verify-standard.sh` 仍是含离线 Oracle 的过渡全仓门。
+`./init.sh` 只建立开工前提；依赖同步、构建与测试由独立命令承担。产品行为以 `./scripts/verify-product.sh` 为准。可选 Python 工具走 `./scripts/verify-offline.sh`。`scripts/verify-standard.sh` 是含历史 cutover 的显式过渡混门，不是提交/合并默认入口。
 
 ## 代码 / 架构约束
 

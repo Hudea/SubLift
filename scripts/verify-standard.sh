@@ -1,8 +1,9 @@
 #!/bin/bash
-# SubLift 标准产品验证门（开发门，非完整发布门）。
+# SubLift 过渡混门（非默认、非产品门）。
 #
-# 该脚本由旧的重型 init.sh 迁入。Harness 的 ./init.sh 只做秒级 L0；
-# 不要把本脚本中的依赖同步、构建或测试重新塞回默认会话入口。
+# 默认请用 ./scripts/verify-product.sh（产品）或 ./scripts/verify-offline.sh（离线）。
+# 本脚本显式混跑 Native 构建、离线 pytest 与历史 cutover，不是提交/合并默认门。
+# Harness 的 ./init.sh 只做秒级 L0；不要把依赖同步、构建或测试塞回默认会话入口。
 #
 # 默认覆盖：
 #   工具检查 → uv sync（vision+paddle extras）→ ruff / mypy →
@@ -10,7 +11,7 @@
 #   cutover 正确性 parity（golden 列表）
 #
 # 默认 *不* 跑：cutover runtime 微基准、GT L3 live、二次 pytest、coverage。
-# 完整发布门请显式打开（见下方环境变量）或单独调用 check_cutover_gate.py。
+# 完整 cutover 请显式打开（见下方环境变量）或单独调用 check_cutover_gate.py。
 #
 # 环境变量：
 #   SUBLIFT_VERIFY_SKIP_VISION=1   Darwin 上不编 Vision（默认 macOS VISION=ON）
@@ -70,8 +71,11 @@ run_check() {
 }
 
 echo "=============================="
-echo " SubLift 标准验证"
+echo " SubLift 过渡混门（非默认）"
 echo "=============================="
+echo "不是产品门。默认请用 ./scripts/verify-product.sh"
+echo "离线工具请用 ./scripts/verify-offline.sh"
+echo "本入口额外混跑历史 cutover，须显式调用。"
 echo
 
 check "uv"      uv      true
@@ -151,7 +155,7 @@ echo " Python 测试（单次，含 post-build IPC）"
 echo "=============================="
 echo
 # After C++ build so tests/ipc/test_cpp_worker.py can run (not skip for missing binary).
-# --no-cov: 标准验证门不是 coverage 门（完整 cov 由开发者显式 pytest 配置）。
+# --no-cov: 本混门不是 coverage 门（完整 cov 由开发者显式 pytest 配置）。
 # 不再二次单独跑 test_cpp_worker.py。
 run_check "pytest" "${UV[@]}" pytest -m "not integration" --no-cov
 
@@ -247,12 +251,13 @@ echo "=============================="
 echo " 汇总"
 echo "=============================="
 printf "通过: ${GREEN}%d${NC}  失败: ${RED}%d${NC}\n" "$pass" "$fail"
-echo "提示: 发布门请 SUBLIFT_VERIFY_RUNTIME=1 SUBLIFT_VERIFY_REQUIRE_GT=1 ./scripts/verify-standard.sh"
-echo "      或 uv run python scripts/parity/check_cutover_gate.py --check --require-gt"
+echo "提示: 产品门 ./scripts/verify-product.sh ；离线门 ./scripts/verify-offline.sh"
+echo "      显式 cutover：uv run python scripts/parity/check_cutover_gate.py --check"
+echo "      完整 cutover：SUBLIFT_VERIFY_RUNTIME=1 SUBLIFT_VERIFY_REQUIRE_GT=1 $0"
 
 if [ "$fail" -gt 0 ]; then
-    printf "${RED}环境验证未通过，请修复上述失败项。${NC}\n"
+    printf "${RED}过渡混门未通过，请修复上述失败项。${NC}\n"
     exit 1
 fi
 
-printf "${GREEN}标准验证通过。${NC}\n"
+printf "${GREEN}过渡混门通过（非产品门）。${NC}\n"

@@ -1,14 +1,20 @@
 # Diagnostic scripts
 
-面向低频定位的脚本，不是 benchmark 主入口，也不替代默认 C++ Worker 的产品门：
+面向低频定位的脚本，不是 benchmark 主入口，也不替代默认 C++ Worker 的产品门。
+当前身份以 `docs/TESTMAP.md` §3.4 为准。
+
+**仍可跑（需显式媒体/输出参数）：**
 
 - `run_timeline.py`：查看变化点与时间轴；
 - `run_trace.py`：记录并比较打轴决策 trace；
 - `scan_params.py`：历史短字幕专项参数扫描；
-- `ocr_compare.py`：逐时段 OCR 人工对照。
+- `ocr_compare.py`：逐时段 OCR 人工对照；
 - `extract_frames.py`：从显式指定的视频抽取有限帧；
-- `compare_detectors.py`：输出 BottomCrop 与 FixedRegion 的裁剪结果以供人工比较；
-- `audit_python_ipc.py` / `long_video_ux.py`：已退出；Python IPC 产品 Worker 已移除，请用 Native Worker 或 tag `python-product-last`。
+- `compare_detectors.py`：输出 BottomCrop 与 FixedRegion 的裁剪结果以供人工比较。
+
+**已删除：** `audit_python_ipc.py` / `long_video_ux.py`。请用 Native Worker / `sublift extract`，历史实现见 tag `python-product-last`。
+
+**不在本目录：** `scripts/compare_roi_ab.py` 等三个根目录脚本是 `sublift-benchmark` 的 historical shim，不是诊断套件。
 
 端到端质量、性能、参数矩阵和已有 SRT 评分统一使用：
 
