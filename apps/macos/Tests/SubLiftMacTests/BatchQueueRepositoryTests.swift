@@ -175,7 +175,8 @@ final class BatchQueueRepositoryTests: XCTestCase {
             runningTaskID: snapshot.runningTaskID,
             status: snapshot.status
         )
-        try encoder.encode(snapshot).write(to: fileURL)
+        let writtenData = try encoder.encode(snapshot)
+        try writtenData.write(to: fileURL)
 
         XCTAssertThrowsError(try repository.load()) { error in
             guard case BatchQueueRepositoryError.unknownSchemaVersion(let version) = error else {
@@ -183,7 +184,7 @@ final class BatchQueueRepositoryTests: XCTestCase {
             }
             XCTAssertEqual(version, 99)
         }
-        XCTAssertEqual(try Data(contentsOf: fileURL), try encoder.encode(snapshot), "未知版本文件不得被覆盖")
+        XCTAssertEqual(try Data(contentsOf: fileURL), writtenData, "未知版本文件不得被覆盖")
     }
 
     // MARK: - active 恢复

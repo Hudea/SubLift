@@ -8,7 +8,10 @@ struct TaskCenterToolbar: View {
     var onStart: () -> Void
 
     var body: some View {
-        let queue = model.state
+        let transport = TaskCenterPresentation.transport(
+            for: model.state,
+            reason: model.pauseReason
+        )
 
         Button(action: onAddFiles) {
             Label("添加文件", systemImage: "plus")
@@ -24,39 +27,47 @@ struct TaskCenterToolbar: View {
 
         outputLocationMenu
 
-        Button(action: onStart) {
-            Label("开始", systemImage: "play.fill")
-        }
-        .help("开始批量提取")
-        .disabled(!TaskCenterPresentation.canStart(queue))
-        .accessibilityLabel("开始")
+        primaryQueueButton(transport)
 
-        Button {
-            model.pauseAfterCurrent()
-        } label: {
-            Label("暂停", systemImage: "pause.fill")
+        if transport.showsCancelCurrent {
+            Button(role: .destructive) {
+                model.stop()
+            } label: {
+                Label("取消当前", systemImage: "stop.fill")
+            }
+            .labelStyle(.titleAndIcon)
+            .help("取消当前任务并暂停队列")
+            .accessibilityLabel("取消当前任务并暂停队列")
         }
-        .help("完成当前项后暂停")
-        .disabled(!TaskCenterPresentation.canPauseAfterCurrent(queue))
-        .accessibilityLabel("完成当前项后暂停")
+    }
 
-        Button {
-            model.resume()
-        } label: {
-            Label("恢复", systemImage: "play")
+    @ViewBuilder
+    private func primaryQueueButton(_ transport: TaskCenterPresentation.QueueTransport) -> some View {
+        if transport.primaryIsPressed {
+            queuePrimaryControl(transport)
+                .buttonStyle(.borderedProminent)
+        } else {
+            queuePrimaryControl(transport)
         }
-        .help("恢复队列")
-        .disabled(!TaskCenterPresentation.canResume(queue))
-        .accessibilityLabel("恢复")
+    }
 
+    private func queuePrimaryControl(_ transport: TaskCenterPresentation.QueueTransport) -> some View {
         Button {
-            model.stop()
+            switch transport.primaryAction {
+            case .start: onStart()
+            case .resume: model.resume()
+            case .pauseAfterCurrent: model.pauseAfterCurrent()
+            case .clearPauseRequest: model.clearPauseRequest()
+            case .none: break
+            }
         } label: {
-            Label("停止", systemImage: "stop.fill")
+            Label(transport.primaryTitle, systemImage: transport.primarySymbolName)
         }
-        .help("停止调度")
-        .disabled(!TaskCenterPresentation.canStop(queue))
-        .accessibilityLabel("停止")
+        .labelStyle(.titleAndIcon)
+        .help(transport.primaryHelp)
+        .disabled(!transport.primaryEnabled)
+        .accessibilityLabel(transport.primaryTitle)
+        .accessibilityHint(transport.primaryHelp)
     }
 
     // MARK: - 08511 输出位置菜单

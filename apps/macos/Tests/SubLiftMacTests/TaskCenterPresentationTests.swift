@@ -169,8 +169,32 @@ final class TaskCenterCommandTests: XCTestCase {
             quality: .fast,
             developerMode: false
         )
-        if status != .waiting {
-            _ = task.transition(to: status == .failed ? .failed : (status == .cancelled ? .cancelled : status))
+        switch status {
+        case .preparing: _ = task.transition(to: .preparing)
+        case .extracting:
+            _ = task.transition(to: .preparing)
+            _ = task.transition(to: .extracting)
+        case .exporting:
+            _ = task.transition(to: .preparing)
+            _ = task.transition(to: .extracting)
+            _ = task.transition(to: .exporting)
+        case .completed:
+            _ = task.transition(to: .preparing)
+            _ = task.transition(to: .extracting)
+            _ = task.transition(to: .exporting)
+            _ = task.transition(to: .completed)
+        case .failed:
+            _ = task.transition(to: .preparing)
+            _ = task.transition(to: .failed)
+        case .cancelled:
+            _ = task.transition(to: .cancelled)
+        case .interrupted:
+            _ = task.transition(to: .preparing)
+            _ = task.transition(to: .interrupted)
+        case .skipped:
+            _ = task.transition(to: .skipped)
+        case .waiting:
+            break
         }
         return task
     }
@@ -180,21 +204,86 @@ final class TaskCenterCommandTests: XCTestCase {
     }
 
     func testQueueLevelAvailability() {
-        // 空队列：不可开始。
-        XCTAssertFalse(TaskCenterPresentation.canStart(.empty))
-        // 有 waiting：可开始。
+        let empty = TaskCenterPresentation.transport(for: .empty, reason: .none)
+        XCTAssertEqual(empty.displayState, .idle)
+        XCTAssertEqual(empty.primaryTitle, "开始队列")
+        XCTAssertFalse(empty.primaryEnabled)
+        XCTAssertFalse(empty.showsCancelCurrent)
+        XCTAssertEqual(empty.primaryAction, .none)
+
         let waitingQueue = queue([makeTask("a.mp4")])
-        XCTAssertTrue(TaskCenterPresentation.canStart(waitingQueue))
-        // running：可暂停/停止，不可开始。
-        let runningQueue = queue([makeTask("a.mp4", status: .extracting)], status: .running)
-        XCTAssertFalse(TaskCenterPresentation.canStart(runningQueue))
-        XCTAssertTrue(TaskCenterPresentation.canPauseAfterCurrent(runningQueue))
-        XCTAssertTrue(TaskCenterPresentation.canStop(runningQueue))
-        XCTAssertFalse(TaskCenterPresentation.canResume(runningQueue))
-        // paused：可恢复。
+        let waiting = TaskCenterPresentation.transport(for: waitingQueue, reason: .none)
+        XCTAssertEqual(waiting.displayState, .idle)
+        XCTAssertEqual(waiting.primaryTitle, "开始队列")
+        XCTAssertTrue(waiting.primaryEnabled)
+        XCTAssertEqual(waiting.primaryAction, .start)
+        XCTAssertFalse(waiting.showsCancelCurrent)
+
+        let runningQueue = queue(
+            [makeTask("clip.mp4", status: .extracting), makeTask("b.mp4")],
+            status: .running
+        )
+        let running = TaskCenterPresentation.transport(for: runningQueue, reason: .none)
+        XCTAssertEqual(running.displayState, .running)
+        XCTAssertEqual(running.primaryTitle, "完成后暂停")
+        XCTAssertTrue(running.primaryEnabled)
+        XCTAssertEqual(running.primaryAction, .pauseAfterCurrent)
+        XCTAssertTrue(running.showsCancelCurrent)
+        XCTAssertFalse(running.primaryIsPressed)
+        XCTAssertFalse(running.statusText.isEmpty)
+        XCTAssertTrue(running.statusText.contains("队列运行中"))
+
+        let draining = TaskCenterPresentation.transport(for: runningQueue, reason: .afterCurrent)
+        XCTAssertEqual(draining.displayState, .draining)
+        XCTAssertEqual(draining.primaryTitle, "完成后暂停")
+        XCTAssertEqual(draining.primaryAction, .clearPauseRequest)
+        XCTAssertTrue(draining.primaryIsPressed)
+        XCTAssertTrue(draining.primaryEnabled)
+        XCTAssertTrue(draining.showsCancelCurrent)
+        XCTAssertFalse(draining.statusText.isEmpty)
+        XCTAssertTrue(draining.statusText.contains("完成后将暂停"))
+
+        // stopped：取消中不可撤销，不得再提供「取消当前」。
+        let stopping = TaskCenterPresentation.transport(for: runningQueue, reason: .stopped)
+        XCTAssertEqual(stopping.displayState, .draining)
+        XCTAssertEqual(stopping.primaryAction, .none)
+        XCTAssertFalse(stopping.primaryEnabled)
+        XCTAssertFalse(stopping.primaryIsPressed)
+        XCTAssertFalse(stopping.showsCancelCurrent)
+        XCTAssertTrue(stopping.statusText.contains("正在取消当前任务"))
+
+        // singleRun：暂停已就位但不可清除（不软化为继续整队）。
+        let single = TaskCenterPresentation.transport(for: runningQueue, reason: .singleRun)
+        XCTAssertEqual(single.displayState, .draining)
+        XCTAssertEqual(single.primaryTitle, "完成后暂停")
+        XCTAssertEqual(single.primaryAction, .none)
+        XCTAssertFalse(single.primaryEnabled)
+        XCTAssertTrue(single.primaryIsPressed)
+        XCTAssertTrue(single.showsCancelCurrent)
+        XCTAssertTrue(single.statusText.contains("单独运行"))
+
         let pausedQueue = queue([makeTask("a.mp4")], status: .paused)
-        XCTAssertTrue(TaskCenterPresentation.canResume(pausedQueue))
-        XCTAssertFalse(TaskCenterPresentation.canStop(pausedQueue))
+        let paused = TaskCenterPresentation.transport(for: pausedQueue, reason: .none)
+        XCTAssertEqual(paused.displayState, .paused)
+        XCTAssertEqual(paused.primaryTitle, "继续队列")
+        XCTAssertTrue(paused.primaryEnabled)
+        XCTAssertEqual(paused.primaryAction, .resume)
+        XCTAssertFalse(paused.showsCancelCurrent)
+        XCTAssertFalse(paused.statusText.isEmpty)
+
+        let pausedNoWaiting = queue([makeTask("done.mp4", status: .completed)], status: .paused)
+        let pausedIdle = TaskCenterPresentation.transport(for: pausedNoWaiting, reason: .none)
+        XCTAssertEqual(pausedIdle.primaryTitle, "继续队列")
+        XCTAssertFalse(pausedIdle.primaryEnabled)
+        XCTAssertEqual(pausedIdle.primaryAction, .none)
+        XCTAssertFalse(pausedIdle.showsCancelCurrent)
+
+        let interruptedQueue = queue([makeTask("a.mp4")], status: .interrupted)
+        let interrupted = TaskCenterPresentation.transport(for: interruptedQueue, reason: .none)
+        XCTAssertEqual(interrupted.displayState, .paused)
+        XCTAssertEqual(interrupted.primaryTitle, "继续队列")
+        XCTAssertTrue(interrupted.primaryEnabled)
+        XCTAssertEqual(interrupted.primaryAction, .resume)
     }
 
     func testTaskLevelAvailabilityReusesCommandAvailability() {

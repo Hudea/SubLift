@@ -75,8 +75,13 @@ enum TaskCenterAccessibility {
     /// 汇总条 AX 组合 label。
     static func summaryLabel(
         total: Int, waiting: Int, active: Int, completed: Int,
-        failed: Int, cancelled: Int, skipped: Int
+        failed: Int, cancelled: Int, skipped: Int,
+        queueStatus: String = ""
     ) -> String {
-        "总数 \(total)，等待 \(waiting)，进行中 \(active)，完成 \(completed)，失败 \(failed)，取消 \(cancelled)，跳过 \(skipped)"
+        let counts = "总数 \(total)，等待 \(waiting)，进行中 \(active)，完成 \(completed)，失败 \(failed)，取消 \(cancelled)，跳过 \(skipped)"
+        if queueStatus.isEmpty {
+            return counts
+        }
+        return "\(counts)，\(queueStatus)"
     }
 }

@@ -156,6 +156,153 @@ final class BatchQueueSchedulerTests: XCTestCase {
         XCTAssertEqual(scheduler.state.tasks[1].status, .completed)
     }
 
+    func testPauseAfterCurrentWhileRunningSetsReasonWithoutChangingStatus() async {
+        let t1 = makeTask("1.mp4")
+        let t1Gate = AsyncGate()
+        runner.setBehavior(t1.id) { _ in
+            await t1Gate.waitUntilOpened()
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
+        }
+        let scheduler = makeScheduler(tasks: [t1])
+        var changeCount = 0
+        scheduler.onStateChange = { _ in changeCount += 1 }
+
+        scheduler.start()
+        await waitUntil { scheduler.state.status == .running && !scheduler.state.activeTasks.isEmpty }
+        let countAfterStart = changeCount
+        scheduler.pauseAfterCurrent()
+
+        XCTAssertEqual(scheduler.state.status, .running)
+        XCTAssertEqual(scheduler.pauseReason, .afterCurrent)
+        XCTAssertGreaterThan(changeCount, countAfterStart, "运行中 pauseAfterCurrent 必须通知 UI")
+
+        await t1Gate.open()
+        await waitUntil { scheduler.state.status == .paused }
+    }
+
+    func testClearPauseRequestAllowsNextTask() async {
+        let t1 = makeTask("1.mp4")
+        let t2 = makeTask("2.mp4")
+        let t1Gate = AsyncGate()
+        runner.setBehavior(t1.id) { _ in
+            await t1Gate.waitUntilOpened()
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
+        }
+        runner.setBehavior(t2.id) { _ in
+            .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil)
+        }
+
+        let scheduler = makeScheduler(tasks: [t1, t2])
+        scheduler.start()
+        await waitUntil { scheduler.state.status == .running && !scheduler.state.activeTasks.isEmpty }
+        scheduler.pauseAfterCurrent()
+        XCTAssertEqual(scheduler.pauseReason, .afterCurrent)
+
+        scheduler.clearPauseRequest()
+        XCTAssertEqual(scheduler.pauseReason, .none)
+        XCTAssertEqual(scheduler.state.status, .running)
+
+        await t1Gate.open()
+        await waitForIdle(scheduler)
+        XCTAssertEqual(scheduler.state.tasks.map(\.status), [.completed, .completed])
+        XCTAssertEqual(scheduler.state.status, .idle)
+    }
+
+    func testClearPauseRequestIgnoredAfterStop() async {
+        let t1 = makeTask("1.mp4")
+        let t2 = makeTask("2.mp4")
+        let t1Gate = AsyncGate()
+        runner.setBehavior(t1.id) { _ in
+            await t1Gate.waitUntilOpened()
+            if Task.isCancelled { return .cancelled }
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
+        }
+        runner.setBehavior(t2.id) { _ in .completed(entryCount: 2, outputURL: URL(fileURLWithPath: "/tmp/2.srt"), runtimeIdentity: nil) }
+
+        let scheduler = makeScheduler(tasks: [t1, t2])
+        scheduler.start()
+        await waitUntil { scheduler.state.status == .running && !scheduler.state.activeTasks.isEmpty }
+        scheduler.stop()
+        XCTAssertEqual(scheduler.pauseReason, .stopped)
+
+        // stopped 不可清除：撤销请求无效，队列不得被复活。
+        scheduler.clearPauseRequest()
+        XCTAssertEqual(scheduler.pauseReason, .stopped)
+
+        await t1Gate.open()
+        await waitUntil { scheduler.state.status == .paused }
+        XCTAssertEqual(scheduler.state.tasks[0].status, .cancelled)
+        XCTAssertEqual(scheduler.state.tasks[1].status, .waiting, "stop 后不得调度下一项")
+        XCTAssertEqual(runner.recordedRunOrder, [t1.id])
+    }
+
+    func testStopWhileRunningNotifiesUI() async {
+        let t1 = makeTask("1.mp4")
+        let t1Gate = AsyncGate()
+        runner.setBehavior(t1.id) { _ in
+            await t1Gate.waitUntilOpened()
+            if Task.isCancelled { return .cancelled }
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/1.srt"), runtimeIdentity: nil)
+        }
+        let scheduler = makeScheduler(tasks: [t1])
+        var changeCount = 0
+        scheduler.onStateChange = { _ in changeCount += 1 }
+
+        scheduler.start()
+        await waitUntil { scheduler.state.status == .running && !scheduler.state.activeTasks.isEmpty }
+        let countBeforeStop = changeCount
+        scheduler.stop()
+        XCTAssertGreaterThan(changeCount, countBeforeStop, "运行中 stop 必须通知 UI")
+
+        await t1Gate.open()
+        await waitUntil { scheduler.state.status == .paused }
+    }
+
+    func testStartSingleSetsSingleRunReasonWhileRunning() async {
+        let first = makeTask("a.mp4")
+        let selected = makeTask("b.mp4")
+        let selectedGate = AsyncGate()
+        runner.setBehavior(selected.id) { _ in
+            await selectedGate.waitUntilOpened()
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/b.srt"), runtimeIdentity: nil)
+        }
+
+        let scheduler = makeScheduler(tasks: [first, selected])
+        XCTAssertTrue(scheduler.startSingle(selected.id))
+        await waitUntil { scheduler.state.activeTasks.contains { $0.id == selected.id } }
+        XCTAssertEqual(scheduler.state.status, .running)
+        XCTAssertEqual(scheduler.pauseReason, .singleRun)
+
+        await selectedGate.open()
+        await waitUntil { scheduler.state.status == .paused }
+        XCTAssertEqual(scheduler.state.tasks[0].status, .waiting)
+        XCTAssertEqual(scheduler.state.tasks[1].status, .completed)
+    }
+
+    func testClearPauseRequestIgnoredForSingleRun() async {
+        let first = makeTask("a.mp4")
+        let selected = makeTask("b.mp4")
+        let selectedGate = AsyncGate()
+        runner.setBehavior(selected.id) { _ in
+            await selectedGate.waitUntilOpened()
+            return .completed(entryCount: 1, outputURL: URL(fileURLWithPath: "/tmp/b.srt"), runtimeIdentity: nil)
+        }
+
+        let scheduler = makeScheduler(tasks: [first, selected])
+        XCTAssertTrue(scheduler.startSingle(selected.id))
+        await waitUntil { scheduler.state.activeTasks.contains { $0.id == selected.id } }
+        XCTAssertEqual(scheduler.pauseReason, .singleRun)
+
+        // singleRun 不可清除：「该项结束后暂停」契约不软化为继续整队。
+        scheduler.clearPauseRequest()
+        XCTAssertEqual(scheduler.pauseReason, .singleRun)
+
+        await selectedGate.open()
+        await waitUntil { scheduler.state.status == .paused }
+        XCTAssertEqual(scheduler.state.tasks[0].status, .waiting, "单选完成后不继续队列")
+        XCTAssertEqual(scheduler.state.tasks[1].status, .completed)
+    }
+
     // MARK: - 停止
 
     func testStopCancelsCurrentAndDoesNotStartNext() async {

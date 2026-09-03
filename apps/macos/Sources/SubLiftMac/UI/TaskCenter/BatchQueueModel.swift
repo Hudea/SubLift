@@ -27,6 +27,8 @@ enum BatchTaskStatusFilter: String, CaseIterable, Sendable {
 @MainActor
 final class BatchQueueModel: ObservableObject {
     @Published private(set) var state: BatchQueueState
+    /// 调度器 pauseReason 的镜像；不进入 JSON。
+    @Published private(set) var pauseReason: BatchPauseReason = .none
     @Published private(set) var recoveryErrorMessage: String?
 
     // MARK: 08309 投影与导入状态
@@ -94,11 +96,8 @@ final class BatchQueueModel: ObservableObject {
             repository: repository,
             initialState: resolved
         )
-        self.state = self.scheduler.state
-        // live 更新：scheduler 异步变更（进度/终态/调度）通过回调同步到 @Published state。
-        self.scheduler.onStateChange = { [weak self] newState in
-            self?.state = newState
-        }
+        bindScheduler()
+        syncState()
     }
 
     /// 消解恢复错误提示（alert 用）。
@@ -114,10 +113,8 @@ final class BatchQueueModel: ObservableObject {
             repository: repository,
             initialState: fixture
         )
-        scheduler.onStateChange = { [weak self] newState in
-            self?.state = newState
-        }
-        state = scheduler.state
+        bindScheduler()
+        syncState()
         recoveryErrorMessage = nil
     }
     #endif
@@ -158,6 +155,11 @@ final class BatchQueueModel: ObservableObject {
 
     func pauseAfterCurrent() {
         scheduler.pauseAfterCurrent()
+        syncState()
+    }
+
+    func clearPauseRequest() {
+        scheduler.clearPauseRequest()
         syncState()
     }
 
@@ -357,7 +359,16 @@ final class BatchQueueModel: ObservableObject {
         planOutputsForWaitingTasks()
     }
 
+    private func bindScheduler() {
+        scheduler.onStateChange = { [weak self] newState in
+            guard let self else { return }
+            self.state = newState
+            self.pauseReason = self.scheduler.pauseReason
+        }
+    }
+
     private func syncState() {
         state = scheduler.state
+        pauseReason = scheduler.pauseReason
     }
 }

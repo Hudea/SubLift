@@ -19,17 +19,28 @@ enum BatchTaskCommandAvailability {
     static func canStartSingle(_ status: BatchTaskStatus) -> Bool { status == .waiting }
 }
 
+/// 08205：运行时暂停原因（不持久化）。与 `.running` 组合派生 draining 展示态。
+/// 仅 `.afterCurrent` 可经 clearPauseRequest 撤销；`.singleRun`/`.stopped`
+/// 是单任务/取消语义的一部分，不可撤销，防止「取消当前」被误点复活。
+enum BatchPauseReason: Equatable {
+    case none
+    case afterCurrent
+    case singleRun
+    case stopped
+}
+
 /// 08205：串行队列调度器。
 ///
 /// 不变量：
 /// - 固定单并发（maxActive = 1）：前项 teardown（runner 返回）后才启动下一项。
 /// - 每任务启动冻结 run token；stop 后 token 保持有效直到 runner 返回
 ///   （结果接受为 cancelled）；迟到的 progress/final/error 回调被拒绝。
-/// - pauseAfterCurrent：当前任务完成后 paused（不启动下一项）；resume 恢复。
-/// - stop：当前任务取消 + 不再调度；等待项保持顺序。
+/// - pauseAfterCurrent：当前任务完成后 paused（不启动下一项）；运行中可撤销
+///   （clearPauseRequest），仅此一种暂停原因可撤销；resume 恢复。
+/// - stop：当前任务取消 + 不再调度；等待项保持顺序；暂停原因不可撤销。
 /// - 单任务 failed 默认继续下一项；failed/cancelled/interrupted 可 retry 回 waiting。
 /// - remove：非活动态（waiting 与终态）；reorder/replaceConfiguration 仅 waiting。
-/// - startSingle：只跑指定 waiting 任务，完成后暂停，不继续队列。
+/// - startSingle：只跑指定 waiting 任务，完成后暂停，不继续队列；暂停原因不可撤销。
 /// - Scheduler 只依赖 Runner/Repository ports；不解析 IPC、不操作文件系统。
 @MainActor
 final class BatchQueueScheduler {
@@ -46,7 +57,8 @@ final class BatchQueueScheduler {
     private var currentTaskID: UUID?
     private var currentRunTask: Task<Void, Never>?
 
-    private var pauseRequested = false
+    /// 运行时暂停原因，不持久化。`.running` + 非 `.none` 派生为 draining 展示态。
+    private(set) var pauseReason: BatchPauseReason = .none
     /// 下一次 schedule 优先这项（startSingle）；用完即清。
     private var preferredNextTaskID: UUID?
 
@@ -59,20 +71,35 @@ final class BatchQueueScheduler {
     // MARK: - 命令
 
     /// 开始/恢复调度（从第一个 waiting 起；paused 时恢复）。
+    /// 非运行态进入才清除暂停原因：运行中调 start 不得隐式撤销暂停请求。
     func start() {
-        pauseRequested = false
         guard state.status != .running, currentRunToken == nil else { return }
+        pauseReason = .none
         state.status = .running
         scheduleNextIfPossible()
     }
 
-    /// 完成当前项后暂停（不启动下一项）。
+    /// 完成当前项后暂停（不启动下一项）。运行中状态仍为 `.running`，须通知 UI 以显示 draining。
+    /// 已处于单任务/取消暂停时保持原原因（二者已含完成后暂停，且不因本命令降级为可撤销）。
     func pauseAfterCurrent() {
-        pauseRequested = true
+        if pauseReason == .none {
+            pauseReason = .afterCurrent
+        }
         if currentRunToken == nil {
             state.status = .paused
             persist()
+        } else {
+            onStateChange?(state)
         }
+    }
+
+    /// 撤销完成后暂停：仅 `.afterCurrent` 可撤销（singleRun/stopped 不可，
+    /// 避免单任务契约被软化或「取消当前」被复活）。当前任务继续，结束后仍调度下一项。
+    /// 不在此处启动新任务。
+    func clearPauseRequest() {
+        guard state.status == .running, pauseReason == .afterCurrent else { return }
+        pauseReason = .none
+        onStateChange?(state)
     }
 
     /// 恢复调度。
@@ -86,24 +113,26 @@ final class BatchQueueScheduler {
         guard currentRunToken == nil, state.status != .running else { return false }
         guard let index = state.tasks.firstIndex(where: { $0.id == taskID }) else { return false }
         guard BatchTaskCommandAvailability.canStartSingle(state.tasks[index].status) else { return false }
-        pauseRequested = false
+        pauseReason = .none
         preferredNextTaskID = taskID
         state.status = .running
         scheduleNextIfPossible()
         // 当前项已经占住 token 后再请求暂停，避免 schedule 入口直接 return。
-        pauseRequested = true
+        pauseReason = .singleRun
         return currentTaskID == taskID
     }
 
     /// 停止：取消当前任务 + 不再调度；等待项保持顺序。
     /// 当前任务的 run token 保持有效直到 runner 返回（结果被接受为 cancelled），
-    /// 之后 scheduleNextIfPossible 因 pauseRequested 进入 paused。
+    /// 之后 scheduleNextIfPossible 因 `.stopped` 进入 paused；resume 前不可撤销。
     func stop() {
-        pauseRequested = true
+        pauseReason = .stopped
         currentRunTask?.cancel()
         if currentRunToken == nil {
             state.status = .paused
             persist()
+        } else {
+            onStateChange?(state)
         }
     }
 
@@ -228,7 +257,7 @@ final class BatchQueueScheduler {
     // MARK: - 内部
 
     private func scheduleNextIfPossible() {
-        guard !pauseRequested else {
+        guard pauseReason == .none else {
             if currentRunToken == nil {
                 state.status = .paused
                 persist()

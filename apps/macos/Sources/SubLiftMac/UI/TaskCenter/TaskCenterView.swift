@@ -252,13 +252,18 @@ struct TaskCenterView: View {
 
     private var summaryBar: some View {
         let summary = TaskCenterPresentation.summary(for: model.state)
+        let transport = TaskCenterPresentation.transport(
+            for: model.state,
+            reason: model.pauseReason
+        )
         return HStack(spacing: 16) {
             Label("\(summary.total)", systemImage: "list.bullet")
                 .labelStyle(.titleAndIcon)
                 .accessibilityLabel(TaskCenterAccessibility.summaryLabel(
                     total: summary.total, waiting: summary.waiting, active: summary.active,
                     completed: summary.completed, failed: summary.failed,
-                    cancelled: summary.cancelled, skipped: summary.skipped
+                    cancelled: summary.cancelled, skipped: summary.skipped,
+                    queueStatus: transport.statusText
                 ))
             Text("等待 \(summary.waiting)")
             Text("进行中 \(summary.active)")
@@ -267,6 +272,11 @@ struct TaskCenterView: View {
             Text("取消 \(summary.cancelled)")
             Text("跳过 \(summary.skipped)")
             Spacer()
+            if !transport.statusText.isEmpty {
+                Text(transport.statusText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
         .font(.caption)
         .foregroundStyle(.secondary)

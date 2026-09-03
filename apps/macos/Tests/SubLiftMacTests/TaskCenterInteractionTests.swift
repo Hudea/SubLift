@@ -134,5 +134,30 @@ final class TaskCenterAccessibilityTests: XCTestCase {
         XCTAssertTrue(label.contains("等待 1"))
         XCTAssertTrue(label.contains("进行中 1"))
         XCTAssertTrue(label.contains("完成 1"))
+        XCTAssertFalse(label.contains("队列运行中"))
+    }
+
+    func testSummaryLabelIncludesQueueStatusWhenProvided() {
+        let label = TaskCenterAccessibility.summaryLabel(
+            total: 3, waiting: 1, active: 1, completed: 1, failed: 0, cancelled: 0, skipped: 0,
+            queueStatus: "队列运行中 · 当前 a.mp4"
+        )
+        XCTAssertTrue(label.contains("总数 3"))
+        XCTAssertTrue(label.contains("队列运行中 · 当前 a.mp4"))
+    }
+
+    func testTransportStatusTextForRunningIncludesFilename() {
+        var task = BatchTask.make(
+            sourceURL: URL(fileURLWithPath: "/tmp/clip.mp4"),
+            engine: .vision, quality: .fast, developerMode: false
+        )
+        _ = task.transition(to: .preparing)
+        _ = task.transition(to: .extracting)
+        var queue = BatchQueueState.empty
+        queue.status = .running
+        queue.tasks = [task]
+        let statusText = TaskCenterPresentation.transport(for: queue, reason: .none).statusText
+        XCTAssertTrue(statusText.contains("队列运行中"))
+        XCTAssertTrue(statusText.contains("clip.mp4"))
     }
 }

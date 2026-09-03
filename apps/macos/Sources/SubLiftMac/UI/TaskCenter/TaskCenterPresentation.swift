@@ -228,21 +228,132 @@ enum TaskCenterPresentation {
             && queue.tasks.contains { $0.id == taskID && BatchTaskCommandAvailability.canStartSingle($0.status) }
     }
 
-    // MARK: - 队列级命令 availability
+    // MARK: - 队列级工具栏投影（display 派生，不持久化）
 
-    static func canStart(_ queue: BatchQueueState) -> Bool {
-        queue.status != .running && queue.pendingTasks.contains(where: { $0.status == .waiting })
+    enum QueueDisplayState: Equatable {
+        case idle, running, draining, paused
     }
 
-    static func canPauseAfterCurrent(_ queue: BatchQueueState) -> Bool {
-        queue.status == .running
+    enum QueuePrimaryAction: Equatable {
+        case start, pauseAfterCurrent, clearPauseRequest, resume, none
     }
 
-    static func canResume(_ queue: BatchQueueState) -> Bool {
-        queue.status == .paused && queue.pendingTasks.contains(where: { $0.status == .waiting })
+    struct QueueTransport: Equatable {
+        let displayState: QueueDisplayState
+        let primaryAction: QueuePrimaryAction
+        let primaryTitle: String
+        let primarySymbolName: String
+        let primaryHelp: String
+        let primaryEnabled: Bool
+        let primaryIsPressed: Bool
+        let showsCancelCurrent: Bool
+        let statusText: String
     }
 
-    static func canStop(_ queue: BatchQueueState) -> Bool {
-        queue.status == .running
+    static func displayState(for queue: BatchQueueState, reason: BatchPauseReason) -> QueueDisplayState {
+        switch queue.status {
+        case .idle:
+            return .idle
+        case .running:
+            return reason == .none ? .running : .draining
+        case .paused, .interrupted:
+            return .paused
+        }
+    }
+
+    static func transport(for queue: BatchQueueState, reason: BatchPauseReason) -> QueueTransport {
+        let display = displayState(for: queue, reason: reason)
+        let hasWaiting = queue.pendingTasks.contains { $0.status == .waiting }
+        let currentFilename = queue.activeTasks.first?.sourceURL.lastPathComponent
+
+        switch display {
+        case .idle:
+            return QueueTransport(
+                displayState: .idle,
+                primaryAction: hasWaiting ? .start : .none,
+                primaryTitle: "开始队列",
+                primarySymbolName: "play.fill",
+                primaryHelp: "开始按顺序提取等待中的任务",
+                primaryEnabled: hasWaiting,
+                primaryIsPressed: false,
+                showsCancelCurrent: false,
+                statusText: queue.tasks.isEmpty ? "" : "队列空闲"
+            )
+        case .running:
+            return QueueTransport(
+                displayState: .running,
+                primaryAction: .pauseAfterCurrent,
+                primaryTitle: "完成后暂停",
+                primarySymbolName: "pause.fill",
+                primaryHelp: "当前任务完成后暂停队列，不中断正在提取的任务",
+                primaryEnabled: true,
+                primaryIsPressed: false,
+                showsCancelCurrent: true,
+                statusText: runningStatusText("队列运行中", filename: currentFilename)
+            )
+        case .draining:
+            // draining 按暂停原因分三态：仅 afterCurrent 可点击撤销。
+            switch reason {
+            case .stopped:
+                return QueueTransport(
+                    displayState: .draining,
+                    primaryAction: .none,
+                    primaryTitle: "继续队列",
+                    primarySymbolName: "play.fill",
+                    primaryHelp: "正在取消当前任务，完成后队列暂停，届时可继续",
+                    primaryEnabled: false,
+                    primaryIsPressed: false,
+                    showsCancelCurrent: false,
+                    statusText: runningStatusText("正在取消当前任务", filename: currentFilename)
+                )
+            case .singleRun:
+                return QueueTransport(
+                    displayState: .draining,
+                    primaryAction: .none,
+                    primaryTitle: "完成后暂停",
+                    primarySymbolName: "pause.fill",
+                    primaryHelp: "单独运行该任务，完成后暂停队列",
+                    primaryEnabled: false,
+                    primaryIsPressed: true,
+                    showsCancelCurrent: true,
+                    statusText: runningStatusText("单独运行 · 完成后将暂停", filename: currentFilename)
+                )
+            case .afterCurrent, .none:
+                return QueueTransport(
+                    displayState: .draining,
+                    primaryAction: .clearPauseRequest,
+                    primaryTitle: "完成后暂停",
+                    primarySymbolName: "pause.fill",
+                    primaryHelp: "将在当前任务完成后暂停队列，再次点击可继续调度",
+                    primaryEnabled: true,
+                    primaryIsPressed: true,
+                    showsCancelCurrent: true,
+                    statusText: runningStatusText("完成后将暂停", filename: currentFilename)
+                )
+            }
+        case .paused:
+            let waitingCount = queue.pendingTasks.count
+            let statusText = waitingCount > 0
+                ? "队列已暂停 · 还剩 \(waitingCount) 项"
+                : "队列已暂停"
+            return QueueTransport(
+                displayState: .paused,
+                primaryAction: hasWaiting ? .resume : .none,
+                primaryTitle: "继续队列",
+                primarySymbolName: "play.fill",
+                primaryHelp: "继续提取剩余等待中的任务",
+                primaryEnabled: hasWaiting,
+                primaryIsPressed: false,
+                showsCancelCurrent: false,
+                statusText: statusText
+            )
+        }
+    }
+
+    private static func runningStatusText(_ prefix: String, filename: String?) -> String {
+        if let filename, !filename.isEmpty {
+            return "\(prefix) · 当前 \(filename)"
+        }
+        return prefix
     }
 }
