@@ -7,6 +7,7 @@
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -15,6 +16,10 @@
 #if defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
 #include <ImageIO/ImageIO.h>
+#elif defined(SUBLIFT_HAS_OPENCV)
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
 #endif
 
 namespace sublift::worker {
@@ -169,6 +174,41 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
     dst[i * 3 + 0] = temp_rgba[i * 4 + 0];
     dst[i * 3 + 1] = temp_rgba[i * 4 + 1];
     dst[i * 3 + 2] = temp_rgba[i * 4 + 2];
+  }
+  return buf;
+#elif defined(SUBLIFT_HAS_OPENCV)
+  // OpenCV path (Linux/container): decode JPEG to BGR, then convert to RGB24.
+  // Fail-closed: cv::imdecode returns an empty Mat for malformed data.
+  const cv::Mat raw(1, static_cast<int>(bytes.size()), CV_8UC1,
+                    const_cast<std::uint8_t*>(bytes.data()));
+  cv::Mat decoded = cv::imdecode(raw, cv::IMREAD_COLOR);
+  if (decoded.empty()) {
+    throw std::invalid_argument("JPEG 解码失败: OpenCV 无法解析图像数据");
+  }
+  if (decoded.cols <= 0 || decoded.rows <= 0 ||
+      decoded.cols > std::numeric_limits<std::int32_t>::max() ||
+      decoded.rows > std::numeric_limits<std::int32_t>::max() ||
+      static_cast<unsigned long long>(decoded.cols) >
+          kMaxImagePixels / static_cast<unsigned long long>(decoded.rows)) {
+    throw std::invalid_argument("JPEG 解码失败: 图像尺寸超过限制");
+  }
+
+  sublift::ImageBuffer buf(decoded.cols, decoded.rows, sublift::PixelFormat::RGB24);
+  std::uint8_t* dst = buf.data();
+  if (decoded.isContinuous()) {
+    cv::Mat rgb;
+    cv::cvtColor(decoded, rgb, cv::COLOR_BGR2RGB);
+    std::memcpy(dst, rgb.data, static_cast<std::size_t>(decoded.cols) * decoded.rows * 3);
+  } else {
+    for (int y = 0; y < decoded.rows; ++y) {
+      const cv::Vec3b* row = decoded.ptr<cv::Vec3b>(y);
+      for (int x = 0; x < decoded.cols; ++x) {
+        const std::size_t idx = (static_cast<std::size_t>(y) * decoded.cols + x) * 3;
+        dst[idx + 0] = row[x][2];  // R
+        dst[idx + 1] = row[x][1];  // G
+        dst[idx + 2] = row[x][0];  // B
+      }
+    }
   }
   return buf;
 #else

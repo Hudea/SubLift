@@ -106,7 +106,8 @@ Oracle。现行契约见 [`docs/cpp/`](cpp/README.md)。
 | **资源占用** | 长视频处理保持流式，不随帧数线性增长 | ✅ 不累计完整视频帧；Paddle C++/Python canonical 进程树 RSS=0.9152x，720s Paddle C++ 长流通过；既有 4K/Vision 长流门也通过。 |
 | **可分发** | 面向终端用户的独立安装包 | ❌ Phase 2 已明确跳过 `.app` 打包与公证 |
 | **可扩展** | 能力模块依赖 Protocol，平台实现隔离 | ⚠️ 接口与分层完成，第三方插件发现机制未实现 |
-| **当前兼容性** | 产品执行不要求 Python；macOS GUI 需 macOS 13+ 与 Swift 5.9+，Web/Server 使用受支持的 Native 平台 | ✅ Native CLI、macOS 与 Web 产品链均不依赖 Python；Linux 容器分发仍属于 12505 blocked 范围 |
+| **当前兼容性** | 产品执行不要求 Python；macOS GUI 需 macOS 13+ 与 Swift 5.9+，Web/Server 使用受支持的 Native 平台 | ✅ Native CLI、macOS 与 Web 产品链均不依赖 Python；Linux 容器分发由 Phase 14（ADR-0040）承担，12505 仅保留为历史 blocked 记录 |
+| **容器自托管** | 可信局域网内以容器镜像提供 Web 服务，宿主卷为唯一媒体授权根，非 loopback 受最小访问控制约束 | ✅ Phase 14 已交付镜像、Compose、工作区锁定、可选 token 与 `./scripts/verify-container.sh` 真实验收；公网 HTTPS、账号系统、GPU/CUDA 与 CI/CD 不在范围 |
 | **运行时单一性** | C++ 是唯一产品运行时；缺失 capability 时 fail-closed，版本回滚不切 Python | ✅ ADR-0038 与 Phase 13 已完成并在 `main` 冻结 |
 | **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
 | **本地服务信任边界** | Web Server 默认 loopback，当前工作区是所有媒体路径的唯一授权根 | ⚠️ Workspace UI 和 PathSandbox 已存在，但路由统一约束与工作区切换负例由 12510/12511 完成 |
@@ -231,7 +232,15 @@ Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 - [x] 12001–12509：Native Server、HTTP/SSE、单视频 Workbench、ROI/Review、批量基座、媒体工作区、智能区域检测与本地验证基线
 - [>] 12510：Web 批量任务中心交互增强与受控文件夹扫描（当前唯一进行中 Feature）
 - [ ] 12511–12516：统一信任边界、可恢复任务、配置/质量一致性、真实导出、审阅草稿和 Web 可访问性
-- [~] 12505：Linux 容器与 Paddle 完整分发暂缓，保持 blocked；不阻塞本地 Web/Native Server 收口
+- [~] 12505：Linux 容器与 Paddle 完整分发保持 blocked 作为历史记录；容器交付由 Phase 14 重新实现与取证
+
+### Phase 14 — 局域网容器化自托管（ready-for-merge）
+
+- [x] D01：ADR-0040 冻结单容器同源部署、宿主媒体卷、非 loopback 最小访问控制与清单 SHA-256 硬失败校验；Phase 14 已登记
+- [x] D02：多阶段 Dockerfile 与 .dockerignore，按 manifest 校验安装 ORT 与 PP-OCRv6，non-root 且 Paddle fail-closed
+- [x] D03：docker-compose.yml 与访问控制落地（工作区锁定 403、可选 Bearer token、Web 跳过本机路径向导）
+- [x] D04：真实 docker build/run + 容器内 paddle.available + /media 映射的 golden SRT 比对（Python-free scripts/verify-container.sh）
+- [x] D05：运维说明与产品叙述收口；容器验证保持为独立入口，不挂入默认产品门
 
 ### Phase 13 — Python Runtime 退役与 Native-only 收口（已完成）
 

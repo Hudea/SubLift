@@ -28,8 +28,11 @@
 #include <opencv2/opencv.hpp>
 #define SUBLIFT_PADDLE_USE_OPENCV 1
 #endif
+#endif
 
 namespace sublift {
+
+#if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
 
 namespace {
 

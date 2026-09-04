@@ -13,6 +13,7 @@ export const useSystemStore = defineStore('system', () => {
     media_dir: '',
     cache_dir: '',
     video_count: 0,
+    locked: false,
   });
 
   const availableEngines = computed(() => {
@@ -39,6 +40,10 @@ export const useSystemStore = defineStore('system', () => {
     return workspace.value.configured && !!workspace.value.media_dir;
   });
 
+  const isWorkspaceLocked = computed(() => {
+    return workspace.value.locked === true;
+  });
+
   const currentMediaDir = computed(() => {
     return workspace.value.media_dir;
   });
@@ -53,6 +58,9 @@ export const useSystemStore = defineStore('system', () => {
   }
 
   async function setWorkspace(dir: string): Promise<{ success: boolean; error?: string }> {
+    if (isWorkspaceLocked.value) {
+      return { success: false, error: '媒体工作区由服务启动配置锁定，不能通过界面修改' };
+    }
     try {
       const data = await SubLiftApiClient.setWorkspaceConfig(dir);
       workspace.value = data;
@@ -63,6 +71,9 @@ export const useSystemStore = defineStore('system', () => {
   }
 
   async function clearWorkspace() {
+    if (isWorkspaceLocked.value) {
+      return;
+    }
     try {
       const data = await SubLiftApiClient.clearWorkspaceConfig();
       workspace.value = data;
@@ -82,6 +93,7 @@ export const useSystemStore = defineStore('system', () => {
           media_dir: '',
           cache_dir: '',
           video_count: 0,
+          locked: false,
         })),
       ]);
       systemInfo.value = data;
@@ -102,6 +114,7 @@ export const useSystemStore = defineStore('system', () => {
     systemInfo,
     workspace,
     isWorkspaceConfigured,
+    isWorkspaceLocked,
     currentMediaDir,
     availableEngines,
     preferredEngine,

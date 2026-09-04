@@ -16,8 +16,19 @@ function(sublift_ort_sha256_allowed lib_path manifest_path out_var)
     set(${out_var} FALSE PARENT_SCOPE)
     return()
   endif()
+  # macOS 自带 shasum，多数 Linux 发行版只有 sha256sum；两者输出格式一致。
+  find_program(SUBLIFT_SHA256_TOOL NAMES shasum sha256sum)
+  if(NOT SUBLIFT_SHA256_TOOL)
+    set(${out_var} FALSE PARENT_SCOPE)
+    return()
+  endif()
+  if("${SUBLIFT_SHA256_TOOL}" MATCHES "shasum$")
+    set(_sha_cmd "${SUBLIFT_SHA256_TOOL}" -a 256 "${lib_path}")
+  else()
+    set(_sha_cmd "${SUBLIFT_SHA256_TOOL}" "${lib_path}")
+  endif()
   execute_process(
-    COMMAND shasum -a 256 "${lib_path}"
+    COMMAND ${_sha_cmd}
     OUTPUT_VARIABLE _sha_line
     OUTPUT_STRIP_TRAILING_WHITESPACE
     RESULT_VARIABLE _sha_rc)

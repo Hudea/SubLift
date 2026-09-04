@@ -42,6 +42,9 @@ dist/
 # dotenv environment variable files
 .env
 
+# 本机 Docker daemon 运行态（socket / pid / 镜像层），不入库
+.docker/
+
 # Virtual environments
 .venv
 env/

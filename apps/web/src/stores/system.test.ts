@@ -80,3 +80,75 @@ describe('System Store Workspace Management (Feature 12508)', () => {
     expect(store.currentMediaDir).toBe('');
   });
 });
+
+describe('System Store Workspace Lock (Phase 14 D03 / ADR-0040)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    vi.restoreAllMocks();
+  });
+
+  it('服务端报告 locked 时 isWorkspaceLocked 为 true', async () => {
+    const store = useSystemStore();
+    vi.spyOn(SubLiftApiClient, 'getWorkspaceConfig').mockResolvedValue({
+      configured: true,
+      media_dir: '/media',
+      cache_dir: '/media/.sublift_cache',
+      video_count: 3,
+      locked: true,
+    });
+
+    await store.fetchWorkspaceConfig();
+
+    expect(store.isWorkspaceLocked).toBe(true);
+    expect(store.isWorkspaceConfigured).toBe(true);
+  });
+
+  it('服务端未报告 locked（旧版本）时默认未锁定', () => {
+    const store = useSystemStore();
+    store.workspace = {
+      configured: true,
+      media_dir: '/Users/test/Movies',
+      cache_dir: '/Users/test/Movies/.sublift_cache',
+      video_count: 1,
+    };
+
+    expect(store.isWorkspaceLocked).toBe(false);
+  });
+
+  it('锁定时 setWorkspace 不发请求并返回错误', async () => {
+    const store = useSystemStore();
+    store.workspace = {
+      configured: true,
+      media_dir: '/media',
+      cache_dir: '/media/.sublift_cache',
+      video_count: 3,
+      locked: true,
+    };
+    const setSpy = vi.spyOn(SubLiftApiClient, 'setWorkspaceConfig');
+
+    const res = await store.setWorkspace('/etc');
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('锁定');
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(store.currentMediaDir).toBe('/media');
+  });
+
+  it('锁定时 clearWorkspace 不发请求且工作区保持不变', async () => {
+    const store = useSystemStore();
+    store.workspace = {
+      configured: true,
+      media_dir: '/media',
+      cache_dir: '/media/.sublift_cache',
+      video_count: 3,
+      locked: true,
+    };
+    const clearSpy = vi.spyOn(SubLiftApiClient, 'clearWorkspaceConfig');
+
+    await store.clearWorkspace();
+
+    expect(clearSpy).not.toHaveBeenCalled();
+    expect(store.isWorkspaceConfigured).toBe(true);
+    expect(store.currentMediaDir).toBe('/media');
+  });
+});

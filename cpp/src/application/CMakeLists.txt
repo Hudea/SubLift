@@ -24,6 +24,12 @@ target_link_libraries(sublift_application PUBLIC
 
 if(SUBLIFT_ENABLE_OPENCV)
   target_compile_definitions(sublift_application PUBLIC SUBLIFT_HAS_OPENCV=1)
+  # bridge.cpp 的 Frame-mode JPEG 解码在非 Apple 平台走 OpenCV（cv::imdecode）。
+  find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
+  if(OpenCV_FOUND)
+    target_link_libraries(sublift_application PRIVATE ${OpenCV_LIBS})
+    target_include_directories(sublift_application PRIVATE ${OpenCV_INCLUDE_DIRS})
+  endif()
 else()
   target_compile_definitions(sublift_application PUBLIC SUBLIFT_HAS_OPENCV=0)
 endif()

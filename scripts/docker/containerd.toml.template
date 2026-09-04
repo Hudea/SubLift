@@ -1,0 +1,26 @@
+# 由 start-local-daemon.sh 填入路径后写入 debug/docker/containerd.toml。
+# uid/gid = -1 表示不 chown socket，避免沙箱缺少 CAP_CHOWN 时启动失败。
+version = 3
+root = "{{ROOT}}"
+state = "{{STATE}}"
+disabled_plugins = [
+  "io.containerd.grpc.v1.cri",
+  "io.containerd.cri.v1.images",
+  "io.containerd.cri.v1.runtime",
+]
+oom_score = 0
+
+[grpc]
+  address = "{{GRPC}}"
+  uid = -1
+  gid = -1
+
+[ttrpc]
+  address = "{{TTRPC}}"
+  uid = -1
+  gid = -1
+
+[debug]
+  address = ""
+  uid = -1
+  gid = -1

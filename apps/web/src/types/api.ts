@@ -118,6 +118,8 @@ export interface WorkspaceConfigDTO {
   media_dir: string;
   cache_dir: string;
   video_count: number;
+  /** 启动期注入的媒体根是否锁定；锁定后前端不得改工作区 */
+  locked?: boolean;
 }
 
 /** 工作区视频文件项（Feature 12508） */

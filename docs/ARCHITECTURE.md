@@ -138,6 +138,26 @@ Web 入口仍是本机产品边界，不因使用 HTTP 而获得读取任意本�
   输出文件各有版本/状态；浏览器下载不等同于服务端已保存，磁盘 completed 必须以原子写
   成功为准。
 
+### 7.2 容器自托管部署边界
+
+Web / Native Server 可以以容器镜像部署到可信局域网服务器（ADR-0040，Phase 14）。容器化
+不改变第 7.1 节的会话与结果所有权，只改变宿主的挂载与网络暴露方式：
+
+- 拓扑为单容器同源部署：容器内 `sublift_server` 同时托管 Web 静态资源与 API；不引入反向
+  代理或前端独立服务。媒体入口是宿主目录挂载到容器 `/media`，不新增上传 API。
+- 非 loopback 监听必须满足最小访问控制合同：启动时必须已有媒体根；启动期注入的媒体根
+  锁定工作区，`POST/DELETE /api/config/workspace` 返回 403；可选共享 token
+  （`SUBLIFT_ACCESS_TOKEN`）要求 `/api/*` 携带 `Authorization: Bearer`。CORS 继续默认关闭。
+- 镜像内的模型与 ONNX Runtime 由 `resources/manifest.json` 的版本与 SHA-256 约束，校验
+  失败即构建失败；Paddle capability 缺失时 fail-closed，不静默降级为 mock。推理为 CPU
+  ONNX Runtime；GPU/CUDA 不在部署边界内。
+- 缓存、抽帧与导出落在宿主媒体目录下的 `.sublift_cache/`。更新方式是仓库内
+  `docker compose build` 后 `up -d`；不推镜像仓库、不做 CI/CD。管理员操作说明见根
+  [README 局域网容器自托管](../README.md)。
+- 容器验收是独立于默认产品门的入口（`./scripts/verify-container.sh`），由真实
+  `docker build`、容器内 `paddle.available` 与经 `/media` 映射的 golden SRT 比对构成。
+  公网 HTTPS、账号系统、镜像仓库与 CI/CD 不属于当前部署边界。
+
 ## 8. 配置、能力与资源
 
 配置在产品入口完成解析和校验，由 Application 为每个 job 创建不可追溯修改的快照；运行中的任务不读取 UI 的后续变更。

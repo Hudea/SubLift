@@ -1,10 +1,109 @@
 #include "sublift/server/http_server.hpp"
 
+#include <algorithm>
+#include <string>
+#include <string_view>
+
 #include <httplib.h>
 
 #include "sublift/server/routes.hpp"
 
 namespace sublift::server {
+
+namespace {
+
+/// 常量时间比较，避免通过响应耗时逐字节猜测共享 token。
+bool constant_time_equals(std::string_view a, std::string_view b) noexcept {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  unsigned char diff = 0;
+  for (std::size_t i = 0; i < a.size(); ++i) {
+    diff |= static_cast<unsigned char>(a[i]) ^ static_cast<unsigned char>(b[i]);
+  }
+  return diff == 0;
+}
+
+std::string_view trim(std::string_view value) noexcept {
+  const auto is_space = [](char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+  };
+  while (!value.empty() && is_space(value.front())) {
+    value.remove_prefix(1);
+  }
+  while (!value.empty() && is_space(value.back())) {
+    value.remove_suffix(1);
+  }
+  return value;
+}
+
+}  // namespace
+
+bool is_loopback_host(const std::string& host) noexcept {
+  const std::string_view h = trim(host);
+  if (h.empty()) {
+    return false;
+  }
+  if (h == "localhost" || h == "localhost.") {
+    return true;
+  }
+  // IPv6 loopback 的常见书写形式（含 IPv6-mapped IPv4 ::ffff:127.0.0.1）
+  if (h == "::1" || h == "[::1]" || h == "0:0:0:0:0:0:0:1" || h == "[0:0:0:0:0:0:0:1]") {
+    return true;
+  }
+  const std::string_view mapped = "::ffff:127.0.0.1";
+  if (h.size() >= mapped.size() && h.compare(0, mapped.size(), mapped) == 0) {
+    return true;
+  }
+  // IPv4 loopback：整个 127.0.0.0/8 都是本机回环
+  if (h.compare(0, 4, "127.") == 0) {
+    // 仅接受 127.x.x.x 形式的点分十进制，避免把 "127.example.com" 误判为回环
+    int dots = 0;
+    bool all_digits_or_dot = true;
+    for (char c : h) {
+      if (c == '.') {
+        ++dots;
+      } else if (c < '0' || c > '9') {
+        all_digits_or_dot = false;
+        break;
+      }
+    }
+    return all_digits_or_dot && dots == 3;
+  }
+  return false;
+}
+
+std::string validate_remote_exposure(const ServerConfig& config, bool media_root_configured) {
+  if (is_loopback_host(config.host)) {
+    return "";
+  }
+  if (!media_root_configured) {
+    return "拒绝以非 loopback 地址 " + config.host +
+           " 启动：必须先配置媒体授权根（SUBLIFT_MEDIA_DIR / --media-dir）。"
+           "远程暴露工作区未定的服务会让任意访问者重新指定宿主目录。";
+  }
+  if (!config.workspace_locked) {
+    return "拒绝以非 loopback 地址 " + config.host +
+           " 启动：媒体授权根必须锁定（配置来自启动参数或环境变量），"
+           "否则远程访问者可修改工作区。";
+  }
+  return "";
+}
+
+bool authorize_request(const ServerConfig& config, const std::string& auth_header) {
+  if (config.access_token.empty()) {
+    return true;
+  }
+  const std::string_view header = trim(auth_header);
+  const std::string_view prefix = "Bearer ";
+  if (header.size() <= prefix.size()) {
+    return false;
+  }
+  if (header.compare(0, prefix.size(), prefix) != 0) {
+    return false;
+  }
+  return constant_time_equals(trim(header.substr(prefix.size())), config.access_token);
+}
 
 HttpServer::HttpServer(ServerConfig config)
     : config_(std::move(config)),
@@ -25,7 +124,27 @@ HttpServer::HttpServer(ServerConfig config)
     });
   }
 
-  register_routes(*svr_, job_manager_, config_.static_dir, workspace_manager_);
+  // 共享 token 作为局域网自托管的最小访问控制（ADR-0040）。静态资源与首页保持可访问，
+  // 以便未持 token 的访问者得到明确提示而不是空白页；API 与 SSE 一律要求 Bearer。
+  if (!config_.access_token.empty()) {
+    svr_->set_pre_routing_handler(
+        [this](const httplib::Request& req, httplib::Response& res) -> httplib::Server::HandlerResponse {
+          if (req.path.rfind("/api/", 0) != 0) {
+            return httplib::Server::HandlerResponse::Unhandled;
+          }
+          if (authorize_request(config_, req.get_header_value("Authorization"))) {
+            return httplib::Server::HandlerResponse::Unhandled;
+          }
+          res.status = 401;
+          res.set_header("WWW-Authenticate", "Bearer");
+          res.set_content(R"({"error":"unauthorized","detail":"需要 Bearer 访问令牌"})",
+                          "application/json");
+          return httplib::Server::HandlerResponse::Handled;
+        });
+  }
+
+  register_routes(*svr_, job_manager_, config_.static_dir, workspace_manager_,
+                  config_.workspace_locked);
 }
 
 HttpServer::~HttpServer() {

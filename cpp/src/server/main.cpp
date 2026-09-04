@@ -1,5 +1,7 @@
+#include <cctype>
 #include <csignal>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -31,7 +33,17 @@ void print_help(std::string_view prog_name) {
             << "      --host <ip>          Bind address (default: 127.0.0.1)\n"
             << "  -p, --port <port>        Listen port (default: 8080)\n"
             << "      --static-dir <path>  Directory to serve static web assets from\n"
-            << "      --cors-origin <o>    Allow-Origin for cross-origin use (default: off)\n";
+            << "      --cors-origin <o>    Allow-Origin for cross-origin use (default: off)\n"
+            << "      --media-dir <path>   Media workspace root; also locks the workspace\n"
+            << "      --config-file <path> Override workspace config file path\n"
+            << "\n"
+            << "Environment:\n"
+            << "  SUBLIFT_HOST / SUBLIFT_PORT / SUBLIFT_STATIC_DIR / SUBLIFT_CORS_ORIGIN\n"
+            << "  SUBLIFT_MEDIA_DIR        Media workspace root (locks the workspace)\n"
+            << "  SUBLIFT_ACCESS_TOKEN     Require 'Authorization: Bearer <token>' on /api/*\n"
+            << "  SUBLIFT_LOCK_WORKSPACE   Force-lock the workspace (1/true/yes/on)\n"
+            << "\n"
+            << "Binding a non-loopback address requires a configured and locked media root.\n";
 }
 
 }  // namespace
@@ -72,6 +84,23 @@ int main(int argc, char* argv[]) {
     config_file = env_cfg;
   }
 
+  std::string access_token = "";
+  if (const char* env_token = std::getenv("SUBLIFT_ACCESS_TOKEN"); env_token && *env_token) {
+    access_token = env_token;
+  }
+
+  // 工作区锁定：启动期注入媒体根即锁定；SUBLIFT_LOCK_WORKSPACE 可显式强制锁定。
+  bool workspace_locked = !media_dir.empty();
+  if (const char* env_lock = std::getenv("SUBLIFT_LOCK_WORKSPACE"); env_lock && *env_lock) {
+    std::string flag;
+    for (const char* p = env_lock; *p != '\0'; ++p) {
+      flag.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(*p))));
+    }
+    if (flag == "1" || flag == "true" || flag == "yes" || flag == "on") {
+      workspace_locked = true;
+    }
+  }
+
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-h" || arg == "--help") {
@@ -96,6 +125,7 @@ int main(int argc, char* argv[]) {
       cors_origin = argv[++i];
     } else if (arg == "--media-dir" && i + 1 < argc) {
       media_dir = argv[++i];
+      workspace_locked = true;
     } else if (arg == "--config-file" && i + 1 < argc) {
       config_file = argv[++i];
     } else {
@@ -129,9 +159,26 @@ int main(int argc, char* argv[]) {
       .cors_origin = cors_origin,
       .media_dir = media_dir,
       .config_file = config_file,
+      .access_token = access_token,
+      .workspace_locked = workspace_locked,
   };
 
   g_server = std::make_unique<sublift::server::HttpServer>(std::move(config));
+
+  const bool media_configured = g_server->workspace_manager() &&
+                                g_server->workspace_manager()->get_media_dir().has_value();
+  {
+    sublift::server::ServerConfig exposure_check;
+    exposure_check.host = host;
+    exposure_check.workspace_locked = workspace_locked;
+    exposure_check.access_token = access_token;
+    if (const std::string err =
+            sublift::server::validate_remote_exposure(exposure_check, media_configured);
+        !err.empty()) {
+      std::cerr << "Error: " << err << "\n";
+      return 1;
+    }
+  }
 
   std::signal(SIGINT, handle_signal);
   std::signal(SIGTERM, handle_signal);
@@ -145,6 +192,9 @@ int main(int argc, char* argv[]) {
     std::cout << " Static dir:   " << static_dir << "\n";
   }
   std::cout << " CORS:         " << (cors_origin.empty() ? "off (same-origin only)" : cors_origin) << "\n";
+  std::cout << " Workspace:    " << (media_configured ? "configured" : "unset")
+            << (workspace_locked ? " (locked)" : "") << "\n";
+  std::cout << " Access token: " << (access_token.empty() ? "off (trusted LAN only)" : "required") << "\n";
   std::cout << " Available OCR Engines:\n";
   for (const auto& eng : sys_info.engines) {
     std::cout << "   - [" << (eng.available ? "x" : " ") << "] " << eng.name

@@ -1,6 +1,7 @@
 # Dependency pins. OpenCV and ffmpeg remain system deps (not FetchContent).
 #
-# nlohmann/json: always (core).
+# nlohmann/json: prefer a distro package (Docker/Linux CI) so configure does not
+# clone GitHub; FetchContent remains the fallback for macOS / developer machines.
 # Catch2 v3: only when SUBLIFT_BUILD_TESTS is ON (set before include).
 
 include(FetchContent)
@@ -8,14 +9,18 @@ include(FetchContent)
 set(SUBLIFT_CATCH2_TAG "v3.7.1" CACHE STRING "Catch2 git tag")
 set(SUBLIFT_NLOHMANN_JSON_TAG "v3.11.3" CACHE STRING "nlohmann/json git tag")
 
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG        ${SUBLIFT_NLOHMANN_JSON_TAG}
-  GIT_SHALLOW    TRUE
-)
-
-FetchContent_MakeAvailable(nlohmann_json)
+find_package(nlohmann_json 3.10 QUIET)
+if(nlohmann_json_FOUND)
+  message(STATUS "nlohmann_json ${nlohmann_json_VERSION} (system package)")
+else()
+  FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG        ${SUBLIFT_NLOHMANN_JSON_TAG}
+    GIT_SHALLOW    TRUE
+  )
+  FetchContent_MakeAvailable(nlohmann_json)
+endif()
 
 if(SUBLIFT_BUILD_TESTS)
   FetchContent_Declare(

@@ -313,7 +313,8 @@ std::optional<std::filesystem::path> find_by_fingerprint(
 void register_routes(httplib::Server& server,
                      std::shared_ptr<JobManager> job_manager,
                      const std::string& static_dir,
-                     std::shared_ptr<WorkspaceManager> workspace_manager) {
+                     std::shared_ptr<WorkspaceManager> workspace_manager,
+                     bool workspace_locked) {
   // CORS Preflight
   server.Options(R"(/api/.*)", [](const httplib::Request&, httplib::Response& res) {
     res.status = 204;
@@ -326,7 +327,7 @@ void register_routes(httplib::Server& server,
   });
 
   // GET /api/config/workspace (Feature 12508)
-  server.Get("/api/config/workspace", [workspace_manager](const httplib::Request&, httplib::Response& res) {
+  server.Get("/api/config/workspace", [workspace_manager, workspace_locked](const httplib::Request&, httplib::Response& res) {
     if (workspace_manager) {
       auto info = workspace_manager->get_workspace_info();
       nlohmann::json j = {
@@ -334,6 +335,7 @@ void register_routes(httplib::Server& server,
           {"media_dir", info.media_dir},
           {"cache_dir", info.cache_dir},
           {"video_count", info.video_count},
+          {"locked", workspace_locked},
       };
       res.set_content(j.dump(), "application/json; charset=utf-8");
     } else {
@@ -342,6 +344,7 @@ void register_routes(httplib::Server& server,
           {"media_dir", ""},
           {"cache_dir", ""},
           {"video_count", 0},
+          {"locked", workspace_locked},
       };
       res.set_content(j.dump(), "application/json; charset=utf-8");
     }
@@ -368,10 +371,19 @@ void register_routes(httplib::Server& server,
   });
 
   // POST /api/config/workspace (Feature 12508)
-  server.Post("/api/config/workspace", [workspace_manager, job_manager](const httplib::Request& req, httplib::Response& res) {
+  server.Post("/api/config/workspace", [workspace_manager, job_manager, workspace_locked](const httplib::Request& req, httplib::Response& res) {
     if (!workspace_manager) {
       res.status = 500;
       res.set_content(R"({"error":"WorkspaceManager not available"})", "application/json; charset=utf-8");
+      return;
+    }
+
+    // ADR-0040：容器/局域网自托管下媒体授权根由启动配置锁定，运行时不得改到宿主任意路径。
+    if (workspace_locked) {
+      res.status = 403;
+      res.set_content(
+          R"({"error":"workspace_locked","detail":"媒体工作区由服务启动配置锁定，不能通过 API 修改"})",
+          "application/json; charset=utf-8");
       return;
     }
 
@@ -414,7 +426,15 @@ void register_routes(httplib::Server& server,
   });
 
   // Clear workspace
-  auto handle_clear_workspace = [workspace_manager, job_manager](const httplib::Request&, httplib::Response& res) {
+  auto handle_clear_workspace = [workspace_manager, job_manager, workspace_locked](const httplib::Request&, httplib::Response& res) {
+    // 与 POST /api/config/workspace 同一合同：锁定时不得清空或改写媒体授权根。
+    if (workspace_locked) {
+      res.status = 403;
+      res.set_content(
+          R"({"error":"workspace_locked","detail":"媒体工作区由服务启动配置锁定，不能通过 API 修改"})",
+          "application/json; charset=utf-8");
+      return;
+    }
     if (workspace_manager) {
       workspace_manager->clear_workspace();
       if (job_manager) {
@@ -426,10 +446,11 @@ void register_routes(httplib::Server& server,
           {"media_dir", ""},
           {"cache_dir", info.cache_dir},
           {"video_count", 0},
+          {"locked", workspace_locked},
       };
       res.set_content(j.dump(), "application/json; charset=utf-8");
     } else {
-      res.set_content(R"({"configured":false,"media_dir":"","cache_dir":"","video_count":0})", "application/json; charset=utf-8");
+      res.set_content(R"({"configured":false,"media_dir":"","cache_dir":"","video_count":0,"locked":false})", "application/json; charset=utf-8");
     }
   };
   server.Post("/api/config/workspace/clear", handle_clear_workspace);

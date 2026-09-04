@@ -5,6 +5,41 @@
 
 ---
 
+## ADR-0040 容器化自托管限于可信局域网，以宿主卷为媒体入口并锁定工作区（2026-09-03）
+
+- **状态**：已确认；由 Phase 14（D01–D05）实施。
+- **背景**：Phase 12 的 Web/Native Server 已收口为本机产品边界，默认只绑定 loopback。用户
+  希望在服务器上通过容器部署多人使用。但 ADR-0039 明确：非 loopback 暴露必须显式启用并
+  满足独立的访问控制合同；当时最大的远程风险是 `WorkspaceManager::set_media_directory` 只
+  校验目录存在，任何能访问端口的人都可以把媒体授权根改到 `/etc` 或其他宿主路径。Phase 12
+  的 12505 也证明容器交付不能靠未经真实执行的脚本冒充完成：模型下载 URL 曾全部 404 却被
+  `|| true` 吞错，宿主临时路径与容器 `/media` 结构性错配，容器分支从未对真实容器跑过。
+- **决策**：
+  1. 服务器部署新增为 Phase 14（v2），不扩张已收口的 Phase 12；12505 保持 `blocked` 历史
+     记录，其交付意图由 Phase 14 的真实容器验收承接。
+  2. 拓扑为单容器同源部署：容器内 `sublift_server` 同时托管 Web 静态资源与 API，不引入
+     反向代理、多容器编排或前端独立服务。媒体入口是宿主目录挂载到容器 `/media`；
+     不新增浏览器上传 API。
+  3. 非 loopback 监听必须满足最小访问控制合同，缺一即拒绝启动或拒绝放行：
+     - 启动时必须已有媒体根（`SUBLIFT_MEDIA_DIR` 或等价配置）；空工作区不得以非 loopback
+       启动。
+     - 启动期注入的媒体根即锁定工作区；`POST/DELETE /api/config/workspace` 返回 403。
+     - 可选共享 token（`SUBLIFT_ACCESS_TOKEN`）；未设置时文档必须写明仅可信局域网使用。
+       同源部署继续保持 CORS 默认关闭。
+  4. 镜像内的 Paddle 模型与 ONNX Runtime 只使用 `resources/manifest.json` 已冻结的 URL 与
+     SHA-256；构建期校验失败即失败，禁止 `|| true`、静默降级 mock 或空目录挂载遮蔽内置模型。
+  5. 容器验收必须由真实 `docker build` + 运行 + 容器内 `paddle.available=true` + 经 `/media`
+     映射的真实 Paddle 提取与 golden SRT 比对构成；无 Docker daemon 的环境只能把对应
+     Deliverable 标 `blocked`，不得标 `done`。容器验收脚本 Python-free，且不挂入默认
+     `./scripts/verify-product.sh`。
+- **理由**：局域网自托管改变了 Web 入口的信任边界，但不需要 TLS、账号和编排系统；先冻结
+  最小访问控制与卷/路径合同，才能在不引入账号系统的前提下让远程暴露可控。把容器分发重新
+  登记为新的纵向 Phase，也让 12505 的历史失败模式有机会被真实证据纠正而不是被补写。
+- **影响**：Phase 14 以 Docker Compose 交付可运行的 Linux 镜像；本机 loopback 开发路径不变。
+  公网暴露、HTTPS、账号/RBAC、镜像仓库与 CI/CD 仍属后置或 Ask first 范围。
+
+---
+
 ## ADR-0039 Web/Native Server 以工作区为信任边界，并采用可恢复任务控制面（2026-08-23）
 
 - **状态**：已确认；由 Phase 12 的 12510–12516 依次实施，当前 12510 in-progress。

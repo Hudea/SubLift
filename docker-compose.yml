@@ -1,0 +1,39 @@
+# SubLift 局域网容器化自托管（Phase 14 / ADR-0040）
+#
+# 单容器同源部署：sublift_server 同时托管 Web 静态资源与 API。
+# 宿主媒体目录挂载到容器 /media，是唯一媒体授权根；服务以该根启动并锁定工作区，
+# 远程访问者不能通过 API 把工作区改到宿主任意路径。
+#
+# 用法：
+#   SUBLIFT_MEDIA_DIR=/srv/sublift/media docker compose up -d
+#   可选共享 token（推荐在非 loopback 使用）：
+#   SUBLIFT_MEDIA_DIR=/srv/sublift/media SUBLIFT_ACCESS_TOKEN=change-me docker compose up -d
+#
+# 环境变量也可写入同目录 .env 文件（.env 已被 gitignore，不入库）。
+# 可信局域网专用：本部署不提供 HTTPS / 账号体系 / RBAC，勿暴露到公网。
+
+services:
+  sublift:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sublift:local
+    restart: unless-stopped
+    ports:
+      # 宿主端口可用 SUBLIFT_HTTP_PORT 覆盖；默认 8080
+      - "${SUBLIFT_HTTP_PORT:-8080}:8080"
+    environment:
+      # 非 loopback 监听；服务端要求此时必须有已配置且锁定的媒体根
+      SUBLIFT_HOST: 0.0.0.0
+      SUBLIFT_PORT: "8080"
+      SUBLIFT_STATIC_DIR: /opt/sublift/web
+      SUBLIFT_PADDLE_MODEL_DIR: /opt/sublift/models/ppocrv6-small
+      SUBLIFT_NATIVE_MANIFEST: /opt/sublift/share/sublift/manifest.json
+      # 启动期注入媒体根 = 锁定工作区（POST/DELETE /api/config/workspace 返回 403）
+      SUBLIFT_MEDIA_DIR: /media
+      # 可选：设置后 /api/* 要求 Authorization: Bearer <token>；留空则仅限可信局域网
+      SUBLIFT_ACCESS_TOKEN: ${SUBLIFT_ACCESS_TOKEN:-}
+    volumes:
+      # 唯一媒体授权根：宿主媒体目录 → 容器 /media。
+      # 缓存与导出产物就近落在 <媒体目录>/.sublift_cache。
+      - ${SUBLIFT_MEDIA_DIR:?请在环境或 .env 中设置 SUBLIFT_MEDIA_DIR 为宿主媒体目录}:/media

@@ -1,0 +1,164 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 14 - 局域网容器化自托管",
+  "goal": "把已收口的 Web / Native Server 以 Docker 镜像与 Compose 编排交付到可信局域网服务器：镜像内含 Web 静态资源、ffmpeg、OpenCV、ONNX Runtime 与 PP-OCRv6，媒体通过宿主卷挂载进入工作区，非 loopback 暴露时满足最小访问控制合同，并由真实容器运行与 golden SRT 比对证明可用。",
+  "scope": [
+    "冻结容器化自托管的运行时与信任边界合同（ADR-0040）：单容器同源部署、宿主媒体卷、锁定工作区、可选共享 token。",
+    "交付可复现的 Linux 产品镜像：多阶段构建 Web dist 与 sublift_server，按 resources/manifest.json 的 SHA-256 校验安装 ORT 与 PP-OCRv6，non-root 运行且 Paddle 缺失时 fail-closed。",
+    "交付 docker-compose.yml 与环境变量示例，使服务以 /media 为工作区启动，并在工作区已配置时跳过本机路径向导。",
+    "在服务端补齐非 loopback 访问控制：无媒体根拒绝启动、锁定工作区后改配置返回 403、可选 Bearer token。",
+    "以 Python-free 脚本完成真实容器验收：docker build、运行、paddle.available=true、沙箱拒绝系统路径、真实 Paddle 提取与 golden SRT 比对。",
+    "更新架构、需求与运维文档，说明挂载、端口、token、更新与数据落盘位置。"
+  ],
+  "non_goals": [
+    "不做公网 HTTPS、反向代理、域名、账号系统或 RBAC；本 Phase 的信任边界是可信局域网。",
+    "不做 Kubernetes、镜像仓库推送、CI/CD 流水线或自动发布。",
+    "不做浏览器上传、媒体库管理、GPU/CUDA、Windows 容器或 macOS .app 分发。",
+    "不把 Docker 步骤挂入默认 ./scripts/verify-product.sh，避免无 Docker daemon 的开发机产品门失败。",
+    "不扩张或改写 Phase 12 已完成 Feature，也不为 12505 补写未经真实执行的证据。",
+    "不创建 docs/plans 或 docs/reports 过程归档目录。"
+  ],
+  "status": "ready-for-merge",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "冻结自托管合同并登记 Phase 14",
+      "outcome": "容器化自托管的拓扑、信任边界、访问控制与非目标形成单一可验证合同，Phase 14 以 2–8 个纵向 Deliverable 登记为当前工作，并澄清 12505 的历史关系。",
+      "acceptance": [
+        "ADR-0040 明确单容器同源部署、宿主媒体卷、非 loopback 最小访问控制（媒体根必需、工作区锁定、可选 token）与清单校验硬失败要求。",
+        "Phase 14 通过 docs/phases/phaseN.schema.json 与 phases.schema.json 的 Draft 2020-12 校验，且是唯一处于 in-progress 的 Phase。",
+        "12505 保持 blocked，但其描述与 evidence 注明交付意图由 Phase 14 的真实容器验收承接。",
+        "docs/ARCHITECTURE.md 与 docs/REQUIREMENTS.md 中「容器分发仍属 12505 blocked」的表述更新为 Phase 14 承担，且不改写已完成 Feature 的结论。",
+        "本 Deliverable 只变更合同、跟踪与文档，不修改产品运行时代码。",
+        "JSON 语法、Markdown 本地链接、git diff --check 与 ./init.sh 全部通过。"
+      ],
+      "areas": [
+        "docs/phases",
+        "docs/DECISIONS.md",
+        "docs/ARCHITECTURE.md",
+        "docs/REQUIREMENTS.md",
+        "phases.json",
+        "progress.md"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-03：新增 ADR-0040，冻结可信局域网单容器同源部署、宿主媒体卷、非 loopback 最小访问控制（媒体根必需 / 工作区锁定 / 可选 token）、清单 SHA-256 硬失败校验与真实容器验收要求；公网 HTTPS、账号、K8s、CI/CD 与上传均列为非目标。",
+        "2026-09-03：新增 docs/phases/phase14.json（schema_version=2，5 个纵向 Deliverable）并登记 phases.json；Python 3.13.0 / jsonschema 4.25.1 Draft202012Validator 校验 phases.schema.json、phaseN.schema.json、phases.json 与 14 个 Phase detail 全部通过；in-progress 唯一性成立。",
+        "2026-09-03：12505 保持 blocked，其描述与 evidence 已注明交付意图由 Phase 14 承接，未补写任何容器验收结论。",
+        "2026-09-03：ARCHITECTURE 7.1 与 REQUIREMENTS 兼容性矩阵加入容器自托管合同；本 Deliverable 未改动产品运行时代码，未运行产品测试。",
+        "2026-09-03：Markdown 本地链接检查、git diff --check 与 ./init.sh 通过。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "可复现的 Linux 产品镜像",
+      "outcome": "可从干净仓库复现地构建出 Linux 运行镜像：内含 Web 静态资源、sublift_server、ffmpeg、OpenCV、ONNX Runtime 与 PP-OCRv6，以 non-root 运行，Paddle 能力缺失时构建失败而不是静默降级。",
+      "acceptance": [
+        "Dockerfile 为多阶段构建：Web dist 构建、C++ sublift_server 构建与精简 runtime 三段分离，构建上下文由 .dockerignore 收敛。",
+        "ORT 与 PP-OCRv6 只从 resources/manifest.json 已冻结的 URL 获取，构建期以 sha256sum 校验，任一文件缺失或校验失败即构建失败；禁止 || true、重试吞错或空目录挂载遮蔽内置模型。",
+        "镜像以 non-root 用户运行 sublift_server，且默认环境变量包含 SUBLIFT_STATIC_DIR、SUBLIFT_PADDLE_MODEL_DIR 与 ORT 库路径。",
+        "镜像内的模型与 ORT 文件清单可在构建后核对，来源可追溯到 manifest 中的版本与 SHA-256。",
+        "在有 Docker daemon 的环境中 docker build 成功；本机构建环境无 daemon 时该状态如实记录，不声称已构建。"
+      ],
+      "areas": [
+        "Dockerfile",
+        ".dockerignore",
+        "resources/manifest.json",
+        "apps/web",
+        "cpp"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-04：在本机 Docker daemon 29.1.3 / overlay2 上 docker build --progress=plain -t sublift:local . 成功，BUILD_EXIT=0；镜像 sha256:25e1dd381642，748MB，User=sublift。",
+        "2026-09-04：构建期按 resources/manifest.json 拉取并 sha256sum 校验 ORT 与 PP-OCRv6（resources 阶段约 66s）；镜像内可核对本：/opt/sublift/models/ppocrv6-small/{PP-OCRv6_det_small.onnx,PP-OCRv6_rec_small.onnx,ch_ppocr_mobile_v2.0_cls_mobile.onnx,ppocrv6_dict.txt}，ORT libonnxruntime.so.1.18.1，Web dist 含 index.html，/opt/sublift/bin/sublift_server 可执行。",
+        "2026-09-04：默认环境含 SUBLIFT_STATIC_DIR=/opt/sublift/web、SUBLIFT_PADDLE_MODEL_DIR=/opt/sublift/models/ppocrv6-small、LD_LIBRARY_PATH=/opt/sublift/lib、SUBLIFT_HOST=0.0.0.0。Paddle 以 SUBLIFT_REQUIRE_PADDLE=ON 硬失败，不降级 mock。",
+        "2026-09-04：构建过程修复三处配方问题后才通过：fetch-native-resources.sh 须置于 /work/scripts/docker/ 才能解析 manifest；Debian OpenCV 需 libopencv-dev + OpenCV_DIR=.../cmake/opencv4；nlohmann_json 改优先系统包 nlohmann-json3-dev，避免容器内 git clone GitHub 在校园网下挂死。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "Compose 运行时与访问控制落地",
+      "outcome": "服务可通过 Compose 以 /media 工作区启动并被局域网访问；非 loopback 暴露受最小访问控制约束，工作区不能被远程改到宿主任意路径，且工作区已配置时 Web 不再要求填写本机路径。",
+      "acceptance": [
+        "docker-compose.yml 挂载宿主媒体目录到容器 /media，映射端口，并通过环境或 .env 文件传入 SUBLIFT_HOST、SUBLIFT_MEDIA_DIR、SUBLIFT_PADDLE_MODEL_DIR 与可选 SUBLIFT_ACCESS_TOKEN。",
+        "非 loopback 启动时若没有已配置的媒体根，服务拒绝监听并返回可执行提示；loopback 本机路径不受影响。",
+        "由启动期环境锁定的工作区不可被 POST/DELETE /api/config/workspace 修改，接口返回 403 且工作区保持不变。",
+        "设置 SUBLIFT_ACCESS_TOKEN 时 /api/* 需要 Authorization: Bearer，缺失或错误返回 401；未设置时不要求 token，且文档声明仅可信局域网。",
+        "Catch2 [server] 覆盖非 loopback 无媒体根拒绝启动、工作区锁定 403 与 token 开关三类行为。",
+        "Web 在服务端已配置工作区时直接进入工作台，不展示本机绝对路径输入向导。"
+      ],
+      "areas": [
+        "docker-compose.yml",
+        "cpp/src/server",
+        "cpp/tests/server_test.cpp",
+        "apps/web/src/stores/system.ts",
+        "apps/web/src/views"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-04：服务端落地区域网访问控制合同——main.cpp 增加 SUBLIFT_MEDIA_DIR（启动期注入即锁定工作区）、SUBLIFT_ACCESS_TOKEN、SUBLIFT_LOCK_WORKSPACE 与 --media-dir/--config-file；非 loopback 启动经 validate_remote_exposure 前置检查，无媒体根或未锁定即拒绝监听并给出可执行提示。",
+        "2026-09-04：routes.cpp 的 GET/POST /api/config/workspace、POST .../clear 与 DELETE 共享 locked 合同：启动期锁定后修改/清空工作区返回 403 且工作区保持不变；GET 响应新增 locked 字段。http_server.cpp 以常量时间比较实现 Bearer 校验，仅约束 /api/*（静态资源保持可访问），缺失/错误返回 401 并附 WWW-Authenticate: Bearer。",
+        "2026-09-04：新增 docker-compose.yml：宿主媒体目录经必需变量 SUBLIFT_MEDIA_DIR 挂载为容器 /media（缺失即拒绝启动编排），透传 SUBLIFT_HOST/PORT/STATIC_DIR/PADDLE_MODEL_DIR/ACCESS_TOKEN；SUBLIFT_MEDIA_DIR=/tmp/... docker compose config 校验通过。",
+        "2026-09-04：Catch2 新增 4 个用例（is_loopback_host 含 127/8、::1、IPv4-mapped 与欺诈形式拒绝；validate_remote_exposure 三态；锁定工作区 403 含 DELETE 与状态不变断言；Bearer token 401/200 与静态资源豁免），[server] 全量 37 用例 845 断言通过。",
+        "2026-09-04：Web 侧 system store 新增 isWorkspaceLocked（locked 字段向后兼容缺省 false），锁定时 setWorkspace/clearWorkspace 前置拦截不发请求；system.test.ts 新增 4 用例，apps/web 全量 148 测试通过。App.vue 既有 isWorkspaceConfigured 分流保证服务端已配置工作区时不展示本机路径向导。",
+        "2026-09-04：真机端到端冒烟（Python httplib 驱动真实 sublift_server 进程，host=0.0.0.0 + SUBLIFT_MEDIA_DIR + SUBLIFT_ACCESS_TOKEN）：无 token/错 token/错 scheme 均 401，正确 Bearer 200，锁定 POST/DELETE/clear 均 403 且 GET 保持 configured；非 loopback 无媒体根启动被拒绝并打印中文可执行提示。./scripts/verify-product.sh 中 4 个新测试用例亦全部通过。",
+        "2026-09-04：环境事实记录：本机 ~/.cache/sublift 无 Paddle 模型且沙箱拒绝写入，resources install 无法在本机完成；Paddle Stub 与 extractor parity 两个失败经 git stash 复跑证实为预先存在的环境问题，与本 Deliverable 无关（产品门日志：paddle probe unavailable; mock extract remains the required product path）。"
+      ]
+    },
+    {
+      "id": "D04",
+      "name": "容器内真实验收",
+      "outcome": "容器交付由真实运行证据背书：能构建、能启动、容器内 Paddle 可用、沙箱仍拒绝系统路径，并经 /media 映射完成真实 Paddle 提取与 golden SRT 比对。",
+      "acceptance": [
+        "提供 Python-free 的 scripts/verify-container.sh，依次执行构建、运行、就绪探测、/api/system/info 的 paddle.available 断言、沙箱拒绝系统路径、真实 Paddle job 与 SRT 导出比对。",
+        "测试媒体置于挂载目录内，API 只使用容器内 /media 路径，不把宿主临时路径塞给容器。",
+        "golden SRT 比对使用精确比对；缺失 golden 时首跑录制并明确标注为待人工确认，不得静默生成后宣称通过。",
+        "无 Docker daemon 时脚本显式输出容器阶段 SKIPPED 并以非成功状态退出，不假绿；此时 D04 保持 blocked。",
+        "在有 Docker 的服务器或 CI 机上脚本完整通过，并把命令与结果摘要写入本 Deliverable 的 evidence。"
+      ],
+      "areas": [
+        "scripts/verify-container.sh",
+        "docker-compose.yml",
+        "benchmark"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-04：新增 Python-free scripts/verify-container.sh（薄包装）与 scripts/verification/verify-container.sh：无 daemon 时打印 SKIPPED 并以退出码 2 失败；有 daemon 时依次 docker build、compose up（宿主媒体目录挂载 /media）、就绪探测、paddle.available、POST /api/jobs /etc/passwd→400、锁定工作区 POST /api/config/workspace→403、仅使用容器路径 /media/clip.mp4 的 Paddle job、精确 cmp golden。",
+        "2026-09-04：本机 Docker 29.1.3 上 ./scripts/verify-container.sh 通过 14/14。摘要：runtime=cpp；paddle.available=true（ppocrv6-small@rapidocr-3.9.2）；沙箱拒绝 /etc/passwd；工作区锁定 403；job_id 经 /media/clip.mp4 导出 SRT 与 benchmark/container/paddle_drawtext.v1.srt 逐字节一致（烧录文本 SUBLIFT2026，00:00:00,000 --> 00:00:01,800）。首跑无 golden 时曾录制 debug/container/pending_paddle_golden.srt 并失败（待人工确认），确认后再冻结复跑通过。",
+        "2026-09-04：运行时补拷 resources/manifest.json 到 /opt/sublift/share/sublift/manifest.json 并设置 SUBLIFT_NATIVE_MANIFEST，否则 probe 报 native resource manifest not found、paddle.available=false。Compose 去掉固定 container_name 与双重 tini（Dockerfile 已 ENTRYPOINT tini），避免验收项目名冲突。"
+      ]
+    },
+    {
+      "id": "D05",
+      "name": "运维说明与产品叙述收口",
+      "outcome": "管理员能按文档在服务器上完成部署、更新与排障，且项目文档对容器自托管的叙述与 Phase 14 的实际边界一致。",
+      "acceptance": [
+        "README 或部署文档说明：挂载的媒体目录、端口、可选 token、镜像更新方式、缓存与导出产物落在 .sublift_cache、以及局域网信任边界的明确提示。",
+        "文档不出现未实现的公网 HTTPS、账号系统或 CI/CD 承诺。",
+        "progress.md 导航更新为 Phase 14，并同步当前 Deliverable 与容器验收的环境阻塞。",
+        "默认 ./scripts/verify-product.sh 不因本机缺少 Docker 而失败；容器验证是独立入口。",
+        "全部 Deliverable 完成后 Phase 进入 ready-for-merge；合入 main 并在 main 上完成所需验收后才置 done。"
+      ],
+      "areas": [
+        "README.md",
+        "progress.md",
+        "scripts/verification/README.md",
+        "docs/REQUIREMENTS.md"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-04：README 增加局域网容器自托管操作说明：宿主 SUBLIFT_MEDIA_DIR→/media、SUBLIFT_HTTP_PORT、可选 token 与当前 Web UI 不发送 Bearer 的限制、docker compose build 更新、.sublift_cache 落盘、CPU-only / 无公网 HTTPS / 无账号 / 无 CI/CD；新增 .env.example。默认 ./scripts/verify-product.sh 仍不依赖 Docker；容器门为 ./scripts/verify-container.sh。",
+        "2026-09-04：ARCHITECTURE 7.2 补齐缓存目录、镜像更新方式与 GPU 非目标；REQUIREMENTS 容器自托管行改为已交付，Phase 14 清单 D01–D05 全部勾选。progress.md 导航为 ready-for-merge。文档未承诺未实现的公网 HTTPS、账号或流水线。"
+      ]
+    }
+  ],
+  "exit_criteria": [
+    "在干净仓库可复现构建包含 Web、ffmpeg、OpenCV、ORT 与 PP-OCRv6 的 Linux 镜像，模型与 ORT 来源可追溯到 resources/manifest.json 的 SHA-256。",
+    "docker compose up 后局域网浏览器可打开工作台，并以 /media 挂载目录作为唯一媒体授权根完成选片与提取。",
+    "非 loopback 暴露满足最小访问控制：无媒体根拒绝启动、工作区锁定后改配置返回 403、可选 Bearer token 生效。",
+    "真实容器运行取得 paddle.available=true 与经 /media 映射的 Paddle 提取 golden SRT 比对证据；无 Docker 环境如实保持 blocked。",
+    "部署文档与进度导航与实现边界一致，且默认产品门不依赖 Docker。",
+    "全部 Deliverable 完成后进入 ready-for-merge；合入 main 并在 main 上复验通过后将 Phase 标记为 done 并冻结。"
+  ]
+}

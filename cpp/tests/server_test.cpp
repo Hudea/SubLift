@@ -2891,7 +2891,9 @@ TEST_CASE("Feature 12511: Unified Media Sandbox and Workspace Trust Boundary Mat
     REQUIRE(res_stream->status == 200);
 
     // 2. detect-region
-    nlohmann::json detect_body = {{"video_path", ws1_vid.string()}};
+    // engine=mock：本用例验证路径沙箱授权，而非引擎行为；显式固定引擎，
+    // 避免测试机配置了 SUBLIFT_PADDLE_MODEL_DIR 时触发真实推理导致超时。
+    nlohmann::json detect_body = {{"video_path", ws1_vid.string()}, {"engine", "mock"}};
     auto res_detect = cli.Post("/api/video/detect-region", detect_body.dump(), "application/json");
     REQUIRE(res_detect != nullptr);
     REQUIRE(res_detect->status == 200);
@@ -3012,6 +3014,196 @@ TEST_CASE("Feature 12511: Unified Media Sandbox and Workspace Trust Boundary Mat
   if (server_thread.joinable()) {
     server_thread.join();
   }
+}
+
+// ============================================================================
+// ADR-0040 / Phase 14 D03：局域网自托管的访问控制合同
+// ============================================================================
+
+TEST_CASE("Loopback host detection covers IPv4, IPv6 and hostname forms", "[server][access_control]") {
+  // IPv4 loopback：整个 127.0.0.0/8
+  REQUIRE(sublift::server::is_loopback_host("127.0.0.1"));
+  REQUIRE(sublift::server::is_loopback_host("127.8.15.200"));
+  // IPv6 loopback 与常见书写变体
+  REQUIRE(sublift::server::is_loopback_host("::1"));
+  REQUIRE(sublift::server::is_loopback_host("[::1]"));
+  REQUIRE(sublift::server::is_loopback_host("0:0:0:0:0:0:0:1"));
+  // IPv4-mapped IPv6 loopback
+  REQUIRE(sublift::server::is_loopback_host("::ffff:127.0.0.1"));
+  // 主机名
+  REQUIRE(sublift::server::is_loopback_host("localhost"));
+  REQUIRE(sublift::server::is_loopback_host(" localhost "));
+
+  // 非 loopback：LAN 地址、通配与欺诈形式
+  REQUIRE_FALSE(sublift::server::is_loopback_host(""));
+  REQUIRE_FALSE(sublift::server::is_loopback_host("0.0.0.0"));
+  REQUIRE_FALSE(sublift::server::is_loopback_host("192.168.1.10"));
+  REQUIRE_FALSE(sublift::server::is_loopback_host("::"));
+  // "127." 前缀必须是点分十进制，避免把 "127.example.com" 误判为回环
+  REQUIRE_FALSE(sublift::server::is_loopback_host("127.example.com"));
+  REQUIRE_FALSE(sublift::server::is_loopback_host("128.0.0.1"));
+}
+
+TEST_CASE("Remote exposure validation rejects non-loopback without media root or lock", "[server][access_control]") {
+  sublift::server::ServerConfig cfg;
+
+  // loopback 一律放行，无需媒体根或锁定
+  cfg.host = "127.0.0.1";
+  REQUIRE(sublift::server::validate_remote_exposure(cfg, /*media_root_configured=*/false).empty());
+  REQUIRE(sublift::server::validate_remote_exposure(cfg, /*media_root_configured=*/true).empty());
+
+  // 非 loopback：无媒体根 → 拒绝；有媒体根但未锁定 → 拒绝；两者齐备 → 通过
+  cfg.host = "0.0.0.0";
+  auto err_no_media = sublift::server::validate_remote_exposure(cfg, false);
+  REQUIRE_FALSE(err_no_media.empty());
+  REQUIRE(err_no_media.find("媒体授权根") != std::string::npos);
+
+  auto err_unlocked = sublift::server::validate_remote_exposure(cfg, true);
+  REQUIRE_FALSE(err_unlocked.empty());
+  REQUIRE(err_unlocked.find("锁定") != std::string::npos);
+
+  cfg.workspace_locked = true;
+  REQUIRE(sublift::server::validate_remote_exposure(cfg, true).empty());
+}
+
+TEST_CASE("Locked workspace rejects runtime modification and reports locked flag", "[server][workspace_lock]") {
+  auto temp_dir = std::filesystem::temp_directory_path() /
+                  ("sublift_wslock_" + std::to_string(::getpid()));
+  std::error_code ec;
+  std::filesystem::create_directories(temp_dir, ec);
+  auto config_file = temp_dir / "cfg.json";
+
+  sublift::server::ServerConfig cfg;
+  cfg.port = 0;
+  cfg.config_file = config_file.string();
+  cfg.media_dir = temp_dir.string();
+  cfg.workspace_locked = true;  // 启动期注入媒体根即锁定（容器/局域网部署形态）
+
+  sublift::server::HttpServer server(std::move(cfg));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&server]() {
+    server.listen_after_bind();
+  });
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(2, 0);
+  cli.set_read_timeout(5, 0);
+
+  // 1. GET 报告 configured 且 locked
+  auto res_get = cli.Get("/api/config/workspace");
+  REQUIRE(res_get != nullptr);
+  REQUIRE(res_get->status == 200);
+  auto j_get = nlohmann::json::parse(res_get->body);
+  REQUIRE(j_get["configured"].get<bool>());
+  REQUIRE(j_get["locked"].get<bool>() == true);
+
+  // 2. POST /api/config/workspace 被拒：403 且工作区保持不变
+  auto res_post = cli.Post("/api/config/workspace",
+                           R"({"media_dir":"/etc"})", "application/json");
+  REQUIRE(res_post != nullptr);
+  REQUIRE(res_post->status == 403);
+
+  auto res_after = cli.Get("/api/config/workspace");
+  REQUIRE(res_after != nullptr);
+  auto j_after = nlohmann::json::parse(res_after->body);
+  REQUIRE(j_after["configured"].get<bool>());
+  REQUIRE(j_after["media_dir"].get<std::string>() ==
+          std::filesystem::canonical(temp_dir).string());
+
+  // 3. POST /api/config/workspace/clear 同合同被拒：403 且工作区保持不变
+  auto res_clear = cli.Post("/api/config/workspace/clear", "{}", "application/json");
+  REQUIRE(res_clear != nullptr);
+  REQUIRE(res_clear->status == 403);
+  auto j_clear = nlohmann::json::parse(res_clear->body);
+  REQUIRE(j_clear["error"].get<std::string>() == "workspace_locked");
+
+  // 4. DELETE /api/config/workspace 与 clear 共用受锁保护的处理路径
+  auto res_delete = cli.Delete("/api/config/workspace");
+  REQUIRE(res_delete != nullptr);
+  REQUIRE(res_delete->status == 403);
+
+  auto res_final = cli.Get("/api/config/workspace");
+  REQUIRE(res_final != nullptr);
+  auto j_final = nlohmann::json::parse(res_final->body);
+  REQUIRE(j_final["configured"].get<bool>());
+  REQUIRE(j_final["media_dir"].get<std::string>() ==
+          std::filesystem::canonical(temp_dir).string());
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+
+  std::filesystem::remove_all(temp_dir, ec);
+}
+
+TEST_CASE("Access token enforces Bearer on API routes only", "[server][access_token]") {
+  auto temp_dir = std::filesystem::temp_directory_path() /
+                  ("sublift_token_" + std::to_string(::getpid()));
+  std::error_code ec;
+  std::filesystem::create_directories(temp_dir, ec);
+
+  sublift::server::ServerConfig cfg;
+  cfg.port = 0;
+  cfg.access_token = "s3cret-token";
+  cfg.media_dir = temp_dir.string();
+  cfg.workspace_locked = true;
+  // 最小静态目录：验证静态资源不要求 token（UI 对未持 token 的访问者可见）
+  auto static_dir = temp_dir / "static";
+  std::filesystem::create_directories(static_dir, ec);
+  {
+    std::ofstream ofs(static_dir / "index.html");
+    ofs << "<!doctype html><html><body>sublift</body></html>";
+  }
+  cfg.static_dir = static_dir.string();
+
+  sublift::server::HttpServer server(std::move(cfg));
+  int port = server.bind_to_any_port("127.0.0.1");
+  REQUIRE(port > 0);
+
+  std::thread server_thread([&server]() {
+    server.listen_after_bind();
+  });
+
+  httplib::Client cli("127.0.0.1", port);
+  cli.set_connection_timeout(2, 0);
+  cli.set_read_timeout(5, 0);
+
+  // 1. 无 token / 错误 token / 非 Bearer scheme → 401
+  auto res_missing = cli.Get("/api/system/info");
+  REQUIRE(res_missing != nullptr);
+  REQUIRE(res_missing->status == 401);
+  REQUIRE(res_missing->get_header_value("WWW-Authenticate") == "Bearer");
+
+  auto res_wrong = cli.Get("/api/system/info",
+                           {{"Authorization", "Bearer wrong-token"}});
+  REQUIRE(res_wrong != nullptr);
+  REQUIRE(res_wrong->status == 401);
+
+  auto res_scheme = cli.Get("/api/system/info",
+                            {{"Authorization", "Basic s3cret-token"}});
+  REQUIRE(res_scheme != nullptr);
+  REQUIRE(res_scheme->status == 401);
+
+  // 2. 正确 token → 200
+  auto res_ok = cli.Get("/api/system/info",
+                        {{"Authorization", "Bearer s3cret-token"}});
+  REQUIRE(res_ok != nullptr);
+  REQUIRE(res_ok->status == 200);
+
+  // 3. 静态资源不要求 token（未持 token 的访问者得到 UI 而非空白页）
+  auto res_static = cli.Get("/");
+  REQUIRE(res_static != nullptr);
+  REQUIRE(res_static->status == 200);
+
+  server.stop();
+  if (server_thread.joinable()) {
+    server_thread.join();
+  }
+
+  std::filesystem::remove_all(temp_dir, ec);
 }
 
 

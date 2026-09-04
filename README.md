@@ -15,7 +15,7 @@
 - **真实进度与快速取消**：CLI/GUI 展示处理阶段和百分比，GUI 可中途取消并重新开始
 - **macOS GUI**：SwiftUI 界面，拖拽导入、视频预览、增量字幕、字幕编辑、SRT 导出
 - **批量任务中心** ✅：独立 Task Center（⌘⇧T）、多文件/文件夹统一导入、单并发串行队列、安全 SRT 输出与本地 JSON 恢复（Phase 8 已完成）
-- **Web / Native Server** ⚠️：单视频工作台、智能 ROI 和批量交互基座已可用；Phase 12 正在收口工作区信任边界、任务恢复、配置一致性、真实导出与可访问性
+- **Web / Native Server**：单视频工作台、智能 ROI、批量交互与工作区信任边界已收口（Phase 12）；Linux 局域网容器自托管由 Phase 14 / ADR-0040 交付（CPU Paddle，不做 GPU/CUDA 或公网 HTTPS）
 
 ## 环境要求
 
@@ -24,6 +24,7 @@
 - CMake 3.20+ 与 C++20 工具链（推荐 Ninja）
 - Xcode 15+ 或 SwiftPM（仅 GUI 构建需要）
 - Node.js 20+（仅 Web UI 构建需要）
+- Docker Engine 24+（仅局域网容器自托管需要；默认产品门 `./scripts/verify-product.sh` 不依赖 Docker）
 
 Python 3.12+ 与 `uv` 只服务隔离的可选离线工具（benchmark、评分、冻结 Oracle）；
 它们不是产品安装条件，也不得成为 Native-only 产品运行或产品门禁的依赖。
@@ -49,7 +50,10 @@ ctest --test-dir build/cpp --output-on-failure
 ```
 
 产品验证入口是 `./scripts/verify-product.sh`：不安装 Python 依赖、不运行 Python
-脚本，也不因为缺少 `python` / `uv` / `.venv` 而跳过产品必测项。
+脚本，也不因为缺少 `python` / `uv` / `.venv` 或 Docker daemon 而跳过或失败。
+
+局域网容器验收是独立入口 `./scripts/verify-container.sh`（需要 Docker daemon；无 daemon
+时打印 SKIPPED 并以非 0 退出，不假绿）。
 
 隔离离线工具入口是 `./scripts/verify-offline.sh`。`./scripts/verify-standard.sh`
 是显式过渡混门（Native + Oracle + cutover），不是默认提交门；不得据此把 Python
@@ -124,6 +128,57 @@ Phase 13 起产品只接受 C++ Worker：能力不可用时 fail-closed；需要
 或 `SUBLIFT_RUNTIME` 作为实现选择。Python 包不再提供 `sublift extract`；离线工具入口是
 `sublift-benchmark`。
 
+### 本机 Web / Native Server
+
+同源部署：`sublift_server` 同时提供 API 与 `apps/web/dist` 静态页。默认只绑 loopback。
+
+```bash
+cmake --build build/cpp --target sublift_server
+npm --prefix apps/web run build
+./build/cpp/bin/sublift_server --static-dir apps/web/dist
+# 浏览器打开 http://127.0.0.1:8080
+```
+
+非 loopback 监听必须已配置并锁定媒体根（`SUBLIFT_MEDIA_DIR` / `--media-dir`），否则拒绝启动。
+
+## 局域网容器自托管（Phase 14 / ADR-0040）
+
+把 Web 工作台和 Native Server 以**单个 Linux 容器**跑在可信局域网服务器上。媒体只通过
+宿主目录挂载进入容器 `/media`，镜像内不预置用户视频。推理走 CPU 上的 ONNX Runtime +
+PP-OCRv6；**不包含 GPU/CUDA**，也不提供公网 HTTPS、反向代理、账号或 CI/CD 发布。
+
+### 部署
+
+```bash
+# 1. 准备宿主媒体目录（视频放这里；容器内路径一律是 /media/...）
+mkdir -p /srv/sublift/media
+
+# 2. 可选：复制环境文件（.env 已被 gitignore，不入库）
+cp .env.example .env
+# 编辑 SUBLIFT_MEDIA_DIR= 为上一步的绝对路径
+
+# 3. 构建并启动（首次会按 resources/manifest.json 校验下载 ORT 与模型）
+SUBLIFT_MEDIA_DIR=/srv/sublift/media docker compose up -d --build
+```
+
+浏览器访问 `http://<服务器局域网IP>:8080`。服务端已注入 `/media` 时，Web 直接进入工作台，
+不再要求填写本机绝对路径。
+
+| 项 | 说明 |
+|---|---|
+| 媒体挂载 | 宿主 `SUBLIFT_MEDIA_DIR` → 容器 `/media`，唯一媒体授权根 |
+| 端口 | 容器内 8080；宿主端口 `SUBLIFT_HTTP_PORT`（默认 8080） |
+| 进程用户 | 镜像内 `sublift`（non-root，UID 10001） |
+| 缓存与导出 | 落在宿主媒体目录下的 `.sublift_cache/`（frames / remux / jobs / exports） |
+| 工作区 | 启动期锁定；`POST/DELETE /api/config/workspace` 返回 403 |
+| 可选 token | `SUBLIFT_ACCESS_TOKEN` 非空时 `/api/*` 需要 `Authorization: Bearer`。**当前 Web UI 不会附加该头**，打开 token 后浏览器工作台会 401；token 供脚本/API 调用。未设置时仅限可信局域网 |
+| 更新镜像 | 在仓库根执行 `docker compose build --no-cache && docker compose up -d`。本 Phase 不推镜像仓库、不做自动发布 |
+| 验收 | `./scripts/verify-container.sh`；与默认产品门分离 |
+
+排障：`docker compose logs -f`。`paddle.available=false` 通常是镜像内缺少
+`SUBLIFT_NATIVE_MANIFEST` 指向的 `manifest.json` 或模型 SHA 不匹配——应重新构建，不要挂空
+`./models` 目录盖住内置模型。
+
 ### Runtime 矩阵
 
 | engine | 产品 runtime | 说明 |
@@ -182,7 +237,8 @@ cmake --build build/cpp
 ctest --test-dir build/cpp --output-on-failure
 (cd apps/macos && swift test)
 npm --prefix apps/web test
-./scripts/verify-product.sh   # Python-free 产品门（提交/合并默认）
+./scripts/verify-product.sh   # Python-free 产品门（提交/合并默认；不依赖 Docker）
+./scripts/verify-container.sh # 局域网容器门（需要 Docker daemon）
 ./scripts/verify-offline.sh   # 隔离离线工具
 ./scripts/verify-standard.sh  # 显式过渡混门 / 历史 cutover；非默认
 ```

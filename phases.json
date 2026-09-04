@@ -92,6 +92,13 @@
       "description": "关闭产品双 runtime，完成 Native 资源与 Python-free 产品验证，将 Python 仅保留为隔离的可选离线工程工具。",
       "detail_file": "docs/phases/phase13.json",
       "status": "done"
+    },
+    {
+      "id": "phase14",
+      "name": "Phase 14 - 局域网容器化自托管",
+      "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。",
+      "detail_file": "docs/phases/phase14.json",
+      "status": "ready-for-merge"
     }
   ]
 }

@@ -53,6 +53,7 @@ struct SystemInfoDTO {
 void register_routes(httplib::Server& server,
                      std::shared_ptr<JobManager> job_manager,
                      const std::string& static_dir = "",
-                     std::shared_ptr<WorkspaceManager> workspace_manager = nullptr);
+                     std::shared_ptr<WorkspaceManager> workspace_manager = nullptr,
+                     bool workspace_locked = false);
 
 }  // namespace sublift::server

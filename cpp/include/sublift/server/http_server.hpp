@@ -25,7 +25,29 @@ struct ServerConfig {
   std::string media_dir{""};
   /// 工作区持久化配置文件覆盖路径
   std::string config_file{""};
+  /// 共享访问令牌。非空时 /api/* 要求 `Authorization: Bearer <token>`。
+  /// 局域网自托管的最小访问控制手段：不提供账号体系，只防止端口被误暴露后被任意调用。
+  std::string access_token{""};
+  /// 工作区是否由启动期配置锁定。锁定后不接受运行时修改媒体授权根。
+  bool workspace_locked{false};
 };
+
+/// 判断监听地址是否属于 loopback。
+///
+/// 非 loopback 暴露改变 Web 入口的信任边界（ADR-0039/ADR-0040），启动前必须已具备
+/// 媒体授权根；本函数用于在启动时执行该前置检查。
+[[nodiscard]] bool is_loopback_host(const std::string& host) noexcept;
+
+/// 启动期访问控制检查。返回错误信息；空字符串表示通过。
+///
+/// 约束：
+/// 1. 非 loopback 监听必须有已配置的媒体根；
+/// 2. 非 loopback 监听必须锁定工作区，避免远程把授权根改到宿主任意路径。
+[[nodiscard]] std::string validate_remote_exposure(const ServerConfig& config,
+                                                   bool media_root_configured) ;
+
+/// 校验请求的 Bearer token；未配置 token 时直接放行。
+[[nodiscard]] bool authorize_request(const ServerConfig& config, const std::string& auth_header);
 
 class HttpServer {
  public:

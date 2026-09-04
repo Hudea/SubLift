@@ -1,0 +1,30 @@
+# 容器构建上下文收敛：只保留构建 sublift_server 与 Web dist 所需的源码与合同。
+# 排除宿主机构建缓存、IDE 与本机工具产物，避免镜像被本机状态污染。
+.git
+.github
+.agent
+.cursor
+.venv
+.idea
+.DS_Store
+
+.docker
+build
+debug
+node_modules
+apps/web/node_modules
+apps/web/dist
+apps/macos/.build
+apps/macos/spikes
+
+# 运行时资源由 Dockerfile 按 resources/manifest.json 在构建期获取与校验，
+# 不继承宿主已安装或缓存的模型与 ORT。
+~/.cache/sublift
+docker-cache
+
+# 本机可选 Python 工具与 benchmark 产物不属于产品镜像。
+benchmark/datasets
+benchmark/runs
+benchmark/results
+__pycache__
+*.egg-info
