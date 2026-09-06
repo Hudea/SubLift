@@ -3,6 +3,7 @@
 #include <memory>
 #include <string>
 
+#include "sublift/ocr_execution.hpp"
 #include "sublift/server/job_manager.hpp"
 #include "sublift/server/workspace_manager.hpp"
 
@@ -30,6 +31,9 @@ struct ServerConfig {
   std::string access_token{""};
   /// 工作区是否由启动期配置锁定。锁定后不接受运行时修改媒体授权根。
   bool workspace_locked{false};
+  /// Paddle 执行后端（ADR-0041）。默认 CPU；显式请求 cuda 而构建不支持时
+  /// 启动期拒绝。该配置贯通提取、批量与智能选区的引擎创建。
+  sublift::PaddleExecutionConfig paddle_execution{};
 };
 
 /// 判断监听地址是否属于 loopback。

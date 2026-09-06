@@ -7,6 +7,7 @@ set(_sublift_test_srcs
   timeline_test.cpp
   dedupe_test.cpp
   line_select_test.cpp
+  ocr_execution_test.cpp
   ocr_test.cpp
   extractor_pure_test.cpp
   extractor_probe_test.cpp

@@ -1,0 +1,134 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 15 - 可移植 GPU 字幕提取",
+  "goal": "在不改变识别算法与既有 CPU 交付合同的前提下，为 Paddle 引入显式执行后端（provider=cpu/cuda）配置模型：同一套代码与模型按部署配置在 CPU 或 NVIDIA GPU 上运行，机器差异由镜像兼容条件与启动探测处理；GPU 不可用时明确失败而非静默降级，任务保留实际执行身份，最终由真实 GPU 推理、质量与性能验收证明可用。",
+  "scope": [
+    "落地执行后端配置模型：engine 仍为 vision/paddle/mock，新增 provider（cpu/cuda）与 device_id，解析遵循“显式参数 > 环境变量 > 默认值”，无 auto 模式。",
+    "保持 CPU 现有产品行为不退步：未配置时默认 cpu，既有单视频、批量与智能选区路径语义不变，默认产品门不依赖 GPU。",
+    "非 loopback 与引擎偏好禁止静默降级：请求 cuda 但后端不可用时拒绝启动/拒绝执行，不自动回落 CPU 或 mock。",
+    "任务携带执行身份快照：创建时记录请求/生效 provider 与设备，持久化向后兼容，历史任务不伪造执行后端。",
+    "在 /api/system/info 的 paddle 条目暴露可选 execution 对象（provider、设备、状态），旧端缺失时不猜测。",
+    "原生 CUDA 提取、GPU 容器工作台与多机质量/性能在冻结目标显卡、运行库版本并具备真实 GPU 与 Docker 环境后按 D02–D04 推进。"
+  ],
+  "non_goals": [
+    "不新增 paddle-gpu 引擎名；GPU 是 paddle 引擎内部的执行后端，不改变引擎枚举。",
+    "不建设动态插件加载系统或通用 GPU 调度框架；仅扩展已知 provider 枚举与显式分支。",
+    "不在本阶段引入 CUDA/cuDNN 运行库、TensorRT、FP16/量化、硬件解码、跨帧批处理或多 GPU 调度。",
+    "不做 AMD/Apple GPU 后端，也不把 macOS Vision 切换到执行后端参数。",
+    "不在本机无 Docker/无 GPU 的环境伪造真实 GPU 验收；对应 Deliverable 如实标 blocked。",
+    "不自动放宽现有产品质量门；GPU 数值差异须先经人工审阅与已批准的多源 GT 门冻结基线。"
+  ],
+  "status": "blocked",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "配置与 CPU 兼容",
+      "outcome": "执行后端配置模型、解析与失败语义落地并贯通 Server 装配，CPU 现有产品行为不退步；请求 cuda 而构建不支持时被明确拒绝。",
+      "acceptance": [
+        "新增独立于 Ort/CUDA 的 PaddleProvider 与 PaddleExecutionConfig 类型，默认 cpu；解析遵循显式参数 > 环境变量 > 默认值。",
+        "非法 provider、非法设备编号、CPU 指定设备、CUDA 缺设备默认 0 等规则均有 fail-closed 单测覆盖。",
+        "Server 支持 SUBLIFT_PADDLE_PROVIDER / SUBLIFT_PADDLE_DEVICE_ID 与 --paddle-provider / --paddle-device-id，启动期校验失败即拒绝启动。",
+        "PaddleOptions 携带执行配置；请求 cuda 而当前构建未启用 CUDA 时 Paddle 引擎构造被拒绝（fail-closed），CPU 路径不变。",
+        "执行配置贯通到提取、批量与智能选区的引擎创建点，默认 CPU 不改变既有行为。",
+        "/api/system/info 的 paddle 条目携带可选 execution 对象；任务创建记录执行身份快照并可向后兼容读回。",
+        "默认产品门与既有 CPU 测试在无 GPU 环境全部通过，无行为退步。"
+      ],
+      "areas": [
+        "cpp/include/sublift/core/ocr_execution.hpp",
+        "cpp/include/sublift/ocr_execution.hpp",
+        "cpp/src/core/ocr_execution.cpp",
+        "cpp/include/sublift/adapters/paddle.hpp",
+        "cpp/src/adapters/paddle/paddle_ocr.cpp",
+        "cpp/src/worker/engine_factory.cpp",
+        "cpp/src/server/main.cpp",
+        "cpp/src/server/http_server.cpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/server/job_manager.cpp",
+        "cpp/src/server/region_detector.cpp",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-09-06：新增 cpp/include/sublift/core/ocr_execution.hpp、cpp/src/core/ocr_execution.cpp 与顶层 shim：PaddleProvider/PaddleExecutionConfig、显式参数>环境变量>默认值、无 auto、CPU 拒设备、CUDA 缺设备默认 0；ocr_execution_test 新增 13 用例 68 断言通过（含非法 provider/设备、优先级、int32 边界、空白/大小写容忍、cuda 构造拒绝）。",
+        "2026-09-06：PaddleOptions 新增 execution（默认 CPU）；validate_paddle_execution 对当前无 CUDA 构建的 cuda 请求返回 fail-closed 错误；真实与桩两分支构造均先校验执行配置再加载模型。",
+        "2026-09-06：EngineFactory 绑定执行配置并透传给 PaddleOcrEngine，validate_engine 对不可执行后端返回错误；JobManager（setter/快照优先）/RegionDetector/register_routes/HttpServer 贯通 ServerConfig.paddle_execution，默认 CPU 不改变既有行为。",
+        "2026-09-06：Server 新增 SUBLIFT_PADDLE_PROVIDER/SUBLIFT_PADDLE_DEVICE_ID 与 --paddle-provider/--paddle-device-id；实测 --paddle-provider auto 与 SUBLIFT_PADDLE_PROVIDER=cuda 均打印中文错误并 exit 1；--help 已更新且声明不静默降级。",
+        "2026-09-06：/api/system/info 的 paddle 条目新增可选 execution 对象（provider/state；CPU 无 device_id；device_name/artifact_id/probe_time 按设计延期且有断言锁定），vision/mock 不携带；JobConfig 新增可选 paddle_execution 快照并向后兼容（legacy 无字段可读且不伪造，损坏快照整体丢弃回退部署绑定）；POST /api/jobs 校验抽取为可单测的 check_job_paddle_execution（省略/null 继承、相同值通过、不匹配 409、非法值/CPU 带设备/非 paddle 携带 400），另有 HTTP 拒绝矩阵集成测试覆盖 409/400 接线。",
+        "2026-09-06：五路 reviewer 并行审查结论均为 PASS_WITH_COMMENTS、无 blocker，整改项（parse 去 noexcept、ASCII 空白、引擎构造前置校验、validate 镜像 CPU 拒设备、CLI 缺值分支、快照损坏整体丢弃、u64 溢出 400、provider 覆盖先清设备、预检传入部署绑定）已落实并复验；cmake 全量构建通过；ctest 242/242 通过；npm web 14 files/150 tests 通过；./init.sh OK；git diff --check clean。容器/GPU 真实验收未执行（本机无 Docker daemon 与 NVIDIA GPU），D02–D04 保持 blocked。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "原生 CUDA 提取",
+      "outcome": "在冻结的 GPU 资源与运行库上完成真实三阶段 CUDA 推理、失败语义与 Native 单视频输出，并通过质量门。",
+      "acceptance": [
+        "冻结目标服务器 OS/架构、GPU 型号/显存、驱动版本，以及带完整哈希的原生 ORT GPU 包与对应 CUDA/cuDNN/基础镜像。",
+        "Det/Cls/Rec 均在真实 CUDA 会话执行，启用 provider 注册失败即返回错误，不重建纯 CPU 会话。",
+        "以版本化小 fixture 完成启动探测与输出形状/有限值检查，并以 ORT profiling 证明三阶段存在 CUDA 计算。",
+        "单视频经 GPU 提取输出 SRT，质量差异按 CPU golden 与逐源 hash 记录，供人工审阅。",
+        "在具备目标 GPU 的真机上运行；无 GPU 环境如实保持 blocked，不伪造。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle",
+        "cpp/cmake",
+        "resources/manifest.json",
+        "scripts/verification"
+      ],
+      "status": "blocked",
+      "evidence": [
+        "blocked 原因：依赖目标显卡、驱动与原生 ORT GPU 运行库版本冻结（见 docs/design/gpu-execution.md §11 待冻结输入），本机无 NVIDIA GPU 与 Docker，无法进行真实 CUDA 验收。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "GPU 容器工作台",
+      "outcome": "交付 GPU 镜像与 Compose 编排，Web 系统信息与任务详情呈现执行后端，智能选区与提取共用同一后端并受 GPU 并发准入约束。",
+      "acceptance": [
+        "提供独立 runtime-cuda 构建目标与 docker-compose.gpu.yml override，CPU 镜像不受影响。",
+        "启动探测核对宿主设备到容器逻辑编号的映射，未映射正确即失败。",
+        "/api/system/info 返回 execution.state=ready 且设备名来自真实探测；任务详情显示已冻结 provider。",
+        "智能选区与提取使用同一执行配置与并发准入（lease），提取占用时选区返回 gpu_busy，无死锁/饥饿。",
+        "在有 NVIDIA Container Toolkit 与 GPU 的宿主上真实运行通过；无则如实保持 blocked。"
+      ],
+      "areas": [
+        "Dockerfile",
+        "docker-compose.gpu.yml",
+        "cpp/src/server",
+        "apps/web/src/stores/system.ts"
+      ],
+      "status": "blocked",
+      "evidence": [
+        "blocked 原因：依赖 D02 的原生 CUDA 运行时与 GPU 容器环境；本机无 Docker daemon 与 NVIDIA GPU，无法构建或运行 GPU 容器。"
+      ]
+    },
+    {
+      "id": "D04",
+      "name": "多机质量与性能",
+      "outcome": "在至少两种受支持 GPU 上取得真实运行证据，冻结 GPU 质量基线与性能目标，并完成长流、取消、恢复与运维说明。",
+      "acceptance": [
+        "兼容表中至少两种 GPU 型号实跑通过；未测试型号标为未验证，不声称全覆盖。",
+        "GPU 质量基线经人工审阅差异并通过已批准的多源 GT 门后版本化冻结；在此之前不宣称 GPU 交付通过。",
+        "性能以同宿主、同媒体/选项、同版本系列 ORT 的 CPU/GPU 对照，预热与交错测量，报告 median 与显存。",
+        "取消时延、排队取消、运行取消、OOM 与设备不可用均按失败语义验证；连续任务显存不累计。",
+        "输出运维说明：挂载、设备选择、更新与数据落盘位置。"
+      ],
+      "areas": [
+        "scripts/verification",
+        "benchmark",
+        "docs"
+      ],
+      "status": "blocked",
+      "evidence": [
+        "blocked 原因：依赖多块受支持 GPU 的真机环境与已冻结的质量/性能阈值；当前无相应硬件与基线，无法开展真实验收。"
+      ]
+    }
+  ],
+  "exit_criteria": [
+    "执行后端配置模型与失败语义落地，CPU 现有产品行为不退步，请求 cuda 而不支持时被明确拒绝。",
+    "在冻结的 GPU 资源上完成真实三阶段 CUDA 推理并通过质量门，失败语义符合设计（不静默降级）。",
+    "GPU 镜像与 Compose 可交付，Web 信息与任务详情正确呈现执行后端，智能选区与提取共用后端并受并发准入约束。",
+    "在至少两种受支持 GPU 上取得真实质量与性能证据并冻结基线；长流、取消、恢复与运维说明齐备。",
+    "本机无 GPU/无 Docker 的 Deliverable 如实保持 blocked，不以 mock 或未经真实执行的证据冒充完成。"
+  ]
+}

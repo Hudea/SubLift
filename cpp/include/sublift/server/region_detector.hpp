@@ -9,6 +9,7 @@
 
 #include "sublift/models.hpp"
 #include "sublift/ocr.hpp"
+#include "sublift/ocr_execution.hpp"
 
 namespace sublift::server {
 
@@ -31,8 +32,13 @@ struct RegionDetectionResult {
 
 class RegionDetector {
  public:
-  explicit RegionDetector(std::shared_ptr<IOcrEngine> shared_ocr = nullptr);
+  explicit RegionDetector(std::shared_ptr<IOcrEngine> shared_ocr = nullptr,
+                          sublift::PaddleExecutionConfig paddle_execution = {});
   ~RegionDetector() = default;
+
+  [[nodiscard]] const sublift::PaddleExecutionConfig& paddle_execution() const noexcept {
+    return paddle_execution_;
+  }
 
   /// 执行自动字幕区域探测
   /// @param video_path 视频物理路径（已通过 sandbox 校验）
@@ -47,6 +53,7 @@ class RegionDetector {
   IOcrEngine* resolve_ocr_engine_locked(const std::optional<std::string>& engine_preference);
 
   std::shared_ptr<IOcrEngine> shared_ocr_;
+  sublift::PaddleExecutionConfig paddle_execution_{};
   std::unique_ptr<IOcrEngine> fallback_engine_;
   std::string current_engine_name_;
   std::mutex ocr_mutex_;

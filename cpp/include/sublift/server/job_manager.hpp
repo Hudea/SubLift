@@ -20,6 +20,7 @@
 #include <nlohmann/json.hpp>
 
 #include "sublift/models.hpp"
+#include "sublift/ocr_execution.hpp"
 
 namespace sublift::worker {
 class BridgeHandler;
@@ -91,6 +92,9 @@ struct JobConfig {
   double confidence_threshold{0.0};
   std::optional<std::string> script;
   RegionBox region_box;
+  /// 部署绑定的 Paddle 执行快照（ADR-0041）。仅 paddle 任务携带；旧文件缺省时
+  /// 保持未设置，不伪造执行后端。
+  std::optional<sublift::PaddleExecutionConfig> paddle_execution;
 
   [[nodiscard]] nlohmann::json to_json() const {
     nlohmann::json j = {
@@ -102,6 +106,14 @@ struct JobConfig {
     };
     if (script.has_value()) {
       j["script"] = *script;
+    }
+    if (paddle_execution.has_value()) {
+      nlohmann::json execution = {
+          {"provider", std::string(sublift::paddle_provider_name(paddle_execution->provider))}};
+      if (paddle_execution->device_id.has_value()) {
+        execution["device_id"] = *paddle_execution->device_id;
+      }
+      j["paddle_execution"] = std::move(execution);
     }
     return j;
   }
@@ -125,6 +137,43 @@ struct JobConfig {
     }
     if (j.contains("region_box") && j["region_box"].is_object()) {
       cfg.region_box = RegionBox::from_json(j["region_box"]);
+    }
+    if (j.contains("paddle_execution") && j["paddle_execution"].is_object()) {
+      const auto& execution = j["paddle_execution"];
+      if (execution.contains("provider") && execution["provider"].is_string()) {
+        if (const auto provider = sublift::parse_paddle_provider(
+                execution["provider"].get<std::string>());
+            provider.has_value()) {
+          sublift::PaddleExecutionConfig snapshot;
+          snapshot.provider = *provider;
+          const auto& device = execution.value("device_id", nlohmann::json());
+          const bool has_device = !device.is_null();
+          bool device_ok = true;
+          if (has_device) {
+            device_ok = false;
+            if (device.is_number_integer()) {
+              const long long device_value = device.get<long long>();
+              device_ok = device_value >= 0 && device_value <= 2147483647;
+              if (device_ok) {
+                snapshot.device_id = static_cast<std::int32_t>(device_value);
+              }
+            } else if (device.is_number_unsigned()) {
+              const unsigned long long device_value = device.get<unsigned long long>();
+              device_ok = device_value <= 2147483647ULL;
+              if (device_ok) {
+                snapshot.device_id = static_cast<std::int32_t>(device_value);
+              }
+            }
+          }
+          // provider 为 CPU 却携带设备，或设备非法：丢弃整个快照，
+          // 由 execute_job 回退到部署绑定，不合成部分快照。
+          if (!device_ok || (snapshot.provider == sublift::PaddleProvider::Cpu && has_device)) {
+            cfg.paddle_execution.reset();
+          } else {
+            cfg.paddle_execution = snapshot;
+          }
+        }
+      }
     }
     return cfg;
   }
@@ -267,6 +316,10 @@ class JobManager {
   void set_state_file_path(const std::filesystem::path& path);
   [[nodiscard]] std::filesystem::path get_state_file_path() const;
 
+  /// 设置部署绑定的 Paddle 执行后端（ADR-0041）。提取任务创建引擎时使用。
+  void set_paddle_execution(sublift::PaddleExecutionConfig execution);
+  [[nodiscard]] sublift::PaddleExecutionConfig paddle_execution() const;
+
   void save_state();
   void load_state();
 
@@ -282,6 +335,7 @@ class JobManager {
   std::size_t max_concurrent_jobs_;
   std::size_t max_history_jobs_;
   std::filesystem::path state_file_path_;
+  sublift::PaddleExecutionConfig paddle_execution_{};
 
   mutable std::mutex mutex_;
   std::condition_variable queue_cv_;

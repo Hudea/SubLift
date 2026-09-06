@@ -178,6 +178,10 @@ struct PaddleOcrEngine::Impl {
         memory_info(
             Ort::MemoryInfo::CreateCpu(
                 OrtArenaAllocator, OrtMemTypeDefault)) {
+    if (const std::string exec_err = validate_paddle_execution(options.execution);
+        !exec_err.empty()) {
+      throw std::runtime_error(exec_err);
+    }
     models::ResourceLocator locator;
     model_paths = locator.locate_model_bundle(options.model_root_dir, model_type);
     model_dir = model_paths.det_path.parent_path();
@@ -460,7 +464,14 @@ struct PaddleOcrEngine::Impl {
 };
 
 PaddleOcrEngine::PaddleOcrEngine(PaddleOcrOptions options)
-    : impl_(std::make_unique<Impl>(std::move(options))) {}
+    : impl_(nullptr) {
+  // 先拒绝不可执行的后端，避免为注定失败的构造创建 ORT Env；Impl 内保留同检查。
+  if (const std::string exec_err = validate_paddle_execution(options.execution);
+      !exec_err.empty()) {
+    throw std::runtime_error(exec_err);
+  }
+  impl_ = std::make_unique<Impl>(std::move(options));
+}
 
 PaddleOcrEngine::~PaddleOcrEngine() = default;
 
@@ -558,6 +569,10 @@ PaddleCapabilities PaddleOcrEngine::probe_capabilities(
 struct PaddleOcrEngine::Impl {};
 
 PaddleOcrEngine::PaddleOcrEngine(PaddleOcrOptions options) {
+  if (const std::string exec_err = validate_paddle_execution(options.execution);
+      !exec_err.empty()) {
+    throw std::runtime_error(exec_err);
+  }
   (void)paddle_detail::parse_model_type(options.model_type);
   throw std::runtime_error("PaddleOCR 不可用：C++ 构建未启用 SUBLIFT_ENABLE_PADDLE");
 }
@@ -576,5 +591,20 @@ PaddleRuntimeStats PaddleOcrEngine::runtime_stats() const noexcept {
 }
 
 #endif
+
+std::string validate_paddle_execution(const PaddleExecutionConfig& config) {
+  if (config.provider == PaddleProvider::Cpu) {
+    // 与 resolve_paddle_execution 一致：CPU 不接受设备编号，防止手写配置绕过。
+    if (config.device_id.has_value()) {
+      return "CPU 执行后端不接受设备编号（device_id）";
+    }
+    return "";
+  }
+  // CUDA 执行后端依赖目标显卡与运行库版本冻结（docs/design/gpu-execution.md
+  // §11，Phase 15 D02）。当前构建未启用 CUDA，请求 cuda 一律 fail-closed，
+  // 不得静默回落 CPU（ADR-0038/0041）。
+  return "Paddle 执行后端 cuda 在当前构建不可用：未启用 CUDA 运行库"
+         "（需要 Phase 15 D02 冻结的 GPU 资源与运行库），不得静默降级";
+}
 
 }  // namespace sublift

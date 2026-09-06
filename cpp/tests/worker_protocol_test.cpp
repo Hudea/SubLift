@@ -60,6 +60,18 @@ TEST_CASE("EngineFactory only advertises the engine bound to this Worker process
 #endif
 }
 
+TEST_CASE("EngineFactory binds the resolved paddle execution backend", "[worker][engine_factory]") {
+  sublift::worker::EngineFactory cpu_factory("paddle");
+  REQUIRE(cpu_factory.paddle_execution().provider == sublift::PaddleProvider::Cpu);
+  REQUIRE_FALSE(cpu_factory.paddle_execution().device_id.has_value());
+
+  sublift::PaddleExecutionConfig cuda;
+  cuda.provider = sublift::PaddleProvider::Cuda;
+  cuda.device_id = 0;
+  sublift::worker::EngineFactory cuda_factory("paddle", cuda);
+  REQUIRE(cuda_factory.paddle_execution() == cuda);
+}
+
 TEST_CASE("Table-driven parsing and serialization of all 12 message types", "[worker][ipc][protocol]") {
   SECTION("HelloMsg") {
     std::string json_in = R"({"type":"hello","client":"sublift-mac","protocol_version":1})";

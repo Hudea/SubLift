@@ -92,6 +92,34 @@ TEST_CASE("Server System Info and CORS Preflight", "[server][system_info]") {
     REQUIRE(has_mock);
   }
 
+  SECTION("paddle engine reports deployment execution backend") {
+    auto res = cli.Get("/api/system/info");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+
+    auto json = nlohmann::json::parse(res->body);
+    bool has_paddle = false;
+    for (const auto& eng : json["engines"]) {
+      if (eng["name"] == "paddle") {
+        has_paddle = true;
+        REQUIRE(eng.contains("execution"));
+        REQUIRE(eng["execution"]["provider"] == "cpu");
+        if (eng["available"] == true) {
+          REQUIRE(eng["execution"]["state"] == "ready");
+        } else {
+          REQUIRE(eng["execution"]["state"] == "unavailable");
+        }
+        REQUIRE(!eng["execution"].contains("device_id"));
+        REQUIRE(!eng["execution"].contains("device_name"));
+        REQUIRE(!eng["execution"].contains("artifact_id"));
+        REQUIRE(!eng["execution"].contains("probe_time"));
+      } else {
+        REQUIRE(!eng.contains("execution"));
+      }
+    }
+    REQUIRE(has_paddle);
+  }
+
   SECTION("OPTIONS /api/system/info handles CORS preflight") {
     auto res = cli.Options("/api/system/info");
     REQUIRE(res != nullptr);
@@ -211,6 +239,187 @@ TEST_CASE("Unified JobConfig DTO serialization, clamping and script support", "[
   REQUIRE(job_json["config"]["script"] == "Hans");
   REQUIRE(job_json["config"]["fps"] == 8.0);
   REQUIRE(job_json["config"]["confidence_threshold"] == 0.35);
+}
+
+TEST_CASE("JobConfig paddle execution snapshot round-trips", "[server][jobs]") {
+  sublift::server::JobConfig cfg;
+  cfg.video_path = "/path/to/movie.mp4";
+  cfg.engine = "paddle";
+  cfg.paddle_execution = sublift::PaddleExecutionConfig{};
+
+  auto serialized = cfg.to_json();
+  REQUIRE(serialized.contains("paddle_execution"));
+  REQUIRE(serialized["paddle_execution"]["provider"] == "cpu");
+  REQUIRE(!serialized["paddle_execution"].contains("device_id"));
+
+  auto parsed = sublift::server::JobConfig::from_json(serialized);
+  REQUIRE(parsed.paddle_execution.has_value());
+  REQUIRE(parsed.paddle_execution->provider == sublift::PaddleProvider::Cpu);
+  REQUIRE_FALSE(parsed.paddle_execution->device_id.has_value());
+
+  // Legacy files without the snapshot stay readable and carry no fabricated backend.
+  nlohmann::json legacy = {
+      {"video_path", "/path/to/legacy.mp4"}, {"engine", "paddle"}, {"fps", 2.0}};
+  auto legacy_cfg = sublift::server::JobConfig::from_json(legacy);
+  REQUIRE_FALSE(legacy_cfg.paddle_execution.has_value());
+  REQUIRE(!legacy_cfg.to_json().contains("paddle_execution"));
+
+  // A cuda snapshot round-trips with its device id.
+  sublift::server::JobConfig cuda_cfg;
+  cuda_cfg.video_path = "/path/to/movie.mp4";
+  cuda_cfg.engine = "paddle";
+  cuda_cfg.paddle_execution = sublift::PaddleExecutionConfig{};
+  cuda_cfg.paddle_execution->provider = sublift::PaddleProvider::Cuda;
+  cuda_cfg.paddle_execution->device_id = 1;
+  auto cuda_serialized = cuda_cfg.to_json();
+  REQUIRE(cuda_serialized["paddle_execution"]["provider"] == "cuda");
+  REQUIRE(cuda_serialized["paddle_execution"]["device_id"] == 1);
+  auto cuda_parsed = sublift::server::JobConfig::from_json(cuda_serialized);
+  REQUIRE(cuda_parsed.paddle_execution == cuda_cfg.paddle_execution);
+
+  // Corrupt snapshots fall back instead of synthesizing partial identities.
+  nlohmann::json bad_provider = {
+      {"video_path", "/x.mp4"},
+      {"engine", "paddle"},
+      {"paddle_execution", {{"provider", "auto"}}}};
+  REQUIRE_FALSE(
+      sublift::server::JobConfig::from_json(bad_provider).paddle_execution.has_value());
+  nlohmann::json bad_device = {
+      {"video_path", "/x.mp4"},
+      {"engine", "paddle"},
+      {"paddle_execution", {{"provider", "cuda"}, {"device_id", -1}}}};
+  REQUIRE_FALSE(
+      sublift::server::JobConfig::from_json(bad_device).paddle_execution.has_value());
+  nlohmann::json cpu_device = {
+      {"video_path", "/x.mp4"},
+      {"engine", "paddle"},
+      {"paddle_execution", {{"provider", "cpu"}, {"device_id", 0}}}};
+  REQUIRE_FALSE(
+      sublift::server::JobConfig::from_json(cpu_device).paddle_execution.has_value());
+}
+
+TEST_CASE("Job paddle execution assertion matrix", "[server][jobs]") {
+  const sublift::PaddleExecutionConfig cpu_bound{};
+  sublift::PaddleExecutionConfig cuda_bound{};
+  cuda_bound.provider = sublift::PaddleProvider::Cuda;
+  cuda_bound.device_id = 0;
+
+  const auto check = [](const std::string& engine, const nlohmann::json& body,
+                        const sublift::PaddleExecutionConfig& bound) {
+    return sublift::server::check_job_paddle_execution(engine, body, bound);
+  };
+
+  SECTION("omitted or null inherits the deployment binding") {
+    auto omitted = check("paddle", nlohmann::json::object(), cpu_bound);
+    REQUIRE(omitted.http_status == 0);
+    REQUIRE(omitted.asserted == cpu_bound);
+
+    nlohmann::json null_field = {{"paddle_execution", nullptr}};
+    auto nulled = check("paddle", null_field, cpu_bound);
+    REQUIRE(nulled.http_status == 0);
+    REQUIRE(nulled.asserted == cpu_bound);
+
+    nlohmann::json null_subfields = {{"paddle_execution",
+                                      {{"provider", nullptr}, {"device_id", nullptr}}}};
+    auto null_sub = check("paddle", null_subfields, cpu_bound);
+    REQUIRE(null_sub.http_status == 0);
+    REQUIRE(null_sub.asserted == cpu_bound);
+
+    // Non-paddle engines without the field are untouched.
+    auto vision_omit = check("vision", nlohmann::json::object(), cpu_bound);
+    REQUIRE(vision_omit.http_status == 0);
+  }
+
+  SECTION("same-value assertions pass") {
+    nlohmann::json same = {{"paddle_execution", {{"provider", "cpu"}}}};
+    auto res = check("paddle", same, cpu_bound);
+    REQUIRE(res.http_status == 0);
+    REQUIRE(res.asserted == cpu_bound);
+
+    nlohmann::json same_cuda = {{"paddle_execution",
+                                 {{"provider", "cuda"}, {"device_id", 0}}}};
+    auto res_cuda = check("paddle", same_cuda, cuda_bound);
+    REQUIRE(res_cuda.http_status == 0);
+    REQUIRE(res_cuda.asserted == cuda_bound);
+  }
+
+  SECTION("mismatches return 409") {
+    nlohmann::json wrong_provider = {{"paddle_execution", {{"provider", "cuda"}}}};
+    auto res = check("paddle", wrong_provider, cpu_bound);
+    REQUIRE(res.http_status == 409);
+    REQUIRE(res.error.find("cuda") != std::string::npos);
+    REQUIRE(res.error.find("cpu") != std::string::npos);
+
+    // Partial cuda assertion without device does not equal cuda:0.
+    nlohmann::json partial = {{"paddle_execution", {{"provider", "cuda"}}}};
+    REQUIRE(check("paddle", partial, cuda_bound).http_status == 409);
+
+    nlohmann::json wrong_device = {{"paddle_execution",
+                                    {{"provider", "cuda"}, {"device_id", 1}}}};
+    REQUIRE(check("paddle", wrong_device, cuda_bound).http_status == 409);
+
+    // Explicit cpu against a cuda deployment is a mismatch, not an illegal combo.
+    nlohmann::json cpu_vs_cuda = {{"paddle_execution", {{"provider", "cpu"}}}};
+    REQUIRE(check("paddle", cpu_vs_cuda, cuda_bound).http_status == 409);
+  }
+
+  SECTION("illegal values return 400") {
+    nlohmann::json bad_provider = {{"paddle_execution", {{"provider", "auto"}}}};
+    REQUIRE(check("paddle", bad_provider, cpu_bound).http_status == 400);
+
+    nlohmann::json non_string = {{"paddle_execution", {{"provider", 1}}}};
+    REQUIRE(check("paddle", non_string, cpu_bound).http_status == 400);
+
+    nlohmann::json non_object = {{"paddle_execution", nlohmann::json::array()}};
+    REQUIRE(check("paddle", non_object, cpu_bound).http_status == 400);
+
+    for (const auto device :
+         {nlohmann::json(-1), nlohmann::json(1.5), nlohmann::json("0"),
+          nlohmann::json(18446744073709551615ULL)}) {
+      nlohmann::json bad_device = {{"paddle_execution",
+                                    {{"provider", "cuda"}, {"device_id", device}}}};
+      INFO("device=" << device.dump());
+      REQUIRE(check("paddle", bad_device, cuda_bound).http_status == 400);
+    }
+
+    // CPU rejects an explicit device id.
+    nlohmann::json cpu_device = {{"paddle_execution",
+                                  {{"provider", "cpu"}, {"device_id", 0}}}};
+    auto res = check("paddle", cpu_device, cpu_bound);
+    REQUIRE(res.http_status == 400);
+    REQUIRE(res.error.find("device_id") != std::string::npos);
+  }
+
+  SECTION("non-paddle engines carrying the field return 400") {
+    nlohmann::json field = {{"paddle_execution", {{"provider", "cpu"}}}};
+    REQUIRE(check("vision", field, cpu_bound).http_status == 400);
+    REQUIRE(check("mock", field, cpu_bound).http_status == 400);
+  }
+}
+
+TEST_CASE("SystemInfo execution object defers device identity fields", "[server][system_info]") {
+  sublift::server::SystemInfoDTO info;
+  info.version = "test";
+  info.runtime = "cpp";
+  sublift::server::SystemEngineInfo paddle;
+  paddle.name = "paddle";
+  paddle.available = true;
+  paddle.detail = "ok";
+  paddle.execution = sublift::server::EngineExecutionInfo{};
+  paddle.execution->provider = "cuda";
+  paddle.execution->device_id = 0;
+  paddle.execution->state = "ready";
+  info.engines.push_back(paddle);
+
+  auto json = info.to_json();
+  const auto& execution = json["engines"][0]["execution"];
+  REQUIRE(execution["provider"] == "cuda");
+  REQUIRE(execution["device_id"] == 0);
+  REQUIRE(execution["state"] == "ready");
+  // device_name / artifact_id / probe_time are deferred beyond D01 (gpu-execution.md §9).
+  REQUIRE(!execution.contains("device_name"));
+  REQUIRE(!execution.contains("artifact_id"));
+  REQUIRE(!execution.contains("probe_time"));
 }
 
 TEST_CASE("Server Video Resolve Fingerprint Lookup", "[server][resolve]") {
@@ -668,6 +877,42 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
     auto res_bad_eng = cli.Post("/api/jobs", req_bad_engine.dump(), "application/json");
     REQUIRE(res_bad_eng != nullptr);
     REQUIRE(res_bad_eng->status == 400);
+  }
+
+  SECTION("POST /api/jobs validates paddle_execution assertions") {
+    // Default deployment binds CPU; every case below is rejected before job
+    // creation, so no extraction ever runs.
+    TempTestFile temp_exec_video("sublift_exec_assert_dummy.mp4",
+                                 {0x00, 0x00, 0x00, 0x18, 'f', 't', 'y', 'p'});
+    const std::string video = temp_exec_video.path.string();
+    const auto post_status = [&](const nlohmann::json& body) {
+      auto res = cli.Post("/api/jobs", body.dump(), "application/json");
+      REQUIRE(res != nullptr);
+      return res->status;
+    };
+
+    // Mismatched backend is a 409, not a silent downgrade.
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "paddle"},
+                         {"paddle_execution", {{"provider", "cuda"}}}}) == 409);
+    // Illegal provider / device / shape are 400.
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "paddle"},
+                         {"paddle_execution", {{"provider", "auto"}}}}) == 400);
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "paddle"},
+                         {"paddle_execution", {{"provider", "cpu"}, {"device_id", 0}}}}) ==
+            400);
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "paddle"},
+                         {"paddle_execution", {{"device_id", -1}}}}) == 400);
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "paddle"},
+                         {"paddle_execution", nlohmann::json::array()}}) == 400);
+    // Non-paddle engines must not carry the field.
+    REQUIRE(post_status({{"video_path", video},
+                         {"engine", "vision"},
+                         {"paddle_execution", {{"provider", "cpu"}}}}) == 400);
   }
 
   SECTION("POST /api/jobs/:id/cancel returns 404 for unknown job") {

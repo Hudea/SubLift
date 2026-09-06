@@ -99,6 +99,13 @@
       "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。",
       "detail_file": "docs/phases/phase14.json",
       "status": "ready-for-merge"
+    },
+    {
+      "id": "phase15",
+      "name": "Phase 15 - 可移植 GPU 字幕提取",
+      "description": "为 Paddle 引入显式执行后端（provider=cpu/cuda）配置模型：同一套代码与模型按部署配置在 CPU 或 NVIDIA GPU 上运行，GPU 不可用时明确失败而非静默降级，任务保留执行身份。配置与 CPU 兼容部分可先行交付；原生 CUDA 提取、GPU 容器与多机质量/性能在冻结目标显卡与运行库版本并具备真实 GPU 环境后推进。",
+      "detail_file": "docs/phases/phase15.json",
+      "status": "blocked"
     }
   ]
 }

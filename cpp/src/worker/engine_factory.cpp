@@ -8,8 +8,9 @@
 
 namespace sublift::worker {
 
-EngineFactory::EngineFactory(std::string bound_engine)
-    : bound_engine_(std::move(bound_engine)) {}
+EngineFactory::EngineFactory(std::string bound_engine,
+                             sublift::PaddleExecutionConfig paddle_execution)
+    : bound_engine_(std::move(bound_engine)), paddle_execution_(paddle_execution) {}
 
 std::vector<std::string> EngineFactory::supported_engines() const {
 #if !SUBLIFT_HAS_OPENCV
@@ -56,6 +57,12 @@ std::optional<std::string> EngineFactory::validate_engine(const std::string& req
   if (requested_engine == "paddle" && !sublift::is_paddle_available()) {
     return "PaddleOCR 引擎在当前环境不可用（SUBLIFT_ENABLE_PADDLE=OFF 或模型文件缺失）";
   }
+  if (requested_engine == "paddle") {
+    if (const std::string exec_err = sublift::validate_paddle_execution(paddle_execution_);
+        !exec_err.empty()) {
+      return exec_err;
+    }
+  }
   if (requested_engine != "mock" && requested_engine != "vision" && requested_engine != "paddle") {
     return "不支持的 OCR 引擎: '" + requested_engine + "'";
   }
@@ -81,7 +88,9 @@ std::unique_ptr<sublift::IOcrEngine> EngineFactory::create_engine(
     if (!sublift::is_paddle_available()) {
       throw std::runtime_error("PaddleOCR is not available at runtime");
     }
-    return std::make_unique<sublift::PaddleOcrEngine>();
+    sublift::PaddleOptions options;
+    options.execution = paddle_execution_;
+    return std::make_unique<sublift::PaddleOcrEngine>(options);
   }
   if (bound_engine_ == "mock") {
     return std::make_unique<sublift::MockOcrEngine>(mock_text, mock_confidence);

@@ -8,6 +8,10 @@
 #include <string_view>
 #include <vector>
 
+#include <optional>
+
+#include "sublift/adapters/paddle.hpp"
+#include "sublift/ocr_execution.hpp"
 #include "sublift/server/http_server.hpp"
 #include "sublift/server/routes.hpp"
 #include "sublift/version.hpp"
@@ -36,15 +40,21 @@ void print_help(std::string_view prog_name) {
             << "      --cors-origin <o>    Allow-Origin for cross-origin use (default: off)\n"
             << "      --media-dir <path>   Media workspace root; also locks the workspace\n"
             << "      --config-file <path> Override workspace config file path\n"
+            << "      --paddle-provider <p> Paddle execution backend: cpu | cuda (default: cpu)\n"
+            << "      --paddle-device-id <n> CUDA device index (default: 0; CPU rejects this)\n"
             << "\n"
             << "Environment:\n"
             << "  SUBLIFT_HOST / SUBLIFT_PORT / SUBLIFT_STATIC_DIR / SUBLIFT_CORS_ORIGIN\n"
             << "  SUBLIFT_MEDIA_DIR        Media workspace root (locks the workspace)\n"
             << "  SUBLIFT_ACCESS_TOKEN     Require 'Authorization: Bearer <token>' on /api/*\n"
             << "  SUBLIFT_LOCK_WORKSPACE   Force-lock the workspace (1/true/yes/on)\n"
+            << "  SUBLIFT_PADDLE_PROVIDER  Paddle execution backend: cpu | cuda (default: cpu)\n"
+            << "  SUBLIFT_PADDLE_DEVICE_ID CUDA device index (default: 0; CPU rejects this)\n"
             << "\n"
             << "Binding a non-loopback address requires a configured and locked media root,\n"
-            << "and an available Paddle OCR engine (no silent mock fallback).\n";
+            << "and an available Paddle OCR engine (no silent mock fallback).\n"
+            << "Requesting --paddle-provider cuda without a CUDA build fails at startup;\n"
+            << "the server never silently downgrades to CPU or mock (ADR-0041).\n";
 }
 
 }  // namespace
@@ -102,6 +112,10 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  // Paddle 执行后端（ADR-0041）：显式启动参数 > 环境变量 > 默认 cpu。
+  std::optional<std::string> cli_paddle_provider;
+  std::optional<std::string> cli_paddle_device_id;
+
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if (arg == "-h" || arg == "--help") {
@@ -129,6 +143,13 @@ int main(int argc, char* argv[]) {
       workspace_locked = true;
     } else if (arg == "--config-file" && i + 1 < argc) {
       config_file = argv[++i];
+    } else if (arg == "--paddle-provider" && i + 1 < argc) {
+      cli_paddle_provider = argv[++i];
+    } else if (arg == "--paddle-device-id" && i + 1 < argc) {
+      cli_paddle_device_id = argv[++i];
+    } else if (arg == "--paddle-provider" || arg == "--paddle-device-id") {
+      std::cerr << "Error: missing value for " << arg << "\n";
+      return 1;
     } else {
       std::cerr << "Unknown option: " << arg << "\n";
       print_help(argv[0]);
@@ -152,6 +173,40 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  // 解析并校验 Paddle 执行后端（fail-closed，ADR-0041）。
+  std::optional<std::string_view> explicit_provider;
+  if (cli_paddle_provider.has_value()) {
+    explicit_provider = std::string_view{*cli_paddle_provider};
+  }
+  std::optional<std::string_view> explicit_device;
+  if (cli_paddle_device_id.has_value()) {
+    explicit_device = std::string_view{*cli_paddle_device_id};
+  }
+  const char* env_paddle_provider = std::getenv("SUBLIFT_PADDLE_PROVIDER");
+  std::optional<std::string_view> env_provider;
+  if (env_paddle_provider && *env_paddle_provider) {
+    env_provider = std::string_view{env_paddle_provider};
+  }
+  const char* env_paddle_device = std::getenv("SUBLIFT_PADDLE_DEVICE_ID");
+  std::optional<std::string_view> env_device;
+  if (env_paddle_device && *env_paddle_device) {
+    env_device = std::string_view{env_paddle_device};
+  }
+
+  const auto paddle_resolution = sublift::resolve_paddle_execution(
+      explicit_provider, explicit_device, env_provider, env_device);
+  if (!paddle_resolution.ok()) {
+    std::cerr << "Error: " << paddle_resolution.error << "\n";
+    return 1;
+  }
+  if (const std::string avail_err =
+          sublift::validate_paddle_execution(paddle_resolution.config);
+      !avail_err.empty()) {
+    std::cerr << "Error: " << avail_err << "\n";
+    return 1;
+  }
+  const sublift::PaddleExecutionConfig paddle_execution = paddle_resolution.config;
+
   sublift::server::ServerConfig config{
       .host = host,
       .port = port,
@@ -162,6 +217,7 @@ int main(int argc, char* argv[]) {
       .config_file = config_file,
       .access_token = access_token,
       .workspace_locked = workspace_locked,
+      .paddle_execution = paddle_execution,
   };
 
   g_server = std::make_unique<sublift::server::HttpServer>(std::move(config));
@@ -184,7 +240,7 @@ int main(int argc, char* argv[]) {
   std::signal(SIGINT, handle_signal);
   std::signal(SIGTERM, handle_signal);
 
-  auto sys_info = sublift::server::collect_system_info();
+  auto sys_info = sublift::server::collect_system_info(paddle_execution);
   bool paddle_available = false;
   for (const auto& eng : sys_info.engines) {
     if (eng.name == "paddle" && eng.available) {

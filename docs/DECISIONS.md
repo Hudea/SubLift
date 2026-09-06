@@ -5,6 +5,30 @@
 
 ---
 
+## ADR-0041 采纳 GPU 执行后端与容器框架，先交付配置与 CPU 兼容（2026-09-06）
+
+- **状态**：已确认；由 Phase 15（D01 配置与 CPU 兼容）先行实施，D02–D04 待冻结输入。
+- **背景**：`docs/design/gpu-execution.md` 冻结了“引擎与后端分离”的框架：`engine` 仍为
+  vision/paddle/mock，`provider`（cpu/cuda）与 `device_id` 是 Paddle 内部执行配置；机器差异
+  由镜像兼容条件与启动探测处理，不在代码或任务中写死主机。第一版只交付 Linux x86_64、单容器、
+  单可见 NVIDIA GPU 的 Paddle CUDA 推理。当时缺少目标显卡、驱动与运行库版本，无法真机验收。
+- **决策**：
+  1. 登记 Phase 15（v2，四个纵向 Deliverable），不扩张已收口的 Phase 14 CPU-only 交付合同。
+  2. `provider` 仅 cpu/cuda，无 auto；解析遵循“显式参数 > 环境变量 > 默认值”，未指定默认 cpu。
+  3. 失败一律 fail-closed：请求 cuda 而构建/设备不支持时拒绝启动或拒绝执行，不自动回落
+     CPU、mock 或 Python；CPU 指定设备即报错，CUDA 未指定设备默认 0。
+  4. 配置模型、CPU 兼容与资源选择接口先独立实现和验证，不依赖 GPU 真机；具体运行库版本
+     （ORT/CUDA/cuDNN/基础镜像）待目标显卡确定后冻结，不由当前 CPU ORT 版本推导。
+  5. Core/Pipeline/Application 不链接 CUDA，CPU 构建不要求 CUDA 头文件或动态库；ORT/CUDA
+     类型与会话选项保留在 `sublift_paddle` 私有实现。
+- **理由**：先把与硬件无关的配置模型、失败语义与 CPU 兼容落地并验收，可在无 GPU 环境取得真实
+  证据；把依赖真机的 CUDA 提取、容器与多机质量/性能隔离为后续 Deliverable，避免用未经真实
+  执行的脚本冒充完成。
+- **影响**：本机无 NVIDIA GPU 与 Docker 时，D02–D04 如实标 `blocked`；配置与 CPU 兼容（D01）
+  以既有产品门与单测验收。不引入新第三方运行库，不改动 `resources/manifest.json` schema。
+
+---
+
 ## ADR-0040 容器化自托管限于可信局域网，以宿主卷为媒体入口并锁定工作区（2026-09-03）
 
 - **状态**：已确认；由 Phase 14（D01–D05）实施。

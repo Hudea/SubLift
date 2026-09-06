@@ -203,6 +203,16 @@ std::filesystem::path JobManager::get_state_file_path() const {
   return state_file_path_;
 }
 
+void JobManager::set_paddle_execution(sublift::PaddleExecutionConfig execution) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  paddle_execution_ = execution;
+}
+
+sublift::PaddleExecutionConfig JobManager::paddle_execution() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return paddle_execution_;
+}
+
 void JobManager::save_state() {
   std::lock_guard<std::mutex> lock(mutex_);
   save_state_locked();
@@ -469,8 +479,15 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
   bool is_error = false;
   std::string error_msg;
 
+  const sublift::PaddleExecutionConfig deployment_execution = paddle_execution();
+  const sublift::PaddleExecutionConfig job_execution =
+      (job->config.engine == "paddle" && job->config.paddle_execution.has_value())
+          ? *job->config.paddle_execution
+          : deployment_execution;
+
   try {
-    auto engine_factory = std::make_unique<sublift::worker::EngineFactory>(job->config.engine);
+    auto engine_factory = std::make_unique<sublift::worker::EngineFactory>(job->config.engine,
+                                                                           job_execution);
     auto media_services = std::make_unique<sublift::worker::FfmpegPathMediaServices>();
     auto detector_factory = std::make_unique<sublift::worker::DefaultDetectorFactory>();
 

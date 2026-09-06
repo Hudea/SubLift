@@ -15,8 +15,9 @@
 
 namespace sublift::server {
 
-RegionDetector::RegionDetector(std::shared_ptr<IOcrEngine> shared_ocr)
-    : shared_ocr_(std::move(shared_ocr)) {}
+RegionDetector::RegionDetector(std::shared_ptr<IOcrEngine> shared_ocr,
+                               sublift::PaddleExecutionConfig paddle_execution)
+    : shared_ocr_(std::move(shared_ocr)), paddle_execution_(paddle_execution) {}
 
 IOcrEngine* RegionDetector::resolve_ocr_engine_locked(
     const std::optional<std::string>& engine_preference) {
@@ -41,7 +42,7 @@ IOcrEngine* RegionDetector::resolve_ocr_engine_locked(
     return fallback_engine_.get();
   }
 
-  sublift::worker::EngineFactory factory(target_engine);
+  sublift::worker::EngineFactory factory(target_engine, paddle_execution_);
   fallback_engine_ = factory.create_engine();
   current_engine_name_ = target_engine;
   return fallback_engine_.get();

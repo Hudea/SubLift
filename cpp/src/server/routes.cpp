@@ -112,6 +112,16 @@ nlohmann::json SystemInfoDTO::to_json() const {
     if (!eng.model_root.empty()) {
       e["model_root"] = eng.model_root;
     }
+    if (eng.execution.has_value()) {
+      nlohmann::json execution = {
+          {"provider", eng.execution->provider},
+          {"state", eng.execution->state},
+      };
+      if (eng.execution->device_id.has_value()) {
+        execution["device_id"] = *eng.execution->device_id;
+      }
+      e["execution"] = std::move(execution);
+    }
     engines_arr.push_back(e);
   }
   root["engines"] = engines_arr;
@@ -126,7 +136,7 @@ nlohmann::json SystemInfoDTO::to_json() const {
   return root;
 }
 
-SystemInfoDTO collect_system_info() {
+SystemInfoDTO collect_system_info(const sublift::PaddleExecutionConfig& paddle_execution) {
   SystemInfoDTO info;
   info.version = std::string(sublift::version());
   info.runtime = "cpp";
@@ -155,12 +165,20 @@ SystemInfoDTO collect_system_info() {
 
   // 2. PaddleOCR engine
   auto paddle_cap = sublift::PaddleOcrEngine::probe_capabilities();
+  const bool paddle_executable =
+      sublift::validate_paddle_execution(paddle_execution).empty();
   info.engines.push_back({
       .name = "paddle",
       .available = paddle_cap.available,
       .detail = paddle_cap.detail,
       .model_type = paddle_cap.model_type,
       .model_root = paddle_cap.model_root,
+      .execution =
+          EngineExecutionInfo{
+              .provider = std::string(sublift::paddle_provider_name(paddle_execution.provider)),
+              .device_id = paddle_execution.device_id,
+              .state = (paddle_executable && paddle_cap.available) ? "ready" : "unavailable",
+          },
   });
 
   // 3. Mock engine (testing / diagnostic)
@@ -310,21 +328,114 @@ std::optional<std::filesystem::path> find_by_fingerprint(
 
 }  // namespace fingerprint
 
+JobPaddleExecutionCheck check_job_paddle_execution(
+    const std::string& engine, const nlohmann::json& body,
+    const sublift::PaddleExecutionConfig& bound) {
+  JobPaddleExecutionCheck out;
+  out.asserted = bound;
+
+  // 字段整体为 null 视为缺省（向后兼容旧客户端），与省略同义。
+  const bool has_field = body.contains("paddle_execution") && !body["paddle_execution"].is_null();
+  if (has_field && engine != "paddle") {
+    out.http_status = 400;
+    out.error = "Paddle execution fields do not apply to engine '" + engine + "'";
+    return out;
+  }
+  if (engine != "paddle" || !has_field) {
+    return out;
+  }
+
+  const auto& requested = body["paddle_execution"];
+  if (!requested.is_object()) {
+    out.http_status = 400;
+    out.error = "Invalid 'paddle_execution': must be an object";
+    return out;
+  }
+
+  bool provider_overridden = false;
+  if (requested.contains("provider") && !requested["provider"].is_null()) {
+    if (!requested["provider"].is_string()) {
+      out.http_status = 400;
+      out.error = "Invalid 'paddle_execution.provider': " + requested["provider"].dump() +
+                  " (expected 'cpu' or 'cuda')";
+      return out;
+    }
+    const auto parsed_provider =
+        sublift::parse_paddle_provider(requested["provider"].get<std::string>());
+    if (!parsed_provider.has_value()) {
+      out.http_status = 400;
+      out.error = "Invalid 'paddle_execution.provider': '" +
+                  requested["provider"].get<std::string>() + "' (expected 'cpu' or 'cuda')";
+      return out;
+    }
+    out.asserted.provider = *parsed_provider;
+    provider_overridden = true;
+    // provider 被显式覆盖后，先丢弃继承来的设备，再叠加请求的设备，
+    // 避免合成 {cpu, device 0} 这类违反 CPU-无设备不变式的中间值。
+    out.asserted.device_id.reset();
+  }
+
+  const bool requested_device =
+      requested.contains("device_id") && !requested["device_id"].is_null();
+  if (requested_device) {
+    const auto& device = requested["device_id"];
+    bool device_ok = false;
+    std::int32_t device_value = 0;
+    if (device.is_number_integer()) {
+      const long long raw = device.get<long long>();
+      device_ok = raw >= 0 && raw <= 2147483647;
+      if (device_ok) {
+        device_value = static_cast<std::int32_t>(raw);
+      }
+    } else if (device.is_number_unsigned()) {
+      const unsigned long long raw = device.get<unsigned long long>();
+      device_ok = raw <= 2147483647ULL;
+      if (device_ok) {
+        device_value = static_cast<std::int32_t>(raw);
+      }
+    }
+    if (!device_ok) {
+      out.http_status = 400;
+      out.error = "Invalid 'paddle_execution.device_id': " + device.dump() +
+                  " (expected a non-negative int32 device index)";
+      return out;
+    }
+    out.asserted.device_id = device_value;
+  }
+
+  if (out.asserted.provider == sublift::PaddleProvider::Cpu && requested_device) {
+    out.http_status = 400;
+    out.error = "CPU execution backend rejects 'device_id'";
+    return out;
+  }
+  if (!(out.asserted == bound)) {
+    out.http_status = 409;
+    out.error = "Paddle execution mismatch: requested '" +
+                sublift::format_paddle_execution(out.asserted) +
+                "' does not match deployment '" +
+                sublift::format_paddle_execution(bound) + "'";
+    return out;
+  }
+  return out;
+}
+
 void register_routes(httplib::Server& server,
                      std::shared_ptr<JobManager> job_manager,
                      const std::string& static_dir,
                      std::shared_ptr<WorkspaceManager> workspace_manager,
-                     bool workspace_locked) {
+                     bool workspace_locked,
+                     const sublift::PaddleExecutionConfig& paddle_execution) {
   // CORS Preflight
   server.Options(R"(/api/.*)", [](const httplib::Request&, httplib::Response& res) {
     res.status = 204;
   });
 
   // GET /api/system/info
-  server.Get("/api/system/info", [](const httplib::Request&, httplib::Response& res) {
-    auto info = collect_system_info();
-    res.set_content(info.to_json().dump(), "application/json; charset=utf-8");
-  });
+  server.Get("/api/system/info",
+             [paddle_execution](const httplib::Request&, httplib::Response& res) {
+               auto info = collect_system_info(paddle_execution);
+               res.set_content(info.to_json().dump(), "application/json; charset=utf-8");
+             });
 
   // GET /api/config/workspace (Feature 12508)
   server.Get("/api/config/workspace", [workspace_manager, workspace_locked](const httplib::Request&, httplib::Response& res) {
@@ -1007,7 +1118,7 @@ void register_routes(httplib::Server& server,
   // 输入：video_path (必填), time_s (可选), engine (可选)
   // 输出：{ "detected": true, "sample_time_s": 12.5, "suggested_box": { "x": 0, "y": 0.78, "width": 1.0, "height": 0.16 }, "preview_text": "...", "confidence": 0.95, "total_candidates": 2 }
   // ---------------------------------------------------------------------------
-  auto region_detector = std::make_shared<RegionDetector>();
+  auto region_detector = std::make_shared<RegionDetector>(nullptr, paddle_execution);
 
   server.Post("/api/video/detect-region", [region_detector, workspace_manager](const httplib::Request& req, httplib::Response& res) {
     nlohmann::json body;
@@ -1076,7 +1187,9 @@ void register_routes(httplib::Server& server,
   });
 
   // POST /api/jobs (Create and start a subtitle extraction job)
-  server.Post("/api/jobs", [job_manager, workspace_manager](const httplib::Request& req, httplib::Response& res) {
+  server.Post("/api/jobs",
+              [job_manager, workspace_manager, paddle_execution](
+                  const httplib::Request& req, httplib::Response& res) {
     if (!job_manager) {
       res.status = 500;
       nlohmann::json err = {{"error", "JobManager is not initialized"}};
@@ -1126,8 +1239,24 @@ void register_routes(httplib::Server& server,
         cfg.region_box = RegionBox::from_json(body_json["region_box"]);
       }
 
+      // Paddle 执行快照（ADR-0041）：省略即继承部署绑定；提交相同值视为断言，
+      // 不匹配返回 409，非法值或非 paddle 引擎携带该字段返回 400。
+      {
+        const auto execution_check =
+            check_job_paddle_execution(cfg.engine, body_json, paddle_execution);
+        if (execution_check.http_status != 0) {
+          res.status = execution_check.http_status;
+          nlohmann::json err = {{"error", execution_check.error}};
+          res.set_content(err.dump(), "application/json; charset=utf-8");
+          return;
+        }
+        if (cfg.engine == "paddle") {
+          cfg.paddle_execution = execution_check.asserted;
+        }
+      }
+
       // Pre-validate OCR Engine
-      auto sys_info = collect_system_info();
+      auto sys_info = collect_system_info(paddle_execution);
       if (cfg.engine != "mock") {
         bool engine_available = false;
         for (const auto& eng : sys_info.engines) {

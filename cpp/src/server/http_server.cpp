@@ -118,6 +118,7 @@ HttpServer::HttpServer(ServerConfig config)
       job_manager_(std::make_shared<JobManager>(1, 50)),
       workspace_manager_(std::make_shared<WorkspaceManager>(config_.media_dir, config_.config_file)),
       svr_(std::make_unique<httplib::Server>()) {
+  job_manager_->set_paddle_execution(config_.paddle_execution);
   if (auto media_p = workspace_manager_->get_media_dir(); media_p.has_value()) {
     job_manager_->set_state_file_path(workspace_manager_->get_cache_dir() / "jobs_state.v1.json");
   }
@@ -152,7 +153,7 @@ HttpServer::HttpServer(ServerConfig config)
   }
 
   register_routes(*svr_, job_manager_, config_.static_dir, workspace_manager_,
-                  config_.workspace_locked);
+                  config_.workspace_locked, config_.paddle_execution);
 }
 
 HttpServer::~HttpServer() {

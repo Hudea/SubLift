@@ -6,6 +6,7 @@ set(_sublift_core_srcs
   timeline.cpp
   dedupe.cpp
   line_select.cpp
+  ocr_execution.cpp
 )
 
 add_library(sublift_core STATIC ${_sublift_core_srcs})
