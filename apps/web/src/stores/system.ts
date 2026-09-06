@@ -21,11 +21,12 @@ export const useSystemStore = defineStore('system', () => {
     return systemInfo.value.engines.filter((e) => e.available);
   });
 
+  // ADR-0038/0040：产品默认 vision > paddle；capability 缺失不得切换到 mock。
+  // 显式选择 mock 仍可用于 loopback 诊断与产品门，但不由偏好逻辑自动挑选。
   const preferredEngine = computed<OcrEngineName>(() => {
     const list = availableEngines.value.map((e) => e.name);
     if (list.includes('vision')) return 'vision';
-    if (list.includes('paddle')) return 'paddle';
-    return 'mock';
+    return 'paddle';
   });
 
   const isFfmpegReady = computed(() => {

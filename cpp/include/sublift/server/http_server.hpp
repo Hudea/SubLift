@@ -44,7 +44,14 @@ struct ServerConfig {
 /// 1. 非 loopback 监听必须有已配置的媒体根；
 /// 2. 非 loopback 监听必须锁定工作区，避免远程把授权根改到宿主任意路径。
 [[nodiscard]] std::string validate_remote_exposure(const ServerConfig& config,
-                                                   bool media_root_configured) ;
+                                                   bool media_root_configured);
+
+/// 启动期 OCR 能力检查。返回错误信息；空字符串表示通过。
+///
+/// 非 loopback 自托管要求 Paddle 可用（ADR-0038/0040）：不得静默降级 mock。
+/// loopback 允许 Paddle 缺失，以便本机开发与显式 `engine=mock` 诊断。
+[[nodiscard]] std::string validate_remote_paddle(const ServerConfig& config,
+                                                 bool paddle_available);
 
 /// 校验请求的 Bearer token；未配置 token 时直接放行。
 [[nodiscard]] bool authorize_request(const ServerConfig& config, const std::string& auth_header);

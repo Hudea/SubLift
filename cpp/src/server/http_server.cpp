@@ -90,6 +90,14 @@ std::string validate_remote_exposure(const ServerConfig& config, bool media_root
   return "";
 }
 
+std::string validate_remote_paddle(const ServerConfig& config, bool paddle_available) {
+  if (is_loopback_host(config.host) || paddle_available) {
+    return "";
+  }
+  return "拒绝以非 loopback 地址 " + config.host +
+         " 启动：Paddle OCR 不可用。局域网自托管不得静默降级 mock（ADR-0038/0040）。";
+}
+
 bool authorize_request(const ServerConfig& config, const std::string& auth_header) {
   if (config.access_token.empty()) {
     return true;

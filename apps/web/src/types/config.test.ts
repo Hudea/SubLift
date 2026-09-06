@@ -107,5 +107,11 @@ describe('Shared Config DTO & Defaults Truth Source (Feature 12513)', () => {
 
     const updatedBatchDef = batchStore.defaultBatchConfig;
     expect(updatedBatchDef.engine).toBe('paddle');
+
+    // Paddle 也不可用时仍保持产品默认 paddle，不得切换 mock（ADR-0038）
+    systemStore.systemInfo.engines[1].available = false;
+    systemStore.systemInfo.engines.push({ name: 'mock', available: true, detail: 'Mock' });
+    expect(systemStore.preferredEngine).toBe('paddle');
+    expect(batchStore.defaultBatchConfig.engine).toBe('paddle');
   });
 });

@@ -152,3 +152,44 @@ describe('System Store Workspace Lock (Phase 14 D03 / ADR-0040)', () => {
     expect(store.currentMediaDir).toBe('/media');
   });
 });
+
+describe('System Store preferredEngine (ADR-0038 fail-closed)', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+  });
+
+  it('prefers vision then paddle, never auto-selects mock', () => {
+    const store = useSystemStore();
+    store.systemInfo = {
+      version: 'v0.1.0',
+      runtime: 'cpp',
+      capabilities: [],
+      engines: [
+        { name: 'vision', available: false, detail: 'not this host' },
+        { name: 'paddle', available: false, detail: 'models missing' },
+        { name: 'mock', available: true, detail: 'Mock Engine' },
+      ],
+      ffmpeg: { available: true },
+    };
+
+    expect(store.preferredEngine).toBe('paddle');
+    expect(store.availableEngines.map((e) => e.name)).toEqual(['mock']);
+  });
+
+  it('selects vision when available even if paddle and mock are present', () => {
+    const store = useSystemStore();
+    store.systemInfo = {
+      version: 'v0.1.0',
+      runtime: 'cpp',
+      capabilities: [],
+      engines: [
+        { name: 'vision', available: true, detail: 'Apple Vision' },
+        { name: 'paddle', available: true, detail: 'PaddleOCR' },
+        { name: 'mock', available: true, detail: 'Mock Engine' },
+      ],
+      ffmpeg: { available: true },
+    };
+
+    expect(store.preferredEngine).toBe('vision');
+  });
+});

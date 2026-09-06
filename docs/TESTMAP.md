@@ -62,7 +62,9 @@
   │
   └─► 提交 / 合并前全量验证
         ├─► 产品主门禁 (Python-Free): ./scripts/verify-product.sh
-        └─► 若改了离线工具: ./scripts/verify-offline.sh
+        ├─► 若改了离线工具: ./scripts/verify-offline.sh
+        └─► 若改了容器镜像 / Compose / 容器门: ./scripts/verify-container.sh
+            （独立门，需要 Docker daemon；不是默认产品门。无 daemon 时 SKIPPED 并以非零退出，不假绿）
 
 显式过渡混门（非默认，含历史 cutover）: ./scripts/verify-standard.sh
 ```
@@ -77,14 +79,16 @@
 | **Native Server** (`cpp/src/server/`) | `./build/cpp/bin/sublift_tests "[server]"` | `./scripts/verify-web-server.sh` | 验证 HTTP/SSE 路由、媒体沙箱根、任务队列与 SRT 导出 |
 | **macOS 客户端** (`apps/macos/`) | `swift test --package-path apps/macos --filter <TestCase>` | `cd apps/macos && swift test` | 验证 SwiftUI 状态管理、批量任务中心、工作台交互与 IPC 通信 |
 | **Web 前端** (`apps/web/`) | `npx --prefix apps/web vitest run <file>` | `npm --prefix apps/web test && npm --prefix apps/web run build` | 验证 Pinia Stores、ROI 遮罩、实时字幕、A11y 与静态构建 |
+| **容器自托管** (`Dockerfile`, `docker-compose.yml`, `scripts/docker/`, `scripts/verification/verify-container.sh`) | `./scripts/verify-container.sh` | `./scripts/verify-container.sh` | 独立容器门：真实 docker build、paddle.available、/media Paddle 提取与 golden SRT、沙箱与工作区锁定；不挂入 `verify-product.sh` |
 | **离线工具与基准** (`src/sublift/`, `src/sublift_offline/`) | `uv run pytest tests/<test_file>.py` | `./scripts/verify-offline.sh` | 验证隔离离线命名空间、Benchmark 评分与 parity 门禁包装；冻结 Oracle 算法单测已移除，产品语义由 C++ `[parity]` 锁定 |
 
 ---
 
 ## 3. 全仓测试与脚本资产总览 (Test & Script Asset Catalog)
 
-SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五类：
+SubLift 维护全栈统一的测试资产。资产按生命周期状态分类：
 - `Active Gate`：当前主干必须通过的活跃质量门禁与单元测试；
+- `Independent Gate`：独立验收门，修改对应范围时运行，不挂入默认产品门；
 - `Transitional Mixed`：显式过渡混门，不是提交/合并默认入口；
 - `Core E2E`：覆盖系统端到端链路与集成契约的核心用例；
 - `Frozen Parity`：用于保障 Native C++ 与历史 Oracle 行为 100% 一致的冻结黄金集比对；
@@ -99,6 +103,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分为五
 | `scripts/verify-offline.sh`<br>`scripts/verification/verify-offline.sh` | Bash | **Active Gate** | 离线工具门禁：uv extras 同步、命名空间隔离、Ruff、Mypy、Pytest 单元测试与无归档生成检查 | `./scripts/verify-offline.sh` |
 | `scripts/verify-standard.sh` | Bash | **Transitional Mixed** | 显式过渡混门（非默认）：离线静态检查 + C++ 构建 + pytest + 历史 cutover + Vitest/E2E。不是产品门，也不替代 `verify-offline.sh` | 须显式调用 `./scripts/verify-standard.sh` |
 | `scripts/verify-web-server.sh` | Bash | **Active Gate** | Web Native Server 本地验收门禁：Server 构建、静态前端构建、Server Catch2 测试、Python E2E 与 Vitest | `./scripts/verify-web-server.sh` |
+| `scripts/verify-container.sh`<br>`scripts/verification/verify-container.sh` | Bash | **Independent Gate** | 局域网容器自托管验收（Python-free）：docker build、paddle.available、/media 提取、golden SRT、沙箱与工作区锁定。无 daemon 时 SKIPPED 非零退出，不挂入 `verify-product.sh` | `./scripts/verify-container.sh` |
 | `cpp/tests/` | Catch2 v3<br>(C++20 / ObjC++) | **Active Gate** | Native C++ 全量单元测试（Core / Pipeline / Adapters / Worker / Server / CLI）与 Parity 黄金集比对 | `ctest --test-dir build/cpp --output-on-failure` |
 | `apps/macos/Tests/SubLiftMacTests/` | XCTest<br>(Swift 5.9+) | **Active Gate** | macOS 客户端全量测试（批量任务队列、调度器、工作台状态、无障碍、IPC 客户端等 39 个测试套件） | `cd apps/macos && swift test` |
 | `apps/web/src/**/*.test.ts` | Vitest<br>(TypeScript / Vue 3) | **Active Gate** | Web 前端全量测试（Pinia Stores、ROI 映射、时间码、SRT 格式化、无障碍、批量任务） | `npm --prefix apps/web test` |

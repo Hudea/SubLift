@@ -3066,6 +3066,24 @@ TEST_CASE("Remote exposure validation rejects non-loopback without media root or
   REQUIRE(sublift::server::validate_remote_exposure(cfg, true).empty());
 }
 
+TEST_CASE("Remote paddle validation rejects non-loopback without Paddle", "[server][access_control]") {
+  sublift::server::ServerConfig cfg;
+
+  // loopback 允许 Paddle 缺失（本机开发 / 显式 mock）
+  cfg.host = "127.0.0.1";
+  REQUIRE(sublift::server::validate_remote_paddle(cfg, /*paddle_available=*/false).empty());
+  REQUIRE(sublift::server::validate_remote_paddle(cfg, /*paddle_available=*/true).empty());
+
+  // 非 loopback：Paddle 不可用必须拒绝监听，不得静默降级 mock
+  cfg.host = "0.0.0.0";
+  auto err_no_paddle = sublift::server::validate_remote_paddle(cfg, false);
+  REQUIRE_FALSE(err_no_paddle.empty());
+  REQUIRE(err_no_paddle.find("Paddle") != std::string::npos);
+  REQUIRE(err_no_paddle.find("mock") != std::string::npos);
+
+  REQUIRE(sublift::server::validate_remote_paddle(cfg, true).empty());
+}
+
 TEST_CASE("Locked workspace rejects runtime modification and reports locked flag", "[server][workspace_lock]") {
   auto temp_dir = std::filesystem::temp_directory_path() /
                   ("sublift_wslock_" + std::to_string(::getpid()));

@@ -43,7 +43,8 @@ void print_help(std::string_view prog_name) {
             << "  SUBLIFT_ACCESS_TOKEN     Require 'Authorization: Bearer <token>' on /api/*\n"
             << "  SUBLIFT_LOCK_WORKSPACE   Force-lock the workspace (1/true/yes/on)\n"
             << "\n"
-            << "Binding a non-loopback address requires a configured and locked media root.\n";
+            << "Binding a non-loopback address requires a configured and locked media root,\n"
+            << "and an available Paddle OCR engine (no silent mock fallback).\n";
 }
 
 }  // namespace
@@ -184,6 +185,24 @@ int main(int argc, char* argv[]) {
   std::signal(SIGTERM, handle_signal);
 
   auto sys_info = sublift::server::collect_system_info();
+  bool paddle_available = false;
+  for (const auto& eng : sys_info.engines) {
+    if (eng.name == "paddle" && eng.available) {
+      paddle_available = true;
+      break;
+    }
+  }
+  {
+    sublift::server::ServerConfig paddle_check;
+    paddle_check.host = host;
+    if (const std::string err =
+            sublift::server::validate_remote_paddle(paddle_check, paddle_available);
+        !err.empty()) {
+      std::cerr << "Error: " << err << "\n";
+      return 1;
+    }
+  }
+
   std::cout << "====================================================\n";
   std::cout << " SubLift Native Web Server v" << sublift::version() << "\n";
   std::cout << "====================================================\n";
