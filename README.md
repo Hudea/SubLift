@@ -1,207 +1,99 @@
 # SubLift
 
-硬字幕（烧录字幕）提取工具——从视频画面中自动识别字幕，生成可编辑的 SRT 文件。
+本地硬字幕提取工具：从视频画面识别烧录字幕，导出可编辑的 SRT。
 
-本地运行、隐私优先，视频与识别文本不离开本机。产品运行时已统一为 Native C++；Vision
-与准备好模型的 PaddleOCR 均在本机离线推理，Python 只服务隔离的可选离线工具。
+视频和识别文本留在你的机器上，不上传。当前版本是 **0.1 技术预览**——能用，但不是应用商店安装包，也不是公网服务。
 
-## 特性
+## 不是什么
 
-- **Apple Vision OCR**：C++/ObjC++ 产品实现；默认中英双语识别（zh-Hans + en-US）
-- **PaddleOCR 跨平台引擎**：PP-OCRv6 + Native ONNX Runtime，缺少能力或模型时 fail-closed
-- **像素差异打轴**：双信号帧签名（前景占比 + dHash）+ 三态状态机，时间轴稳定
-- **OCR 后置与段内共识**：每段最多识别 4 个代表帧，按字幕画像选行并用跨帧共识抑制背景文字
-- **模块化可插拔**：extractor / detector / ocr / export 均为 Protocol，可替换实现
-- **真实进度与快速取消**：CLI/GUI 展示处理阶段和百分比，GUI 可中途取消并重新开始
-- **macOS GUI**：SwiftUI 界面，拖拽导入、视频预览、增量字幕、字幕编辑、SRT 导出
-- **批量任务中心** ✅：独立 Task Center（⌘⇧T）、多文件/文件夹统一导入、单并发串行队列、安全 SRT 输出与本地 JSON 恢复（Phase 8 已完成）
-- **Web / Native Server**：单视频工作台、智能 ROI、批量交互与工作区信任边界已收口（Phase 12）；Linux 局域网容器自托管由 Phase 14 / ADR-0040 交付（CPU Paddle，不做 GPU/CUDA 或公网 HTTPS）
+- 不是已签名、已公证的 macOS `.app`
+- 不是公网 HTTPS / 账号 / 反向代理
+- 不含 GPU/CUDA 加速
+- 不导出 ASS / VTT
+- 不提取软字幕轨，也不做翻译
 
-## 环境要求
+## 三个入口
 
-- macOS 13+（当前 GUI 与 Vision 引擎；Apple Silicon 推荐）
-- ffmpeg（含 ffprobe）
-- CMake 3.20+ 与 C++20 工具链（推荐 Ninja）
-- Xcode 15+ 或 SwiftPM（仅 GUI 构建需要）
-- Node.js 20+（仅 Web UI 构建需要）
-- Docker Engine 24+（仅局域网容器自托管需要；默认产品门 `./scripts/verify-product.sh` 不依赖 Docker）
+| 入口 | 适合 | 引擎 |
+|---|---|---|
+| 局域网 Web | 在 Linux 服务器上用浏览器处理视频 | CPU 上的 PaddleOCR |
+| Native CLI | 本机脚本、单文件或批量 | macOS 可用 Vision 或 Paddle；需自行编译 |
+| macOS GUI | 本机拖拽、预览、校对 | 开发者构建（`swift run`），不是独立安装包 |
 
-Python 3.12+ 与 `uv` 只服务隔离的可选离线工具（benchmark、评分、冻结 Oracle）；
-它们不是产品安装条件，也不得成为 Native-only 产品运行或产品门禁的依赖。
+缺少模型、Worker 或所请求的引擎时会明确失败，不会静默换成别的引擎或 Python。
 
-## 文档
+## 局域网 Web（Docker）
 
-- [架构](docs/ARCHITECTURE.md)
-- [需求规格](docs/REQUIREMENTS.md)
-- [Native C++ 架构与契约](docs/cpp/README.md)
-- [当前进度](progress.md)与 [Phase 索引](phases.json)
-- [CHANGELOG 6.6](CHANGELOG.md) — 历史 cutover 与质量/性能记录
-- [项目辅助架构](docs/phases/phase7.json) — Phase 7 统一保存 Harness 迁移及原 Phase 9 仓库治理记录；Phase 9 已释放
+把 Web 工作台和识别服务跑在**可信局域网**的一台 Linux 机器上。媒体只通过宿主目录挂进容器 `/media`，镜像里不带你的视频。推理使用 CPU 上的 ONNX Runtime + PP-OCRv6。
 
-## 安装
+需要 Docker Engine 24+。
 
 ```bash
-git clone <repo>
-cd SubLift
-./init.sh                  # 开工基线：连续性入口与 Phase detail JSON 链
-cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON
+mkdir -p /srv/sublift/media          # 把视频放到这个目录
+cp .env.example .env                 # 可选；.env 不入库
+# 编辑 SUBLIFT_MEDIA_DIR 为上面的绝对路径
+
+SUBLIFT_MEDIA_DIR=/srv/sublift/media docker compose up -d --build
+```
+
+浏览器打开 `http://<服务器局域网IP>:8080`。
+
+| 项 | 说明 |
+|---|---|
+| 媒体 | 宿主 `SUBLIFT_MEDIA_DIR` → 容器 `/media`，唯一可访问的视频根 |
+| 端口 | 默认宿主 8080（`SUBLIFT_HTTP_PORT`） |
+| 缓存与导出 | 写在媒体目录下的 `.sublift_cache/` |
+| 更新 | 在仓库根执行 `docker compose build --no-cache && docker compose up -d` |
+
+**不要把端口暴露到公网。** 也不要给浏览器工作台设置 `SUBLIFT_ACCESS_TOKEN`：当前网页不会带这个头，打开后会 401。该 token 只给脚本 / API 用。
+
+排障：`docker compose logs -f`。若提示 Paddle 不可用，重新构建镜像，不要用空的 `./models` 目录盖住内置模型。
+
+## 本机 CLI（macOS）
+
+需要：macOS 13+、ffmpeg（含 ffprobe）、CMake 3.20+、C++20 工具链（推荐 Ninja）。
+
+### Vision（macOS 默认）
+
+```bash
+cmake -S cpp -B build/cpp -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DSUBLIFT_ENABLE_VISION=ON
 cmake --build build/cpp
-ctest --test-dir build/cpp --output-on-failure
+
+./build/cpp/bin/sublift extract clip.mkv -o output.srt
+./build/cpp/bin/sublift extract clip.mkv --fps 5 --script cjk -o out.srt
 ```
 
-产品验证入口是 `./scripts/verify-product.sh`：不安装 Python 依赖、不运行 Python
-脚本，也不因为缺少 `python` / `uv` / `.venv` 或 Docker daemon 而跳过或失败。
+### Paddle
 
-局域网容器验收是独立入口 `./scripts/verify-container.sh`（需要 Docker daemon；无 daemon
-时打印 SKIPPED 并以非 0 退出，不假绿）。
-
-隔离离线工具入口是 `./scripts/verify-offline.sh`。`./scripts/verify-standard.sh`
-是显式过渡混门（Native + Oracle + cutover），不是默认提交门；不得据此把 Python
-解释为产品依赖。
-
-### 可选的过渡工具
-
-当前本地产物清理器仍由 Python 实现。它不是产品命令；默认只预览可重建产物及预计释放
-空间，不写盘：
+需要 OpenCV，以及 `resources/manifest.json` 约束的 ONNX Runtime（macOS 可用 `brew install onnxruntime`，1.28.0）。CMake 会拒绝 Python wheel 里的 ORT。
 
 ```bash
-uv run python scripts/cleanup_local_artifacts.py
-```
-
-Swift build、C++ build 与 Python 工具环境必须分别显式选择；`.venv` 不在推荐默认范围：
-
-```bash
-uv run python scripts/cleanup_local_artifacts.py --swift-build
-uv run python scripts/cleanup_local_artifacts.py --cpp-build
-uv run python scripts/cleanup_local_artifacts.py --python-env
-```
-
-工具只接受当前 Git checkout 内的固定路径，拒绝仓库根、Git 元数据、路径逃逸、符号链接、
-视频、SRT/GT 与未分类生成文件。`--apply` 会执行实际删除；在真实工作区使用前必须先取得
-用户的再次明确授权。它从不清理分支、worktree、模型、外部资源或固定本地媒体。
-
-### 原生 C++ 构建（vision/mock 产品路径）
-
-```bash
-cmake -S cpp -B build/cpp -G Ninja -DCMAKE_BUILD_TYPE=Release -DSUBLIFT_ENABLE_VISION=ON
-cmake --build build/cpp
-# 产物：build/cpp/bin/sublift（与 sublift_cli）+ sublift_worker
-```
-
-> Vision 未安装时，OCR 集成测试自动跳过，pipeline 可用 MockOcrEngine 跑闭环测试。
-> Native Paddle 使用 `resources/manifest.json` 固定的 PP-OCRv6-small
-> 文件与 SHA-256。首次运行 `./build/cpp/bin/sublift resources install`；缺少或
-> 校验失败时明确失败，不会下载到 RapidOCR 缓存或切换到 Python。
-
-### Paddle Native Release 构建
-
-Paddle Native 使用 Homebrew 或官方 GitHub ONNX Runtime，版本与 SHA 由
-`resources/manifest.json` 约束。CMake 会拒绝 `.venv` / `site-packages`
-里的 Python wheel。
-
-```bash
-# macOS：brew install onnxruntime  （1.28.0，SHA 已列入 manifest）
 cmake -S cpp -B build/cpp-rel -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DSUBLIFT_ENABLE_OPENCV=ON -DSUBLIFT_REQUIRE_OPENCV=ON \
   -DSUBLIFT_ENABLE_PADDLE=ON -DSUBLIFT_REQUIRE_PADDLE=ON
 cmake --build build/cpp-rel
-./build/cpp-rel/bin/sublift resources install   # 首次准备模型；之后可离线重复提取
+./build/cpp-rel/bin/sublift resources install   # 首次下载并校验模型；之后可离线
+
+./build/cpp-rel/bin/sublift extract clip.mkv --engine paddle -o out.srt
 ```
-
-CMake 会把所选 ORT 复制到 `build/cpp-rel/lib/`，并给 Worker 写入相对
-`@loader_path/../lib`。完整 `.app` 内置模型、签名、公证仍按 ADR-0030 后置。
-
-## 使用
-
-### 原生 C++ CLI（无需 uv）
-
-```bash
-./build/cpp/bin/sublift extract <video> -o output.srt
-./build/cpp/bin/sublift extract clip.mkv --fps 5 --script cjk -o out.srt
-./build/cpp/bin/sublift extract clip.mkv --engine mock -o out.srt
-./build/cpp-rel/bin/sublift extract clip.mkv --engine paddle -o out.srt  # 使用上面的 Paddle Release 构建
-```
-
-Phase 13 起产品只接受 C++ Worker：能力不可用时 fail-closed；需要回滚时回滚到上一已验收
-版本，而不是在同一版本内切换 Python 实现。产品 CLI、macOS 与 Web 不再接受 `--runtime`
-或 `SUBLIFT_RUNTIME` 作为实现选择。Python 包不再提供 `sublift extract`；离线工具入口是
-`sublift-benchmark`。
-
-### 本机 Web / Native Server
-
-同源部署：`sublift_server` 同时提供 API 与 `apps/web/dist` 静态页。默认只绑 loopback。
-
-```bash
-cmake --build build/cpp --target sublift_server
-npm --prefix apps/web run build
-./build/cpp/bin/sublift_server --static-dir apps/web/dist
-# 浏览器打开 http://127.0.0.1:8080
-```
-
-非 loopback 监听必须已配置并锁定媒体根（`SUBLIFT_MEDIA_DIR` / `--media-dir`），否则拒绝启动。
-
-## 局域网容器自托管（Phase 14 / ADR-0040）
-
-把 Web 工作台和 Native Server 以**单个 Linux 容器**跑在可信局域网服务器上。媒体只通过
-宿主目录挂载进入容器 `/media`，镜像内不预置用户视频。推理走 CPU 上的 ONNX Runtime +
-PP-OCRv6；**不包含 GPU/CUDA**，也不提供公网 HTTPS、反向代理、账号或 CI/CD 发布。
-
-### 部署
-
-```bash
-# 1. 准备宿主媒体目录（视频放这里；容器内路径一律是 /media/...）
-mkdir -p /srv/sublift/media
-
-# 2. 可选：复制环境文件（.env 已被 gitignore，不入库）
-cp .env.example .env
-# 编辑 SUBLIFT_MEDIA_DIR= 为上一步的绝对路径
-
-# 3. 构建并启动（首次会按 resources/manifest.json 校验下载 ORT 与模型）
-SUBLIFT_MEDIA_DIR=/srv/sublift/media docker compose up -d --build
-```
-
-浏览器访问 `http://<服务器局域网IP>:8080`。服务端已注入 `/media` 时，Web 直接进入工作台，
-不再要求填写本机绝对路径。
-
-| 项 | 说明 |
-|---|---|
-| 媒体挂载 | 宿主 `SUBLIFT_MEDIA_DIR` → 容器 `/media`，唯一媒体授权根 |
-| 端口 | 容器内 8080；宿主端口 `SUBLIFT_HTTP_PORT`（默认 8080） |
-| 进程用户 | 镜像内 `sublift`（non-root，UID 10001） |
-| 缓存与导出 | 落在宿主媒体目录下的 `.sublift_cache/`（frames / remux / jobs / exports） |
-| 工作区 | 启动期锁定；`POST/DELETE /api/config/workspace` 返回 403 |
-| 可选 token | `SUBLIFT_ACCESS_TOKEN` 非空时 `/api/*` 需要 `Authorization: Bearer`。**当前 Web UI 不会附加该头**，打开 token 后浏览器工作台会 401；token 供脚本/API 调用。未设置时仅限可信局域网 |
-| 更新镜像 | 在仓库根执行 `docker compose build --no-cache && docker compose up -d`。本 Phase 不推镜像仓库、不做自动发布 |
-| 验收 | `./scripts/verify-container.sh`；与默认产品门分离 |
-
-排障：`docker compose logs -f`。`paddle.available=false` 通常是镜像内缺少
-`SUBLIFT_NATIVE_MANIFEST` 指向的 `manifest.json` 或模型 SHA 不匹配——应重新构建，不要挂空
-`./models` 目录盖住内置模型。
-
-### Runtime 矩阵
-
-| engine | 产品 runtime | 说明 |
-|---|---|---|
-| **vision** | **C++** (`sublift_worker`) | macOS 主路径 |
-| **mock** | **C++** | 流程验证 |
-| **paddle** | **C++** | 完整 DB/Quad/Cls/Rec Native；能力或资产缺失即报错 |
 
 ### CLI 参数
 
-| 参数 | 默认值 | 说明 |
+| 参数 | 默认 | 说明 |
 |---|---|---|
-| `<video>` | 必填 | 输入视频路径 |
-| `-o, --output` | output.srt | 输出字幕文件路径 |
-| `--fps` | 5.0 | 帧采样率（推荐 5.0） |
-| `--confidence` | 0.5 | OCR 高置信门；低置信文本仅在多帧共识等条件满足时放行 |
-| `--engine` | vision | OCR 引擎（vision / paddle / mock）；Paddle 需要已准备好的 Native 模型资产 |
-| `--script` | auto | 字幕文字系统（auto / cjk / latin）；已知字幕语言时可显式指定 |
+| `<video>` | 必填 | 输入视频 |
+| `-o, --output` | output.srt | 输出 SRT |
+| `--fps` | 5.0 | 帧采样率 |
+| `--confidence` | 0.5 | OCR 高置信门 |
+| `--engine` | vision | `vision` / `paddle` / `mock` |
+| `--script` | auto | `auto` / `cjk` / `latin` |
 
-## macOS GUI（开发者构建）
+## macOS GUI
 
-> Phase 2 GUI 当前通过 SwiftPM 构建运行，**不做独立 `.app` 分发包**（见 ADR-0009）。
-> Phase 13 的 GUI 产品合同只启动 C++ `sublift_worker`。能力不可用时失败关闭，不启动 Python。
+通过 SwiftPM 在开发者环境运行，**没有独立 `.app` 安装包**。处理 mkv 需要系统 ffmpeg。
 
 ```bash
 cd apps/macos
@@ -209,77 +101,23 @@ swift build
 swift run SubLiftMac
 ```
 
-### GUI 功能
+可以拖入 mp4 / mov / mkv，预览视频，选择字幕区域，看增量结果，编辑后导出 SRT。批量处理在独立的 Task Center（⌘⇧T）。
 
-- **拖拽导入**：把 mp4 / mov / mkv 视频拖入窗口
-- **视频预览**：AVPlayer 播放，支持播放/暂停/拖动进度条
-- **字幕区域选择**：Vision 自动检测文字候选框，多选字幕框后提取（无选择时回退下部裁剪）
-- **实时反馈**：段闭合后增量显示字幕，处理阶段、百分比和相对实时处理倍速均来自真实帧进度
-- **快速取消**：提取中可终止 ffmpeg 与后台任务，取消后可重新开始
-- **原生工作台**：Video / Transcript Split、可选 Context Inspector、系统 Toolbar 与菜单命令
-- **字幕审阅**：处理期只读 Live Transcript；完成后搜索、选择、修改、合并/拆分并通过时间线定位
-- **提取设置**：视频区快速设置栏与分层 Settings 共用 vision / paddle / mock（开发者模式）和采样质量偏好
-- **SRT 导出**：点击「导出 SRT」选择保存路径
+## 本机浏览器（loopback）
 
-> 处理 mkv 需要系统已安装 ffmpeg，否则 UI 会提示 `brew install ffmpeg`。
->
-> Phase 10 Native Workbench 已实施并收口；当前能力、视觉证据与已知交互限制见
-> [UI 设计入口](docs/design_ui/README.md) 和 [Phase 10 跟踪](docs/phases/phase10.json)。
->
-> Phase 8 Task Center 已完成（08001 设计冻结 + 08102–08410 实现与综合验收）；实施与证据见
-> [批量任务中心设计合同](docs/design_ui/batch-task-center.md) 与 [Phase 8 跟踪](docs/phases/phase8.json)。
+仅本机访问时，也可以不经过 Docker：
+
+```bash
+cmake --build build/cpp --target sublift_server
+npm --prefix apps/web run build
+./build/cpp/bin/sublift_server --static-dir apps/web/dist
+# http://127.0.0.1:8080
+```
+
+## 许可证
+
+源码为 [MIT](LICENSE)。PaddleOCR 算法来源、模型与其它第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 ## 开发
 
-```bash
-./init.sh                     # 开工基线，会话开始/结束时运行
-cmake --build build/cpp
-ctest --test-dir build/cpp --output-on-failure
-(cd apps/macos && swift test)
-npm --prefix apps/web test
-./scripts/verify-product.sh   # Python-free 产品门（提交/合并默认；不依赖 Docker）
-./scripts/verify-container.sh # 局域网容器门（需要 Docker daemon）
-./scripts/verify-offline.sh   # 隔离离线工具
-./scripts/verify-standard.sh  # 显式过渡混门 / 历史 cutover；非默认
-```
-
-仅在维护隔离的 Python benchmark、诊断或历史 Oracle 时才运行：
-
-```bash
-uv run pytest -m "not integration" --no-cov
-uv run ruff check .
-uv run mypy src tests
-```
-
-### Harness 与进度
-
-`phases.json → docs/phases/phase*.json` 是当前开发 Phase 和 Deliverable 的操作真源；
-`.agent/` 当前只保留轻量规则、会话入口和提交辅助，复杂能力编排已从活跃 Harness 移出，
-后续按真实需要增量引入。根 `feature-list.json` 仍保留给历史文档和旧工具兼容，不能用于
-选择新工作。执行 Task 只存在于当前会话计划，不写入长期 Phase 文件。详见
-[AGENTS.md](AGENTS.md) 与 [ADR-0033](docs/DECISIONS.md)。
-
-### 架构与设计
-
-- [架构设计](docs/ARCHITECTURE.md) — 模块布局、数据流、分层原则
-- [需求规格](docs/REQUIREMENTS.md) — 功能需求、非功能需求、验收标准
-- 设计文档：[UI vNext](docs/design_ui/README.md) · [pipeline](docs/design/pipeline.md) · [ocr](docs/design/ocr.md) · [extractor](docs/design/extractor.md) · [benchmark](docs/design/benchmark.md) · [macos-gui 当前实现](docs/design/macos-gui.md) · [OCR 内部性能归因（Phase 4.2 计划）](docs/design/ocr-performance-attribution.md)
-- [Benchmark 用法](benchmark/README.md) — 统一 `run/matrix/score` 入口、产物与回归锚点
-- [已知障碍](docs/HURDLES.md) — 开发中遇到的技术问题与解决方案
-
-### Phase 3 固定 GT 水位
-
-Zootopia 固定片段（1080p、5fps、统一 diagnostic 口径）的最终结果：timing recall 96.6%、precision 98.8%、F1 97.7%，CER macro 3.2%（字符准确率 97.6%），usable subtitle recall 92.0%，空文本与噪声均为 0。该结果用于回归锚点，不代表对其他片源的泛化保证；非 Zootopia 长视频 GUI 手工体验验收已在 Phase 4 完成，但英文/中英混排/不同字幕位置的量化 GT 扩充仍是后续工作。
-
-隔离的 Python Benchmark 当前仍使用 `uv run sublift-benchmark`；入口与指标说明见
-[benchmark/README.md](benchmark/README.md)（设计见
-[docs/design/benchmark.md](docs/design/benchmark.md)）。已验收的
-[质量与性能归因基线](benchmark/baselines/README.md)随仓库版本化。版本化配置引用的固定
-本地媒体保留在 `debug/` 根目录且不入库；GUI/C++ 导入、运行、性能报告与历史归档统一写入
-`debug/benchmark/`。该工具可以辅助分析 Native 输出，但不得成为产品运行或最终 Native
-门禁依赖。
-
-### 技术栈
-
-C++20 / ObjC++ / CMake / Ninja / Swift 5.9+ / SwiftPM / Vue 3 / TypeScript / OpenCV /
-ONNX Runtime / ffmpeg；Python 3.12+ 与 uv 仅用于隔离的可选离线工具。
+构建、测试、验证门和项目架构见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。变更记录见 [CHANGELOG.md](CHANGELOG.md)。

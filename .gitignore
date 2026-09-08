@@ -4,6 +4,9 @@
 
 debug/
 
+# Node (root or any package)
+node_modules/
+
 ### macOS
 # Finder metadata
 .DS_Store

@@ -152,8 +152,7 @@ Web / Native Server 可以以容器镜像部署到可信局域网服务器（ADR
   失败即构建失败；Paddle capability 缺失时 fail-closed，不静默降级为 mock。推理为 CPU
   ONNX Runtime；GPU/CUDA 不在部署边界内。
 - 缓存、抽帧与导出落在宿主媒体目录下的 `.sublift_cache/`。更新方式是仓库内
-  `docker compose build` 后 `up -d`；不推镜像仓库、不做 CI/CD。管理员操作说明见根
-  [README 局域网容器自托管](../README.md)。
+  `docker compose build` 后 `up -d`；不推镜像仓库、不做 CI/CD。管理员操作说明见根 [README](../README.md) 的局域网 Web 一节。
 - 容器验收是独立于默认产品门的入口（`./scripts/verify-container.sh`），由真实
   `docker build`、容器内 `paddle.available` 与经 `/media` 映射的 golden SRT 比对构成。
   公网 HTTPS、账号系统、镜像仓库与 CI/CD 不属于当前部署边界。

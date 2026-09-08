@@ -2,8 +2,8 @@
 
 ## PaddleOCR / RapidOCR algorithm compatibility
 
-The native Paddle adapter in `cpp/src/paddle/ppocr_det_preprocess.*` and
-`cpp/src/paddle/ppocr_db_postprocess.*` independently adapts the observable
+The native Paddle adapter in `cpp/src/adapters/paddle/ppocr_det_preprocess.*` and
+`cpp/src/adapters/paddle/ppocr_db_postprocess.*` independently adapts the observable
 preprocessing and DB postprocessing behavior of:
 
 - PaddleOCR, copyright 2020 PaddlePaddle Authors;
@@ -14,8 +14,8 @@ Those upstream implementations are provided under the Apache License 2.0:
 
 SubLift's implementation uses its own C++ types and target boundaries. It does
 not embed Python, call RapidOCR as a subprocess, or vendor the upstream
-repositories. Python RapidOCR remains a test oracle and explicit product
-fallback.
+repositories. A frozen Python Oracle may remain as an isolated offline tool;
+it is not a product runtime or fallback.
 
 The DB unclip compatibility implementation also independently reproduces the
 observable integer offset semantics of pyclipper 1.4.0 / Angus Johnson's
