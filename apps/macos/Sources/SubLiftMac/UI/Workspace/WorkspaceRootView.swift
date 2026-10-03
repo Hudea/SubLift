@@ -335,7 +335,7 @@ struct WorkspaceRootView: View {
         .clipped()
     }
 
-    // MARK: - 不支持的预览（mkv 等 AVPlayer 无法播放的格式）
+    // MARK: - 不支持的预览（AVPlayer 无法播放时 ffmpeg 抽帧）
 
     private var unsupportedPreview: some View {
         ZStack {
@@ -345,6 +345,9 @@ struct WorkspaceRootView: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
+            } else if workspace.playerModel.fallbackFailed {
+                Text("无法提取预览帧")
+                    .foregroundStyle(.white.opacity(0.8))
             } else {
                 ProgressView("正在提取预览帧...")
                     .tint(.white)
@@ -353,7 +356,7 @@ struct WorkspaceRootView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .bottom) {
             if workspace.playerModel.fallbackPreview != nil {
-                Text("静态预览（拖动进度条查看，mkv 不支持播放）")
+                Text("静态预览（系统播放器无法播放，拖动进度条查看）")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.7))
                     .padding(6)

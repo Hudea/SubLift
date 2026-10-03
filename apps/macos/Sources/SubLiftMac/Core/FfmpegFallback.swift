@@ -20,13 +20,22 @@ enum FfmpegDetector {
         if _detected { return _cachedPath }
         _detected = true
 
+        let candidates = [
+            "/opt/homebrew/bin/ffmpeg",
+            "/usr/local/bin/ffmpeg",
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            _cachedPath = path
+            return path
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["which", "ffmpeg"]
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -124,8 +133,12 @@ enum FfmpegFrameSampler {
         process.executableURL = URL(fileURLWithPath: ffmpegPath)
         // -ss 在 -i 前是 fast seek（关键帧定位，快但不精确）
         process.arguments = [
+            "-nostdin",
+            "-hide_banner",
+            "-loglevel", "error",
             "-ss", String(format: "%.2f", seconds),
             "-i", url.path,
+            "-an",
             "-frames:v", "1",
             "-f", "image2pipe",
             "-vcodec", "mjpeg",
@@ -135,7 +148,7 @@ enum FfmpegFrameSampler {
 
         let stdoutPipe = Pipe()
         process.standardOutput = stdoutPipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -170,7 +183,7 @@ enum FfmpegFrameSampler {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -208,7 +221,7 @@ enum FfmpegFrameSampler {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -249,7 +262,7 @@ enum FfmpegFrameSampler {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -310,7 +323,7 @@ enum FfmpegFrameSampler {
 
         let pipe = Pipe()
         process.standardOutput = pipe
-        process.standardError = Pipe()
+        process.standardError = FileHandle.nullDevice
 
         do {
             try process.run()
@@ -353,7 +366,7 @@ enum FfmpegFrameSampler {
 
         let stdoutPipe = Pipe()
         process.standardOutput = stdoutPipe
-        process.standardError = Pipe()  // 忽略 stderr
+        process.standardError = FileHandle.nullDevice  // 忽略 stderr
 
         do {
             try process.run()

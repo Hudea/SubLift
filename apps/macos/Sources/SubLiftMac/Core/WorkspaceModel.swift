@@ -44,6 +44,7 @@ final class WorkspaceModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var priorStateBeforeRegionEditing: WorkspaceState = .ready
+    private var priorInspectorPresentedBeforeRegionEditing: Bool = false
     private var metadataTask: Task<Void, Never>?
     private let metadataRequest: MetadataRequest
     private let importPolicy: VideoImportPolicy
@@ -249,19 +250,22 @@ final class WorkspaceModel: ObservableObject {
         state = .failed
     }
 
-    /// 进入 Region Editing 状态。
+    /// 进入 Region Editing 状态：切换到 region inspector 并自动展开面板。
     func enterRegionEditing() {
         guard currentVideoURL != nil else { return }
         guard [.ready, .review, .failed, .cancelled].contains(state) else { return }
         priorStateBeforeRegionEditing = state
+        priorInspectorPresentedBeforeRegionEditing = isInspectorPresented
         state = .regionEditing
         setInspectorMode(.region)
+        isInspectorPresented = true
     }
 
-    /// 退出 Region Editing 状态。
+    /// 退出 Region Editing 状态：恢复进入前的 inspector 展开状态。
     func exitRegionEditing() {
         guard state == .regionEditing else { return }
         state = priorStateBeforeRegionEditing
+        isInspectorPresented = priorInspectorPresentedBeforeRegionEditing
         setInspectorMode(editor.selectedId != nil ? .subtitle : .video)
     }
 

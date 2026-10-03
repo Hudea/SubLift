@@ -66,14 +66,17 @@ final class WorkspaceModelTests: XCTestCase {
         let meta = VideoMetadata(fileName: "test.mp4", fileSize: 100, width: 1920, height: 1080, durationMs: 1000, codec: "h264")
         model.handleMetadataLoaded(meta, sessionToken: token)
 
+        XCTAssertFalse(model.isInspectorPresented)
         model.enterRegionEditing()
         XCTAssertEqual(model.state, .regionEditing)
         XCTAssertEqual(model.inspectorMode, .region)
+        XCTAssertTrue(model.isInspectorPresented, "进入区域编辑应自动展开 Inspector")
         XCTAssertTrue(model.commandAvailability.isRegionActive)
 
         model.exitRegionEditing()
         XCTAssertEqual(model.state, .ready)
         XCTAssertEqual(model.inspectorMode, .video)
+        XCTAssertFalse(model.isInspectorPresented, "退出区域编辑应恢复进入前的 Inspector 状态")
         XCTAssertFalse(model.commandAvailability.isRegionActive)
     }
 

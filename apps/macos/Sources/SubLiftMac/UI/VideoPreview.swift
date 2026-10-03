@@ -12,8 +12,10 @@ final class PlayerModel: ObservableObject {
     @Published private(set) var isPlaying: Bool = false
     @Published private(set) var player: AVPlayer?
     @Published private(set) var loadFailed: Bool = false
-    /// mkv 等 AVPlayer 不支持的格式：用 ffmpeg 抽首帧作为静态预览。
+    /// AVPlayer 无法播放时：用 ffmpeg 抽帧作为静态预览（不限扩展名）。
     @Published private(set) var fallbackPreview: NSImage?
+    /// ffmpeg 抽帧已结束但仍无图像（找不到 ffmpeg 或抽帧失败）。
+    @Published private(set) var fallbackFailed: Bool = false
 
     var url: URL? {
         didSet {
@@ -29,6 +31,8 @@ final class PlayerModel: ObservableObject {
     private var statusObservation: NSKeyValueObservation?
     private var rateObservation: NSKeyValueObservation?
     private var pendingSeekMs: Int?
+    private var loadGeneration: Int = 0
+    private var playbackDecisionPending = false
 
     deinit {
         if let token = timeObserverToken {
@@ -49,6 +53,9 @@ final class PlayerModel: ObservableObject {
         statusObservation?.invalidate()
         rateObservation?.invalidate()
         pendingSeekMs = nil
+        loadGeneration += 1
+        let generation = loadGeneration
+        playbackDecisionPending = true
 
         let item = AVPlayerItem(url: url)
         let newPlayer: AVPlayer
@@ -62,21 +69,27 @@ final class PlayerModel: ObservableObject {
 
         loadFailed = false
         fallbackPreview = nil
+        fallbackFailed = false
         observePlayer(newPlayer)
-        observeItem(item)
+        observeItem(item, generation: generation)
+        decidePlaybackPath(url: url, item: item, generation: generation)
 
         currentMs = 0
         durationMs = 0
     }
 
     private func unload() {
+        loadGeneration += 1
+        playbackDecisionPending = false
         player?.pause()
         player?.replaceCurrentItem(with: nil)
         pendingSeekMs = nil
         currentMs = 0
         durationMs = 0
         isPlaying = false
+        loadFailed = false
         fallbackPreview = nil
+        fallbackFailed = false
     }
 
     // MARK: - 观察器
@@ -102,40 +115,84 @@ final class PlayerModel: ObservableObject {
         }
     }
 
-    private func observeItem(_ item: AVPlayerItem) {
+    private func observeItem(_ item: AVPlayerItem, generation: Int) {
         statusObservation = item.observe(\.status, options: [.new]) { [weak self] item, _ in
             DispatchQueue.main.async {
+                guard let self, generation == self.loadGeneration else { return }
+                if item.status == .failed {
+                    self.playbackDecisionPending = false
+                    self.enterFallback()
+                    return
+                }
                 if item.status == .readyToPlay {
-                    self?.loadFailed = false
-                    self?.fallbackPreview = nil
-                    let secs = CMTimeGetSeconds(item.duration)
-                    if secs.isFinite {
-                        self?.durationMs = Int(secs * 1000)
+                    if self.playbackDecisionPending || self.loadFailed {
+                        return
                     }
-                } else if item.status == .failed {
-                    self?.loadFailed = true
-                    // AVPlayer 失败时（如 mkv），用 ffmpeg 兜底预览
-                    self?.startFallbackMode()
+                    self.applyReadyToPlay(item)
                 }
             }
         }
     }
 
-    // MARK: - ffmpeg 兜底预览模式（mkv）
+    private func decidePlaybackPath(url: URL, item: AVPlayerItem, generation: Int) {
+        Task { [weak self] in
+            let playable = await PreviewPlayback.videoTrackIsPlayable(url: url)
+            await MainActor.run {
+                guard let self, generation == self.loadGeneration, self.url == url else { return }
+                self.playbackDecisionPending = false
+                let status = item.status
+                if PreviewPlayback.shouldUseFfmpegFallback(
+                    videoTrackPlayable: playable,
+                    itemStatus: status
+                ) {
+                    self.enterFallback()
+                } else if status == .readyToPlay, !self.loadFailed {
+                    self.applyReadyToPlay(item)
+                }
+            }
+        }
+    }
 
-    /// 进入 ffmpeg 兜底模式：用 ffprobe 取时长，ffmpeg 抽首帧。
+    private func applyReadyToPlay(_ item: AVPlayerItem) {
+        loadFailed = false
+        fallbackPreview = nil
+        let secs = CMTimeGetSeconds(item.duration)
+        if secs.isFinite {
+            durationMs = Int(secs * 1000)
+        }
+    }
+
+    private func enterFallback() {
+        player?.pause()
+        isPlaying = false
+        loadFailed = true
+        startFallbackMode()
+    }
+
+    // MARK: - ffmpeg 兜底预览
+
+    /// ffmpeg 抽帧预览：系统播放器不能播时使用，不限扩展名。
     private func startFallbackMode() {
-        guard let url = url,
-              FfmpegDetector.detect() != nil else { return }
+        guard let url = url else { return }
+        let generation = loadGeneration
+        fallbackFailed = false
 
-        // 用 ffprobe 取时长
         Task.detached(priority: .userInitiated) { [weak self] in
-            let durationMs = FfmpegFrameSampler.probeDurationMs(url: url)
+            // 先出首帧再探时长，避免 大文件 moov-at-end 把界面卡在转圈。
             let firstFrame = FfmpegFrameSampler.captureFrameAt(url: url, seconds: 0)
-
-            DispatchQueue.main.async {
-                self?.durationMs = durationMs
-                self?.fallbackPreview = firstFrame
+            await MainActor.run {
+                guard let self, generation == self.loadGeneration else { return }
+                self.fallbackPreview = firstFrame
+                if firstFrame == nil {
+                    self.fallbackFailed = true
+                }
+            }
+            let durationMs = FfmpegFrameSampler.probeDurationMs(url: url)
+            await MainActor.run {
+                guard let self, generation == self.loadGeneration else { return }
+                if durationMs > 0 {
+                    self.durationMs = durationMs
+                }
             }
         }
     }
@@ -254,7 +311,7 @@ struct VideoControlsView: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // fallback 模式下禁用播放/暂停（mkv 不支持播放）
+            // fallback 模式下禁用播放/暂停（系统播放器无法播放）
             Button(action: { model.togglePlay() }) {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
                     .frame(width: 20)

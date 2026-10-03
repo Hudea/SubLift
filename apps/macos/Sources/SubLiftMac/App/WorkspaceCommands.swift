@@ -194,7 +194,7 @@ struct WorkspaceCommands: Commands {
         }
     }
 
-    /// 播放/暂停可用：已加载视频且非 fallback（mkv 不支持播放）。
+    /// 播放/暂停可用：已加载视频且非 ffmpeg 静态预览。
     private var canPlayPause: Bool {
         workspace.currentVideoURL != nil && !workspace.playerModel.loadFailed
     }

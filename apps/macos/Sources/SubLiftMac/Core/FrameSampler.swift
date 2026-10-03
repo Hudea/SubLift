@@ -32,37 +32,48 @@ enum FrameSampler {
     }
 
     /// 抽取指定时间点的单帧（用于预览检测 / 静态预览）。
+    /// AVFoundation 不可播时走 ffmpeg，不看扩展名；AV 抽帧失败再退 ffmpeg。
     static func captureFrameAt(url: URL, seconds: Double) async -> CGImage? {
-        if url.pathExtension.lowercased() == "mkv" {
-            return FfmpegFrameSampler.captureFrameAt(url: url, seconds: seconds)
-                .flatMap { $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+        if await PreviewPlayback.videoTrackIsPlayable(url: url) == true {
+            if let image = await captureFrameWithAVFoundation(url: url, seconds: seconds) {
+                return image
+            }
         }
-        return await captureFrameWithAVFoundation(url: url, seconds: seconds)
+        return ffmpegCGImage(url: url, seconds: seconds)
     }
 
-    /// 估算总帧数（用于进度条）。按扩展名路由。
+    /// 估算总帧数（用于进度条）。时长先问 AVFoundation，无效再 ffprobe。
     static func estimateFrameCount(url: URL, fps: Int) async -> Int {
-        if url.pathExtension.lowercased() == "mkv" {
-            return await FfmpegFrameSampler.estimateFrameCount(url: url, fps: fps)
-        }
         let asset = AVURLAsset(url: url)
-        let cmDuration = try? await asset.load(.duration)
-        guard let cmDuration = cmDuration else { return 0 }
-        let duration = CMTimeGetSeconds(cmDuration)
-        guard duration.isFinite, duration > 0 else { return 0 }
-        return Int(duration * Double(fps))
+        if let cmDuration = try? await asset.load(.duration) {
+            let duration = CMTimeGetSeconds(cmDuration)
+            if duration.isFinite, duration > 0 {
+                return Int(duration * Double(fps))
+            }
+        }
+        return await FfmpegFrameSampler.estimateFrameCount(url: url, fps: fps)
     }
 
-    /// 抽帧入口：按文件扩展名路由到 AVFoundation 或 ffmpeg。
-    ///
-    /// - .mkv → FfmpegFrameSampler（AVFoundation 不支持 mkv 容器）
-    /// - 其他 → AVAssetReader（mp4/mov 全支持）
+    /// 抽帧入口：视频轨对 AVFoundation 不可播时走 ffmpeg，否则 AVAssetReader。
     /// - Returns: (SampledFrame?, Error?) —— error 非 nil 时表示失败，frame 为 nil 且 error 为 nil 时表示结束
     static func sample(url: URL, config: Config = .default) -> AsyncStream<(SampledFrame?, Error?)> {
-        if url.pathExtension.lowercased() == "mkv" {
-            return FfmpegFrameSampler.sample(url: url, config: config)
+        AsyncStream { continuation in
+            Task.detached(priority: .userInitiated) {
+                if await PreviewPlayback.videoTrackIsPlayable(url: url) == true {
+                    do {
+                        try await sampleImpl(url: url, config: config, continuation: continuation)
+                    } catch {
+                        continuation.yield((nil, error))
+                        continuation.finish()
+                    }
+                    return
+                }
+                for await item in FfmpegFrameSampler.sample(url: url, config: config) {
+                    continuation.yield(item)
+                }
+                continuation.finish()
+            }
         }
-        return sampleWithAVAssetReader(url: url, config: config)
     }
 
     /// 用 AVAssetReader 抽帧，返回 AsyncStream。
@@ -109,6 +120,11 @@ enum FrameSampler {
     }
 
     // MARK: - AVFoundation 单帧
+
+    private static func ffmpegCGImage(url: URL, seconds: Double) -> CGImage? {
+        FfmpegFrameSampler.captureFrameAt(url: url, seconds: seconds)
+            .flatMap { $0.cgImage(forProposedRect: nil, context: nil, hints: nil) }
+    }
 
     private static func captureFrameWithAVFoundation(url: URL, seconds: Double) async -> CGImage? {
         await withCheckedContinuation { continuation in

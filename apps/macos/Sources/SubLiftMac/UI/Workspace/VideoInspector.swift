@@ -22,7 +22,7 @@ enum VideoInspectorPresentation {
         }
     }
 
-    /// 预览兼容性：AVPlayer 失败（如 mkv）时由 ffmpeg 静态预览。
+    /// 预览兼容性：AVPlayer 无法播放时由 ffmpeg 静态预览。
     static func previewCompatibility(loadFailed: Bool) -> String {
         loadFailed
             ? "静态预览（AVPlayer 不支持，使用 ffmpeg 抽帧）"
