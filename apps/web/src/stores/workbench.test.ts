@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useWorkbenchStore } from './workbench';
 import { useSystemStore } from './system';
@@ -8,6 +8,7 @@ import type { SseJobCallbacks } from '../types/api';
 describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    vi.spyOn(SubLiftApiClient, 'exportSrt').mockRejectedValue(new Error('export unavailable'));
     const systemStore = useSystemStore();
     systemStore.systemInfo = {
       version: 'v0.1.0',
@@ -17,6 +18,8 @@ describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
       ffmpeg: { available: true, path: '/usr/bin/ffmpeg' },
     };
   });
+
+  afterEach(() => vi.restoreAllMocks());
 
   it('initializes in Empty state with progressPct at 0', () => {
     const store = useWorkbenchStore();
@@ -114,7 +117,7 @@ describe('useWorkbenchStore - Milestone 2 (Feature 12512)', () => {
     });
 
     await extractPromise;
-    expect(store.state).toBe('Review');
+    await vi.waitFor(() => expect(store.state).toBe('Review'));
     expect(store.entries.length).toBe(2);
   });
 

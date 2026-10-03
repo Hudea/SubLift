@@ -10,7 +10,9 @@ import type {
   JobSaveResponse,
   BatchSaveRequest,
   BatchSaveResponse,
+  SubtitleEntry,
 } from '../types/api';
+import { parseSrt } from '../utils/srt_formatter';
 
 const API_BASE = '/api';
 
@@ -190,6 +192,12 @@ export class SubLiftApiClient {
       throw new Error(`Failed to export SRT: HTTP ${res.status}`);
     }
     return res.text();
+  }
+
+  /** 完成后的去重字幕列表（GET /export 的 SRT，已经过 merge_entries）。 */
+  static async exportEntries(jobId: string): Promise<SubtitleEntry[]> {
+    const srt = await this.exportSrt(jobId);
+    return parseSrt(srt);
   }
 
   /**

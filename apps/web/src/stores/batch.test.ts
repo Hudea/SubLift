@@ -9,6 +9,9 @@ import type { SseJobCallbacks } from '../types/api';
 describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 & Phase 8)', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
+    SubLiftApiClient.exportSrt = async () => {
+      throw new Error('exportSrt not stubbed');
+    };
   });
 
   it('initializes with empty tasks, preferred engine and fast 5 FPS default config', () => {
@@ -116,6 +119,38 @@ describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 
     expect(batchStore.tasks[0].status).toBe('waiting');
     expect(batchStore.currentRunningId).toBeNull();
     expect(batchStore.isQueueRunning).toBe(false); // Does not advance to task 1
+  });
+
+  it('loads final deduped entries while preserving completion metadata', async () => {
+    const store = useBatchStore();
+    store.addBatchItems([{
+      videoPath: '/tmp/deduped.mp4',
+      config: { engine: 'mock', roi_policy: 'default' },
+    }]);
+    const sse: { cb: SseJobCallbacks | null } = { cb: null };
+    SubLiftApiClient.createJob = async () => ({ job_id: 'batch-deduped', status: 'running' });
+    SubLiftApiClient.subscribeJobEvents = (_id, callbacks) => {
+      sse.cb = callbacks;
+      return () => {};
+    };
+    SubLiftApiClient.exportSrt = async () =>
+      '1\n00:00:00,000 --> 00:00:02,000\n合并字幕\n';
+
+    const task = store.tasks[0];
+    await store.startSingle(task.id);
+    sse.cb?.onDone?.({ total_entries: 1, elapsed_ms: 100 });
+    await vi.waitFor(() => expect(task.status).toBe('completed'));
+
+    expect(task.entries.map((entry) => entry.text)).toEqual(['合并字幕']);
+    expect(task.result).toMatchObject({
+      entryCount: 1,
+      runtimeIdentity: 'MOCK Engine',
+      roiSource: '默认底边 30%',
+      effectiveRegion: { x: 0, y: 0.7, width: 1, height: 0.3 },
+      diskStatus: 'unwritten',
+      emptyResult: false,
+    });
+    expect(store.currentRunningId).toBeNull();
   });
 
   it('filters tasks by search text and status tab', () => {
@@ -1216,4 +1251,3 @@ describe('useBatchStore - Batch Queue & Native Alignment (Features 12301, 12503 
     });
   });
 });
-

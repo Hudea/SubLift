@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import { SubLiftApiClient } from '../api/client';
 import { useSystemStore } from './system';
 import { globalSubtitleSearcher } from '../utils/subtitle_search';
-import { exportSrtFile } from '../utils/srt_formatter';
+import { exportSrtFile, parseSrt } from '../utils/srt_formatter';
 import type {
   OcrEngineName,
   NormalizedRegionBox,
@@ -567,15 +567,32 @@ export const useWorkbenchStore = defineStore('workbench', () => {
           }
         },
         onDone: (_data) => {
-          state.value = 'Review';
+          const jobId = activeJobId.value;
           if (sseUnsubscribe) {
             sseUnsubscribe();
             sseUnsubscribe = null;
           }
-          // 提取完成后自动固化初始版本草稿
-          if (videoPath.value && entries.value.length > 0) {
-            saveDraftToStorage();
-          }
+          void (async () => {
+            if (jobId) {
+              try {
+                const srt = await SubLiftApiClient.exportSrt(jobId);
+                const finalEntries = parseSrt(srt);
+                if (activeJobId.value === jobId && state.value === 'Processing' && !hasUserEdits.value && finalEntries.length > 0) {
+                  entries.value = finalEntries;
+                  globalSubtitleSearcher.resetCache();
+                }
+              } catch (err) {
+                console.warn('[Job] failed to load deduped entries, keeping live stream', err);
+              }
+            }
+            if (!cancelRequested && activeJobId.value === jobId && state.value === 'Processing') {
+              state.value = 'Review';
+              // 固化完成后的去重字幕，而不是临时 SSE 条目。
+              if (videoPath.value && entries.value.length > 0) {
+                saveDraftToStorage();
+              }
+            }
+          })();
         },
         onError: (err) => {
           console.error('[Job Error]', err);

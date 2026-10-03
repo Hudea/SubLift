@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { SubLiftApiClient } from '../api/client';
 import { useSystemStore } from './system';
-import { exportSrtFile, exportBatchZip } from '../utils/srt_formatter';
+import { exportSrtFile, exportBatchZip, parseSrt } from '../utils/srt_formatter';
 import type { NormalizedRegionBox, JobConflictPolicy } from '../types/api';
 import {
   type BatchTaskItem,
@@ -527,27 +527,42 @@ export const useBatchStore = defineStore('batch', () => {
           }
         },
         onDone: (data) => {
-          if (task.status === 'extracting' || task.status === 'preparing' || task.status === 'exporting') {
-            // FSM 级联快进推进至 completed，防止跨阶段转移拒绝
-            task.status = 'completed';
-            task.stage = 'completed';
-            task.progressPct = 100;
-            task.elapsedMs = data.elapsed_ms;
-            const entryCount = data.total_entries;
-            const emptyResult = entryCount === 0 || task.entries.length === 0;
-            task.emptyResult = emptyResult;
-            task.diskStatus = 'unwritten';
-            task.result = {
-              entryCount,
-              outputPath: task.outputPath || `${task.videoPath.replace(/\.[^/.]+$/, '')}.srt`,
-              runtimeIdentity: `${frozenConfig.engine.toUpperCase()} Engine`,
-              roiSource,
-              effectiveRegion: targetRegionBox,
-              diskStatus: 'unwritten',
-              emptyResult,
-            };
-          }
-          finalizeIfCurrent();
+          const jobId = task.jobId;
+          void (async () => {
+            if (jobId) {
+              try {
+                const srt = await SubLiftApiClient.exportSrt(jobId);
+                const finalEntries = parseSrt(srt);
+                if (task.jobId === jobId && BatchTaskStatusGuard.isActive(task.status) && finalEntries.length > 0) {
+                  task.entries = finalEntries;
+                }
+              } catch (err) {
+                console.warn('[Batch] failed to load deduped entries, keeping live stream', err);
+              }
+            }
+            if (task.jobId !== jobId) return;
+            if (task.status === 'extracting' || task.status === 'preparing' || task.status === 'exporting') {
+              // FSM 级联快进推进至 completed，防止跨阶段转移拒绝
+              task.status = 'completed';
+              task.stage = 'completed';
+              task.progressPct = 100;
+              task.elapsedMs = data.elapsed_ms;
+              const entryCount = data.total_entries;
+              const emptyResult = entryCount === 0 || task.entries.length === 0;
+              task.emptyResult = emptyResult;
+              task.diskStatus = 'unwritten';
+              task.result = {
+                entryCount,
+                outputPath: task.outputPath || `${task.videoPath.replace(/\.[^/.]+$/, '')}.srt`,
+                runtimeIdentity: `${frozenConfig.engine.toUpperCase()} Engine`,
+                roiSource,
+                effectiveRegion: targetRegionBox,
+                diskStatus: 'unwritten',
+                emptyResult,
+              };
+            }
+            finalizeIfCurrent();
+          })();
         },
         onError: (err) => {
           if (BatchTaskStatusGuard.isActive(task.status)) {

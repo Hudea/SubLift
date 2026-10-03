@@ -11,6 +11,7 @@ describe('useWorkbenchStore - Milestone 5 (Feature 12515: 字幕审阅草稿与�
 
   beforeEach(() => {
     setActivePinia(createPinia());
+    vi.spyOn(SubLiftApiClient, 'exportSrt').mockRejectedValue(new Error('export unavailable'));
     localStorageMock = {};
 
     // Mock localStorage
@@ -360,7 +361,7 @@ describe('useWorkbenchStore - Milestone 5 (Feature 12515: 字幕审阅草稿与�
 
       // Complete extraction -> state transitions to Review
       sseHolder.current?.onDone?.({ total_entries: 1, elapsed_ms: 500 });
-      expect(store.state).toBe('Review');
+      await vi.waitFor(() => expect(store.state).toBe('Review'));
 
       // User performs custom review edits
       store.updateSubtitleEntry(1, { text: 'User human-corrected text' });
