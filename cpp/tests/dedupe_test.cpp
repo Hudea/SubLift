@@ -47,3 +47,34 @@ TEST_CASE("whitespace normalize merge", "[dedupe]") {
   REQUIRE(out.size() == 1);
   REQUIRE(out[0].text == "你好");
 }
+
+TEST_CASE("empty between same text merges without drop_empty_text", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 4200, "放开我"), e(4200, 5000, ""), e(5000, 5800, "放开我")},
+      1000, 500, false);
+  REQUIRE(out.size() == 1);
+  REQUIRE(out[0].start_ms == 0);
+  REQUIRE(out[0].end_ms == 5800);
+  REQUIRE(out[0].text == "放开我");
+}
+
+TEST_CASE("typewriter watermark fragments merge to longest", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 600, "更"), e(600, 1400, "多"), e(1400, 3200, "多资源尽在98堂"),
+       e(3400, 5000, "更多资源尽在98堂"),
+       e(5000, 6600, "更多资源尽在98堂永久地址："),
+       e(6600, 7400, "更多资源尽在98堂永久地址：WWW.98T.LA"),
+       e(8000, 8800, "更多资源尽在98堂永久地址："),
+       e(8800, 9400, "更多资源尽在98堂")},
+      1000, 0, false);
+  REQUIRE(out.size() == 1);
+  REQUIRE(out[0].start_ms == 0);
+  REQUIRE(out[0].end_ms == 9400);
+  REQUIRE(out[0].text.find("WWW.98T.LA") != std::string::npos);
+}
+
+TEST_CASE("single char not absorbed unless prefix", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 800, "嘛"), e(800, 2800, "知道啦进公司后就禁止")}, 1000, 0, false);
+  REQUIRE(out.size() == 2);
+}

@@ -46,13 +46,30 @@ def merge_entries(
     return _merge_adjacent(filtered_short, merge_gap_ms)
 
 
+
+def _same_subtitle(a: str, b: str) -> bool:
+    """同一句字幕的碎段：全等、包含（≥2 字）或前缀出字。"""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    if shorter not in longer:
+        return False
+    if len(shorter) >= 2:
+        return True
+    return longer.startswith(shorter)
+
+
 def _merge_adjacent(
     entries: list[SubtitleEntry],
     merge_gap_ms: int,
 ) -> list[SubtitleEntry]:
-    """合并相邻相同文本段（归一化后相等 + gap <= merge_gap_ms）。
+    """合并同一字幕的碎段（距上一非空段 gap <= merge_gap_ms）。
 
-    合并后保留第一段的文本，start 取首段 start，end 取末段 end。
+    可合并：归一化后相等；或一句包含另一句（至少 2 字）；或短句是长句前缀
+    （处理「更」「多」「更多资源…」这种逐步出字）。空 OCR 段可夹在中间。
+    合并后保留更长的原文，start 取首段，end 取末段。
     """
     if not entries:
         return []
@@ -60,15 +77,29 @@ def _merge_adjacent(
     result: list[SubtitleEntry] = [entries[0]]
 
     for current in entries[1:]:
-        last = result[-1]
-        gap = current.start_ms - last.end_ms
         normalized = _normalize(current.text)
+        if not normalized:
+            result.append(current)
+            continue
 
-        if gap <= merge_gap_ms and normalized and normalized == _normalize(last.text):
-            result[-1] = SubtitleEntry(
+        last_ne_idx: int | None = None
+        for i in range(len(result) - 1, -1, -1):
+            if _normalize(result[i].text):
+                last_ne_idx = i
+                break
+        if last_ne_idx is None:
+            result.append(current)
+            continue
+
+        last = result[last_ne_idx]
+        last_norm = _normalize(last.text)
+        gap = current.start_ms - last.end_ms
+        if gap <= merge_gap_ms and _same_subtitle(last_norm, normalized):
+            del result[last_ne_idx + 1 :]
+            result[last_ne_idx] = SubtitleEntry(
                 start_ms=last.start_ms,
                 end_ms=current.end_ms,
-                text=last.text,
+                text=current.text if len(normalized) > len(last_norm) else last.text,
                 confidence=max(last.confidence, current.confidence),
             )
         else:

@@ -90,6 +90,49 @@ namespace {
   return out;
 }
 
+[[nodiscard]] std::size_t utf8_cp_count(const std::string& text) {
+  std::size_t n = 0;
+  for (std::size_t i = 0; i < text.size();) {
+    const auto c = static_cast<unsigned char>(text[i]);
+    if ((c & 0x80) == 0) {
+      i += 1;
+    } else if ((c & 0xE0) == 0xC0) {
+      i += 2;
+    } else if ((c & 0xF0) == 0xE0) {
+      i += 3;
+    } else if ((c & 0xF8) == 0xF0) {
+      i += 4;
+    } else {
+      i += 1;
+    }
+    if (i > text.size()) break;
+    ++n;
+  }
+  return n;
+}
+
+[[nodiscard]] bool same_subtitle(const std::string& a, const std::string& b) {
+  if (a.empty() || b.empty()) {
+    return false;
+  }
+  if (a == b) {
+    return true;
+  }
+  const std::string* shorter = &a;
+  const std::string* longer = &b;
+  if (a.size() > b.size()) {
+    shorter = &b;
+    longer = &a;
+  }
+  if (longer->find(*shorter) == std::string::npos) {
+    return false;
+  }
+  if (utf8_cp_count(*shorter) >= 2) {
+    return true;
+  }
+  return longer->compare(0, shorter->size(), *shorter) == 0;
+}
+
 [[nodiscard]] std::vector<SubtitleEntry> merge_adjacent(
     const std::vector<SubtitleEntry>& entries, std::int32_t merge_gap_ms) {
   if (entries.empty()) {
@@ -99,15 +142,31 @@ namespace {
   result.push_back(entries.front());
   for (std::size_t i = 1; i < entries.size(); ++i) {
     const auto& current = entries[i];
-    auto& last = result.back();
-    const auto gap = current.start_ms - last.end_ms;
     const auto normalized = normalize_for_merge(current.text);
-    if (gap <= merge_gap_ms && !normalized.empty() &&
-        normalized == normalize_for_merge(last.text)) {
-      last = SubtitleEntry{
+    if (normalized.empty()) {
+      result.push_back(current);
+      continue;
+    }
+    int last_ne_idx = -1;
+    for (int j = static_cast<int>(result.size()) - 1; j >= 0; --j) {
+      if (!normalize_for_merge(result[static_cast<std::size_t>(j)].text).empty()) {
+        last_ne_idx = j;
+        break;
+      }
+    }
+    if (last_ne_idx < 0) {
+      result.push_back(current);
+      continue;
+    }
+    const auto last = result[static_cast<std::size_t>(last_ne_idx)];
+    const auto last_norm = normalize_for_merge(last.text);
+    const auto gap = current.start_ms - last.end_ms;
+    if (gap <= merge_gap_ms && same_subtitle(last_norm, normalized)) {
+      result.resize(static_cast<std::size_t>(last_ne_idx) + 1);
+      result[static_cast<std::size_t>(last_ne_idx)] = SubtitleEntry{
           .start_ms = last.start_ms,
           .end_ms = current.end_ms,
-          .text = last.text,
+          .text = normalized.size() > last_norm.size() ? current.text : last.text,
           .confidence = std::max(last.confidence, current.confidence),
       };
     } else {
