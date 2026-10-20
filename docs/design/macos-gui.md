@@ -28,9 +28,9 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。Swift 只选择 engine、探�
 不允许因 C++ capability 缺失而静默切换其他实现、Vision 或 Mock。GUI 记录实际 Worker
 与 engine capability，避免界面设置与真实执行后端漂移。
 
-当前代码中 `RuntimePolicy`、`PipelineClient`、部分测试及仓库定位仍保留 Python 分支和
-`.venv` 假设。这些是 Phase 13 待移除的迁移债务，不是兼容承诺；新增 GUI 行为不得继续
-扩展该路径。
+Phase 13 已退役 Python 产品 runtime。当前代码仍保留少量 Python 时代的注释、测试命名与
+`SUBLIFT_RUNTIME` fail-closed 拒绝项；产品路径只启动 C++ `sublift_worker`，不查找
+`.venv`、不启动 Python，也不提供 Python fallback。新增 GUI 行为不得重新引入该路径。
 
 ## 模块职责
 
@@ -42,8 +42,8 @@ GUI 不在 Swift 进程中执行字幕 Pipeline。Swift 只选择 engine、探�
 | `WorkspaceLayout.swift` | 计算 Video/Transcript/Inspector 的比例、最小宽度与 divider clamp。 |
 | `VideoImportPolicy.swift` | 统一 Open/drop 格式校验；MKV 缺 ffmpeg 时在改变 Session 前 fail-closed。 |
 | `ExtractionConfiguration.swift` | 表达引擎与采样质量的 active/final 运行配置快照。 |
-| `RuntimePolicy.swift` | 过渡模块；目标只解析 engine/capability 并执行 Native fail-closed，移除 runtime 切换。 |
-| `PipelineClient.swift` | 查找并启动 C++ Worker；负责 UDS 连接、framing、握手、请求与资源回收。现存 Python 分支待删除。 |
+| `RuntimePolicy.swift` | 解析 engine/capability 并执行 Native fail-closed；`SUBLIFT_RUNTIME=python` 仅作为拒绝项，不是运行时选项。 |
+| `PipelineClient.swift` | 查找并启动 C++ Worker；负责 UDS 连接、framing、握手、请求与资源回收。不提供 Python fallback。 |
 | `Messages.swift` | Swift ↔ C++ Worker 的 IPC Codable 消息。 |
 | `SubtitleExtractor.swift` | 发送 path-mode `start_job`，消费 progress / push_entry / entries / done，协调取消、日志与处理倍速。 |
 | `FrameSampler.swift` | 为预览候选框扫描、代表帧和 legacy frame mode 提供 AVFoundation 采样；不参与默认打轴。 |

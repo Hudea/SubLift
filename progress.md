@@ -1,44 +1,57 @@
 # SubLift 进度导航
 
+> 本文件只做导航，不沉积 evidence 或实施过程；细节在 Phase detail、`docs/HURDLES.md` 与
+> `benchmark/baselines/`。进度真源：[`phases.json`](phases.json) → `detail_file`。
+
 ## 当前状态
 
-- **最后更新：** 2026-09-06
-- **当前 Phase：** [Phase 15](docs/phases/phase15.json) — `blocked`（D01 配置与 CPU 兼容已完成；D02–D04 待 GPU 硬件与运行库冻结）
-- **当前 Deliverable：** 无（D01 已完成；剩余需真实 GPU/Docker 环境）
-- **已冻结里程碑：** [Phase 13](docs/phases/phase13.json) 已在 `main` 完成验收并置 `done`；[Phase 14](docs/phases/phase14.json) `ready-for-merge`（D01–D05 全部完成；合入 `main` 并复验前不置 `done`）。
-- **进度真源：** [`phases.json`](phases.json) → `detail_file`；本文件只提供当前工作与阻塞导航。
+- **最后更新：** 2026-10-20
+- **当前 Phase：** [Phase 17](docs/phases/phase17.json) `in-progress`；
+  [Phase 14](docs/phases/phase14.json) 保持 `ready-for-merge`（detail 已在 `main`，
+  D01–D05 全 done；待 `main` 复验后置 `done`）
+- **当前 Deliverable：** Phase 17 / D02「跨端语义对齐」
+  （in-progress；SRT 与输出重名已对齐，剩余 confidence/ROI/状态映射）
+- **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
+  [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
+  [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
+- **验证入口：** `./scripts/verify-harness.sh`（真源/链接）· `./scripts/verify-product.sh`
+  （产品门，Python-free）· `./scripts/verify-container.sh`（容器，独立）·
+  `./scripts/verify-offline.sh`（可选 Python）
 
-## 当前收口顺序
+## 下一步
 
-- Phase 14 把 Web / Native Server 以容器镜像交付到可信局域网服务器（[ADR-0040](docs/DECISIONS.md)）。
-- 产品验证使用 `./scripts/verify-product.sh`（不依赖 Docker）；可选离线工具使用 `./scripts/verify-offline.sh`；
-  容器验收使用独立的 `./scripts/verify-container.sh`（Python-free，需要 Docker daemon）。
+1. **D02 收尾**：SRT 与输出重名已对齐；下一步处理 confidence 默认值、ROI 转换与
+   Job/Task 状态映射，仍以 contracts fixtures + 三端测试为准。
+2. **D03 启动**：Web 批量队列版本化持久化/恢复；优先复用 Swift BatchQueueState 语义，
+   再决定 localStorage 还是服务端 queue endpoint。
+3. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
+   `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`），
+   不能伪造复验。
 
-## 阻塞项
+## 阻塞
 
-- Phase 15 D02–D04 — `blocked`：需目标显卡/驱动、原生 ORT GPU 包与 CUDA/cuDNN/基础镜像冻结，以及真实 NVIDIA GPU + Docker 环境；本机两者皆无，不伪造验收。
-- Phase 14 合入 `main` 并在 `main` 上完成必要验收后才置 `done`。
-- 12505 — `blocked`：Phase 12 的历史记录，容器交付意图已由 Phase 14 承接，不再作为执行入口。
+- **Phase 15 D02–D04**：需目标显卡/驱动、原生 ORT GPU 包与 CUDA/cuDNN/基础镜像冻结，以及
+  真实 NVIDIA GPU + Docker 环境；本机两者皆无。
+- **Phase 14**：未在 `main` 上完成必要复验前不置 `done`；本机无 Docker 客户端/daemon，
+  容器门无法执行，需要具备 Docker 的环境。
 
-## 当前风险
+## 风险 / 已知残余
 
-- 局域网自托管改变了 Web 入口的信任边界：非 loopback 暴露必须同时具备媒体根、工作区锁定与
-  可选 token。当前 Web UI 不会发送 Bearer，开启 `SUBLIFT_ACCESS_TOKEN` 会使浏览器工作台 401。
-- 当前构建未启用 CUDA：请求 `--paddle-provider cuda` 会在启动期被拒绝，不会静默回落 CPU/mock。
-
-## 近期决策
-
-- ADR-0041：采纳 GPU 执行后端与容器框架，先交付配置与 CPU 兼容；运行库版本待目标显卡确定后冻结（2026-09-06）。
-- ADR-0040：容器化自托管限于可信局域网，宿主卷为媒体入口，非 loopback 受最小访问控制约束
-  （2026-09-03）。GPU/CUDA、公网 HTTPS、账号与 CI/CD 均非本 Phase 目标。
+- **Web 批量队列恢复**：服务端 job 状态与 SSE cursor 已持久化，但 Web 批量队列的成员/顺序未
+  跨刷新持久化；刷新后队列丢失。归入维护 Phase。
+- **跨端默认值与状态**：SRT 与输出重名已对齐；confidence 默认值（Swift 0.5 vs 合同 0.0）、
+  批量 ROI、Job/Task 状态映射仍未统一。归入 D02。
+- **Web + token**：开启 `SUBLIFT_ACCESS_TOKEN` 时浏览器工作台不会发送 Bearer，打开即 401；
+  容器自托管不要给 Web 开 token，或先补同源鉴权。
+- **工作树**：当前仍有 Phase 16 的未提交改动（集中在 `cpp/`）；结构性重构前先提交/收口，
+  不要在脏树上搬目录。
 
 ## 最近收口
 
-- Phase 15 D01 完成：执行后端配置模型、Server 解析与启动期 fail-closed、system/info execution 对象、任务执行快照与引擎贯通落地；ctest 239/239、Web 150 测试、init.sh 通过；容器/GPU 真实验收未执行（无 Docker/GPU）。
-- Phase 14 D05 完成：README / `.env.example` / ARCHITECTURE 7.2 / REQUIREMENTS 与进度导航
-  与真实边界对齐；容器门保持独立入口。
-- Phase 14 D04 完成：`./scripts/verify-container.sh` 在本机 Docker 29.1.3 上 14/14 通过（paddle.available、/media Paddle 提取、golden SRT 精确比对、沙箱 400、工作区锁定 403）。
-- Phase 14 D03 完成：服务端非 loopback 访问控制、docker-compose.yml 与 Web 锁定感知落地。
-- Phase 14 D02 完成：本机 `docker build -t sublift:local` 成功（748MB，non-root `sublift`，ORT 1.18.1 与 PP-OCRv6 按 manifest 校验装入）。
-- Phase 14 D01 完成：ADR-0040 冻结，Phase 14 登记并通过 Draft 2020-12 校验。
-- Phase 13 已合入 `main`，通过 `./scripts/verify-product.sh` 并在 `main` 上冻结为 `done`。
+- **Phase 17（2026-10-20）**：D01 合同/parity 收口；D02 已对齐 SRT 与输出重名，
+  三端共享 fixtures 测试通过。下一步 confidence/ROI/状态映射。
+- **Phase 16（2026-10-20）**：P0 的 S0 基线与 O1–O8 全部落地；端到端收益在噪声内，det_infer
+  占 84.35%，以负向结论收口。P1/P2 未启动，后续另立 Phase。
+- **Phase 12（2026-10-20）**：12509–12516 全部交付；12505 历史 blocked 由 Phase 14 承接。
+  复核发现 Web 批量队列持久化残余，记入上方风险。
+- **Phase 14（2026-09-03/04）**：D01–D05 完成并合入 `main`；等待 `main` 复验。

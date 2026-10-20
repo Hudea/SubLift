@@ -11,13 +11,16 @@
 - Node.js 20+（仅 Web UI）
 - Docker Engine 24+（仅局域网容器验收；默认产品门不依赖 Docker）
 
-Python 3.12+ 与 `uv` 只服务隔离的可选离线工具（benchmark、评分、冻结 Oracle），
-不是产品安装条件，也不得成为 Native 产品运行或产品门的依赖。
+Python 3.12+ 与 `uv` 只服务隔离的可选离线工具（benchmark、评分、冻结 Oracle）与独立的
+developer E2E（`scripts/test_server_e2e.py`）；不是产品安装条件，也不得成为 Native 产品运行
+或 `verify-product.sh` 的依赖。
 
 ## 开工与验证
 
 ```bash
 ./init.sh                     # 开工基线，会话开始/结束时运行
+./scripts/verify-harness.sh   # Phase 真源/链接（可选 schema；非产品门）
+./scripts/verify-contracts.sh # 跨语言合同 fixture（非产品门）
 cmake --build build/cpp
 ctest --test-dir build/cpp --output-on-failure
 (cd apps/macos && swift test)
@@ -31,6 +34,13 @@ npm --prefix apps/web test
 `./init.sh` 只建立开工前提。产品行为以 `./scripts/verify-product.sh` 为准：不安装
 Python 依赖、不运行 Python 脚本，也不因为缺少 `python` / `uv` / `.venv` 或 Docker
 daemon 而跳过或失败。
+
+修改 Phase、AGENTS 或当前文档后运行 `./scripts/verify-harness.sh`。它校验
+`phases.json`/detail 状态一致性、唯一 active Phase 与当前文档链接；安装 `jsonschema`
+时执行完整 schema 校验，否则只做结构检查并明确警告（可用
+`PYTHON=.venv/bin/python` 获得完整校验）。修改 `contracts/` 或跨端语义时运行
+`./scripts/verify-contracts.sh`；它校验 schema/fixture 与 ROI/SRT/output 参考语义。
+两者都是连续性门，不是产品门。
 
 容器验收是独立入口 `./scripts/verify-container.sh`（需要 Docker daemon；无 daemon
 时打印 SKIPPED 并以非 0 退出，不假绿）。

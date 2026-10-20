@@ -1,12 +1,15 @@
-# macOS UI 设计
+# SubLift UI 设计
 
-本目录维护 SubLift macOS 产品当前的交互与视觉设计参考，不记录 Phase 计划、实施步骤或项目进度。
+本目录维护 SubLift macOS 与 Web 产品的交互/视觉设计参考，不记录 Phase 计划、实施步骤或
+项目进度。macOS 设计文档仍是主体；Web 与 macOS 的能力对齐、宿主差异与 gap 统一登记在
+[shared/parity.md](shared/parity.md)。
 
 | 文档 | 职责 |
 |---|---|
 | [Workbench 设计](macos-workbench.md) | 单视频工作台的信息架构、Surface 与产品交互 |
 | [交互状态规范](interaction-state-spec.md) | Workspace 状态机、命令、只读/编辑和响应式合同 |
 | [Task Center 设计](batch-task-center.md) | 批量导入、串行队列、输出规划、恢复与任务中心 UI |
+| [Web/macOS Parity Matrix](shared/parity.md) | 两端能力语义、宿主差异与已知 gap 的唯一登记处 |
 | [参考资产索引](reference-index.md) | 外部参考图的来源、适用边界与哈希 |
 
 ## 资产

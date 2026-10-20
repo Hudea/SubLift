@@ -33,14 +33,14 @@ Oracle。现行契约见 [`docs/cpp/`](cpp/README.md)。
   均返回逐行 `OcrLine(text, confidence, box)`，保留 Native Mock 引擎用于测试。
 - **F5 时间轴生成** ✅：双信号帧签名、变化点状态机与 SSIM patrol 生成 `start_ms` / `end_ms`。
 - **F6 去重与合并** ✅：相邻同文去重、短空洞桥接与重叠处理；仍有少量 merged residual。
-- **F7 字幕导出** ⚠️：SRT 格式化与单项下载已完成；ASS、VTT 只有接口占位，Web 工作区原子保存、冲突策略和真实批量导出由 12514 收口。
+- **F7 字幕导出** ⚠️：SRT 单条/批量下载、服务端原子保存与冲突策略已交付（12514）；ASS、VTT 仍只有接口占位，属于后续格式范围。
 - **F8 CLI** ✅：Native `sublift extract <video> -o <output>`，支持 fps、置信度、OCR 引擎及
   文字系统参数。`--runtime` / `SUBLIFT_RUNTIME` 不是产品选项。Python console `sublift extract`
   已 fail-closed，指向 Native CLI。可选离线工具使用 `sublift-benchmark` /
   `python -m sublift_offline`，不占用产品 `sublift` 命令。
 - **F9 中英文与混排** ⚠️：Vision 配置 zh-Hans + en-US，`auto/cjk/latin` 画像和多帧共识已实现；显式 CJK 边界清理对无空格混排仍有误删风险。
 - **F10 引擎自动路由** ⚠️：GUI 可按候选文字推断文字系统，但尚未实现多 OCR 引擎自动选择。
-- **F11 进度与取消** ⚠️：Native CLI 与 macOS GUI 已显示真实处理阶段和百分比并支持快速取消；Web 已有 SSE 与取消，但单视频百分比换算、重连 cursor 和刷新恢复尚由 12512 收口。
+- **F11 进度与取消** ⚠️：Native CLI 与 macOS GUI 显示真实阶段/百分比并支持快速取消；Web 已交付 SSE、取消、游标续传与 job_id+seq 去重。活动会话在刷新后的自动恢复仍不完整，归入后续维护项。
 - **F12 配置文件** ❌：尚不支持 `sublift.toml` / `--config`。
 - **F13 引擎对照模式** ❌：尚未提供产品化的多引擎并行对照。
 - **F14 PaddleOCR 第二引擎** ✅：C++ ONNX Adapter 已实现完整 Det DB/unclip、
@@ -82,19 +82,20 @@ Oracle。现行契约见 [`docs/cpp/`](cpp/README.md)。
   工作台、ROI、增量字幕、Review 与 SRT 下载已实现；产品链不依赖 Python runtime。
 - **F30 Web 智能字幕区域** ✅（12509）：Native Server 自动检测候选区域，Web 自动应用可信
   结果并允许手工覆盖；迟到检测不得覆盖用户已修改的选区。
-- **F31 Web 批量任务中心与文件夹扫描** ⚠️（12510）：队列、筛选、Inspector、单项控制、
-  浏览器文件夹导入和服务端路径扫描基座已存在；工作区内扫描、硬上限和完整 E2E 仍在收口。
-- **F32 媒体沙箱与本地服务边界** ❌（12511）：WorkspaceManager 必须成为所有媒体路由
-  的唯一授权根；默认 loopback，工作区外/符号链接逃逸和旧根路径必须 fail-closed。
-- **F33 可恢复 Job/Queue 与可靠 SSE** ❌（12512）：队列、配置快照、事件 cursor 和终态结果
-  需要版本化原子持久化；刷新/重启可恢复，活动任务转 interrupted，重连不重放字幕。
-- **F34 单视频/批量配置与质量一致性** ❌（12513）：两个入口共享同一配置 DTO、默认值和
-  `auto/fixed/default` ROI policy，实际生效配置可见且没有静默回退。
-- **F35 真实输出计划与原子批量导出** ❌（12514）：服务端按受控路径和冲突策略原子写 SRT；
-  浏览器下载与工作区保存分开，批量动作不能以重复下载伪装为已落盘。
-- **F36 字幕审阅草稿与无损校对** ❌（12515）：文本/时间码编辑可恢复，具备保存状态、
+- **F31 Web 批量任务中心与文件夹扫描** ✅（12510）：队列、筛选、Inspector、单项控制、
+  浏览器文件夹导入、服务端路径扫描与硬上限已交付。
+- **F32 媒体沙箱与本地服务边界** ✅（12511）：WorkspaceManager 是所有媒体路由的唯一授权根；
+  默认 loopback，工作区外/符号链接/旧根路径 fail-closed。
+- **F33 可恢复 Job/Queue 与可靠 SSE** ⚠️（12512）：Job 状态、配置快照、事件 cursor、终态结果
+  和 interrupted 语义已版本化持久化，SSE 可续传去重；Web 批量队列的成员/顺序尚未跨刷新
+  持久化，刷新恢复不完整。
+- **F34 单视频/批量配置与质量一致性** ✅（12513）：Web 单视频与批量共享同一配置 DTO、默认值和
+  `auto/fixed/default` ROI policy；跨 macOS/CLI 的 confidence/ROI 默认值统一归入维护 Phase。
+- **F35 真实输出计划与原子批量导出** ✅（12514）：服务端按受控路径和冲突策略原子写 SRT；
+  浏览器下载与工作区保存分开，批量动作不以重复下载伪装为已落盘。
+- **F36 字幕审阅草稿与无损校对** ✅（12515）：文本/时间码编辑可恢复，具备保存状态、
   校验和撤销/重做；迟到事件不覆盖草稿，导出使用当前已确认版本。
-- **F37 Web 可访问性与紧凑布局** ❌（12516）：核心路径具备键盘、焦点、dialog、状态播报、
+- **F37 Web 可访问性与紧凑布局** ✅（12516）：核心路径具备键盘、焦点、dialog、状态播报、
   reduced motion、可选中文本和 960×600 / 200% zoom 验收合同。
 
 ## 4. 非功能需求
@@ -110,9 +111,9 @@ Oracle。现行契约见 [`docs/cpp/`](cpp/README.md)。
 | **容器自托管** | 可信局域网内以容器镜像提供 Web 服务，宿主卷为唯一媒体授权根，非 loopback 受最小访问控制约束 | ✅ Phase 14 已交付镜像、Compose、工作区锁定、可选 token 与 `./scripts/verify-container.sh` 真实验收；公网 HTTPS、账号系统、GPU/CUDA 与 CI/CD 不在范围 |
 | **运行时单一性** | C++ 是唯一产品运行时；缺失 capability 时 fail-closed，版本回滚不切 Python | ✅ ADR-0038 与 Phase 13 已完成并在 `main` 冻结 |
 | **跨平台演进** | 核心算法与 OS / 厂商 API 解耦 | ⚠️ PaddleOCR 已提供通用 OCR 路径；Windows/Linux 产品交付与 GUI 尚未完成 |
-| **本地服务信任边界** | Web Server 默认 loopback，当前工作区是所有媒体路径的唯一授权根 | ⚠️ Workspace UI 和 PathSandbox 已存在，但路由统一约束与工作区切换负例由 12510/12511 完成 |
-| **任务可靠性** | Web job/queue 可恢复，SSE 可续传去重，进度单位一致 | ⚠️ 基础任务和 SSE 已实现；持久化、cursor、刷新/重启恢复和进度换算由 12512 完成 |
-| **GUI 可用性 / 可访问性** | macOS 与 Web 主路径在紧凑布局、键盘、读屏和浅深色下可用 | ⚠️ macOS 代码与自动测试已实施，证据见 Phase 10；Web 的 focus/dialog/live-region/reduced-motion/960×600 合同由 12516 完成 |
+| **本地服务信任边界** | Web Server 默认 loopback，当前工作区是所有媒体路径的唯一授权根 | ✅ 12510/12511 已收口：WorkspaceManager 是唯一 canonical root，非 loopback 需锁定媒体根；token 与 Web 的 401 另见风险表 |
+| **任务可靠性** | Web job/queue 可恢复，SSE 可续传去重，进度单位一致 | ⚠️ Job 状态/SSE cursor 已持久化；Web 批量队列成员/顺序未跨刷新持久化，刷新恢复不完整 |
+| **GUI 可用性 / 可访问性** | macOS 与 Web 主路径在紧凑布局、键盘、读屏和浅深色下可用 | ⚠️ macOS Phase 10 与 Web 12516 的自动/截图证据已交付；VoiceOver/Increase Contrast 等人工项仍未完整执行 |
 
 ## 5. 输入输出规范
 
@@ -146,14 +147,14 @@ Oracle。现行契约见 [`docs/cpp/`](cpp/README.md)。
 | Paddle GT 来源仍有限 | 现有 1 个真实 CJK + 2 个确定生成源不能代表所有片源 | 当前逐源 SHA exact 且全门通过；继续扩充真实 Latin/混排/不同字幕位置，不放宽冻结门 |
 | ORT 二进制构建差异 | 相同版本/provider 仍可能有数值与性能差异 | Candidate 固定官方 ORT SHA；CMake 复制到 build `lib/` 并用相对 rpath；6.9+ 负责正式 App 签名/随包 |
 | 退役 Python 后失去同版本 runtime fallback | Native capability 故障不能在当前版本内绕行 | fail-closed；回滚上一版已验收 Native artifact/tag；golden、GT 与 Native tests 承担回归真源 |
-| 工作区配置未统一约束全部 HTTP 媒体路由 | 本地页面可读取或扫描工作区外文件，扩大隐私与误操作边界 | 12510/12511 统一 canonical root、symlink/旧根负例与 loopback 合同；完成前不宣称工作区是安全边界 |
-| Web job/queue 与 SSE cursor 不可恢复 | 刷新或服务重启丢失队列，重连可能重复字幕或显示错误进度 | 12512 建立版本化有界持久化、interrupted 语义、Last-Event-ID/cursor 与 job id + seq 去重 |
-| 单视频与批量入口默认配置漂移 | 同一视频因 ROI/质量档不同得到不可解释的字幕差异 | 12513 共享配置 DTO 与显式 ROI policy，并以 fixture exact + 真实 Vision 差异报告验收 |
-| Web 输出路径与实际下载行为不一致 | UI 误报文件已保存，冲突提示与磁盘事实不符 | 12514 区分浏览器下载和工作区保存，以受控路径、冲突策略和原子写结果定义 completed |
+| 工作区配置未统一约束全部 HTTP 媒体路由 | 本地页面可读取或扫描工作区外文件，扩大隐私与误操作边界 | 12510/12511 已收口；开启 SUBLIFT_ACCESS_TOKEN 时 Web 仍会 401，不要给浏览器工作台开 token |
+| Web job/queue 与 SSE cursor 不可恢复 | 刷新或服务重启丢失队列，重连可能重复字幕或显示错误进度 | 12512 已交付 Job/SSE 持久化；Web 批量队列成员/顺序未跨刷新持久化，归入维护 Phase |
+| 单视频与批量入口默认配置漂移 | 同一视频因 ROI/质量档不同得到不可解释的字幕差异 | 12513 已统一 Web 单视频/批量；macOS/CLI 的 confidence/ROI 默认值尚未统一，归入 contracts/parity |
+| Web 输出路径与实际下载行为不一致 | UI 误报文件已保存，冲突提示与磁盘事实不符 | 12514 已交付；浏览器下载与服务端受控落盘已分离 |
 
 ## 8. 阶段验收状态
 
-以下 Phase 1–13 条目记录各阶段当时的验收事实，不因 ADR-0038 追溯改写；其中关于 Python
+以下 Phase 1–16 条目记录各阶段当时的验收事实，不因 ADR-0038 追溯改写；其中关于 Python
 Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 
 ### Phase 1 — CLI MVP
@@ -227,12 +228,14 @@ Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 - [x] 完整 Swift 测试（201 XCTest + 140 Swift Testing）、项目标准门 10/10、V01–V09/960 紧凑/Light-Dark 截图及 A01/A02 代码与自动测试证据通过
 - [ ] V10 Increase Contrast/Reduce Transparency 实际切换、完整 VoiceOver 朗读会话和部分真实点击路径仍受系统权限限制；替代覆盖与边界记录于 10412–10415 evidence
 
-### Phase 12 — Cross-Platform Web UI & Native Server（in-progress）
+### Phase 12 — Cross-Platform Web UI & Native Server（done）
 
-- [x] 12001–12509：Native Server、HTTP/SSE、单视频 Workbench、ROI/Review、批量基座、媒体工作区、智能区域检测与本地验证基线
-- [>] 12510：Web 批量任务中心交互增强与受控文件夹扫描（当前唯一进行中 Feature）
-- [ ] 12511–12516：统一信任边界、可恢复任务、配置/质量一致性、真实导出、审阅草稿和 Web 可访问性
-- [~] 12505：Linux 容器与 Paddle 完整分发保持 blocked 作为历史记录；容器交付由 Phase 14 重新实现与取证
+- [x] 12001–12516：Native Server、HTTP/SSE、单视频 Workbench、ROI/Review、批量任务中心、
+  媒体工作区、智能区域检测、统一信任边界、可恢复任务、配置一致性、原子导出、审阅草稿与
+  Web 可访问性全部交付。
+- [x] 12510–12516 的证据见 `docs/phases/phase12.json`；2026-10-20 复核确认 Web 批量队列
+  成员/顺序未跨刷新持久化，作为后续维护项记录，不改变本 Phase 交付事实。
+- [~] 12505：Linux 容器与 Paddle 完整分发保持历史 blocked；容器交付由 Phase 14 承接。
 
 ### Phase 14 — 局域网容器化自托管（ready-for-merge）
 
@@ -241,6 +244,15 @@ Oracle/回滚的描述只表示历史状态，不再定义目标产品契约。
 - [x] D03：docker-compose.yml 与访问控制落地（工作区锁定 403、可选 Bearer token、Web 跳过本机路径向导）
 - [x] D04：真实 docker build/run + 容器内 paddle.available + /media 映射的 golden SRT 比对（Python-free scripts/verify-container.sh）
 - [x] D05：运维说明与产品叙述收口；容器验证保持为独立入口，不挂入默认产品门
+- [~] main 复验：detail 已合入 `main`；在 `main` 上运行 `verify-product` / `verify-container` 通过后才置 `done`
+
+### Phase 16 — Native 性能加速（done，负向结论）
+
+- [x] D01：C++ Native + Paddle 阶段归因基线，覆盖率 99.9498%，ocr 占 core_wall 90.15%，
+  det_infer 单项 84.35%。
+- [x] D02：O1–O4 数值等价优化落地；同机 6 份 SRT 字节相同，智能选区 348 行 SRT SHA 相同。
+- [x] D03：O5–O8 调度/缓存优化落地；server/Web/Swift 测试通过。
+- [x] D04：P0 以负向结论收口；端到端收益在噪声内，P1/P2 未启动，后续另立 Phase。
 
 ### Phase 13 — Python Runtime 退役与 Native-only 收口（已完成）
 

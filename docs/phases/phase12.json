@@ -1,7 +1,7 @@
 {
   "project": "SubLift",
   "phase": "Phase 12 - Cross-Platform Web UI & Native Server",
-  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）。服务端、单视频工作台、智能选区、批量任务中心、沙箱信任边界、可恢复队列/SSE、配置质量一致性、真实原子导出、审阅草稿恢复与可访问性全链路已完成交付与门禁闭环（12509–12516 全部完成）。Linux 容器交付暂缓，12505 保持 blocked。",
+  "description": "构建跨平台的 Web UI 与纯 C++ 原生服务（Native Web Server）。服务端、单视频工作台、智能选区、批量任务中心、沙箱信任边界、可恢复队列/SSE、配置质量一致性、真实原子导出、审阅草稿恢复与可访问性全链路已完成交付与门禁闭环（12509–12516 全部完成）。Linux 容器交付暂缓，12505 保持 blocked。2026-10-20 复核：Web 批量队列的成员/顺序未跨刷新持久化，作为后续维护项记录，不改变本 Phase 交付事实。",
   "features": [
     {
       "id": "12001",

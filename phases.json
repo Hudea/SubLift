@@ -82,9 +82,9 @@
     {
       "id": "phase12",
       "name": "Phase 12 - Cross-Platform Web UI & Native Server",
-      "description": "Native Server 与 Web 本地工作台已完成完整度收口（12509–12516 全部交付）；容器交付由 Phase 14 / ADR-0040 承接，12505 保持 blocked。",
+      "description": "Native Server 与 Web 本地工作台已完成完整度收口（12509–12516 全部交付）；12505 为历史 blocked，容器交付由 Phase 14 / ADR-0040 承接。Web 批量队列成员/顺序未跨刷新持久化，作为后续维护项记录。",
       "detail_file": "docs/phases/phase12.json",
-      "status": "blocked"
+      "status": "done"
     },
     {
       "id": "phase13",
@@ -96,7 +96,7 @@
     {
       "id": "phase14",
       "name": "Phase 14 - 局域网容器化自托管",
-      "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。",
+      "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。detail 已在 main，D01–D05 全 done；保持 ready-for-merge 直到在 main 上完成复验。",
       "detail_file": "docs/phases/phase14.json",
       "status": "ready-for-merge"
     },
@@ -106,6 +106,20 @@
       "description": "为 Paddle 引入显式执行后端（provider=cpu/cuda）配置模型：同一套代码与模型按部署配置在 CPU 或 NVIDIA GPU 上运行，GPU 不可用时明确失败而非静默降级，任务保留执行身份。配置与 CPU 兼容部分可先行交付；原生 CUDA 提取、GPU 容器与多机质量/性能在冻结目标显卡与运行库版本并具备真实 GPU 环境后推进。",
       "detail_file": "docs/phases/phase15.json",
       "status": "blocked"
+    },
+    {
+      "id": "phase16",
+      "name": "Phase 16 - Native 性能加速（第一批）",
+      "description": "按 docs/design/performance-acceleration.md 第一批（P0）实施：建立 C++ Native 阶段归因基线，落地数值等价的工程优化（O1–O4）与调度/缓存优化（O5–O8）；P0 已完成并以负向结论收口（端到端收益在噪声内，det 推理占 84%），P1/P2 未启动。",
+      "detail_file": "docs/phases/phase16.json",
+      "status": "done"
+    },
+    {
+      "id": "phase17",
+      "name": "Phase 17 - 产品表面收口（Contract / Session / Layout）",
+      "description": "维护 Phase：把 Web/macOS 的能力语义收敛到 contracts/，把 Worker/Server 收敛到共享 ApplicationSession，把前端收敛为 domain/application/presentation，并把根目录、Python 离线工具与部署文件归位；不新增用户功能，不改变产品运行时语义。",
+      "detail_file": "docs/phases/phase17.json",
+      "status": "in-progress"
     }
   ]
 }

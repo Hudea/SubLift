@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agent-template.local/schemas/phases.schema.json",
-  "title": "Agent Project Phase Index Schema",
-  "description": "项目级 Phase 索引 Schema。列出所有 Phase 及其 detail_file 路径，提供状态总览。",
+  "$id": "https://sublift.local/schemas/phases.schema.json",
+  "title": "SubLift Phase Index Schema",
+  "description": "项目级 Phase 索引 Schema。列出所有 Phase 及其 detail_file 路径，提供状态总览；同一时间最多一个 in-progress，ready-for-merge 可并存。",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "description", "phases"],
@@ -32,7 +32,7 @@
             "type": "object",
             "properties": {
               "status": {
-                "enum": ["in-progress", "ready-for-merge"]
+                "enum": ["in-progress"]
               }
             },
             "required": ["status"]

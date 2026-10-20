@@ -7,7 +7,7 @@
 | 用途 | 路径 |
 |---|---|
 | Phase 索引 | `phases.json`（schema：`phases.schema.json`） |
-| Phase 细节 | `phases.json` → `detail_file`（如 `docs/phases/phase0.json`） |
+| Phase 细节 | `phases.json` → `detail_file`（由索引指向，不假设固定文件名） |
 | Phase 细节 schema | `docs/phases/phaseN.schema.json`（文件名固定；文档里的 `phaseN` 是模式，不是字面路径） |
 | 会话导航 | `progress.md` |
 | 初始化入口 | `./init.sh`（策略：`.agent/rules/initialization.md`） |

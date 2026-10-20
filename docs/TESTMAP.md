@@ -27,10 +27,28 @@
    - 验证 `phases.json` 的 JSON 语法有效性；
    - 遍历 `phases.json` 中声明的各 Phase `detail_file`，验证文件存在性及 JSON 语法合法性。
 
+### 1.3 连续性与真源校验（非 init）
+`./scripts/verify-harness.sh` 是独立的连续性门，不属于 `init.sh`，也不属于产品门：
+
+- 校验 `phases.json` 与 detail 的状态一致性、Phase/Deliverable 状态约束、唯一 active Phase；
+- 校验当前文档的 Markdown 本地链接；
+- `jsonschema` 可用时执行完整 Draft 2020-12 schema 校验；否则只做结构检查并明确警告；
+- 修改 Phase、AGENTS 或当前文档后运行；本机可用 `PYTHON=.venv/bin/python ./scripts/verify-harness.sh`
+  获得完整 schema 校验。
+
+### 1.4 跨语言合同 fixture（非产品门）
+`./scripts/verify-contracts.sh` 校验 `contracts/` 的 schema 与 fixtures：
+
+- ExtractionSpec/Job/Event/Output/SaveResult 的 Draft 2020-12 schema（安装 `jsonschema` 时）；
+- 归一化 ROI → 像素 box、规范 SRT 字节、输出冲突重名、默认值与状态映射的参考语义；
+- 修改 `contracts/` 或跨端行为时运行；它是 Contract Gate，不是产品门。
+
 ---
 
 ## 2. 行动决策树 (When to Run What)
 
+修改 Phase、AGENTS 或当前文档后，先运行 `./scripts/verify-harness.sh`；修改 `contracts/`
+或跨端语义后，先运行 `./scripts/verify-contracts.sh`。两者只校验真源/合同，不替代产品门。
 根据所修改的代码模块，遵循以下行动决策路径执行对应的编译与测试命令：
 
 ```text
@@ -100,15 +118,17 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分类：
 | 资产路径 / 目录 | 框架 / 语言 | 生命周期状态 | 目标范围 | 执行命令 |
 |---|---|---|---|---|
 | `scripts/verify-product.sh`<br>`scripts/verification/verify-product.sh` | Bash | **Active Gate** | 产品主门禁（Python-Free）：C++ Debug 构建、CTest、Swift 测试、Web Vitest、Web Build、CLI 提取及 Web Server HTTP/SSE/SRT 导出 | `./scripts/verify-product.sh` |
+| `scripts/verify-harness.sh`<br>`scripts/check_project.py` | Bash + Python 3.12+<br>(stdlib；可选 jsonschema) | **Continuity Gate** | Phase 索引/detail 状态一致性、Deliverable 约束、唯一 active Phase、当前文档链接与可选 JSON Schema；不是产品门 | `./scripts/verify-harness.sh` |
+| `scripts/verify-contracts.sh`<br>`scripts/check_contracts.py`<br>`contracts/` | Bash + Python 3.12+<br>(stdlib；可选 jsonschema) | **Contract Gate** | 跨语言 schema 与 fixtures：ExtractionSpec、Job/Event、Output/SaveResult、ROI 转换、SRT 字节、输出重名、默认值与状态映射；不是产品门 | `./scripts/verify-contracts.sh` |
 | `scripts/verify-offline.sh`<br>`scripts/verification/verify-offline.sh` | Bash | **Active Gate** | 离线工具门禁：uv extras 同步、命名空间隔离、Ruff、Mypy、Pytest 单元测试与无归档生成检查 | `./scripts/verify-offline.sh` |
 | `scripts/verify-standard.sh` | Bash | **Transitional Mixed** | 显式过渡混门（非默认）：离线静态检查 + C++ 构建 + pytest + 历史 cutover + Vitest/E2E。不是产品门，也不替代 `verify-offline.sh` | 须显式调用 `./scripts/verify-standard.sh` |
-| `scripts/verify-web-server.sh` | Bash | **Active Gate** | Web Native Server 本地验收门禁：Server 构建、静态前端构建、Server Catch2 测试、Python E2E 与 Vitest | `./scripts/verify-web-server.sh` |
+| `scripts/verify-web-server.sh` | Bash | **Independent Gate** | Web Native Server 本地验收门禁：Server 构建、静态前端构建、Server Catch2 测试、Python E2E 与 Vitest。依赖 uv/Python，不是默认产品门 | `./scripts/verify-web-server.sh` |
 | `scripts/verify-container.sh`<br>`scripts/verification/verify-container.sh` | Bash | **Independent Gate** | 局域网容器自托管验收（Python-free）：docker build、paddle.available、/media 提取、golden SRT、沙箱与工作区锁定。无 daemon 时 SKIPPED 非零退出，不挂入 `verify-product.sh` | `./scripts/verify-container.sh` |
 | `cpp/tests/` | Catch2 v3<br>(C++20 / ObjC++) | **Active Gate** | Native C++ 全量单元测试（Core / Pipeline / Adapters / Worker / Server / CLI）与 Parity 黄金集比对 | `ctest --test-dir build/cpp --output-on-failure` |
 | `apps/macos/Tests/SubLiftMacTests/` | XCTest<br>(Swift 5.9+) | **Active Gate** | macOS 客户端全量测试（批量任务队列、调度器、工作台状态、无障碍、IPC 客户端等 39 个测试套件） | `cd apps/macos && swift test` |
 | `apps/web/src/**/*.test.ts` | Vitest<br>(TypeScript / Vue 3) | **Active Gate** | Web 前端全量测试（Pinia Stores、ROI 映射、时间码、SRT 格式化、无障碍、批量任务） | `npm --prefix apps/web test` |
 | `scripts/test_server_e2e.py` | Python 3.12+<br>(urllib / requests) | **Core E2E** | Web Native Server 核心接口端到端回归套件（HTTP/SSE、沙箱安全、Mock/Paddle 提取比对） | `uv run python scripts/test_server_e2e.py` |
-| `tests/` | Pytest<br>(Python 3.12+) | **Active Gate** | 隔离离线工具、Benchmark 与 parity 门禁包装（12 个测试文件）。冻结 Oracle 算法单测已移除，不在 pytest 中为退役产品 Python 背书 | `uv run pytest -m "not integration" --no-cov` |
+| `tests/` | Pytest<br>(Python 3.12+) | **Independent Gate** | 隔离离线工具、Benchmark 与 parity 门禁包装（12 个测试文件）。仅修改离线树时运行；冻结 Oracle 算法单测已移除，不在 pytest 中为退役产品 Python 背书 | `uv run pytest -m "not integration" --no-cov` |
 
 ### 3.2 对齐与黄金集资产 (Frozen Parity)
 

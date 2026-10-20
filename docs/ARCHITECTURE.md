@@ -40,6 +40,7 @@ SubLift 按职责分层，产品依赖向领域核心收敛；平台能力和第
 | `cpp/` | Native 产品实现：Core、Pipeline、Application、Protocol、Adapters、Worker、CLI 与 Server |
 | `apps/macos/` | SwiftUI 工作台、批量任务中心、播放与编辑状态，以及 UDS 客户端 |
 | `apps/web/` | Web 工作台与批量任务中心，通过 HTTP/SSE 使用 Native Server |
+| `contracts/` | 跨语言合同：ExtractionSpec、Job/Event、Output/SaveResult、ROI 与 SRT fixtures；不依赖产品代码 |
 | `src/sublift/` | 冻结 Oracle 与离线工具内部实现；位于产品依赖图之外，不随产品新能力演进 |
 | `benchmark/` | 版本化配置、数据集、质量基线、golden 与 parity 资产 |
 
