@@ -477,11 +477,9 @@ struct WorkspaceRootView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            let srt = try SrtFormatter.format(entries: entries)
+            let srt = SrtFormatter.format(entries: entries)
             try srt.write(to: url, atomically: true, encoding: .utf8)
             showExportSuccess = true
-        } catch let error as SrtFormatError {
-            exportError = error.localizedDescription
         } catch {
             exportError = "保存文件失败: \(error.localizedDescription)"
         }

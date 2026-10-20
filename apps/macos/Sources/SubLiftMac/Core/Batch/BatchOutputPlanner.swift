@@ -4,7 +4,7 @@ import Foundation
 enum BatchOutputConflictPolicy: String, Codable, Sendable {
     /// 默认：跳过（不覆盖）。
     case skip
-    /// 首个稳定可用 name (N).srt。
+    /// 首个稳定可用 name_N.srt（Phase 17 D02 canonical）。
     case rename
     /// 替换（必须携带已确认策略——replace 为显式确认结果）。
     case replace
@@ -151,14 +151,14 @@ struct BatchOutputPlanner: Sendable {
         return FileManager.default.isWritableFile(atPath: probe.path)
     }
 
-    /// 首个稳定可用 `name (N).srt`。
+    /// 首个稳定可用 `name_N.srt`。
     private func firstAvailableRename(for target: URL) -> URL {
         let dir = target.deletingLastPathComponent()
         let base = target.deletingPathExtension().lastPathComponent
         let ext = target.pathExtension.isEmpty ? "srt" : target.pathExtension
         var n = 1
         while true {
-            let candidate = dir.appendingPathComponent("\(base) (\(n)).\(ext)")
+            let candidate = dir.appendingPathComponent("\(base)_\(n).\(ext)")
             if !fileExists(candidate) {
                 return candidate
             }

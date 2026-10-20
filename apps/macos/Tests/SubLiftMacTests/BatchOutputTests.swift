@@ -89,10 +89,10 @@ final class BatchOutputPlannerTests: XCTestCase {
     func testRenamePicksFirstStableAvailableName() throws {
         let source = try makeFile("movie.mp4")
         _ = try makeFile("movie.srt")
-        _ = try makeFile("movie (1).srt")
+        _ = try makeFile("movie_1.srt")
         let planner = BatchOutputPlanner(conflictPolicy: .rename)
         let plan = try planner.plan(source: source, sourceRoot: nil)
-        XCTAssertEqual(plan.targetURL.lastPathComponent, "movie (2).srt")
+        XCTAssertEqual(plan.targetURL.lastPathComponent, "movie_2.srt")
         XCTAssertEqual(plan.conflict, .renamed(
             from: tempDir.appendingPathComponent("movie.srt").standardizedFileURL,
             to: plan.targetURL

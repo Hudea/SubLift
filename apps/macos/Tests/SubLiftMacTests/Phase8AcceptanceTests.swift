@@ -67,10 +67,10 @@ final class Phase8AcceptanceTests: XCTestCase {
         } else {
             XCTFail("已有 SRT 默认应 skipped")
         }
-        // rename：目标存在 → 稳定 (N)。创建 clip (1).srt 后 rename 到 (2)。
-        _ = try write("clip (1).srt")
+        // rename：目标存在 → 稳定 _N。创建 clip_1.srt 后 rename 到 clip_2.srt。
+        _ = try write("clip_1.srt")
         let renamePlan = try BatchOutputPlanner(conflictPolicy: .rename).plan(source: a, sourceRoot: nil)
-        XCTAssertEqual(renamePlan.targetURL.lastPathComponent, "clip (2).srt")
+        XCTAssertEqual(renamePlan.targetURL.lastPathComponent, "clip_2.srt")
         // replace：显式确认 → 原目标。
         let replacePlan = try BatchOutputPlanner(conflictPolicy: .replace).plan(source: a, sourceRoot: nil)
         XCTAssertEqual(replacePlan.targetURL.lastPathComponent, "clip.srt")
@@ -124,8 +124,9 @@ final class Phase8AcceptanceTests: XCTestCase {
         // 输出定位：真实产物存在（completed 原子写出）。
         XCTAssertTrue(fileManager.fileExists(atPath: completedA.outputURL!.path), "completed 输出存在")
         XCTAssertTrue(fileManager.fileExists(atPath: completedB.outputURL!.path), "completed 输出存在")
-        let contentA = try Data(contentsOf: completedA.outputURL!)
-        XCTAssertFalse(contentA.isEmpty, "SRT 内容非空")
+        let contentA = try String(contentsOf: completedA.outputURL!, encoding: .utf8)
+        // spike 素材可能没有字幕；空结果是合法的，非空则必须是可解析 SRT。
+        XCTAssertTrue(contentA.isEmpty || contentA.contains(" --> "), "SRT 为空或包含时间码")
     }
 
     /// 仓库素材定位（从测试 cwd 上溯）。

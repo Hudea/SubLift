@@ -14,16 +14,20 @@ export function formatSrt(entries: SubtitleEntry[]): string {
   const sorted = [...entries].sort((a, b) => a.start_ms - b.start_ms);
 
   const blocks: string[] = [];
-  sorted.forEach((entry, idx) => {
-    const indexNum = idx + 1;
-    const startStr = formatSrtTimestamp(Math.max(0, entry.start_ms));
-    const endStr = formatSrtTimestamp(Math.max(entry.start_ms, entry.end_ms));
-    const text = (entry.text || '').trim();
+  sorted.forEach((entry) => {
+    const text = entry.text || '';
+    if (!text.trim()) return;
 
-    blocks.push(`${indexNum}\n${startStr} --> ${endStr}\n${text}`);
+    const startMs = Math.max(0, entry.start_ms);
+    const endMs = Math.max(startMs, entry.end_ms);
+    const indexNum = blocks.length + 1;
+
+    blocks.push(
+      `${indexNum}\n${formatSrtTimestamp(startMs)} --> ${formatSrtTimestamp(endMs)}\n${text}`
+    );
   });
 
-  return blocks.join('\n\n') + '\n';
+  return blocks.length > 0 ? blocks.join('\n\n') + '\n\n' : '';
 }
 
 /**

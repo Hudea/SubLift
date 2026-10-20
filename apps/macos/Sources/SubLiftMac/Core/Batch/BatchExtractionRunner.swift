@@ -87,7 +87,7 @@ final class BatchExtractionRunner: BatchTaskRunning, @unchecked Sendable {
             // finalizing → exporting（写出阶段）。
             onUpdate(.exporting, nil)
 
-            let srt = try SrtFormatter.format(entries: response.entries)
+            let srt = SrtFormatter.format(entries: response.entries)
             let outputURL = task.outputURL ?? defaultSidecarURL(for: task.sourceURL)
             try AtomicSrtWriter.write(srt, to: outputURL)
 

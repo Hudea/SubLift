@@ -1,0 +1,166 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 17 - 产品表面收口（Contract / Session / Layout）",
+  "goal": "在不新增用户功能的前提下，把 Web 与 macOS 的能力语义收敛到共享合同层，把 Worker 与 Native Server 收敛到共享 ApplicationSession，并把根目录、文档与验证门整理为可持续维护的结构。完成后，同一输入在 CLI/macOS/Web/Server 上应得到一致的配置语义、SRT 字节与输出冲突结果；Web 与 Swift 的差异只保留在宿主能力与表现层。",
+  "scope": [
+    "D01：建立 contracts/ 的 schema、fixtures 与 docs/design_ui/shared/parity.md，冻结 shared/host-specific/deferred/gap 四类差异；不改变产品行为。",
+    "D02：统一 SRT 格式、输出重名策略、ROI 坐标转换、confidence/engine 默认值与 Job/Task 状态映射，并在 C++/Swift/TS 三套测试中消费同一批 fixture。",
+    "D03：为 Web 批量队列提供版本化持久化与恢复（优先复用 Swift BatchQueueState 的语义；若选择服务端队列，则同步定义 HTTP 合同），刷新/重启后成员、顺序与 interrupted 状态可恢复。",
+    "D04：从 Worker Bridge 与 Server JobManager 中抽出共享 ApplicationSession；JobConfig/JobState/JobEvent 归入 application 层；routes 按 system/workspace/media/job/export/static 拆分；CLI/Server/Worker 共用单一 SRT formatter。",
+    "D05：Web 按 domain/application/infrastructure/presentation 分层，Swift 按 Domain/Application/Infrastructure/Platform 分层；大 store/大组件拆分，视图不直接持有网络、文件或状态机业务规则。",
+    "D06：根目录收口到稳定入口；Python 离线工具迁入 tools/offline/，部署文件迁入 deploy/，项目状态迁入 project/；验证门分为 product/harness/offline/container/developer-E2E，并更新文档与脚本。"
+  ],
+  "non_goals": [
+    "不新增用户可见功能，不改变产品交互或视觉设计；UI 像素级统一不在本 Phase 范围。",
+    "不重写 Phase 1–12 历史、phase JSON evidence 或已归档负向证据；历史只做勘误与索引。",
+    "不重新引入 Python 产品 runtime、Python IPC 或 .venv 驱动的 Worker 查找。",
+    "不启动 Phase 16 的 P1/P2 性能优化、GPU/CUDA、ASS/VTT、账号系统或公网部署。",
+    "不以目录搬迁替代行为修复；D06 只能在 D01–D05 的合同与测试就位后执行。",
+    "不把 macOS 与 Web 强行合并为同一套 UI 代码；共享的是合同与状态语义，不是像素。"
+  ],
+  "status": "in-progress",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "合同清单、Parity Matrix 与可执行 fixtures",
+      "outcome": "contracts/ 成为跨语言 DTO 与语义的唯一定义处；parity matrix 明确哪些能力必须一致、哪些是宿主差异、哪些暂缓、哪些是已知缺口；fixtures 可被 C++/Swift/TS 测试直接消费。",
+      "acceptance": [
+        "contracts/README.md 说明 owner、版本策略、schema 与 fixture 的增删规则。",
+        "contracts/schemas/ 覆盖 ExtractionSpec、JobState/JobEvent、OutputPlan/SaveResult。",
+        "contracts/fixtures/ 覆盖 defaults、ROI 坐标、SRT 字节、输出冲突与状态迁移。",
+        "scripts/verify-contracts.sh 能校验 fixtures 对 schema 与基本不变量，失败即非零退出。",
+        "docs/design_ui/shared/parity.md 为每个能力标注 shared/host-specific/deferred/gap。",
+        "本 Deliverable 不修改产品代码，不改变任何入口的运行时行为。"
+      ],
+      "areas": [
+        "contracts",
+        "docs/design_ui/shared",
+        "scripts"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-20：contracts/ 初版落地（VERSION、5 schemas、defaults/extraction/ROI/SRT/output/job/status fixtures、check_contracts.py、verify-contracts.sh）与 docs/design_ui/shared/parity.md；verify-contracts.sh schema 与参考语义校验通过。",
+        "2026-10-20：D01 收口。contracts 作为跨语言语义定义处，fixtures 采用纯 JSON，C++/Swift/TS 可直接读取；语言消费测试由 D02 接入，不在 D01 伪装已对齐。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "跨端语义对齐（SRT / 输出 / ROI / 默认值 / 状态）",
+      "outcome": "同一批 SubtitleEntry 在 C++/Swift/TS 中生成相同 SRT 字节；同一冲突策略生成相同输出名；归一化 ROI 在各边界转换为相同像素 box；confidence/engine 默认值与 Job/Task 状态映射有单一合同。",
+      "acceptance": [
+        "SRT policy 固定排序、空文本、负数与 end<start 行为；C++/Swift/TS golden 字节一致。",
+        "输出冲突策略 skip/deterministic_rename/replace 的重名规则冻结为 name_N.srt，并在 Server、Swift、Web 的 fixture 测试中一致。",
+        "ROI 在 HTTP/UI 边界使用归一化 box，在 Worker 边界使用像素 box；转换、clamp 与 probe 失败语义有 fixture 与测试。",
+        "confidence 默认值、engine capability 选择与 script 默认值在 CLI/Server/Web/Swift 中显式且一致，禁止隐式回退。",
+        "JobStatus/TaskStatus 的映射表冻结；Web/Swift 不再各自发明阶段名。"
+      ],
+      "areas": [
+        "cpp/src/core",
+        "cpp/src/server",
+        "cpp/src/application",
+        "apps/web/src",
+        "apps/macos/Sources/SubLiftMac/Core",
+        "contracts/fixtures"
+      ],
+      "status": "in-progress",
+      "evidence": [
+        "2026-10-20：D02 启动。先以 contracts 的 SRT/输出/默认值 fixtures 对齐三端，并逐项消除 parity matrix 中的 gap；不一次性改状态机与前端结构。",
+        "2026-10-20：SRT 合同对齐。Web formatSrt 改为跳过纯空白并保持 canonical 钳制；Swift SrtFormatter 改为排序/跳空/钳制且不再抛 SrtFormatError；C++ CLI 与 Server formatter 增加排序、clamp 与末尾空行（两个换行，兼容容器 golden 的精确比对）。三端均消费 contracts/fixtures/srt-cases.json：Web 4 例、Swift 1 套共享 fixture、C++ CLI/Server 各 3 例通过。",
+        "2026-10-20：输出重名对齐。Swift BatchOutputPlanner 从 name (N).srt 改为 name_N.srt，BatchOutputTests/Phase8AcceptanceTests 同步；Server/Web 已使用 _1。Web 157 tests、Swift 381 XCTest + 142 Swift Testing、C++ [srt] 33 assertions 与 ctest 261/261 全部通过。",
+        "2026-10-20：Phase8 真实 IPC 验收的 SRT 断言改为“空或包含时间码”。spike 素材可能没有字幕；canonical 跳空后空 SRT 是合法结果，原断言依赖空文本条目生成非空文件。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "Web 批量队列持久化与恢复",
+      "outcome": "Web 刷新或服务重启后，批量队列的成员、顺序、配置快照与终态可恢复；活动任务收敛为 interrupted，用户显式继续后才重新调度；恢复语义与 macOS BatchQueueState 对齐。",
+      "acceptance": [
+        "队列状态使用带版本的 JSON，原子写且有界；损坏或未知版本 fail-closed。",
+        "持久化字段与 Swift BatchQueueState 的语义对齐；不持久化运行 token。",
+        "刷新后 UI 恢复等待/完成/失败任务与选中项；活动任务显示 interrupted，不自动恢复 OCR。",
+        "服务端 Job 状态与客户端队列通过 job_id 关联；SSE cursor 不重放已确认字幕。",
+        "增加 Web 测试覆盖刷新恢复、损坏状态与 interrupted 语义。"
+      ],
+      "areas": [
+        "apps/web/src/stores",
+        "apps/web/src/infrastructure",
+        "apps/macos/Sources/SubLiftMac/Core/Batch",
+        "cpp/src/server"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D04",
+      "name": "C++ ApplicationSession 与 Worker/Server host 收敛",
+      "outcome": "Worker 与 Native Server 不再各自实现任务生命周期；两者通过同一个 ApplicationSession 驱动配置快照、状态、事件、取消与终结果；Server 只剩 HTTP/SSE、工作区授权、静态资源与鉴权等宿主职责。",
+      "acceptance": [
+        "ApplicationSession 拥有 JobConfig/JobState/JobEvent/取消/终结果，Worker 与 Server 只做协议适配。",
+        "JobManager 拆为 JobQueue/JobStore/session runner；不改变现有 job 持久化与 SSE 续传契约。",
+        "routes.cpp 按 system/workspace/media/job/export/static 拆分；单文件职责可审计。",
+        "CLI/Server/Worker 使用同一个 SRT formatter；删除重复实现。",
+        "现有 ctest、server 契约测试、真实视频端到端与 SSE 续传用例通过，行为不变。"
+      ],
+      "areas": [
+        "cpp/include/sublift/application",
+        "cpp/src/application",
+        "cpp/src/server",
+        "cpp/src/worker",
+        "cpp/src/cli",
+        "cpp/tests"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D05",
+      "name": "Web/Swift 前端分层与视图收敛",
+      "outcome": "两端都具备纯 domain 层与 application 层；视图只做展示与命令绑定；大 store/大组件按职责拆分；跨端差异能在 parity matrix 中解释，而不是藏在组件里。",
+      "acceptance": [
+        "Web：domain/application/infrastructure/presentation 目录与依赖规则落地；domain 不 import Vue/Pinia/fetch。",
+        "Swift：Domain/Application/Infrastructure/Platform 目录与依赖规则落地；Domain 不 import AppKit/AVFoundation。",
+        "Web 的 session/queue/editor/draft 不再集中在一个 800 行 store；Swift 的 WorkspaceModel/PipelineClient 职责分离。",
+        "大组件按区域拆分（Transcript、TaskCenter、Navbar、BatchInspector），保留现有行为测试。",
+        "删除代码中的 feat-* / Feature 125xx / Python 时代注释，改用领域命名；历史只在文档中追溯。"
+      ],
+      "areas": [
+        "apps/web/src",
+        "apps/macos/Sources/SubLiftMac",
+        "docs/design_ui/shared"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D06",
+      "name": "根目录、工具链与验证门收口",
+      "outcome": "根目录只保留稳定入口；Python 离线工具、部署文件与项目状态归位；根标记不再依赖 phases.json；验证门分类与文档一致，历史文件不被删除。",
+      "acceptance": [
+        "根目录白名单落地；project/、tools/offline/、deploy/ 的职责与 README 清晰。",
+        "PipelineClient/benchmark 的仓库根发现改用稳定 marker，不再依赖 phases.json 位置。",
+        "验证门分为 product/harness/offline/container/developer-E2E；TESTMAP 与脚本一致。",
+        "历史 phase/design/evidence 只做索引与勘误，不搬移或删除；断链检查通过。",
+        "./init.sh、./scripts/verify-harness.sh、./scripts/verify-product.sh 与相应离线/容器门通过。"
+      ],
+      "areas": [
+        "phases.json",
+        "progress.md",
+        "scripts",
+        "docs",
+        "pyproject.toml",
+        "Dockerfile"
+      ],
+      "status": "not-started",
+      "evidence": []
+    }
+  ],
+  "exit_criteria": [
+    "D01 的 contracts fixtures 被 C++/Swift/TS 三套测试消费；同一输入在四个入口产生相同 SRT 字节与输出冲突结果。",
+    "Web 批量队列刷新/重启可恢复；活动任务收敛为 interrupted，不自动恢复 OCR。",
+    "Worker 与 Server 共用 ApplicationSession；不存在第二套任务生命周期或 SRT formatter。",
+    "Web 与 Swift 的 domain/application/infrastructure/presentation 依赖规则可审计；视图不持有业务规则。",
+    "根目录白名单、project/tools/offline/deploy 归位与验证门分类落地；所有文档链接与 harness 校验通过。",
+    "不改变用户可见功能与产品运行时语义；所有行为变更都由合同测试与现有产品门锁定。"
+  ]
+}
