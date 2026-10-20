@@ -177,6 +177,8 @@ final class PipelineClientIntegrationTests: XCTestCase {
         XCTAssertEqual(p1.stage, "ready")
 
         // 2. frame → progress(stage=processing)
+        // O6（Phase 16 D03）：frame 模式进度按 >=200ms 节流（不再每帧一条）。
+        // 测试按 250ms pacing 发送，使每帧都落在节流窗口外，保持逐帧断言。
         let jpegData = createTestJPEG(width: 320, height: 240)
         let jpegBase64 = jpegData.base64EncodedString()
 
@@ -187,6 +189,9 @@ final class PipelineClientIntegrationTests: XCTestCase {
                 jpegBytes: jpegBase64,
                 regionBox: nil
             )
+            if i > 0 {
+                Thread.sleep(forTimeInterval: 0.25)  // O6 throttle window is 200ms
+            }
             let progress = try client.request(frame, expecting: ProgressMessage.self)
             let p = try XCTUnwrap(progress)
             XCTAssertEqual(p.stage, "processing")

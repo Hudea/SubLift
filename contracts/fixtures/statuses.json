@@ -1,0 +1,15 @@
+{
+  "job": ["queued", "preparing", "extracting", "finalizing", "completed", "failed", "cancelled", "interrupted"],
+  "task": ["waiting", "preparing", "extracting", "exporting", "completed", "failed", "cancelled", "interrupted", "skipped"],
+  "mapping": {
+    "waiting": "queued",
+    "preparing": "preparing",
+    "extracting": "extracting",
+    "exporting": "finalizing",
+    "completed": "completed",
+    "failed": "failed",
+    "cancelled": "cancelled",
+    "interrupted": "interrupted",
+    "skipped": null
+  }
+}

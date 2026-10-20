@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <memory>
 
 #include "sublift/config.hpp"
 #include "sublift/image.hpp"
@@ -50,5 +52,58 @@ struct FrameSignature {
     const ImageView& current, const ImageView& anchor,
     const SignatureConfig& config = SignatureConfig{}, bool use_mask = true,
     std::int32_t window_size = 7);
+
+/// Foreground binary mask (adaptiveThreshold GAUSSIAN_C, THRESH_BINARY_INV ->
+/// MORPH_OPEN 2x2 rect) as an owned Gray8 buffer (0/255 per pixel).
+///
+/// Matches the `binary` half of `_compute_foreground_ratio` (including the
+/// historical RGB2GRAY color quirk via `to_gray`). Exposed for the patrol
+/// anchor-mask cache (O1): the anchor crop is immutable between In/CHANGE,
+/// so its mask can be computed once and reused.
+[[nodiscard]] ImageBuffer compute_foreground_mask(
+    const ImageView& image, const SignatureConfig& config = SignatureConfig{});
+
+/// SSIM between two Gray8 foreground masks. Numerically identical to the
+/// masked branch of `compute_foreground_ssim` (same CV_64F pipeline over the
+/// two binary masks).
+[[nodiscard]] double compute_mask_ssim(const ImageView& mask1,
+                                       const ImageView& mask2,
+                                       std::int32_t window_size = 7);
+
+/// Reusable SSIM workspace (O2). Holds the CV_64F intermediates so repeated
+/// patrol SSIM calls avoid ~15 MB-scale allocations each. Opaque: no OpenCV
+/// types leak into the public API (architecture.md §3).
+///
+/// Numerics are unchanged when used through `compute_mask_ssim_reusing`:
+/// same operations, same order, same CV_64F types and blur parameters - only
+/// the destination Mats are reused (OpenCV reuses a Mat's buffer when its
+/// size/type already match).
+class SsimWorkspace {
+ public:
+  SsimWorkspace();
+  ~SsimWorkspace();
+  SsimWorkspace(SsimWorkspace&& other) noexcept;
+  SsimWorkspace& operator=(SsimWorkspace&& other) noexcept;
+  SsimWorkspace(const SsimWorkspace&) = delete;
+  SsimWorkspace& operator=(const SsimWorkspace&) = delete;
+
+  /// Opaque state (defined in signature.cpp); public so the workspace-aware
+  /// SSIM core can take a pointer to it without exposing cv::Mat.
+  struct Impl;
+
+ private:
+  std::unique_ptr<Impl> impl_;
+  friend double compute_mask_ssim_reusing(const ImageView& mask1,
+                                          const ImageView& mask2,
+                                          std::int32_t window_size,
+                                          SsimWorkspace& workspace);
+};
+
+/// SSIM between two Gray8 masks with a caller-held reusable workspace (O2).
+/// Bit-identical to `compute_mask_ssim` for the same inputs.
+[[nodiscard]] double compute_mask_ssim_reusing(const ImageView& mask1,
+                                               const ImageView& mask2,
+                                               std::int32_t window_size,
+                                               SsimWorkspace& workspace);
 
 }  // namespace sublift

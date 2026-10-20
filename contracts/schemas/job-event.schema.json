@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/contracts/job-event.schema.json",
+  "title": "JobEvent",
+  "description": "Transport-neutral job event. UDS and SSE adapters may wrap it differently, but job_id, seq, type and payload semantics are shared.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job_id", "seq", "type", "payload"],
+  "properties": {
+    "job_id": { "type": "string", "minLength": 1 },
+    "seq": { "type": "integer", "minimum": 0 },
+    "type": {
+      "enum": ["progress", "push_entry", "entries", "done", "cancelled", "error"]
+    },
+    "payload": { "type": "object" }
+  }
+}

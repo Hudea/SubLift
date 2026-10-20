@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -65,6 +66,16 @@ class BridgeHandler {
 
   std::unique_ptr<sublift::IDetector> job_detector_;
   std::unique_ptr<sublift::IOcrEngine> job_ocr_engine_;
+
+  /// Measurement only (Phase 16 D01): job wall start for the stage-timing
+  /// report; set when a job starts, used at finalize. Inert unless
+  /// SUBLIFT_STAGE_TIMING=1.
+  std::chrono::steady_clock::time_point job_wall_start_{};
+
+  /// O6: last frame-mode progress emit time (frame mode throttles to one
+  /// ProgressMsg per >=200ms instead of one per frame). Default-constructed
+  /// to the clock epoch, so the first frame always emits.
+  std::chrono::steady_clock::time_point last_frame_progress_emit_{};
 };
 
 }  // namespace sublift::worker

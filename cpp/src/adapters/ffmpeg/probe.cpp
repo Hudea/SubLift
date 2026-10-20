@@ -9,6 +9,12 @@
 
 namespace sublift::ffmpeg {
 
+namespace {
+// Defined below; declared here so probe_source_frame can use it.
+SourceFrameInfo parse_source_frame_json(const std::string& stdout_str,
+                                        const std::filesystem::path& video_path);
+}  // namespace
+
 SourceFrameInfo probe_source_frame(const std::filesystem::path& video_path) {
   const std::string ffprobe = resolve_ffprobe_bin();
   const std::vector<std::string> cmd = {
@@ -37,9 +43,18 @@ SourceFrameInfo probe_source_frame(const std::filesystem::path& video_path) {
                              video_path.string() + detail);
   }
 
+  return parse_source_frame_json(res.stdout_str, video_path);
+}
+
+namespace {
+
+// Parse the ffprobe JSON shared by probe_source_frame and the combined probe
+// (O7). Accepts payloads with or without the `format` section.
+SourceFrameInfo parse_source_frame_json(const std::string& stdout_str,
+                                        const std::filesystem::path& video_path) {
   nlohmann::json data;
   try {
-    data = nlohmann::json::parse(res.stdout_str);
+    data = nlohmann::json::parse(stdout_str);
   } catch (const nlohmann::json::parse_error& exc) {
     throw std::runtime_error("ffprobe JSON 解析失败: " + video_path.string());
   }
@@ -78,6 +93,73 @@ SourceFrameInfo probe_source_frame(const std::filesystem::path& video_path) {
       .height = height,
       .display_transform_ok = ok,
       .transform_note = note,
+  };
+}
+
+}  // namespace
+
+SourceAndDuration probe_source_and_duration(const std::filesystem::path& video_path) {
+  std::error_code ec;
+  if (!std::filesystem::exists(video_path, ec)) {
+    // probe_source_frame fails loudly on a missing file; keep that contract.
+    throw std::runtime_error("视频文件不存在: " + video_path.string());
+  }
+
+  std::string ffprobe;
+  try {
+    ffprobe = resolve_ffprobe_bin();
+  } catch (const std::exception&) {
+    // ffprobe unavailable: no stream info, no duration - the best-effort
+    // shape both separate calls degrade to.
+    return SourceAndDuration{
+        .source = SourceFrameInfo{},
+        .duration_ms = 0,
+    };
+  }
+
+  // O7: one ffprobe call instead of two (stream geometry + format duration).
+  const std::vector<std::string> cmd = {
+      ffprobe,
+      "-v",
+      "error",
+      "-select_streams",
+      "v:0",
+      "-show_entries",
+      "stream=width,height,tags,side_data_list:format=duration",
+      "-of",
+      "json",
+      video_path.string(),
+  };
+
+  const auto res = detail::run_subprocess(cmd, std::chrono::milliseconds(60000));
+  if (res.timed_out) {
+    throw std::runtime_error("ffprobe 超时: " + video_path.string());
+  }
+  if (res.exit_code != 0) {
+    const std::string tail = detail::read_stderr_tail(res.stderr_str, 2000);
+    const std::string detail = tail.empty() ? "" : "：" + tail;
+    throw std::runtime_error("ffprobe 失败（退出码 " +
+                             std::to_string(res.exit_code) + "），path=" +
+                             video_path.string() + detail);
+  }
+
+  SourceFrameInfo source = parse_source_frame_json(res.stdout_str, video_path);
+
+  std::int64_t duration_ms = 0;
+  try {
+    const nlohmann::json data = nlohmann::json::parse(res.stdout_str);
+    if (data.contains("format") && data["format"].is_object() &&
+        data["format"].contains("duration") && data["format"]["duration"].is_string()) {
+      duration_ms = static_cast<std::int64_t>(
+          std::stod(data["format"]["duration"].get<std::string>()) * 1000.0);
+    }
+  } catch (...) {
+    // Tolerant like probe_duration_ms: a missing/unparsable duration is 0.
+    duration_ms = 0;
+  }
+  return SourceAndDuration{
+      .source = source,
+      .duration_ms = duration_ms,
   };
 }
 

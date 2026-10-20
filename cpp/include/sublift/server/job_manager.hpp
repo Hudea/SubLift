@@ -184,11 +184,14 @@ struct JobEvent {
   std::string event_type;  // "progress", "push_entry", "done", "error", "cancelled"
   nlohmann::json data;
 
-  [[nodiscard]] std::string to_sse_string(const std::string& job_id) const {
-    nlohmann::json payload = data;
-    payload["job_id"] = job_id;
-    payload["seq"] = seq_id;
-    return "id: " + std::to_string(seq_id) + "\nevent: " + event_type + "\ndata: " + payload.dump() + "\n\n";
+  /// Serialize as one SSE frame. Non-const: the event is a consumed copy at
+  /// the call site, so `job_id`/`seq` are spliced in place instead of deep-
+  /// copying the payload (O5). The dumped bytes are identical to the previous
+  /// copy-then-dump form because nlohmann::json objects keep sorted keys.
+  [[nodiscard]] std::string to_sse_string(const std::string& job_id) {
+    data["job_id"] = job_id;
+    data["seq"] = seq_id;
+    return "id: " + std::to_string(seq_id) + "\nevent: " + event_type + "\ndata: " + data.dump() + "\n\n";
   }
 };
 
@@ -202,6 +205,15 @@ class JobEventStream {
         .data = std::move(data),
     };
     history_.push_back(std::move(ev));
+    // O5: bound the replay window. Progress-heavy jobs can publish thousands
+    // of events; only the most recent window is retained for cursor resume.
+    // Terminal events live at the tail and are never evicted. A cursor older
+    // than the window (a reconnect staler than the whole window) resumes
+    // from the front - clients dedupe by seq and the final job state remains
+    // authoritative via GET /api/jobs/:id (HURDLES 12512).
+    while (history_.size() > kMaxHistoryEvents) {
+      history_.pop_front();
+    }
     cv_.notify_all();
   }
 
@@ -220,10 +232,24 @@ class JobEventStream {
     }
 
     out_events.clear();
-    for (const auto& ev : history_) {
-      if (ev.seq_id > last_seq) {
-        out_events.push_back(ev);
+    if (history_.empty() || history_.back().seq_id <= last_seq) {
+      return false;  // nothing newer than the cursor (incl. absurd cursors)
+    }
+    // seq ids are dense (++seq_counter_), so the first event newer than the
+    // cursor sits at index (last_seq + 1 - front_seq) - O(k) slice instead of
+    // an O(N) head scan (O5).
+    const std::uint64_t front_seq = history_.front().seq_id;
+    std::size_t begin = 0;
+    if (last_seq >= front_seq) {
+      const std::uint64_t offset = (last_seq - front_seq) + 1;
+      if (offset >= history_.size()) {
+        return false;
       }
+      begin = static_cast<std::size_t>(offset);
+    }
+    out_events.reserve(history_.size() - begin);
+    for (std::size_t i = begin; i < history_.size(); ++i) {
+      out_events.push_back(history_[i]);
     }
     return !out_events.empty();
   }
@@ -234,6 +260,11 @@ class JobEventStream {
   }
 
  private:
+  /// Replay window per job (O5). 2000 events is far beyond a realistic
+  /// reconnect lag (progress is throttled to ~1/s in path mode; frame mode
+  /// is throttled by O6) while keeping memory bounded on long jobs.
+  static constexpr std::size_t kMaxHistoryEvents = 2000;
+
   mutable std::mutex mutex_;
   std::condition_variable cv_;
   std::uint64_t seq_counter_{0};

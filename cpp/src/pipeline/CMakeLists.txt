@@ -2,6 +2,8 @@ set(_sublift_pipeline_srcs
   ${PROJECT_SOURCE_DIR}/include/sublift/pipeline/signature.hpp
   ${PROJECT_SOURCE_DIR}/include/sublift/pipeline/changepoint.hpp
   ${PROJECT_SOURCE_DIR}/include/sublift/pipeline/pipeline.hpp
+  ${PROJECT_SOURCE_DIR}/include/sublift/pipeline/stage_timing.hpp
+  stage_timing.cpp
 )
 if(SUBLIFT_ENABLE_OPENCV)
   list(APPEND _sublift_pipeline_srcs signature.cpp changepoint.cpp pipeline.cpp)

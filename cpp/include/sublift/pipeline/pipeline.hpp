@@ -13,6 +13,7 @@
 #include "sublift/detector.hpp"
 #include "sublift/models.hpp"
 #include "sublift/ocr.hpp"
+#include "sublift/pipeline/stage_timing.hpp"
 #include "sublift/timeline.hpp"
 
 namespace sublift {
@@ -107,6 +108,17 @@ class Pipeline {
     return ocr_call_count_;
   }
 
+  /// Stage timing registry (Phase 16 D01 measurement only). Accumulates
+  /// per-stage wall time inside `feed` / `ocr_segment` when
+  /// `SUBLIFT_STAGE_TIMING=1`; empty and inert otherwise. Serial use only
+  /// (same contract as the Pipeline itself).
+  [[nodiscard]] StageTimingRegistry& stage_timing() noexcept {
+    return stage_timing_;
+  }
+  [[nodiscard]] const StageTimingRegistry& stage_timing() const noexcept {
+    return stage_timing_;
+  }
+
  private:
   /// Per-segment OCR decision stats (6.2 slimmed form of Python seg_stats).
   /// Perf/timing fields are intentionally omitted - parity does not depend on
@@ -168,6 +180,9 @@ class Pipeline {
   std::size_t ocr_call_count_{0};
   std::int64_t last_timestamp_ms_{0};
   bool cancelled_{false};
+  /// Measurement-only stage accumulator (S0); inert unless
+  /// SUBLIFT_STAGE_TIMING=1.
+  StageTimingRegistry stage_timing_{};
 };
 
 }  // namespace sublift

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/contracts/save-result.schema.json",
+  "title": "SaveResult",
+  "description": "Result of an atomic save attempt. empty_result is not failed; it means there was nothing to write and allow_empty was false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "saved_path", "entry_count"],
+  "properties": {
+    "status": { "enum": ["saved", "skipped", "empty_result", "failed"] },
+    "saved_path": {
+      "oneOf": [
+        { "type": "string", "minLength": 1 },
+        { "type": "null" }
+      ]
+    },
+    "entry_count": { "type": "integer", "minimum": 0 },
+    "error": { "type": "string" }
+  }
+}

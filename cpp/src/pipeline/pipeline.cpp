@@ -30,6 +30,11 @@ Pipeline::Pipeline(IDetector& detector, IOcrEngine& ocr, Config config)
 // ---------------------------------------------------------------------------
 
 SubtitleEntry Pipeline::ocr_segment(const SegmentEvent& event) {
+  // Measurement only (S0): the "ocr" stage covers the whole segment OCR call,
+  // including frame collection and consensus; the Paddle adapter accumulates
+  // its own det/cls/rec/preprocess sub-stages into the shared registry.
+  StageTimer ocr_timer(stage_timing_, "ocr");
+
   // No region resolved (detector never produced one): emit an empty entry and
   // cache it, mirroring core.py 324-343. No OCR call is made.
   if (!region_.has_value()) {
@@ -314,12 +319,27 @@ std::optional<SegmentEvent> Pipeline::feed(const Frame& frame) {
 
   // crop -> RGB->BGR quirk -> signature -> changepoint.
   ImageView crop_view = crop_to_region(frame, region_->box);
-  ImageBuffer bgr_buf = convert_rgb_to_bgr(crop_view);
+  ImageBuffer bgr_buf;
+  {
+    StageTimer timer(stage_timing_, "color_convert");
+    bgr_buf = convert_rgb_to_bgr(crop_view);
+  }
   ImageView bgr_view = bgr_buf.view();
 
-  FrameSignature signature =
-      compute_signature(bgr_view, frame.timestamp_ms, config_.signature);
-  auto event = changepoint_.process(signature, &bgr_view);
+  FrameSignature signature;
+  {
+    StageTimer timer(stage_timing_, "signature");
+    signature = compute_signature(bgr_view, frame.timestamp_ms, config_.signature);
+  }
+  std::optional<StateEvent> event;
+  {
+    StageTimer timer(stage_timing_, "changepoint");
+    event = changepoint_.process(signature, &bgr_view);
+  }
+
+  // Exclusive orchestration remainder of feed (matches the Python
+  // pipeline_overhead leaf: never double-counts the leaves above).
+  StageTimer overhead_timer(stage_timing_, "pipeline_overhead");
 
   if (!event.has_value()) {
     on_stable_frame(frame);
@@ -528,7 +548,9 @@ ImageBuffer Pipeline::convert_rgb_to_bgr(const ImageView& rgb) const {
   // compute_signature applies COLOR_RGB2GRAY to any 3-channel view regardless
   // of tag, so the bytes must actually be BGR. We swap R<->B by hand so
   // pipeline.cpp stays OpenCV-free; the BGR24 tag is semantically honest.
-  ImageBuffer bgr(rgb.width(), rgb.height(), PixelFormat::BGR24);
+  // O3: the swap below overwrites every byte, so skip the zero-fill.
+  ImageBuffer bgr = ImageBuffer::allocate_uninitialized(
+      rgb.width(), rgb.height(), PixelFormat::BGR24);
   for (std::int32_t y = 0; y < rgb.height(); ++y) {
     const std::uint8_t* src = rgb.row(y);
     std::uint8_t* dst = bgr.data() + static_cast<std::size_t>(y) *

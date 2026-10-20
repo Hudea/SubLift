@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/contracts/extraction.schema.json",
+  "title": "ExtractionSpec",
+  "description": "Canonical extraction request shared by CLI, Native Server, macOS and Web. Engine availability remains a host capability; this schema only fixes the shape and value domains.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["engine", "sampling", "confidence", "script", "roi"],
+  "properties": {
+    "engine": {
+      "enum": ["vision", "paddle", "mock"]
+    },
+    "sampling": {
+      "enum": ["fast", "balanced", "fine"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "script": {
+      "enum": ["auto", "cjk", "latin"]
+    },
+    "roi": {
+      "$ref": "#/$defs/roi"
+    }
+  },
+  "$defs": {
+    "box": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number", "minimum": 0, "maximum": 1 },
+        "y": { "type": "number", "minimum": 0, "maximum": 1 },
+        "width": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+        "height": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      }
+    },
+    "roi": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "box"],
+      "properties": {
+        "policy": { "enum": ["auto", "fixed", "default"] },
+        "box": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/box" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "policy": { "const": "fixed" } },
+            "required": ["policy"]
+          },
+          "then": {
+            "properties": { "box": { "$ref": "#/$defs/box" } }
+          }
+        }
+      ]
+    }
+  }
+}

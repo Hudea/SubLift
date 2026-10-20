@@ -1,0 +1,32 @@
+[
+  {
+    "name": "full-frame",
+    "source": { "width": 1920, "height": 1080 },
+    "normalized": { "x": 0.0, "y": 0.0, "width": 1.0, "height": 1.0 },
+    "expected_pixels": { "x": 0, "y": 0, "width": 1920, "height": 1080 }
+  },
+  {
+    "name": "bottom-crop",
+    "source": { "width": 1920, "height": 1080 },
+    "normalized": { "x": 0.0, "y": 0.7, "width": 1.0, "height": 0.3 },
+    "expected_pixels": { "x": 0, "y": 756, "width": 1920, "height": 324 }
+  },
+  {
+    "name": "clamp-right-bottom",
+    "source": { "width": 100, "height": 50 },
+    "normalized": { "x": 0.95, "y": 0.9, "width": 0.2, "height": 0.2 },
+    "expected_pixels": { "x": 95, "y": 45, "width": 5, "height": 5 }
+  },
+  {
+    "name": "rounding-and-clamp",
+    "source": { "width": 1920, "height": 1080 },
+    "normalized": { "x": 0.1234, "y": 0.7732, "width": 0.9999, "height": 0.0999 },
+    "expected_pixels": { "x": 237, "y": 835, "width": 1683, "height": 108 }
+  },
+  {
+    "name": "tiny-frame",
+    "source": { "width": 10, "height": 10 },
+    "normalized": { "x": 0.5, "y": 0.5, "width": 0.5, "height": 0.5 },
+    "expected_pixels": { "x": 5, "y": 5, "width": 5, "height": 5 }
+  }
+]

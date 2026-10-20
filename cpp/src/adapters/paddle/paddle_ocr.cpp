@@ -2,11 +2,14 @@
 #include "sublift/adapters/paddle_geometry.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <mutex>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
@@ -108,7 +111,118 @@ Point2D map_point_to_original(
   return point;
 }
 
+// --- O8: capability probe cache --------------------------------------------
+//
+// probe_capabilities() verifies the model bundle SHA-256 against the resource
+// manifest - tens of ms of pure I/O that used to repeat on every
+// POST /api/jobs and GET /api/system/info. Successful probes are cached and
+// reused while the bundle fingerprint (resolved model file paths + size +
+// mtime, plus the manifest) is unchanged. Failures are never cached
+// (fail-closed: a failed probe re-runs immediately). A TTL bounds staleness
+// for changes the fingerprint cannot see (e.g. PATH/env reshuffles).
+
+struct ProbeCacheEntry {
+  std::string model_root_dir;
+  std::string model_type;
+  std::string fingerprint;
+  std::chrono::steady_clock::time_point stored_at;
+  PaddleCapabilities caps;
+};
+
+std::mutex g_probe_cache_mutex;
+std::optional<ProbeCacheEntry> g_probe_cache;
+constexpr auto kProbeCacheTtl = std::chrono::seconds(60);
+
+// Observability for the probe cache (test/measurement only, see header).
+std::atomic<std::uint64_t> g_probe_cache_hits{0};
+std::atomic<std::uint64_t> g_probe_cache_misses{0};
+std::atomic<std::uint64_t> g_probe_cache_stores{0};
+
+std::string probe_file_fingerprint(const std::filesystem::path& path) {
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(path, ec);
+  if (ec) {
+    return path.string() + ":missing";
+  }
+  const auto mtime = std::filesystem::last_write_time(path, ec);
+  if (ec) {
+    return path.string() + ":nomtime";
+  }
+  std::ostringstream oss;
+  // file_clock's rep is __int128 on libc++; normalize to int64 ticks.
+  const auto ticks = static_cast<std::int64_t>(mtime.time_since_epoch().count());
+  oss << path.string() << ':' << size << ':' << ticks;
+  return oss.str();
+}
+
+std::string probe_bundle_fingerprint(const paddle_detail::ModelPaths& paths,
+                                     const std::filesystem::path& manifest_path) {
+  return probe_file_fingerprint(paths.det_path) + "|" +
+         probe_file_fingerprint(paths.cls_path) + "|" +
+         probe_file_fingerprint(paths.rec_path) + "|" +
+         probe_file_fingerprint(paths.keys_path) + "|" +
+         probe_file_fingerprint(manifest_path);
+}
+
+std::optional<PaddleCapabilities> probe_cache_lookup(
+    const std::string& model_root_dir, const std::string& model_type,
+    const std::string& fingerprint) {
+  std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+  if (!g_probe_cache.has_value()) {
+    return std::nullopt;
+  }
+  const ProbeCacheEntry& entry = *g_probe_cache;
+  if (entry.model_root_dir != model_root_dir || entry.model_type != model_type ||
+      entry.fingerprint != fingerprint) {
+    return std::nullopt;
+  }
+  if (std::chrono::steady_clock::now() - entry.stored_at > kProbeCacheTtl) {
+    return std::nullopt;
+  }
+  return entry.caps;
+}
+
+void probe_cache_store(const std::string& model_root_dir,
+                       const std::string& model_type,
+                       const std::string& fingerprint,
+                       const PaddleCapabilities& caps) {
+  std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+  g_probe_cache = ProbeCacheEntry{
+      .model_root_dir = model_root_dir,
+      .model_type = model_type,
+      .fingerprint = fingerprint,
+      .stored_at = std::chrono::steady_clock::now(),
+      .caps = caps,
+  };
+  g_probe_cache_stores.fetch_add(1, std::memory_order_relaxed);
+}
+
 }  // namespace
+
+// Definition of the measurement-only registry declared in the header. Kept
+// outside the anonymous namespace so the symbol matches the declaration.
+SharedStageTimingRegistry& paddle_stage_registry() noexcept {
+  static SharedStageTimingRegistry registry;
+  return registry;
+}
+
+PaddleProbeCacheStats paddle_probe_cache_stats() noexcept {
+  return PaddleProbeCacheStats{
+      .hits = g_probe_cache_hits.load(std::memory_order_relaxed),
+      .misses = g_probe_cache_misses.load(std::memory_order_relaxed),
+      .stores = g_probe_cache_stores.load(std::memory_order_relaxed),
+  };
+}
+
+void reset_paddle_probe_cache_for_testing() noexcept {
+  {
+    std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+    g_probe_cache.reset();
+  }
+  g_probe_cache_hits.store(0, std::memory_order_relaxed);
+  g_probe_cache_misses.store(0, std::memory_order_relaxed);
+  g_probe_cache_stores.store(0, std::memory_order_relaxed);
+}
 
 bool is_paddle_available() noexcept {
   return PaddleOcrEngine::probe_capabilities().available;
@@ -127,16 +241,34 @@ PaddleCapabilities PaddleOcrEngine::probe_capabilities(
   try {
     models::ResourceLocator locator;
     auto type = models::parse_model_type(model_type);
+    auto loaded = models::load_default_native_manifest();
+    // Cheap locate (existence only, no digest) purely to build the cache
+    // fingerprint; the digest verification below stays the source of truth.
+    auto located = locator.probe_model_bundle(model_root_dir, type, false);
+    std::string fingerprint;
+    if (located.found) {
+      fingerprint = probe_bundle_fingerprint(
+          located.value, loaded.ok ? loaded.path : std::filesystem::path{});
+      if (auto cached = probe_cache_lookup(model_root_dir, model_type, fingerprint)) {
+        g_probe_cache_hits.fetch_add(1, std::memory_order_relaxed);
+        return *cached;
+      }
+    }
+    // Counted once per probe that is not served from cache, including the
+    // "bundle not located at all" case (a failed probe is never cached).
+    g_probe_cache_misses.fetch_add(1, std::memory_order_relaxed);
     auto res = locator.probe_model_bundle(model_root_dir, type, true);
     caps.available = res.found;
     if (res.found) {
       caps.model_root = res.value.det_path.parent_path().string();
-      auto loaded = models::load_default_native_manifest();
       if (loaded.ok) {
         caps.detail = "ok (" + loaded.manifest.paddle.id + "@" +
                       loaded.manifest.paddle.version + ")";
       } else {
         caps.detail = "ok";
+      }
+      if (located.found) {
+        probe_cache_store(model_root_dir, model_type, fingerprint, caps);
       }
     } else {
       caps.detail = res.error_msg;
@@ -243,8 +375,12 @@ struct PaddleOcrEngine::Impl {
 
   paddle::DBPostProcessResult run_det(
       const paddle::GlobalPreprocessResult& global) {
-    auto prepared = paddle::prepare_det_input(
-        global.rgb.data(), global.width, global.height);
+    paddle::DetPreprocessResult prepared;
+    {
+      StageTimer timer(paddle_stage_registry(), "paddle.det_preprocess");
+      prepared = paddle::prepare_det_input(
+          global.rgb.data(), global.width, global.height);
+    }
     const auto rw = prepared.width;
     const auto rh = prepared.height;
     auto& input = prepared.nchw;
@@ -254,7 +390,10 @@ struct PaddleOcrEngine::Impl {
                                                         shape.data(), shape.size());
     const char* in_names[] = {det_input_name.c_str()};
     const char* out_names[] = {det_output_name.c_str()};
-    auto outputs = det_session->Run(Ort::RunOptions{nullptr}, in_names, &tensor, 1, out_names, 1);
+    auto outputs = [&] {
+      StageTimer timer(paddle_stage_registry(), "paddle.det_infer");
+      return det_session->Run(Ort::RunOptions{nullptr}, in_names, &tensor, 1, out_names, 1);
+    }();
     float* out = outputs[0].GetTensorMutableData<float>();
     auto info = outputs[0].GetTensorTypeAndShapeInfo();
     auto dims = info.GetShape();
@@ -269,8 +408,12 @@ struct PaddleOcrEngine::Impl {
     }
     paddle::DBPostProcessOptions opts;
     opts.det_box_thresh = 0.5F;
-    auto result = paddle::db_postprocess(
-        out, oh, ow, global.height, global.width, opts);
+    paddle::DBPostProcessResult result;
+    {
+      StageTimer timer(paddle_stage_registry(), "paddle.det_postprocess");
+      result = paddle::db_postprocess(
+          out, oh, ow, global.height, global.width, opts);
+    }
     paddle::sort_db_result(&result);
     runtime_stats.det_boxes += result.quads.size();
     return result;
@@ -311,10 +454,13 @@ struct PaddleOcrEngine::Impl {
           0.0F);
       const std::size_t item_size =
           static_cast<std::size_t>(kChannels * kHeight * kWidth);
-      for (std::size_t item = 0; item < batch; ++item) {
-        paddle::prepare_cls_tensor(
-            crops[indices[begin + item]],
-            input.data() + item * item_size);
+      {
+        StageTimer timer(paddle_stage_registry(), "paddle.cls_preprocess");
+        for (std::size_t item = 0; item < batch; ++item) {
+          paddle::prepare_cls_tensor(
+              crops[indices[begin + item]],
+              input.data() + item * item_size);
+        }
       }
       std::array<std::int64_t, 4> shape{
           static_cast<std::int64_t>(batch),
@@ -331,13 +477,16 @@ struct PaddleOcrEngine::Impl {
           shape.size());
       const char* input_names[] = {cls_input_name.c_str()};
       const char* output_names[] = {cls_output_name.c_str()};
-      auto outputs = cls_session->Run(
-          Ort::RunOptions{nullptr},
-          input_names,
-          &tensor,
-          1,
-          output_names,
-          1);
+      auto outputs = [&] {
+        StageTimer timer(paddle_stage_registry(), "paddle.cls_infer");
+        return cls_session->Run(
+            Ort::RunOptions{nullptr},
+            input_names,
+            &tensor,
+            1,
+            output_names,
+            1);
+      }();
       const float* output = outputs[0].GetTensorData<float>();
       const auto output_info = outputs[0].GetTensorTypeAndShapeInfo();
       const auto output_shape = output_info.GetShape();
@@ -403,12 +552,15 @@ struct PaddleOcrEngine::Impl {
       const std::size_t item_size = static_cast<std::size_t>(
           kChannels * kHeight * target_width);
       std::vector<float> input(batch * item_size, 0.0F);
-      for (std::size_t item = 0; item < batch; ++item) {
-        paddle::prepare_rec_tensor(
-            crops[indices[begin + item]],
-            static_cast<int>(kHeight),
-            static_cast<int>(target_width),
-            input.data() + item * item_size);
+      {
+        StageTimer timer(paddle_stage_registry(), "paddle.rec_preprocess");
+        for (std::size_t item = 0; item < batch; ++item) {
+          paddle::prepare_rec_tensor(
+              crops[indices[begin + item]],
+              static_cast<int>(kHeight),
+              static_cast<int>(target_width),
+              input.data() + item * item_size);
+        }
       }
       std::array<std::int64_t, 4> shape{
           static_cast<std::int64_t>(batch),
@@ -423,15 +575,18 @@ struct PaddleOcrEngine::Impl {
           input.size(),
           shape.data(),
           shape.size());
-      const char* input_names[] = {rec_input_name.c_str()};
-      const char* output_names[] = {rec_output_name.c_str()};
-      auto outputs = rec_session->Run(
-          Ort::RunOptions{nullptr},
-          input_names,
-          &tensor,
-          1,
-          output_names,
-          1);
+      const char* in_names[] = {rec_input_name.c_str()};
+      const char* out_names[] = {rec_output_name.c_str()};
+      auto outputs = [&] {
+        StageTimer timer(paddle_stage_registry(), "paddle.rec_infer");
+        return rec_session->Run(
+            Ort::RunOptions{nullptr},
+            in_names,
+            &tensor,
+            1,
+            out_names,
+            1);
+      }();
       const float* output = outputs[0].GetTensorData<float>();
       const auto output_info = outputs[0].GetTensorTypeAndShapeInfo();
       const auto output_shape = output_info.GetShape();
@@ -497,7 +652,11 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
     const int32_t h = image.height();
     const int32_t stride = static_cast<int32_t>(image.stride_bytes());
 
-    const auto global = paddle::prepare_global_image(rgb, w, h, stride);
+    paddle::GlobalPreprocessResult global;
+    {
+      StageTimer timer(paddle_stage_registry(), "paddle.global_preprocess");
+      global = paddle::prepare_global_image(rgb, w, h, stride);
+    }
     auto db_res = impl_->run_det(global);
     if (db_res.quads.empty()) {
       return OcrResult::from_lines({});
@@ -505,12 +664,15 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
 
     std::vector<paddle::CropResult> crops;
     crops.reserve(db_res.quads.size());
-    for (size_t i = 0; i < db_res.quads.size(); ++i) {
-      const auto& quad = db_res.quads[i];
-      paddle::CropResult crop = paddle::get_rotate_crop(
-          global.rgb.data(), global.width, global.height, global.width * 3,
-          quad);
-      crops.push_back(std::move(crop));
+    {
+      StageTimer timer(paddle_stage_registry(), "paddle.crop");
+      for (size_t i = 0; i < db_res.quads.size(); ++i) {
+        const auto& quad = db_res.quads[i];
+        paddle::CropResult crop = paddle::get_rotate_crop(
+            global.rgb.data(), global.width, global.height, global.width * 3,
+            quad);
+        crops.push_back(std::move(crop));
+      }
     }
 
     (void)impl_->run_cls(crops);
@@ -555,6 +717,12 @@ PaddleRuntimeStats PaddleOcrEngine::runtime_stats() const noexcept {
 #else
 
 bool is_paddle_available() noexcept { return false; }
+
+SharedStageTimingRegistry& paddle_stage_registry() noexcept {
+  // Inert registry: stage timing never accumulates without the Paddle build.
+  static SharedStageTimingRegistry registry;
+  return registry;
+}
 
 PaddleCapabilities PaddleOcrEngine::probe_capabilities(
     const std::string& model_root_dir, const std::string& model_type) {

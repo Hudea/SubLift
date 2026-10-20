@@ -47,4 +47,22 @@ std::int64_t FfmpegPathMediaServices::probe_duration_ms(
   return sublift::ffmpeg::probe_duration_ms(video_path);
 }
 
+sublift::application::FramePlanWithDuration FfmpegPathMediaServices::plan_frame_io_and_duration(
+    const std::filesystem::path& video_path,
+    const std::optional<sublift::SourceBox>& region_box,
+    std::string_view mode,
+    double bottom_ratio) const {
+  // O7: one ffprobe for geometry + duration, then the pure planner. The
+  // early pure branches (no region / mode=full) historically skipped the
+  // source probe; the merged probe is still a single call in those cases
+  // (the duration probe), so the spawn count never increases.
+  const auto probed = sublift::ffmpeg::probe_source_and_duration(video_path);
+  return sublift::application::FramePlanWithDuration{
+      .plan = sublift::ffmpeg::plan_frame_io_pure(
+          region_box, mode, probed.source, sublift::ffmpeg::TransformPolicy::FallbackFull,
+          bottom_ratio),
+      .duration_ms = probed.duration_ms,
+  };
+}
+
 }  // namespace sublift::worker

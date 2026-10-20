@@ -1,6 +1,6 @@
 # SubLift 性能加速方案
 
-> **状态**：分析文档，2026-10-19；未实施、未登记 Phase。
+> **状态**：分析文档，2026-10-19；P0（S0 + O1–O8）已于 2026-10-20 实施并实测，端到端收益 −0.7%（噪声内），P0 已关闭（见第 7 节）；Phase 16 已以负向结论 `done` 收口（D04），P1/P2 未实施。各节优先级判断以第 7 节为准。
 > **分析对象**：Phase 13 之后的 Native-only 产品运行时（C++ Core / Pipeline / Application / Adapters / Worker / Native Server）。
 > **数据基础**：版本化归因基线 `benchmark/baselines/performance-attribution-baseline.md`、`docs/design/ocr-performance-attribution.md` 的决策表，以及对 `cpp/` 全树的代码级普查（带 `file:line` 证据）。
 > **文档定位**：优化候选清单、瓶颈归因与优先级排序。实施任一措施前，须按项目契约登记维护 Phase（2–8 个纵向 Deliverable）并通过相应验证门；本文不自行批准代码变更。
@@ -333,6 +333,32 @@ O11（parity 验证或重冻 golden 的决策）、O20（先出 parity 证据）
 6. **测量纪律**：同机、同负载、同版本；warmup ≥1 + measured ≥3 取 median；每个措施独立前后基准；诊断开销与产品 wall 分开测。
 7. **内存基线**：Paddle 路径单 job RSS 约 1.7GB（HURDLES ADR-0025 证据）；O14/O15 的任何常驻设计必须先做内存预算与准入，再谈吞吐。
 8. **本文与 Phase 状态的关系**：本文不登记 Phase、不改 `phases.json`；实施时按 AGENTS.md 以维护 Phase（2–8 个纵向 Deliverable）立项，Task 只进会话计划。
+
+## 7. 实施结果与优先级修正（2026-10-20）
+
+P0（S0 + O1–O8）已全部落地（Phase 16 D01–D03），结论是**数值等价成立、端到端收益不成立**。
+
+| 项 | 实测结果（同机 / 同负载 / warmup=1 + measured=3，median） |
+|---|---|
+| S0 归因 | core_wall 122,114.0ms，coverage 99.95%；`ocr` 90.15%，其中 `det_infer` **84.35%** |
+| O1 / O2 | `changepoint` 3,577.3 → 3,168.2ms（−11.4%，约 core_wall 0.34%） |
+| O3 | `frame_materialize` 96.6 → 0.5ms（−99.5%，约 core_wall 0.08%） |
+| O4 | `det_preprocess` 1,039.2 → 1,032.8ms（−0.6%，噪声内） |
+| O5–O8 | SSE 复杂度、进度事件量、子进程/PATH 探测、能力探测次数改善；不承诺端到端吞吐 |
+| 端到端 wall | 真实视频 137.15s → 136.21s（−0.7%，运行噪声内） |
+| 等价性 | golden hash `b2d35c1e25f156e1` 不变；真实视频 6 次输出 SRT 逐字节相同；ROI 路径 348 行 SRT 相同 |
+
+**读数修正**（覆盖第 1、4、5 节的估算）：
+
+1. 第 1、4 节的优先级排序以 Python/Vision 结构为参照，对 C++ Native Release 不成立：
+   `extract_wait` ≈ 0（解码在 ffmpeg 子进程并行）、大图搬运合计 ≈ 0.1%、`changepoint` 2.93%。
+   P0 的理论天花板因此 <1%，实测与之一致。
+2. 唯一的结构性上限是 `det_infer` 84.35%。**O9（减少 det 输入面积/次数）、O14/O16（推理层）
+   与 GPU（Phase 15）是唯一能改变端到端的类别**；O5–O8 只在 server 延迟/事件维度有意义，
+   不应计入"加速"叙事。
+3. O11/O12/O13 的约束不变：前两者受 parity 锁定，O13 仍未测量重复率。
+4. 后续任何加速提案，须先用 S0 同协议给出"目标阶段当前占比 + 本措施预计移动的毫秒数"；
+   给不出就不立项。P0 措施不再重提——它们已经是现状的一部分或被明确判定为噪声级收益。
 
 ---
 

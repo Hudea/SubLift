@@ -1,7 +1,9 @@
 #include "sublift/cli/srt.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <vector>
 
 namespace sublift::cli {
 
@@ -29,18 +31,29 @@ bool is_blank_text(std::string_view text) {
 std::pair<std::string, std::size_t> format_srt(
     const std::vector<sublift::SubtitleEntry>& entries) {
   if (entries.empty()) return {"", 0};
+
+  std::vector<const sublift::SubtitleEntry*> ordered;
+  ordered.reserve(entries.size());
+  for (const auto& entry : entries) ordered.push_back(&entry);
+  std::stable_sort(ordered.begin(), ordered.end(), [](const auto* lhs, const auto* rhs) {
+    if (lhs->start_ms != rhs->start_ms) return lhs->start_ms < rhs->start_ms;
+    return lhs->end_ms < rhs->end_ms;
+  });
+
   std::string out;
   std::size_t idx = 1;
-  for (const auto& e : entries) {
-    if (is_blank_text(e.text)) continue;
+  for (const auto* entry : ordered) {
+    if (is_blank_text(entry->text)) continue;
 
+    const std::int64_t start = std::max<std::int64_t>(0, entry->start_ms);
+    const std::int64_t end = std::max<std::int64_t>(start, entry->end_ms);
     out += std::to_string(idx++);
     out += '\n';
-    out += format_srt_timestamp(e.start_ms);
+    out += format_srt_timestamp(start);
     out += " --> ";
-    out += format_srt_timestamp(e.end_ms);
+    out += format_srt_timestamp(end);
     out += '\n';
-    out += e.text;
+    out += entry->text;
     out += "\n\n";
   }
   return {out, idx - 1};

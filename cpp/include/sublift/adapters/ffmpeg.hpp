@@ -56,6 +56,16 @@ void validate_output_crop(const SourceBox& crop, std::int32_t source_width,
 /// 探测视频时长（毫秒）。文件不存在或 ffprobe 探测失败返回 0（与 Python probe_duration_ms 一致）
 [[nodiscard]] std::int64_t probe_duration_ms(const std::filesystem::path& video_path);
 
+/// 合并探测（O7）：一次 ffprobe 同时拿到 source-frame 几何/显示变换与时长。
+/// 语义等同于分别调用 probe_source_frame + probe_duration_ms：stream 解析失败
+/// 抛错，duration 缺失按 0 处理。
+struct SourceAndDuration {
+  SourceFrameInfo source;
+  std::int64_t duration_ms{0};
+};
+[[nodiscard]] SourceAndDuration probe_source_and_duration(
+    const std::filesystem::path& video_path);
+
 /// 探测视频综合元数据（组合 probe_source_frame 与 probe_duration_ms）
 [[nodiscard]] VideoInfo probe_video(const std::filesystem::path& video_path);
 

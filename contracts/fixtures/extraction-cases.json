@@ -1,0 +1,25 @@
+[
+  {
+    "name": "auto-default",
+    "spec": {
+      "engine": "vision",
+      "sampling": "fast",
+      "confidence": 0.0,
+      "script": "auto",
+      "roi": { "policy": "auto", "box": null }
+    }
+  },
+  {
+    "name": "fixed-roi",
+    "spec": {
+      "engine": "paddle",
+      "sampling": "fine",
+      "confidence": 0.5,
+      "script": "cjk",
+      "roi": {
+        "policy": "fixed",
+        "box": { "x": 0.1, "y": 0.7, "width": 0.8, "height": 0.2 }
+      }
+    }
+  }
+]

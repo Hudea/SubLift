@@ -9,6 +9,7 @@ set(_sublift_test_srcs
   line_select_test.cpp
   ocr_execution_test.cpp
   ocr_test.cpp
+  stage_timing_test.cpp
   extractor_pure_test.cpp
   extractor_probe_test.cpp
   extractor_full_test.cpp
@@ -19,6 +20,7 @@ set(_sublift_test_srcs
   paddle_ctc_test.cpp
   paddle_crop_cls_test.cpp
   paddle_models_test.cpp
+  paddle_probe_cache_test.cpp
   sublift_models_test.cpp
   resource_locator_test.cpp
   native_resources_test.cpp
@@ -42,6 +44,7 @@ if(SUBLIFT_ENABLE_OPENCV)
     paddle_db_test.cpp
     paddle_det_preprocess_test.cpp
     signature_test.cpp
+    patrol_equivalence_test.cpp
     changepoint_test.cpp
     pipeline_feed_test.cpp
     pipeline_ocr_test.cpp
@@ -71,6 +74,9 @@ endfunction()
 set(_config_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/config/default_config.v1.json")
 sublift_stringify_path(_config_golden_esc "${_config_golden}")
 
+set(_contract_srt "${PROJECT_SOURCE_DIR}/../contracts/fixtures/srt-cases.json")
+sublift_stringify_path(_contract_srt_esc "${_contract_srt}")
+
 set(_tl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/segments/timeline.v1.json")
 set(_dd_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/entries/dedupe.v1.json")
 set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/line_select.v1.json")
@@ -85,6 +91,7 @@ sublift_stringify_path(_vis_golden_esc "${_vis_golden}")
 sublift_stringify_path(_pad_golden_esc "${_pad_golden}")
 
 target_compile_definitions(sublift_tests PRIVATE
+  "SUBLIFT_CONTRACT_SRT=\"${_contract_srt_esc}\""
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_TIMELINE=\"${_tl_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_DEDUPE=\"${_dd_golden_esc}\""

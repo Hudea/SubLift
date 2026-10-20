@@ -20,6 +20,14 @@ class FfmpegPathMediaServices final : public sublift::application::IPathMediaSer
 
   [[nodiscard]] std::int64_t probe_duration_ms(
       const std::filesystem::path& video_path) const override;
+
+  /// O7: single merged ffprobe (stream geometry + duration) instead of the
+  /// plan probe + duration probe pair.
+  [[nodiscard]] sublift::application::FramePlanWithDuration plan_frame_io_and_duration(
+      const std::filesystem::path& video_path,
+      const std::optional<sublift::SourceBox>& region_box,
+      std::string_view mode,
+      double bottom_ratio) const override;
 };
 
 }  // namespace sublift::worker

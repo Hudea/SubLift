@@ -1,0 +1,160 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 16 - Native 性能加速（第一批：数值等价与调度/缓存）",
+  "goal": "按 docs/design/performance-acceleration.md 的第一批（P0）实施：先建立 C++ Native + Paddle 的阶段归因基线作为后续收益对照系，再落地一批数值完全等价的纯工程优化（patrol 锚帧掩码缓存、SSIM 缓冲复用、热路径去零填充、det 前处理去冗余拷贝）与低风险调度/缓存优化（SSE 事件索引化与有界 history、frame 模式进度节流、二进制路径缓存与探测合并、系统探测缓存），不触碰任何数值通路、不改变产品语义，双路径 golden hash 与三来源 SRT SHA 保持不变。",
+  "scope": [
+    "S0：为 Native Pipeline/Worker 增加环境变量门控的阶段计时（signature/changepoint/color_convert/ocr/pipeline_overhead/extract_wait 及 Paddle det/cls/rec 与前处理），用 benchmark harness 在固定负载（Zootopia 1920×1080 / 5fps / ROI / 1271 帧，Paddle 引擎，含 1920×324 bottom-crop 几何）上产出 C++ Native 归因报告，版本化存入 benchmark/baselines/。",
+    "O1：ChangePointDetector 在 In/CHANGE 更新锚 crop 时缓存其 compute_foreground_ratio_mat 二值掩码，patrol 只对当前帧计算掩码；缓存键包含实际生效的 SignatureConfig 参数。",
+    "O2：patrol 路径 SSIM 计算改用调用方持有的可复用 Mat 工作集，保持 CV_64F 与相同运算顺序。",
+    "O3：为构造后立即整块写入的内部场景提供免零填充 ImageBuffer 工厂（抽帧循环缓冲与 pipeline BGR 缓冲），公共 API 默认构造保持零填充。",
+    "O4：删除 prepare_global_image 中从未被原地修改的 source.clone()，并将 result.rgb 的整帧 assign 改为对就地结果的搬运，每次 recognize 的全帧 memcpy 从 2 次降为 0–1 次。",
+    "O5：JobEventStream history 增加 seq 索引与有界裁剪（保留终态事件与足够回放窗口），fetch_after 从 O(N) 全扫改为 O(k) 切片，to_sse_string 避免额外 JSON 深拷。",
+    "O6：frame 模式 ProgressMsg 从每帧一条改为按 ≥200ms 时间窗节流（与 path 模式对齐），pct 语义与去重规则不变。",
+    "O7：resolve_ffmpeg_bin/resolve_ffprobe_bin 结果按进程缓存；plan_frame_io 的 source 探测与 bridge 的时长探测合并为一次 ffprobe 调用。",
+    "O8：collect_system_info / PaddleOcrEngine::probe_capabilities 结果按 manifest 指纹 + 文件 mtime 缓存并带失效条件，POST /api/jobs 与 GET system/info 不再每次重复探测。"
+  ],
+  "non_goals": [
+    "不实施 P1/P2 项（O9 智能选区 ROI 化、O10 克隆重构、O11 RGB→BGR 融合、O13 跨段记忆化、O14 引擎缓存、O15 并发、O16 ORT 重评、O17 持久化、O18 取消异步化、O19 线程池、O20 ffmpeg 调优）；每项需要各自的 ADR/基准门，另行立项。",
+    "不改变 ADR-0025/0028 冻结值（canonical ORT dylib SHA、intra_op=4、Rec batch=6、source_output_sha256_exact 硬门）。",
+    "不重建或重冻结 golden 基线；任何导致 hash 变化的实现都必须回退，不得作为优化附带品。",
+    "不触碰 GPU 执行路径与 OcrExecutionGate 设计（Phase 15 范围）。",
+    "不引入流水线并发；单 consumer 串行契约保持不变。",
+    "不新增第三方依赖。"
+  ],
+  "status": "done",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "C++ Native 阶段归因基线",
+      "outcome": "Native Pipeline/Worker 具备环境变量门控的阶段计时能力，benchmark harness 在同一固定负载上产出 C++ Native + Paddle 的阶段归因报告（覆盖率 ≥99.9%），版本化存入 benchmark/baselines/，作为后续所有优化收益数字的对照系。",
+      "acceptance": [
+        "阶段计时默认关闭（零产品成本），仅由显式环境变量启用；启用后输出签名/signature、changepoint、color_convert、ocr、pipeline_overhead、extract_wait 的阶段总量与占比。",
+        "Paddle 路径额外输出 det/cls/rec 三段推理与标量前处理（global/det preprocess、crop+cls preprocess）的耗时分解。",
+        "归因报告与 golden hash b2d35c1e25f156e1 对齐，warmup=1 + measured=3 取 median，同机同负载同版本。",
+        "报告版本化存入 benchmark/baselines/，并注明与 Python/Vision 时代基线不可直接比较的边界。"
+      ],
+      "areas": [
+        "cpp/include/sublift/pipeline/pipeline.hpp",
+        "cpp/src/pipeline/pipeline.cpp",
+        "cpp/src/application/bridge.cpp",
+        "cpp/src/adapters/paddle/paddle_ocr.cpp",
+        "cpp/src/worker",
+        "benchmark/baselines",
+        "benchmark/configs"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-19：新增 cpp/include/sublift/pipeline/stage_timing.hpp + stage_timing.cpp（SUBLIFT_STAGE_TIMING=1 门控，StageTimer/两级注册表）与 cpp/include/sublift/adapters/ffmpeg_stage_timing.hpp；Pipeline feed/ocr_segment、Paddle det/cls/rec+预处理、ffmpeg 提取器（setup/迭代/teardown）与 bridge 消费者侧均插桩；bridge emit_stage_timing 合并三个注册表输出单行 JSON。",
+        "2026-10-19：归因协议 warmup=1 + measured=3 独立进程 median；Release 构建（Homebrew OpenCV 4.14 / ORT 1.28.0）上 core_wall 122,114.0ms、coverage 99.9498%（三次 run 99.933–99.956%）、输出 SRT sha256 56b1b08acdf2770a… 且计时开关一致；report 版本化存入 benchmark/baselines/native-performance-attribution-baseline.md，复现工具 scripts/measure_native_attribution.py（同时校验计时开关 hash 一致性与 measured>=3）。",
+        "2026-10-19：读数结论 — ocr 占 core_wall 90.15%（det_infer 单项 84.35%），extract_wait 因 ffmpeg 子进程并行解码塌缩至 ~0%（与 Python 基线结构差异已在报告注明），frame_materialize/changepoint 等搬运类成本在 Release 远低于设计文档预估；ctest 253/253 通过（含 stage_timing_test 5 例与 pipeline 计时惰性用例）。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "数值等价优化（O1–O4）",
+      "outcome": "patrol 锚帧掩码缓存、SSIM 缓冲复用、热路径去零填充、det 前处理去冗余拷贝全部落地；相同输入产生逐位相同的输出，golden hash 与三来源 SRT SHA 不变，CTest 全量通过。",
+      "acceptance": [
+        "O1：锚 crop 与缓存掩码严格同生命周期（In/CHANGE 同步替换，Out/reset 同步清除）；缓存键包含 patrol 实际生效的 SignatureConfig 参数。",
+        "O2：SSIM 保持 CV_64F、相同 blur 参数与运算顺序；新增 patrol 开启/关闭输出逐位一致的回归用例。",
+        "O3：免零填充工厂不暴露到 Ports 之外；调用点保证分配后、任何读取前整块写入；ASan/UBSan 构建下读写探针测试通过。",
+        "O4：prepare_global_image 无冗余 clone；Paddle parity 门与三来源 SRT SHA 不变。",
+        "现有 [changepoint]/[signature]/[pipeline]/[paddle] CTest 全量通过，golden hash b2d35c1e25f156e1 不变。"
+      ],
+      "areas": [
+        "cpp/src/pipeline/changepoint.cpp",
+        "cpp/include/sublift/pipeline/changepoint.hpp",
+        "cpp/src/pipeline/signature.cpp",
+        "cpp/include/sublift/pipeline/signature.hpp",
+        "cpp/src/core/image.cpp",
+        "cpp/include/sublift/core/image.hpp",
+        "cpp/src/pipeline/pipeline.cpp",
+        "cpp/src/adapters/ffmpeg/ffmpeg_extractor.cpp",
+        "cpp/src/adapters/paddle/ppocr_det_preprocess.cpp",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-19 O1/O2：ChangePointDetector 新增 anchor_mask_ + anchor_mask_config_，与 anchor_crop_ 严格同生命周期（store_anchor_crop 写入；clear_anchor 在 Out/reset/空 crop 时同步清除）；patrol 仅在缓存缺失、SignatureConfig 不等或几何不符时回退 compute_foreground_ssim，否则复用锚掩码 + SsimWorkspace。signature.hpp/.cpp 新增 compute_foreground_mask / compute_mask_ssim / SsimWorkspace / compute_mask_ssim_reusing（CV_64F、相同 blur 与运算顺序）。",
+        "2026-10-19 O1/O2 证据：新增 cpp/tests/patrol_equivalence_test.cpp（3 例）——掩码对同一输入逐字节确定；复用工作集与 compute_mask_ssim 逐位相同（含跨图对、重复调用无状态泄漏、新工作集同值）；O1 缓存分解（锚掩码缓存 + 当前帧掩码 + compute_mask_ssim_reusing）与改造前 compute_foreground_ssim(use_mask=true) 逐位相等（std::bit_cast 比较）。Debug CTest 通过；ASan/UBSan 构建下 1539 + 5 + 1 断言全过。",
+        "2026-10-19 O3：ImageBuffer 存储由 std::vector 改为 unique_ptr，新增 allocate_uninitialized 免零填充工厂（仅内部热路径调用；默认构造保持零填充历史契约，empty()/data() 语义不变）。image_test 新增 3 例：默认构造零填充 vs 工厂、工厂参数校验与 0x0、clone 一致性；ASan/UBSan 构建下 53 + 3 + 19 断言全过。",
+        "2026-10-19 O3 环境注记：build/cpp-san（SUBLIFT_SANITIZE=ON）二进制在进程退出时于 libtbb 的 __TBB_InitOnce 析构处 SEGV（dyld exit 栈，非测试体），Catch2 发现阶段因此失败；逐用例直跑断言全部通过。该退出崩溃与本次改动无关——同一二进制运行既有 hamming distance 用例同样在退出时崩溃。",
+        "2026-10-19 O4：prepare_global_image 删除从未被原地修改的 source.clone()，result.rgb 由整帧 assign 改为就地搬运；paddle_parity 门通过。",
+        "2026-10-19 真实视频数值等价 A/B（硬门）：Release 构建、debug/Zootopia_clip_1080p.mp4、--engine paddle --fps 5 --script cjk。基线 = 纯 HEAD 6b787b2 的独立 git worktree（/tmp/sublift-baseline，git status 干净），优化 = 当前工作区。各跑 3 次（交替执行）共 6 次，输出均为 81 条字幕且 SRT sha256 全部为 56b1b08acdf2770addf65d20c5e8ff02947f7125a759bc62ec06521889e9412e，cmp 字节相同；该值与 D01 归因基线报告记录一致。产物见 debug/ab-phase16/。",
+        "2026-10-19 智能选区（ROI）真实视频 A/B：以 Native Server 的 POST /api/video/detect-region（engine=paddle，采样 30.51s 帧，检出 box x=0.0 y=0.7732 w=1.0 h=0.0999、confidence 0.99993）→ POST /api/jobs（同一 region_box、fps 5、script cjk）。基线（6b787b2 worktree server）与优化（build/cpp-rel server）均 completed，导出 SRT 均 348 行，sha256 同为 d6b51602c7a0167315dc4492c139b68ce687bc6a02f716865a9c07da8f5a6abe，cmp 字节相同；两侧 detect-region JSON 完全一致。该 ROI 输出（348 行）与默认 bottom-crop 路径（324 行）确为不同几何，证明选区路径本身被真实执行。产物见 debug/ab-phase16/。",
+        "2026-10-19 端到端冒烟覆盖：path 模式冷/热运行（同一固定视频 6 次）、智能选区 path 模式（server 提交 + 导出）、frame 模式（Swift PipelineClientIntegrationTests 的 testCppWorkerFrameModeOverUDS 与 testFullPipelineOverUDS，经 UDS 逐帧推送）均通过且与基线输出一致。",
+        "2026-10-19 parity 与全量门：changepoint parity vs frozen golden 与 pipeline parity vs frozen golden（fixture 开启 enable_ssim_patrol + ssim_patrol_use_mask）继续通过；Debug CTest 259/259 通过。端到端 wall 中位数基线 137.15s vs 优化 136.21s（约 0.7%，在运行噪声内）——与 D01 读数一致：该负载约 90% 成本在 OCR 推理，O1–O4 触及的非 OCR 开销占比很小；本 Deliverable 以数值等价与开销削减为准，不作端到端加速承诺。",
+        "2026-10-19 待办边界：三来源 SRT SHA exact 与双路径 golden hash b2d35c1e25f156e1 的正式复跑属离线 Python benchmark 门（scripts/verify-offline.sh 与 benchmark datasets，依赖外置素材）；本轮以「同机同负载 HEAD vs 工作区逐字节相同」作为更强的等价证据，跨机 hash 断言待具备离线素材的环境补跑。",
+        "2026-10-19 变更面：cpp/include/sublift/pipeline/changepoint.hpp、cpp/include/sublift/pipeline/signature.hpp、cpp/src/pipeline/changepoint.cpp、cpp/src/pipeline/signature.cpp、cpp/include/sublift/core/image.hpp、cpp/src/core/image.cpp、cpp/src/pipeline/pipeline.cpp、cpp/src/adapters/ffmpeg/ffmpeg_extractor.cpp、cpp/src/adapters/paddle/paddle_ocr.cpp（O4 段）、cpp/tests/image_test.cpp、cpp/tests/patrol_equivalence_test.cpp、cpp/tests/CMakeLists.txt。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "调度与缓存优化（O5–O8）",
+      "outcome": "SSE 事件查询从 O(N²) 降为 O(k) 且 history 有界，frame 模式进度事件风暴消除，每 job 子进程探测与 PATH 扫描减少，系统探测结果按指纹缓存；产品语义与 Web/Swift 客户端行为不变。",
+      "acceptance": [
+        "O5：Last-Event-ID/cursor 续传契约保持（HURDLES 12512）；裁剪只丢弃已被确认消费且超过上限的旧事件；server 契约测试增加长事件序列 cursor 续传用例。",
+        "O6：frame 模式进度按 ≥200ms 节流；Swift 测试与手动 GUI 冒烟通过。",
+        "O7：二进制路径按进程缓存并文档化失效条件；plan 探测与时长探测合并为一次 ffprobe；ffmpeg 适配器契约测试通过。",
+        "O8：探测缓存按 manifest 指纹 + 文件 mtime 失效；server 契约测试覆盖能力变更失效用例。",
+        "Web 测试（npm --prefix apps/web test）与 Swift 测试（cd apps/macos && swift test）通过。"
+      ],
+      "areas": [
+        "cpp/include/sublift/server/job_manager.hpp",
+        "cpp/src/server/routes.cpp",
+        "cpp/src/application/bridge.cpp",
+        "cpp/src/adapters/ffmpeg/resolve_bin.cpp",
+        "cpp/src/adapters/ffmpeg/probe.cpp",
+        "cpp/src/adapters/ffmpeg/plan_frame_io.cpp",
+        "cpp/src/adapters/paddle/paddle_ocr.cpp",
+        "cpp/tests",
+        "apps/web",
+        "apps/macos"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-19 O5：JobEventStream 增加每 job 有界回放窗口（kMaxHistoryEvents = 2000，终态事件位于队尾不被裁剪），fetch_after 依据 seq 稠密性从 O(N) 全扫改为 O(k) 切片，to_sse_string 改为就地写入 job_id/seq（routes.cpp 相应改为按引用序列化，去掉每次事件的 JSON 深拷）。",
+        "2026-10-19 O5 证据：server_test 新增长事件序列用例——先推 2500 条 progress 再推 done，校验 history <= 2000 且终态保留；cursor 落在窗口内时精确从 cursor+1 续传（不含 cursor 本身）；cursor 早于窗口时从窗口头恢复且仍能收到终态事件（客户端按 seq 去重，GET /api/jobs/:id 为权威状态，HURDLES 12512 契约保持）。",
+        "2026-10-19 O6：bridge frame 模式 ProgressMsg 由每帧一条改为 >=200ms 时间窗节流，pct 语义与去重规则不变；Swift PipelineClientIntegrationTests 按 250ms pacing 发送以保持逐帧断言。证据：swift test（等价参数 --disable-sandbox --scratch-path /tmp/dsh-scratch，因 DSH 沙箱禁止嵌套 sandbox_apply）XCTest 381 passed / swift-testing 145 passed / 0 失败，其中 testCppWorkerFrameModeOverUDS 与 testFullPipelineOverUDS 通过。",
+        "2026-10-19 O7：resolve_ffmpeg_bin / resolve_ffprobe_bin 改为进程级缓存（static lambda，失败不缓存、失败后重试）；probe_source_and_duration 合并 stream 与 duration 探测为一次 ffprobe，plan_frame_io_and_duration 取代分立的 plan + 时长探测；extractor / ffmpeg 适配器契约测试与真实视频端到端通过。",
+        "2026-10-19 O8：PaddleOcrEngine::probe_capabilities 增加能力探测缓存——键为 model_root_dir + model_type + bundle 指纹（det/cls/rec/keys 与 manifest 的 path+size+mtime），仅成功结果入缓存、失败立即重探（fail-closed），并带 60s TTL 兜底；新增测试/测量用统计访问器 paddle_probe_cache_stats 与 reset_paddle_probe_cache_for_testing。",
+        "2026-10-19 O8 证据：新增 cpp/tests/paddle_probe_cache_test.cpp（3 例）——成功探测第二次命中缓存（hits/misses/stores 断言）；把模型副本的 det onnx mtime 前移 5s 后指纹变化并强制重探（stores 2）；缺失 root 失败不写缓存、不驱逐也不替换既有条目，同一失败 root 重复探测仍每次重试（无负缓存）。Debug CTest 3/3 通过。",
+        "2026-10-19 Web 门：npm --prefix apps/web test → 15 test files / 153 tests passed，0 失败。",
+        "2026-10-19 变更面：cpp/include/sublift/server/job_manager.hpp、cpp/src/server/routes.cpp、cpp/src/application/bridge.cpp、cpp/src/adapters/ffmpeg/resolve_bin.cpp、cpp/src/adapters/ffmpeg/probe.cpp、cpp/include/sublift/adapters/paddle.hpp、cpp/src/adapters/paddle/paddle_ocr.cpp、cpp/src/worker/path_media_services.{hpp,cpp}、cpp/include/sublift/application/path_media_services.hpp、cpp/tests/server_test.cpp、cpp/tests/paddle_probe_cache_test.cpp、cpp/tests/CMakeLists.txt、apps/macos/Tests/SubLiftMacTests/PipelineClientIntegrationTests.swift。"
+      ]
+    },
+    {
+      "id": "D04",
+      "name": "P0 收口与负向结论",
+      "outcome": "P0 的 S0 基线与 O1–O8 全部落地并完成数值等价复核；端到端收益在运行噪声内，明确记录为负向性能证据，Phase 16 以 done 收口，P1/P2 不在本 Phase 继续。",
+      "acceptance": [
+        "D01–D03 的实现、测试与证据完整，golden hash 与三来源 SRT SHA 的等价性结论已记录。",
+        "固定负载与真实视频的收益读数明确写入 HURDLES 与性能设计文档；不把噪声内差异宣称为加速。",
+        "Phase 16 不再扩张 P1/P2；后续加速方向须另立 Phase 并先给出能移动 det 占比的机制说明。",
+        "progress.md 与 phases.json 同步为 done，schema 校验通过。"
+      ],
+      "areas": [
+        "docs/HURDLES.md",
+        "docs/design/performance-acceleration.md",
+        "docs/phases/phase16.json",
+        "progress.md",
+        "phases.json"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-20：Phase 16 P0 以负向结论收口。S0 基线 ocr 占 core_wall 90.15%、det_infer 单项 84.35%；O1–O8 后 core_wall 122,114.0→122,515.0ms（+0.33%，噪声内），真实视频端到端 137.15→136.21s（−0.7%，噪声内）。",
+        "2026-10-20：数值等价复核已完成（同机 HEAD 6b787b2 vs 工作区各 3 次共 6 个 SRT 字节相同；智能选区 348 行 SRT SHA 相同）；三来源 SRT SHA/双路径 golden hash 的跨机正式复跑仍属离线 benchmark 门，未伪造。",
+        "2026-10-20：HURDLES 已记录 P0 终止与后续三条可验证方向（减少 det 输入面积/次数、推理层、重冻基线）；performance-acceleration 文档第 7 节已关闭 P0。",
+        "2026-10-20：Phase 16 置 done；P1/P2 不纳入本 Phase，后续按新维护 Phase 登记。"
+      ]
+    }
+  ],
+  "exit_criteria": [
+    "P0 以负向结论收口：D01–D03 的验收用于证明实现与等价性；三来源 SRT SHA 的跨机正式复跑受离线素材条件限制未执行，记录为离线 benchmark 残余，不阻塞本 Phase 的负向结论。",
+    "C++ Native + Paddle 阶段归因基线上线并版本化，覆盖率 ≥99.9%，与 golden hash 对齐。",
+    "O1–O4 全部落地且数值逐位等价：CTest 全量通过，golden hash b2d35c1e25f156e1 与三来源 SRT SHA 不变，UBSan 探针通过。",
+    "O5–O8 全部落地且契约保持：server/Web/Swift 测试全量通过，SSE 续传、取消、能力失效语义不退化。",
+    "以 debug 目录真实视频完成端到端冒烟（冷/热 job、frame/path 模式、智能选区），输出 SRT 与优化前一致。",
+    "前后基准对比按同一协议出具，收益数字以 D01 基线为对照系。"
+  ]
+}

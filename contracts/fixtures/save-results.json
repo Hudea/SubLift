@@ -1,0 +1,6 @@
+[
+  { "status": "saved", "saved_path": "video.srt", "entry_count": 1 },
+  { "status": "skipped", "saved_path": null, "entry_count": 1 },
+  { "status": "empty_result", "saved_path": null, "entry_count": 0 },
+  { "status": "failed", "saved_path": null, "entry_count": 0, "error": "disk full" }
+]

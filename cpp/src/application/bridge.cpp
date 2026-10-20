@@ -1,6 +1,9 @@
 #include "bridge.hpp"
 
+#include "sublift/adapters/ffmpeg_stage_timing.hpp"
+#include "sublift/adapters/paddle.hpp"
 #include "sublift/pipeline.hpp"
+#include "sublift/pipeline/stage_timing.hpp"
 
 #include <algorithm>
 #include <array>
@@ -11,7 +14,10 @@
 #include <filesystem>
 #include <iostream>
 #include <limits>
+#include <map>
+#include <sstream>
 #include <stdexcept>
+#include <string_view>
 
 #if defined(__APPLE__)
 #include <CoreGraphics/CoreGraphics.h>
@@ -51,6 +57,74 @@ void emit_perf_stats(const sublift::Pipeline& pipeline) {
   }
   std::cerr << "SUBLIFT_PERF_STATS"
             << " ocr_calls=" << pipeline.ocr_call_count() << '\n';
+}
+
+/// Stage timing report (Phase 16 D01 / S0). Pure measurement: prints a single
+/// `SUBLIFT_STAGE_TIMING` JSON line on stderr when `SUBLIFT_STAGE_TIMING=1`.
+///
+/// Stage tree (top-level leaves marked with *):
+///   extract_wait *  ffmpeg setup + spawn + teardown
+///   frame_fetch *   per-frame extractor-internal (pipe wait)
+///     frame_materialize  frame buffer allocation + zero-fill
+///   consume_call *  consumer invocation incl. frame-buffer release
+///     consume       feed + ocr_segment + IPC (bridge lambda)
+///       signature / changepoint / color_convert / pipeline_overhead  feed
+///       ocr         ocr_segment
+///         paddle.*  Paddle adapter internals (global/det/cls/rec
+///                   preprocess + inference + postprocess)
+///   finalize *      pipeline finalize (dedupe/merge)
+///
+/// `core_wall_ms` is the processing core (Python `core_wall` analog:
+/// extract + finalize); `job_wall_ms` is the full job wall including setup
+/// (plan/probe + engine creation). Coverage is sum(top-level leaves) /
+/// core wall, mirroring the Python baseline's `stage_coverage_pct`.
+/// Formatted by hand so the application layer needs no JSON dependency.
+void emit_stage_timing(const sublift::Pipeline& pipeline, double core_wall_ms,
+                       double job_wall_ms) {
+  if (!sublift::stage_timing_enabled()) {
+    return;
+  }
+  std::map<std::string, sublift::StageTimingEntry> merged =
+      pipeline.stage_timing().stages();
+  for (const auto& [stage, entry] : sublift::paddle_stage_registry().snapshot()) {
+    auto& target = merged[stage];
+    target.calls += entry.calls;
+    target.total_ms += entry.total_ms;
+  }
+  for (const auto& [stage, entry] : sublift::ffmpeg::stage_registry().snapshot()) {
+    auto& target = merged[stage];
+    target.calls += entry.calls;
+    target.total_ms += entry.total_ms;
+  }
+
+  // Top-level leaves only (everything else nests under one of these).
+  static constexpr const char* kTopLevelLeaves[] = {
+      "extract_wait", "frame_fetch", "consume_call", "finalize"};
+  double leaf_sum = 0.0;
+  for (const char* leaf : kTopLevelLeaves) {
+    const auto it = merged.find(leaf);
+    if (it != merged.end()) {
+      leaf_sum += it->second.total_ms;
+    }
+  }
+  const double coverage =
+      core_wall_ms > 0.0 ? leaf_sum / core_wall_ms * 100.0 : 0.0;
+
+  std::ostringstream out;
+  out << "SUBLIFT_STAGE_TIMING {\"core_wall_ms\":" << core_wall_ms
+      << ",\"job_wall_ms\":" << job_wall_ms << ",\"coverage_pct\":" << coverage
+      << ",\"stages\":{";
+  bool first = true;
+  for (const auto& [stage, entry] : merged) {
+    if (!first) {
+      out << ',';
+    }
+    first = false;
+    out << '"' << stage << "\":{\"calls\":" << entry.calls
+        << ",\"total_ms\":" << entry.total_ms << '}';
+  }
+  out << "}}";
+  std::cerr << out.str() << '\n';
 }
 
 std::vector<std::uint8_t> decode_base64(std::string_view input) {
@@ -166,8 +240,8 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
   CGContextRelease(context);
   CGImageRelease(cg_image);
 
-  // Convert RGBA -> RGB24
-  sublift::ImageBuffer buf(
+  // Convert RGBA -> RGB24 (O3: fully overwritten below, skip the zero-fill).
+  sublift::ImageBuffer buf = sublift::ImageBuffer::allocate_uninitialized(
       static_cast<std::int32_t>(w), static_cast<std::int32_t>(h), sublift::PixelFormat::RGB24);
   std::uint8_t* dst = buf.data();
   for (std::size_t i = 0; i < w * h; ++i) {
@@ -193,7 +267,9 @@ sublift::ImageBuffer decode_frame_bytes(const std::vector<std::uint8_t>& bytes) 
     throw std::invalid_argument("JPEG 解码失败: 图像尺寸超过限制");
   }
 
-  sublift::ImageBuffer buf(decoded.cols, decoded.rows, sublift::PixelFormat::RGB24);
+  // O3: the conversion below fully overwrites the buffer, skip the zero-fill.
+  sublift::ImageBuffer buf = sublift::ImageBuffer::allocate_uninitialized(
+      decoded.cols, decoded.rows, sublift::PixelFormat::RGB24);
   std::uint8_t* dst = buf.data();
   if (decoded.isContinuous()) {
     cv::Mat rgb;
@@ -411,6 +487,11 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
     is_path_mode_ = false;
     cancelled_ = false;
     current_video_id_ = msg.video_id;
+    job_wall_start_ = std::chrono::steady_clock::now();
+    if (sublift::stage_timing_enabled()) {
+      sublift::paddle_stage_registry().clear();
+      sublift::ffmpeg::stage_registry().clear();
+    }
 
     push_cb(ipc::ProgressMsg{
         .video_id = msg.video_id,
@@ -459,12 +540,19 @@ std::optional<ipc::Message> BridgeHandler::handle_frame(const ipc::FrameMsg& msg
 
     auto evt = pipeline->feed(frame);
 
-    push_cb(ipc::ProgressMsg{
-        .video_id = current_video_id_,
-        .stage = "processing",
-        .pct = 0.5,
-        .eta_ms = 0,
-    });
+    // O6: frame mode used to push one ProgressMsg per frame (a UDS event
+    // storm when the client feeds faster than realtime). Throttle to one per
+    // >=200ms; pct semantics and dedup rules are unchanged.
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_frame_progress_emit_ >= std::chrono::milliseconds(200)) {
+      last_frame_progress_emit_ = now;
+      push_cb(ipc::ProgressMsg{
+          .video_id = current_video_id_,
+          .stage = "processing",
+          .pct = 0.5,
+          .eta_ms = 0,
+      });
+    }
 
     if (evt.has_value()) {
       sublift::SubtitleEntry entry = pipeline->ocr_segment(*evt);
@@ -507,8 +595,21 @@ std::optional<ipc::Message> BridgeHandler::handle_finalize(const ipc::FinalizeMs
   }
 
   try {
-    std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
+    std::vector<sublift::SubtitleEntry> final_entries;
+    {
+      StageTimer timer(pipeline->stage_timing(), "finalize");
+      final_entries = pipeline->finalize();
+    }
     emit_perf_stats(*pipeline);
+    if (sublift::stage_timing_enabled()) {
+      // Frame mode: frames arrive over IPC, so job wall (start_job ->
+      // finalize) is the core wall; there is no extract_wait leaf.
+      const double core_wall_ms =
+          std::chrono::duration<double, std::milli>(
+              std::chrono::steady_clock::now() - job_wall_start_)
+              .count();
+      emit_stage_timing(*pipeline, core_wall_ms, core_wall_ms);
+    }
 
     push_cb(ipc::EntriesMsg{
         .video_id = msg.video_id,
@@ -563,6 +664,14 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
   } guard{this};
 
   try {
+    job_wall_start_ = std::chrono::steady_clock::now();
+    if (sublift::stage_timing_enabled()) {
+      // The adapter registries are process-level; scope them to this job so
+      // the report covers exactly one run (the Pipeline-owned registry is
+      // per-instance already).
+      sublift::paddle_stage_registry().clear();
+      sublift::ffmpeg::stage_registry().clear();
+    }
     sublift::Config cfg;
     cfg.confidence_threshold = msg.confidence_threshold;
     if (msg.enable_ssim_patrol.has_value()) {
@@ -601,8 +710,13 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       return;
     }
 
-    sublift::FrameIOPlan plan =
-        path_media_->plan_frame_io(video_path, region_box_src, "auto", cfg.region_bottom_ratio);
+    // O7: one merged media probe (plan + duration) instead of a plan probe
+    // plus a separate duration probe.
+    sublift::application::FramePlanWithDuration planned =
+        path_media_->plan_frame_io_and_duration(video_path, region_box_src, "auto",
+                                                cfg.region_bottom_ratio);
+    sublift::FrameIOPlan plan = std::move(planned.plan);
+    const std::int64_t dur_ms = planned.duration_ms;
 
     if (!detector_factory_) {
       push_cb(ipc::DoneMsg{
@@ -645,18 +759,24 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       });
     }
 
-    const std::int64_t dur_ms = path_media_->probe_duration_ms(video_path);
     const double duration_s = static_cast<double>(dur_ms) / 1000.0;
     int estimated_total = static_cast<int>(duration_s * fps);
     if (estimated_total < 1) estimated_total = 1;
 
     int processed_count = 0;
 
+    // Measurement only (S0): the consumer side of the extract loop. Wraps
+    // feed + ocr_segment + IPC + event release; the extractor-internal side
+    // is timed independently inside FfmpegExtractor ("extract_wait"), so the
+    // two leaves are disjoint.
+    auto extract_start = std::chrono::steady_clock::now();
     extractor->extract(
         video_path,
         [this, &pipeline, &push_cb, &video_id, &processed_count, estimated_total](
             const sublift::Frame& frame) -> bool {
           if (cancelled_) return false;
+
+          StageTimer consume_timer(pipeline->stage_timing(), "consume");
 
           auto evt = pipeline->feed(frame);
           processed_count++;
@@ -685,6 +805,11 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
 
           return !cancelled_;
         });
+    const double extract_total_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - extract_start)
+            .count();
+    (void)extract_total_ms;
 
     if (cancelled_) {
       return;
@@ -697,8 +822,27 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
         .eta_ms = 0,
     });
 
-    std::vector<sublift::SubtitleEntry> final_entries = pipeline->finalize();
+    auto finalize_start = std::chrono::steady_clock::now();
+    std::vector<sublift::SubtitleEntry> final_entries;
+    double finalize_ms = 0.0;
+    {
+      StageTimer timer(pipeline->stage_timing(), "finalize");
+      final_entries = pipeline->finalize();
+      finalize_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - finalize_start)
+                        .count();
+    }
     emit_perf_stats(*pipeline);
+    if (sublift::stage_timing_enabled()) {
+      // Core wall (Python `core_wall` analog): extract + finalize. Excludes
+      // plan/probe and engine creation, which are setup, not pipeline cost.
+      const double core_wall_ms = extract_total_ms + finalize_ms;
+      const double job_wall_ms =
+          std::chrono::duration<double, std::milli>(
+              std::chrono::steady_clock::now() - job_wall_start_)
+              .count();
+      emit_stage_timing(*pipeline, core_wall_ms, job_wall_ms);
+    }
 
     if (!cancelled_) {
       push_cb(ipc::EntriesMsg{

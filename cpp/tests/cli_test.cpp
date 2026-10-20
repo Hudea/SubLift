@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -9,6 +10,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "sublift/cli/args.hpp"
 #include "sublift/cli/runtime_guard.hpp"
@@ -170,6 +173,39 @@ TEST_CASE("CLI SRT formatter", "[cli][srt]") {
   REQUIRE(body.find("1\n00:00:00,000 --> 00:00:01,000\nhello\n\n") != std::string::npos);
   REQUIRE(body.find("2\n00:00:02,000 --> 00:00:03,000\nworld\n\n") != std::string::npos);
   REQUIRE(body.find("   ") == std::string::npos);
+}
+
+TEST_CASE("CLI SRT matches shared contract fixtures", "[cli][srt][contract]") {
+  std::ifstream in(SUBLIFT_CONTRACT_SRT);
+  REQUIRE(in.good());
+
+  nlohmann::json cases;
+  in >> cases;
+  REQUIRE(cases.is_array());
+
+  for (const auto& test_case : cases) {
+    std::vector<sublift::SubtitleEntry> entries;
+    for (const auto& item : test_case.at("entries")) {
+      entries.push_back(sublift::SubtitleEntry{
+          .start_ms = item.at("start_ms").get<std::int64_t>(),
+          .end_ms = item.at("end_ms").get<std::int64_t>(),
+          .text = item.at("text").get<std::string>(),
+          .confidence = item.at("confidence").get<double>(),
+      });
+    }
+
+    std::size_t expected_count = 0;
+    for (const auto& entry : entries) {
+      if (!sublift::cli::is_blank_text(entry.text)) {
+        ++expected_count;
+      }
+    }
+
+    INFO("fixture: " << test_case.at("name").get<std::string>());
+    const auto [body, count] = sublift::cli::format_srt(entries);
+    REQUIRE(body == test_case.at("expected").get<std::string>());
+    REQUIRE(count == expected_count);
+  }
 }
 
 TEST_CASE("CLI worker locator fail-closed", "[cli][worker]") {

@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <stdexcept>
 
 #if defined(SUBLIFT_HAS_OPENCV) || __has_include(<opencv2/opencv.hpp>)
@@ -95,7 +96,11 @@ GlobalPreprocessResult prepare_global_image(
   cv::Mat source(
       height, width, CV_8UC3, const_cast<std::uint8_t*>(rgb),
       static_cast<std::size_t>(stride));
-  cv::Mat working = source.clone();
+  // O4: `working` is only ever REASSIGNED below (resize_with_ratio and
+  // copyMakeBorder both read their input and produce a fresh Mat; nothing
+  // modifies pixels in place), so a shallow header copy is sufficient - the
+  // historical full-frame clone() was pure redundant traffic (B8).
+  cv::Mat working = source;
   double ratio_h = 1.0;
   double ratio_w = 1.0;
 
@@ -158,7 +163,18 @@ DetPreprocessResult prepare_det_input(
   }
 
 #if defined(SUBLIFT_USE_OPENCV_FOR_DET_PREPROCESS)
-  constexpr double kLimitSide = 736.0;
+  // Diagnostic only (Phase 16 exploration): RapidOCR parity freezes the min
+  // side at 736, which upscales a 1920x324 bottom crop to 4352x736. An explicit
+  // env override lets us measure det cost/quality at other scales without
+  // touching the product default; unset (or invalid) == 736.
+  double kLimitSide = 736.0;
+  if (const char* raw = std::getenv("SUBLIFT_DET_MIN_SIDE")) {
+    char* end = nullptr;
+    const double parsed = std::strtod(raw, &end);
+    if (end != raw && parsed > 0.0) {
+      kLimitSide = parsed;
+    }
+  }
   double ratio = 1.0;
   if (std::min(width, height) < kLimitSide) {
     ratio = width < height ? kLimitSide / width : kLimitSide / height;

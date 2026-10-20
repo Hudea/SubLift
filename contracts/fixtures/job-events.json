@@ -1,0 +1,27 @@
+[
+  {
+    "job_id": "job-1",
+    "seq": 0,
+    "type": "progress",
+    "payload": { "stage": "preparing", "pct": 0.0 }
+  },
+  {
+    "job_id": "job-1",
+    "seq": 1,
+    "type": "push_entry",
+    "payload": {
+      "entry": {
+        "start_ms": 1000,
+        "end_ms": 2000,
+        "text": "A",
+        "confidence": 0.9
+      }
+    }
+  },
+  {
+    "job_id": "job-1",
+    "seq": 2,
+    "type": "done",
+    "payload": { "ok": true, "total_entries": 1 }
+  }
+]

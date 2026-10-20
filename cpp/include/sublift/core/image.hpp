@@ -2,9 +2,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <stdexcept>
 #include <utility>
-#include <vector>
 
 namespace sublift {
 
@@ -70,6 +70,16 @@ class ImageBuffer {
   ImageBuffer(std::int32_t width, std::int32_t height, PixelFormat format,
               std::int32_t stride_bytes = 0);
 
+  /// Allocate a buffer WITHOUT zero-filling (O3). INTERNAL hot-path factory:
+  /// the caller must fully overwrite the storage before any read of it, and
+  /// must never let uninitialized bytes reach an output or error path. Not
+  /// part of the Ports API; used only where the allocation is immediately
+  /// followed by a complete overwrite (frame extraction, RGB->BGR
+  /// conversion, clone).
+  [[nodiscard]] static ImageBuffer allocate_uninitialized(
+      std::int32_t width, std::int32_t height, PixelFormat format,
+      std::int32_t stride_bytes = 0);
+
   ImageBuffer(ImageBuffer&& other) noexcept
       : storage_(std::move(other.storage_)),
         width_(other.width_),
@@ -104,15 +114,11 @@ class ImageBuffer {
   [[nodiscard]] std::int32_t stride_bytes() const noexcept { return stride_bytes_; }
   [[nodiscard]] PixelFormat format() const noexcept { return format_; }
   [[nodiscard]] bool empty() const noexcept {
-    return width_ <= 0 || height_ <= 0 || storage_.empty();
+    return width_ <= 0 || height_ <= 0 || storage_ == nullptr;
   }
 
-  [[nodiscard]] std::uint8_t* data() noexcept {
-    return storage_.empty() ? nullptr : storage_.data();
-  }
-  [[nodiscard]] const std::uint8_t* data() const noexcept {
-    return storage_.empty() ? nullptr : storage_.data();
-  }
+  [[nodiscard]] std::uint8_t* data() noexcept { return storage_.get(); }
+  [[nodiscard]] const std::uint8_t* data() const noexcept { return storage_.get(); }
 
   [[nodiscard]] ImageView view() const noexcept;
   [[nodiscard]] ImageView roi(std::int32_t x, std::int32_t y, std::int32_t w,
@@ -122,7 +128,13 @@ class ImageBuffer {
   [[nodiscard]] ImageBuffer clone() const;
 
  private:
-  std::vector<std::uint8_t> storage_{};
+  /// Shared allocation/validation core. `zero_fill=false` leaves the storage
+  /// uninitialized (caller must overwrite before reading).
+  static ImageBuffer allocate(std::int32_t width, std::int32_t height,
+                              PixelFormat format, std::int32_t stride_bytes,
+                              bool zero_fill);
+
+  std::unique_ptr<std::uint8_t[]> storage_{};
   std::int32_t width_{0};
   std::int32_t height_{0};
   std::int32_t stride_bytes_{0};

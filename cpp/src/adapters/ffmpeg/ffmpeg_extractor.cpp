@@ -1,4 +1,5 @@
 #include "sublift/adapters/ffmpeg.hpp"
+#include "sublift/adapters/ffmpeg_stage_timing.hpp"
 
 #include <fcntl.h>
 #include <signal.h>
@@ -30,6 +31,11 @@
 extern "C" char** environ;
 
 namespace sublift::ffmpeg {
+
+SharedStageTimingRegistry& stage_registry() noexcept {
+  static SharedStageTimingRegistry registry;
+  return registry;
+}
 
 namespace {
 
@@ -214,6 +220,14 @@ void FfmpegExtractor::extract(const std::filesystem::path& video_path,
     throw std::runtime_error("无法创建临时 stderr 日志文件");
   }
 
+  // Measurement only (S0): "extract_wait" is accumulated in three
+  // non-overlapping pieces (setup+spawn, per-frame buffer materialization +
+  // pipe wait, teardown). The consumer callback runs between iterations and
+  // is timed on the consumer side ("consume_call"/"consume"), keeping leaves
+  // disjoint.
+  const bool timing = sublift::stage_timing_enabled();
+  auto setup_start = std::chrono::steady_clock::now();
+
   int stdout_pipe[2] = {-1, -1};
   if (pipe(stdout_pipe) != 0) {
     throw std::runtime_error("无法创建 stdout 管道");
@@ -265,23 +279,60 @@ void FfmpegExtractor::extract(const std::filesystem::path& video_path,
 
   if (cancelled_.load(std::memory_order_acquire)) {
     proc_guard.cancel_and_reap();
+    if (timing) {
+      stage_registry().add(
+          "extract_wait",
+          std::chrono::duration<double, std::milli>(
+              std::chrono::steady_clock::now() - setup_start)
+              .count());
+    }
     return;
+  }
+
+  if (timing) {
+    stage_registry().add(
+        "extract_wait",
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - setup_start)
+            .count());
   }
 
   int frame_index = 0;
   bool user_stopped = false;
 
   while (!cancelled_.load(std::memory_order_acquire)) {
-    ImageBuffer frame_img(out_w, out_h, PixelFormat::RGB24);
-    if (!read_exact_bytes(stdout_read_fd.fd, frame_img.data(), frame_bytes, cancelled_)) {
-      break;  // EOF or cancelled
+    std::optional<Frame> frame;
+    {
+      // Measurement only (S0): "frame_fetch" = per-iteration extractor-internal
+      // time (buffer materialization + pipe wait). Ends before the consumer
+      // call so the two sides stay disjoint.
+      StageTimer fetch_timer(stage_registry(), "frame_fetch");
+      std::optional<ImageBuffer> frame_img;
+      {
+        // Nested sub-stage: allocation of the frame buffer (O3 skips the
+        // zero-fill; read_exact_bytes below fully overwrites it before any
+        // read, and a failed read destroys the buffer unread).
+        StageTimer materialize_timer(stage_registry(), "frame_materialize");
+        frame_img.emplace(ImageBuffer::allocate_uninitialized(
+            out_w, out_h, PixelFormat::RGB24));
+      }
+      if (!read_exact_bytes(stdout_read_fd.fd, frame_img->data(), frame_bytes, cancelled_)) {
+        break;  // EOF or cancelled
+      }
+
+      std::int64_t timestamp_ms = static_cast<std::int64_t>(frame_index / fps_ * 1000.0);
+      frame.emplace(timestamp_ms, std::move(*frame_img));
     }
 
-    std::int64_t timestamp_ms = static_cast<std::int64_t>(frame_index / fps_ * 1000.0);
-    Frame frame{timestamp_ms, std::move(frame_img)};
-
     if (consumer) {
-      if (!consumer(std::move(frame))) {
+      // Measurement only (S0): "consume_call" covers the whole consumer
+      // invocation including the destruction of the by-value Frame parameter
+      // (freeing the ~1.9MB frame buffer) that happens inside the
+      // std::function call machinery after the callable returns. The bridge
+      // records its own "consume" sub-stage inside this window; the
+      // difference is the frame-release cost.
+      StageTimer call_timer(stage_registry(), "consume_call");
+      if (!consumer(std::move(*frame))) {
         user_stopped = true;
         break;
       }
@@ -289,25 +340,29 @@ void FfmpegExtractor::extract(const std::filesystem::path& video_path,
     frame_index++;
   }
 
-  if (user_stopped || cancelled_.load(std::memory_order_acquire)) {
-    proc_guard.cancel_and_reap();
-  } else {
-    int status = proc_guard.wait();
-    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-      std::string stderr_content;
-      if (!err_log.path.empty() && std::filesystem::exists(err_log.path)) {
-        std::ifstream ifs(err_log.path, std::ios::binary);
-        if (ifs) {
-          std::stringstream ss;
-          ss << ifs.rdbuf();
-          stderr_content = ss.str();
+  {
+    // Measurement only (S0): teardown (reap/wait + exit-status check).
+    StageTimer teardown_timer(stage_registry(), "extract_wait");
+    if (user_stopped || cancelled_.load(std::memory_order_acquire)) {
+      proc_guard.cancel_and_reap();
+    } else {
+      int status = proc_guard.wait();
+      if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        std::string stderr_content;
+        if (!err_log.path.empty() && std::filesystem::exists(err_log.path)) {
+          std::ifstream ifs(err_log.path, std::ios::binary);
+          if (ifs) {
+            std::stringstream ss;
+            ss << ifs.rdbuf();
+            stderr_content = ss.str();
+          }
         }
+        std::string tail = detail::read_stderr_tail(stderr_content, 2000);
+        std::string detail_msg = tail.empty() ? "" : "：" + tail;
+        throw std::runtime_error("ffmpeg 抽帧失败（退出码 " +
+                                 std::to_string(WEXITSTATUS(status)) + "），path=" +
+                                 video_path.string() + detail_msg);
       }
-      std::string tail = detail::read_stderr_tail(stderr_content, 2000);
-      std::string detail_msg = tail.empty() ? "" : "：" + tail;
-      throw std::runtime_error("ffmpeg 抽帧失败（退出码 " +
-                               std::to_string(WEXITSTATUS(status)) + "），path=" +
-                               video_path.string() + detail_msg);
     }
   }
 }

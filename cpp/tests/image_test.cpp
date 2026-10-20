@@ -114,3 +114,52 @@ TEST_CASE("ImageBuffer rejects width*bpp overflow", "[image]") {
   REQUIRE_THROWS_AS(ImageBuffer(1'000'000'000, 1, PixelFormat::RGB24, 0),
                     std::invalid_argument);
 }
+
+// Phase 16 D02 (O3): the default constructor keeps zero-filling (historical
+// contract); the uninitialized factory is for full-overwrite call sites.
+TEST_CASE("default ImageBuffer is zero-filled; factory is not", "[image]") {
+  const ImageBuffer defaulted(4, 2, PixelFormat::RGB24);
+  const std::size_t nbytes =
+      static_cast<std::size_t>(defaulted.stride_bytes()) * 2;
+  for (std::size_t i = 0; i < nbytes; ++i) {
+    REQUIRE(defaulted.data()[i] == 0);
+  }
+
+  ImageBuffer uninit = ImageBuffer::allocate_uninitialized(
+      4, 2, PixelFormat::RGB24);
+  REQUIRE(uninit.width() == 4);
+  REQUIRE(uninit.height() == 2);
+  REQUIRE(uninit.stride_bytes() == defaulted.stride_bytes());
+  REQUIRE_FALSE(uninit.empty());
+  REQUIRE(uninit.data() != nullptr);
+
+  // Probe (ASan/UBSan): write every byte, then read it back through a view.
+  for (std::size_t i = 0; i < nbytes; ++i) {
+    uninit.data()[i] = static_cast<std::uint8_t>(i * 7);
+  }
+  const ImageView view = uninit.view();
+  for (std::size_t i = 0; i < nbytes; ++i) {
+    REQUIRE(view.data()[i] == static_cast<std::uint8_t>(i * 7));
+  }
+}
+
+TEST_CASE("allocate_uninitialized validates like the default path", "[image]") {
+  REQUIRE_THROWS_AS(ImageBuffer::allocate_uninitialized(-1, 2, PixelFormat::Gray8),
+                    std::invalid_argument);
+  REQUIRE_THROWS_AS(ImageBuffer::allocate_uninitialized(2, 2, PixelFormat::Gray8, 1),
+                    std::invalid_argument);
+  const ImageBuffer empty = ImageBuffer::allocate_uninitialized(0, 0, PixelFormat::Gray8);
+  REQUIRE(empty.empty());
+}
+
+TEST_CASE("clone of uninitialized-then-filled buffer matches source", "[image]") {
+  ImageBuffer src(3, 2, PixelFormat::RGB24);
+  for (std::size_t i = 0; i < 18; ++i) {
+    src.data()[i] = static_cast<std::uint8_t>(i + 1);
+  }
+  const ImageBuffer copy = src.clone();
+  REQUIRE(copy.stride_bytes() == src.stride_bytes());
+  for (std::size_t i = 0; i < 18; ++i) {
+    REQUIRE(copy.data()[i] == src.data()[i]);
+  }
+}

@@ -8,11 +8,36 @@
 #include "sublift/models.hpp"
 #include "sublift/ocr.hpp"
 #include "sublift/ocr_execution.hpp"
+#include "sublift/pipeline/stage_timing.hpp"
 
 namespace sublift {
 
 /// 返回 C++ PaddleOCR 引擎在当前运行时/构建中是否可用
 [[nodiscard]] bool is_paddle_available() noexcept;
+
+/// Process-level stage timing registry for Paddle adapter internals
+/// (det/cls/rec inference + scalar preprocess). Measurement only (Phase 16
+/// D01): inert unless `SUBLIFT_STAGE_TIMING=1`. The Paddle adapter sits
+/// behind the generic `IOcrEngine` port, so its internal stages cannot be
+/// accumulated through a Pipeline-owned registry.
+[[nodiscard]] SharedStageTimingRegistry& paddle_stage_registry() noexcept;
+
+/// Process-level capability-probe cache observability (Phase 16 D03 / O8).
+/// Test and measurement only: lets contract tests assert that a successful
+/// probe is reused (hit) and that a changed bundle fingerprint re-probes
+/// (miss) instead of serving a stale cache entry. Product cost is two relaxed
+/// counter increments per probe; the counters carry no semantics.
+struct PaddleProbeCacheStats {
+  std::uint64_t hits{0};
+  std::uint64_t misses{0};
+  std::uint64_t stores{0};
+};
+
+[[nodiscard]] PaddleProbeCacheStats paddle_probe_cache_stats() noexcept;
+
+/// Clear the capability-probe cache and reset its counters. Test isolation
+/// only; never called from product code.
+void reset_paddle_probe_cache_for_testing() noexcept;
 
 /// 校验执行配置在当前 Paddle 运行时是否可执行（fail-closed）。
 /// CPU 始终可执行；CUDA 在当前构建未启用对应运行库时返回错误信息。

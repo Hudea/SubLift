@@ -1,0 +1,37 @@
+[
+  {
+    "name": "no-conflict",
+    "target_name": "video.srt",
+    "existing_names": [],
+    "policy": "deterministic_rename",
+    "expected": { "status": "saved", "saved_name": "video.srt" }
+  },
+  {
+    "name": "skip",
+    "target_name": "video.srt",
+    "existing_names": ["video.srt"],
+    "policy": "skip",
+    "expected": { "status": "skipped", "saved_name": null }
+  },
+  {
+    "name": "rename-one",
+    "target_name": "video.srt",
+    "existing_names": ["video.srt"],
+    "policy": "deterministic_rename",
+    "expected": { "status": "saved", "saved_name": "video_1.srt" }
+  },
+  {
+    "name": "rename-two",
+    "target_name": "video.srt",
+    "existing_names": ["video.srt", "video_1.srt"],
+    "policy": "deterministic_rename",
+    "expected": { "status": "saved", "saved_name": "video_2.srt" }
+  },
+  {
+    "name": "replace",
+    "target_name": "video.srt",
+    "existing_names": ["video.srt"],
+    "policy": "replace",
+    "expected": { "status": "saved", "saved_name": "video.srt" }
+  }
+]

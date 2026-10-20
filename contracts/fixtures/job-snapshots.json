@@ -1,0 +1,16 @@
+[
+  {
+    "job_id": "job-1",
+    "status": "completed",
+    "config": {
+      "engine": "vision",
+      "sampling": "fast",
+      "confidence": 0.0,
+      "script": "auto",
+      "roi": { "policy": "auto", "box": null }
+    },
+    "entries": [
+      { "start_ms": 1000, "end_ms": 2000, "text": "A", "confidence": 0.9 }
+    ]
+  }
+]

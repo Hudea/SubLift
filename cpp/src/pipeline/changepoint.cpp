@@ -11,7 +11,7 @@ ChangePointDetector::ChangePointDetector(ChangePointConfig config)
 void ChangePointDetector::reset() noexcept {
   state_ = State::Empty;
   anchor_signature_.reset();
-  anchor_crop_.reset();
+  clear_anchor();
   last_signature_.reset();
   consecutive_presence_ = 0;
   consecutive_absence_ = 0;
@@ -22,9 +22,15 @@ void ChangePointDetector::reset() noexcept {
   patrol_counter_ = 0;
 }
 
+void ChangePointDetector::clear_anchor() noexcept {
+  anchor_crop_.reset();
+  anchor_mask_.reset();
+  anchor_mask_config_.reset();
+}
+
 void ChangePointDetector::store_anchor_crop(const ImageView* crop) {
   if (crop == nullptr || crop->empty()) {
-    anchor_crop_.reset();
+    clear_anchor();
     return;
   }
   // Deep copy so the detector owns pixels for later SSIM/patrol.
@@ -40,6 +46,17 @@ void ChangePointDetector::store_anchor_crop(const ImageView* crop) {
               dst);
   }
   anchor_crop_ = std::move(buf);
+  anchor_mask_.reset();
+  anchor_mask_config_.reset();
+
+  // O1: the anchor crop is immutable until the next In/CHANGE, so its
+  // foreground mask can be computed once here instead of on every patrol.
+  // Only worth caching when patrol actually consumes masks.
+  if (config_.enable_ssim_patrol && config_.ssim_patrol_use_mask) {
+    const SignatureConfig patrol_cfg = patrol_signature_config();
+    anchor_mask_ = compute_foreground_mask(anchor_crop_->view(), patrol_cfg);
+    anchor_mask_config_ = patrol_cfg;
+  }
 }
 
 std::optional<StateEvent> ChangePointDetector::process(
@@ -125,7 +142,7 @@ std::optional<StateEvent> ChangePointDetector::handle_disappearance(
     stable_start_ms_.reset();
     change_candidate_ms_.reset();
     anchor_signature_.reset();
-    anchor_crop_.reset();
+    clear_anchor();
     return StateEvent{EventType::Out, end_ms, std::nullopt};
   }
   return std::nullopt;
@@ -201,8 +218,23 @@ std::optional<double> ChangePointDetector::maybe_patrol(
   }
 
   patrol_counter_ = 0;
+  const SignatureConfig patrol_cfg = patrol_signature_config();
+
+  // O1 + O2: reuse the cached anchor mask (computed once when the anchor was
+  // stored) and the reusable SSIM workspace. Falls back to the uncached path
+  // when the cache is absent/stale or the geometry differs - numerically
+  // identical either way (same mask ops, same CV_64F SSIM pipeline).
+  if (config_.ssim_patrol_use_mask && anchor_mask_.has_value() &&
+      anchor_mask_config_ == patrol_cfg &&
+      anchor_mask_->width() == crop->width() &&
+      anchor_mask_->height() == crop->height()) {
+    const ImageBuffer current_mask = compute_foreground_mask(*crop, patrol_cfg);
+    return compute_mask_ssim_reusing(current_mask.view(), anchor_mask_->view(),
+                                     config_.ssim_window_size,
+                                     patrol_workspace_);
+  }
   return compute_foreground_ssim(
-      *crop, anchor_crop_->view(), SignatureConfig{},
+      *crop, anchor_crop_->view(), patrol_cfg,
       config_.ssim_patrol_use_mask, config_.ssim_window_size);
 }
 

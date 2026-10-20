@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -824,6 +825,31 @@ TEST_CASE("SRT Time and Formatting Utilities", "[server][srt]") {
         "Valid text\n\n";
 
     REQUIRE(srt == expected);
+  }
+}
+
+TEST_CASE("Server SRT matches shared contract fixtures", "[server][srt][contract]") {
+  std::ifstream in(SUBLIFT_CONTRACT_SRT);
+  REQUIRE(in.good());
+
+  nlohmann::json cases;
+  in >> cases;
+  REQUIRE(cases.is_array());
+
+  for (const auto& test_case : cases) {
+    std::vector<sublift::SubtitleEntry> entries;
+    for (const auto& item : test_case.at("entries")) {
+      entries.push_back(sublift::SubtitleEntry{
+          .start_ms = item.at("start_ms").get<std::int64_t>(),
+          .end_ms = item.at("end_ms").get<std::int64_t>(),
+          .text = item.at("text").get<std::string>(),
+          .confidence = item.at("confidence").get<double>(),
+      });
+    }
+
+    INFO("fixture: " << test_case.at("name").get<std::string>());
+    REQUIRE(sublift::server::format_entries_to_srt(entries) ==
+            test_case.at("expected").get<std::string>());
   }
 }
 
@@ -2762,6 +2788,64 @@ TEST_CASE("Server SSE 10 Events Resumption and Cursor Greater Than Latest", "[se
     for (int i = 1; i <= 5; ++i) {
       REQUIRE(response_body.find("id: " + std::to_string(i) + "\n") == std::string::npos);
     }
+  }
+
+  SECTION("Long event sequence: bounded history keeps resume window and terminal event (O5)") {
+    sublift::server::JobConfig jcfg{
+        .video_path = (temp_ws.path / "test_long.mp4").string(),
+        .engine = "mock"
+    };
+    auto job = server.job_manager()->create_job(jcfg);
+    REQUIRE(job != nullptr);
+
+    // Push well beyond the replay window (2000), then the terminal event.
+    constexpr int kTotal = 2500;
+    for (int i = 1; i <= kTotal; ++i) {
+      job->event_stream->publish("progress", {{"step", i}, {"pct", i * 0.0004}});
+    }
+    job->event_stream->publish("done", {{"ok", true}, {"total_entries", 0}, {"elapsed_ms", 100}});
+    {
+      std::lock_guard<std::mutex> lk(job->state_mutex);
+      job->status = sublift::server::JobStatus::Completed;
+    }
+
+    // History is bounded but retains the terminal event.
+    auto history = job->event_stream->get_all_history();
+    REQUIRE(history.size() <= 2000);
+    REQUIRE(history.back().event_type == "done");
+    REQUIRE(history.back().seq_id == static_cast<std::uint64_t>(kTotal + 1));
+
+    // A cursor inside the retained window resumes exactly from cursor+1.
+    const std::uint64_t cursor = static_cast<std::uint64_t>(kTotal + 1 - 10);
+    std::string response_body;
+    auto res = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=" +
+                        std::to_string(cursor)).c_str(),
+                       [&](const char* data, size_t data_length) {
+                         response_body.append(data, data_length);
+                         return true;
+                       });
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 200);
+    REQUIRE(response_body.find("id: " + std::to_string(cursor) + "\n") == std::string::npos);
+    for (int i = 1; i <= 10; ++i) {
+      const std::uint64_t seq = cursor + static_cast<std::uint64_t>(i);
+      REQUIRE(response_body.find("id: " + std::to_string(seq) + "\n") != std::string::npos);
+    }
+
+    // A cursor older than the window (evicted range) resumes from the front
+    // of the retained window and still delivers the terminal event - the
+    // client dedupes by seq and the final job state stays authoritative.
+    std::string evicted_body;
+    auto res2 = cli.Get(("/api/jobs/" + job->job_id + "/events?cursor=1").c_str(),
+                        [&](const char* data, size_t data_length) {
+                          evicted_body.append(data, data_length);
+                          return true;
+                        });
+    REQUIRE(res2 != nullptr);
+    REQUIRE(res2->status == 200);
+    REQUIRE(evicted_body.find("id: 1\n") == std::string::npos);  // evicted
+    REQUIRE(evicted_body.find("event: done") != std::string::npos);
+    REQUIRE(evicted_body.find("\"seq\":" + std::to_string(kTotal + 1)) != std::string::npos);
   }
 
   server.stop();

@@ -9,6 +9,7 @@
 #include "sublift/image.hpp"
 #include "sublift/mock_ocr.hpp"
 #include "sublift/pipeline.hpp"
+#include "sublift/pipeline/stage_timing.hpp"
 
 #include "pipeline_test_helpers.hpp"
 
@@ -21,6 +22,28 @@ TEST_CASE("feed returns nullopt when detector has no region", "[pipeline]") {
 
   REQUIRE_FALSE(pipe.feed(empty_frame(0)).has_value());
   REQUIRE(pipe.processed_count() == 1);
+}
+
+// Phase 16 D01 (S0): stage timing must be inert unless SUBLIFT_STAGE_TIMING=1.
+// The test process does not opt in, so feeding frames must leave the registry
+// empty (no cost, no behavior change on the product path).
+TEST_CASE("stage timing registry stays empty when not enabled", "[pipeline][stage_timing]") {
+  auto det = full_detector();
+  sublift::MockOcrEngine ocr("x", 1.0);
+  sublift::Pipeline pipe(det, ocr, base_cfg());
+
+  (void)pipe.feed(empty_frame(0));
+  (void)pipe.feed(subA(200));
+  (void)pipe.feed(subA(400));
+  auto ev = pipe.feed(empty_frame(600));
+  if (ev.has_value()) {
+    (void)pipe.ocr_segment(*ev);
+  }
+  (void)pipe.finalize();
+
+  if (!sublift::stage_timing_enabled()) {
+    REQUIRE(pipe.stage_timing().empty());
+  }
 }
 
 TEST_CASE("single IN opens segment, returns nullopt", "[pipeline]") {

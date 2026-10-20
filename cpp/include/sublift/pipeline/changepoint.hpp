@@ -69,11 +69,31 @@ class ChangePointDetector {
   [[nodiscard]] bool is_new_content_stable(const FrameSignature& signature) const;
 
   void store_anchor_crop(const ImageView* crop);
+  void clear_anchor() noexcept;
+
+  /// Effective SignatureConfig for patrol SSIM (O1 cache key).
+  ///
+  /// B7 (docs/design/performance-acceleration.md §2.1): patrol uses the
+  /// default SignatureConfig rather than `config_.signature`. Centralized so
+  /// the O1 anchor-mask cache key always tracks the actually-effective
+  /// parameters: if B7 is ever fixed, the config comparison invalidates the
+  /// cache naturally instead of serving a stale mask.
+  [[nodiscard]] SignatureConfig patrol_signature_config() const noexcept {
+    return SignatureConfig{};
+  }
 
   ChangePointConfig config_{};
   State state_{State::Empty};
   std::optional<FrameSignature> anchor_signature_{};
   std::optional<ImageBuffer> anchor_crop_{};
+  /// Cached foreground mask of the anchor crop (O1). Same lifecycle as
+  /// anchor_crop_ (replaced on In/CHANGE, cleared on Out/reset);
+  /// anchor_mask_config_ records the parameters that produced it.
+  std::optional<ImageBuffer> anchor_mask_{};
+  std::optional<SignatureConfig> anchor_mask_config_{};
+  /// Reusable SSIM workspace for the patrol path (O2). Inert allocation-wise
+  /// until the first patrol; bit-identical results.
+  SsimWorkspace patrol_workspace_{};
   std::optional<FrameSignature> last_signature_{};
   int consecutive_presence_{0};
   int consecutive_absence_{0};

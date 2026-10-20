@@ -1,0 +1,23 @@
+[
+  {
+    "name": "basic-unsorted",
+    "entries": [
+      { "start_ms": 2000, "end_ms": 3000, "text": "B", "confidence": 0.9 },
+      { "start_ms": 1000, "end_ms": 1500, "text": "A", "confidence": 0.8 }
+    ],
+    "expected": "1\n00:00:01,000 --> 00:00:01,500\nA\n\n2\n00:00:02,000 --> 00:00:03,000\nB\n\n"
+  },
+  {
+    "name": "skip-blank-and-clamp",
+    "entries": [
+      { "start_ms": -100, "end_ms": 500, "text": "   ", "confidence": 0.0 },
+      { "start_ms": 1000, "end_ms": 900, "text": "X", "confidence": 0.5 }
+    ],
+    "expected": "1\n00:00:01,000 --> 00:00:01,000\nX\n\n"
+  },
+  {
+    "name": "empty",
+    "entries": [],
+    "expected": ""
+  }
+]

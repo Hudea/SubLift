@@ -18,6 +18,42 @@
 
 ---
 
+### Native P0 数值等价优化没有端到端收益（det 推理占 84%）
+
+- **日期**：2026-10-20
+- **状态**：已归档为负向性能证据；Phase 16 第一批（P0）终止，不作为加速成果继续推进。
+  2026-10-20 Phase 16 以 `done` 收口（D04 记录负向结论），P1/P2 未启动。
+- **现象**：按 `docs/design/performance-acceleration.md` 第一批实施 S0 归因基线 + O1–O8
+  共 8 项"数值完全等价"优化（约 1200 行改动，golden hash 与三来源 SRT SHA 全部不变）。
+  固定负载下 core_wall 从 122,114.0ms 变为 122,515.0ms（+0.33%，噪声内）；真实视频端到端
+  wall 中位数 137.15s → 136.21s（−0.7%，噪声内）。分阶段收益只出现在 `frame_materialize`
+  （96.6 → 0.5ms）与 `changepoint`（3,577.3 → 3,168.2ms），合计约 core_wall 的 0.4%。
+- **排查路径**：
+  1. 先建 C++ Native + Paddle 归因基线（S0），而不是沿用 Python/Vision 时代的 51.65%，
+     避免用旧结构估算新运行时。
+  2. 读数：`ocr` 占 core_wall 90.15%，其中 `paddle.det_infer` 单项 84.35%（占 ocr 的
+     93.6%）；`extract_wait` 仅 0.2ms（解码在 ffmpeg 子进程里与消费者并行）；
+     `frame_materialize` 0.08%、`paddle.*_preprocess` 合计约 1.0%、`color_convert` 0.39%、
+     `changepoint` 2.93%。
+  3. 对照设计文档的预估（changepoint 11.95%、extract_wait 15.03%、大图搬运是主要矛盾）：
+     那些数字来自 Python/Vision 结构与 Debug 期测量，Release 实测相差 1–2 个数量级。
+  4. 落地 O1–O8 后复测：非 OCR 项已全部接近 0，剩余改动空间的天花板本就 <1%；而 OCR 中
+     最贵的 det 推理没有被任何 P0 措施触及。
+  5. 等价性硬门同时复核（真实视频 6 次逐字节相同、ROI 路径 348 行 SRT 相同），确认改动
+     安全但收益不成立——问题不在实现，而在优化对象。
+- **根本原因**：端到端成本由单一阶段 det 推理决定（84.35%），P0 全部落在剩余 <16% 的
+  编排、搬运与事件/调度开销上；C++ Native 已把解码移入 ffmpeg 子进程并行，Python 时代的
+  抽帧与整帧搬运瓶颈不存在。**任何不改变 det 推理成本或输入几何的优化，端到端上限 <1%。**
+- **解决方案（决策）**：记录为负向证据，不再以"数值等价工程优化"立项做加速批次。后续加速
+  只剩三条可验证方向：① 减少 det 输入面积/次数（选区 ROI、几何裁剪）；② 推理层
+  （引擎跨 job 缓存与 warmup、ORT 线程/arena 重评、GPU 后端）；③ 重冻基线（改变数值通路，
+  必须单独 ADR，不得作为优化附带品）。P1 项立项前须先给出"能移动 det 占比"的机制说明。
+- **相关文件**：`benchmark/baselines/native-performance-attribution-baseline.md`、
+  `docs/design/performance-acceleration.md`、`docs/phases/phase16.json`、
+  `docs/phases/phase41.json`（同为负向性能证据的归档先例）。
+
+---
+
 ### WorkspaceManager 已配置但媒体路由未统一使用授权根
 - **日期**：2026-08-23
 - **状态**：未解决；由 12510/12511 收口。

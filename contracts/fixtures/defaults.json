@@ -1,0 +1,18 @@
+{
+  "canonical": {
+    "sampling_fps": {
+      "fast": 5,
+      "balanced": 8,
+      "fine": 12
+    },
+    "confidence": 0.0,
+    "script": "auto",
+    "roi": {
+      "policy": "auto",
+      "box": null
+    },
+    "engine_preference": ["vision", "paddle"],
+    "explicit_only_engines": ["mock"]
+  },
+  "notes": "Engine availability is a host capability. The preference order only applies when multiple engines are available; mock is never auto-selected. confidence 0.0 means no high-confidence filter, not missing input."
+}

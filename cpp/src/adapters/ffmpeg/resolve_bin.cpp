@@ -17,25 +17,37 @@ bool available() noexcept {
 }
 
 std::string resolve_ffmpeg_bin() {
-  models::ResourceLocator locator;
-  auto res = locator.locate_ffmpeg_executable("");
-  if (!res.found) {
-    throw std::runtime_error(
-        "未找到 ffmpeg，请安装并确保在 PATH 中，或设置 SUBLIFT_FFMPEG_PATH（" +
-        res.error_msg + "）");
-  }
-  return res.value.string();
+  // Process-level cache (O7): the resolution scans PATH, and extract() plus
+  // the single-frame APIs used to repeat it per call. PATH is treated as
+  // immutable within a process lifetime (documented); SUBLIFT_FFMPEG_PATH
+  // overrides are resolved on the first call like any other candidate.
+  // A failed resolution is not cached (the static initializer re-runs).
+  static const std::string cached = [] {
+    models::ResourceLocator locator;
+    auto res = locator.locate_ffmpeg_executable("");
+    if (!res.found) {
+      throw std::runtime_error(
+          "未找到 ffmpeg，请安装并确保在 PATH 中，或设置 SUBLIFT_FFMPEG_PATH（" +
+          res.error_msg + "）");
+    }
+    return res.value.string();
+  }();
+  return cached;
 }
 
 std::string resolve_ffprobe_bin() {
-  models::ResourceLocator locator;
-  auto res = locator.locate_ffprobe_executable("");
-  if (!res.found) {
-    throw std::runtime_error(
-        "未找到 ffprobe，请安装并确保在 PATH 中，或设置 SUBLIFT_FFPROBE_PATH（" +
-        res.error_msg + "）");
-  }
-  return res.value.string();
+  // See resolve_ffmpeg_bin for the caching contract (O7).
+  static const std::string cached = [] {
+    models::ResourceLocator locator;
+    auto res = locator.locate_ffprobe_executable("");
+    if (!res.found) {
+      throw std::runtime_error(
+          "未找到 ffprobe，请安装并确保在 PATH 中，或设置 SUBLIFT_FFPROBE_PATH（" +
+          res.error_msg + "）");
+    }
+    return res.value.string();
+  }();
+  return cached;
 }
 
 }  // namespace sublift::ffmpeg

@@ -76,19 +76,27 @@ std::string format_srt_timestamp(std::int64_t ms) {
 std::string format_entries_to_srt(const std::vector<sublift::SubtitleEntry>& entries) {
   if (entries.empty()) return "";
 
+  std::vector<const sublift::SubtitleEntry*> ordered;
+  ordered.reserve(entries.size());
+  for (const auto& entry : entries) ordered.push_back(&entry);
+  std::stable_sort(ordered.begin(), ordered.end(), [](const auto* lhs, const auto* rhs) {
+    if (lhs->start_ms != rhs->start_ms) return lhs->start_ms < rhs->start_ms;
+    return lhs->end_ms < rhs->end_ms;
+  });
+
   std::ostringstream oss;
   std::size_t idx = 1;
 
-  for (const auto& e : entries) {
-    if (is_blank_text(e.text)) {
+  for (const auto* entry : ordered) {
+    if (is_blank_text(entry->text)) {
       continue;
     }
-    std::int64_t start = std::max<std::int64_t>(0, e.start_ms);
-    std::int64_t end = std::max<std::int64_t>(start, e.end_ms);
+    const std::int64_t start = std::max<std::int64_t>(0, entry->start_ms);
+    const std::int64_t end = std::max<std::int64_t>(start, entry->end_ms);
 
     oss << idx++ << "\n";
     oss << format_srt_timestamp(start) << " --> " << format_srt_timestamp(end) << "\n";
-    oss << e.text << "\n\n";
+    oss << entry->text << "\n\n";
   }
 
   return oss.str();
@@ -1366,7 +1374,7 @@ void register_routes(httplib::Server& server,
               *last_seq_ptr, events, job->is_terminal(), std::chrono::milliseconds(2000));
 
           if (!events.empty()) {
-            for (const auto& ev : events) {
+            for (auto& ev : events) {
               std::string sse_chunk = ev.to_sse_string(job->job_id);
               if (!sink.write(sse_chunk.data(), sse_chunk.size())) {
                 return false;

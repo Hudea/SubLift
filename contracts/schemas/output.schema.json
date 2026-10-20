@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/contracts/output.schema.json",
+  "title": "OutputPlan",
+  "description": "Canonical output plan. The conflict policy and resulting action are part of the contract; actual disk writes remain a host responsibility.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["target_path", "policy", "conflict"],
+  "properties": {
+    "target_path": { "type": "string", "minLength": 1 },
+    "policy": {
+      "enum": ["skip", "deterministic_rename", "replace"]
+    },
+    "conflict": {
+      "enum": ["none", "skip", "rename", "replace"]
+    }
+  }
+}
