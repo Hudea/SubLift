@@ -50,7 +50,7 @@
 | E2 | manifest 三源 736 parity 重放；确认历史 Oracle 可复现 | todo（需先分离合并层） | 三源 SRT sha256 对照 |
 | E3 | 路径覆盖：bottom-crop / full-frame / ROI / 竖屏 / 超宽 / 真实低分辨率 | todo | 每路径 A/B + 质量分数 |
 | E4 | 未参与调参素材与 band-controlled 带高矩阵上的平台复核 | in-progress（30% 带已测；带高矩阵待建） | 扫描表 + 策略建议 |
-| E5 | 策略选择：0.6MP / 0.7MP / short-320 / C | in-progress（数据支持 C，待 band-controlled 验证） | D01 决策记录 |
+| E5 | 策略选择：0.6MP 面积下限；短边 320/352 条件项 | done（band-controlled 支持 0.6；条件项待真实素材） | D01 决策记录 |
 
 策略探索的 30% 带、带高与 4K 数据见
 [`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md)。
@@ -124,9 +124,9 @@ PY
   usable recall 不下降 >2pp；timing F1/precision 不下降 >1pp；noise/empty 不增加；
   split/FP 增量必须有解释。
 - E4：在未参与调参的素材上，0.4–0.8MP 至少 3 个点落在同一质量平台；否则不做默认切换。
-- E5：C 在 30% 带与 0.6 等价（1080p native），在 25% 带不劣于 0.7；若 720p precision
-  仍低于 736 超过 1pp，把短边下限提到 352 再测。
-- E5：策略选择必须写明 1080p native 与低分辨率上采样的取舍，并有数据支撑。
+- **E5**：band-controlled 验证支持 0.6MP 面积下限（30% 带 1080p/720p 全对）；短边
+  320/352 仅作条件项，需在真实 720p/22.5–25% 素材复现问题时再评估。
+- **策略记录**：必须写明 1080p native 与低分辨率上采样的取舍，并有数据支撑。
 
 ## 7. 风险与边界
 

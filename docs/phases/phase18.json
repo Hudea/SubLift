@@ -2,11 +2,11 @@
   "schema_version": 2,
   "project": "SubLift",
   "phase": "Phase 18 - Det 输入几何契约与默认切换",
-  "goal": "在不牺牲字幕质量的前提下，把 det 输入几何从固定的 RapidOCR min-side 736 切换为可配置的双下限策略（面积 0.6MP + 短边 320），并把该维度的验收从逐字节 parity 迁移到质量门。完成后，默认路径在固定 1080p bottom-crop 负载上获得约 3 倍端到端加速，文本 CER/exact 不劣于现状，质量门、覆盖矩阵与一键回滚均可复核。",
+  "goal": "在不牺牲字幕质量的前提下，把 det 输入几何从固定的 RapidOCR min-side 736 切换为可配置的 0.6MP 面积下限策略，并把该维度的验收从逐字节 parity 迁移到质量门。完成后，默认路径在固定 1080p bottom-crop 负载上获得约 3 倍端到端加速，文本 CER/exact 不劣于现状，质量门、覆盖矩阵与一键回滚均可复核。",
   "scope": [
-    "D01：批准 ADR-0042，冻结 det 几何策略（C：max(0.6MP, 短边 320)）与质量门阈值；把 SUBLIFT_DET_PIXEL_BUDGET 诊断开关收敛为可校验配置；本阶段不改变产品默认输出。",
+    "D01：批准 ADR-0042，冻结 det 几何策略（0.6MP 面积下限；短边 320/352 仅作条件项）与质量门阈值；把 SUBLIFT_DET_PIXEL_BUDGET 诊断开关收敛为可校验配置；本阶段不改变产品默认输出。",
     "D02：用 python-product-last 历史 Oracle 重放 736 基线；把 check_paddle_gate.py 的 det 维度从逐字节相等改为质量阈值；重冻 paddle 质量基线并保留旧基线归档。",
-    "D03：建立 bottom-crop / full-frame / ROI / 竖屏 / 超宽 / 真实低分辨率的覆盖矩阵；跑 paddle_quality 全门；在未参与调参的素材上复核 C（320）与 C'（352）的取舍。",
+    "D03：建立 bottom-crop / full-frame / ROI / 竖屏 / 超宽 / 真实低分辨率的覆盖矩阵；跑 paddle_quality 全门；复核 0.6 与左边界裁切，必要时评估短边条件项。",
     "D04：切换默认几何，完成固定负载 A/B 与回滚演练，同步 progress.md 与 phases.json，按流程推进 ready-for-merge 与 done。"
   ],
   "non_goals": [
@@ -21,10 +21,10 @@
     {
       "id": "D01",
       "name": "Det 几何契约 ADR 与配置面",
-      "outcome": "ADR-0042 获批并记录；det 几何策略 C 与质量门阈值冻结；诊断 env 收敛为可校验配置；产品默认仍为 736，本 Deliverable 不改变输出。",
+      "outcome": "ADR-0042 获批并记录；det 几何策略（0.6MP 面积下限）与质量门阈值冻结；诊断 env 收敛为可校验配置；产品默认仍为 736，本 Deliverable 不改变输出。",
       "acceptance": [
         "ADR-0042 写入 docs/DECISIONS.md，明确退出 parity 的维度（det 几何）与保留 parity 的维度（SRT 格式/时间码/编码、非 det 语义、模型与 ORT 指纹）。",
-        "几何策略采用 C：max(0.6MP 面积下限, 短边 320 下限)，只放大不缩小，32 对齐；40%+/full-frame 不参与默认决策；记录 720p/22.5–25% 的 320 vs 352 回退规则。",
+        "几何策略采用 0.6MP 面积下限：面积不足 0.6MP 才放大，原生面积已 ≥0.6MP 时不缩放，只放大不缩小，32 对齐；短边 320/352 仅作条件项，不进入默认；40%+/full-frame 不参与默认决策。",
         "配置项可从 CLI/config 读取并覆盖；非法或非正值 fail-closed 或回退默认，不再依赖未校验的 env；SUBLIFT_DET_PIXEL_BUDGET 降级为诊断别名或移除。",
         "默认值保持 736；现有 CTest 与默认路径 SRT sha256（56b1b08a…）不变。"
       ],
@@ -64,7 +64,7 @@
       "acceptance": [
         "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带与真实低分辨率源（非下采样合成），每类至少 1 个素材。",
         "paddle_quality 全门通过：CER macro/micro、exact、usable recall、timing F1/precision、noise/empty、split/FP 均记录且满足 D01/D02 冻结的阈值。",
-        "在未参与调参的素材上比较 C（短边 320）与 C'（短边 352）在 720p/22.5–25% 带的 CER/exact/timing；若 C 的 precision 相对 736 掉超过 1pp，采用 C'。",
+        "在真实 720p 与 22.5–25% 素材上复核 0.6 的左边界裁切与 timing；若 precision 相对 736 掉超过 1pp，先查内容/边界 guard，再评估短边 320/352 条件项。",
         "用 Python/RapidOCR 在同一 crop、同一 736 参数下做 det box 级对照，复现框破碎，排除 C++ DB 后处理移植偏差；不得用受合并层影响的整段 SRT 代替。"
       ],
       "areas": [

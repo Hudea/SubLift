@@ -1,6 +1,7 @@
 # ADR-0042（草案）Det 输入几何：从逐字节 parity 转为质量门
 
-> **状态**：提议（proposal），2026-10-21；2026-10-22 采纳工作决策 C，未批准。批准后并入
+> **状态**：提议（proposal），2026-10-21；2026-10-22 按 band-controlled 验证简化为
+> 0.6MP 面积下限，未批准。批准后并入
 > [`docs/DECISIONS.md`](../DECISIONS.md) 作为 ADR-0042。
 > **证据**：[`det-input-geometry.md`](det-input-geometry.md)、
 > [`det-pixel-budget-delivery.md`](det-pixel-budget-delivery.md)。
@@ -29,9 +30,9 @@ Rec batch=1 等会改变 Latin 输出的微优化（ADR-0028）。但它是一�
   mixed_multiline 55.12% → 7.50%），exact 全部上升；但 1080p/720p split 增加
   （1→4、0→3），720p/480p timing precision 各降约 1pp，latin precision 39.1% 仍低。
 - 2026-10-22 策略探索：30% 带上 0.6MP 的 manifest 聚合 precision 87.0%、F1 87.4%，
-  优于 0.7MP 的 81.0%、84.3%；25% 带上短边 320 同时改善 CER 与 timing；720p 是 0.6 的
-  反例（precision 89.4% vs 95.1%）。见
-  [`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md)。
+  优于 0.7MP 的 81.0%、84.3%；band-controlled 1080p/720p 验证中 0.6 在 30% 带 CER
+  均为 0.00%，0.7 在 720p 30% 反而切左前缀；短边 320 未解决 0.225–0.25 的左边界裁切。
+  见 [`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md)。
 
 切换默认值会改变每一条 det 框与 SRT，因此 `source_output_sha256_exact` **必然失败**。
 这不是回归，而是"有意改变输出"。
@@ -60,23 +61,24 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
    引入的字幕合并策略已属于质量治理维度，二者在 D02 共用或分别建立基线。
 2. **保留 parity 的维度**：SRT 文本格式/时间码/编码、非 det 的配置与状态语义、模型与
    ORT 二进制指纹、错误与 fail-closed 行为。这些维度仍要求逐字节或逐元素一致。
-3. **几何策略采用双下限（工作决策 C）**：
+3. **几何策略采用 0.6MP 面积下限**：
 
    ```text
-   r           = max(w, h) / min(w, h)
-   target_area = max(0.6MP, 320^2 × r)
-   ratio       = max(1, sqrt(target_area / (w × h)))
+   target_area = max(0.6MP, native_area)
+   ratio       = max(1, sqrt(target_area / native_area))
    output      = 32 倍数对齐(w × ratio, h × ratio)
    ```
 
-   短边不足 320 才放大，面积不足 0.6MP 才放大，两者取更大的目标；永不缩小。
+   面积不足 0.6MP 才放大；原生面积已 ≥0.6MP 时不做策略性缩放；永不缩小。
    - 1080p 30% → native 1920×320（0.61MP）；720p/480p 30% → 1888×320（0.60MP）；
-     25% → 2272×320（0.73MP）；22.5% → 2528×320（0.81MP）；≤20% 由 global padding
-     定在 1920×480（0.92MP）。
+     ≤20% 由 global padding 定在 1920×480（0.92MP）。
    - 默认 bottom-crop 带高 ≤30%（`region_bottom_ratio=0.3`）；40%+/full-frame 只属于
      ROI/全帧路径，不参与默认决策。
-   - 回退规则：若 720p/低分辨率 30% 带的 timing precision 相对 736 掉超过 1pp，短边下限
-     提到 352（C'），但短边 ≥320 的源保持 native；该回退由 D03 数据确认。
+   - **条件项**：band-controlled 验证显示 0.6 在 30% 带 1080p/720p 全对；短边 320/352
+     没有解决左边界裁切，不进入默认。只有在真实 720p / 22.5–25% 素材上复现 precision
+     或左边界问题时，才评估短边条件项。
+   - **残余**：左边界拉丁前缀裁切是独立问题，需水平 margin/边界 guard 或真实素材复核，
+     不应靠继续加大面积。
 4. **质量门**（替代 det 维度的字节相等，具体阈值在 D02 冻结）：
    - CER macro/micro 不得比冻结基线差超过 1pp；
    - exact 不得下降；
@@ -122,7 +124,8 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
 
 ## 6. 未决问题
 
-- 短边下限取 320（C）还是 352（C'）；由 720p 与 22.5–25% 带的 D03 证据决定。
+- 短边条件项（320/352）是否需要在真实 720p / 22.5–25% 素材上启用；默认不启用。
+- 左边界拉丁前缀裁切是否需要水平 margin/边界 guard。
 - 合并策略（`2fe2f91`）与 det 几何共用一套质量基线，还是分别独立重冻？
 - full-frame、ROI、竖屏、超宽条带的几何是否需要单独策略。
 - timing precision 的阈值是否按素材/时长加权，避免小样本主导。
