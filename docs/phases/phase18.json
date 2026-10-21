@@ -41,12 +41,12 @@
     {
       "id": "D02",
       "name": "质量门重放与基线重冻",
-      "outcome": "历史 Python Oracle 可在同一负载上重放 736 基线；paddle 质量门把 det 维度改为质量阈值；新基线可复现并被 gate 消费。",
+      "outcome": "历史 Python Oracle 可在合并层不介入的素材上重放 736；paddle 质量门把 det 几何与字幕合并层改为可解释的质量阈值；新基线可复现并被 gate 消费。",
       "acceptance": [
-        "用 python-product-last 历史 worktree 重放 736 固定负载，SRT sha256 与 56b1b08a… 一致；记录命令、环境与模型指纹。",
-        "check_paddle_gate.py 对 det 维度不再要求 source_output_sha256_exact，改为 CER/exact/usable/timing F1/precision/noise/empty 阈值；非 det 维度保留 parity 断言。",
-        "重冻 paddle_quality_baseline.v1.json 与受影响 benchmark baseline，记录 oracle_commit、模型/ORT 指纹、新 hash 与阈值来源。",
-        "gate 失败时输出 per-source 差异与可读原因；旧基线归档保留，不删除历史 evidence。"
+        "用 python-product-last 历史 worktree 在合并层不介入的素材上重放 736，归一化文本与 C++ 736 一致；记录命令、依赖版本、模型指纹与偏离原因。",
+        "记录并解释冻结 Oracle 基线（544426e）与 C++ 合并层（2fe2f91）的既有偏离；确认该偏离属于有意质量变更，并纳入新基线或分层定义。",
+        "check_paddle_gate.py 对 det 几何与合并层分别定义质量门（CER/exact/usable/timing F1/precision/noise/empty）；不再要求受这两层影响的整段 SRT 逐字节相等。",
+        "重冻 paddle_quality_baseline.v1.json 与受影响 benchmark baseline，记录 oracle_commit、合并层 commit、模型/ORT 指纹、新 hash 与阈值来源；旧基线归档保留。"
       ],
       "areas": [
         "scripts/parity",
@@ -65,7 +65,7 @@
         "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带与真实低分辨率源（非下采样合成），每类至少 1 个素材。",
         "paddle_quality 全门通过：CER macro/micro、exact、usable recall、timing F1/precision、noise/empty、split/FP 均记录且满足 D01/D02 冻结的阈值。",
         "在未参与 0.7MP 调参的素材上确认 0.4–0.8MP 平台；若平台不成立，回到 D01 重选策略。",
-        "用 Python/RapidOCR 在同一 crop、同一 736 参数下复现 det 框破碎，排除 C++ DB 后处理移植偏差。"
+        "用 Python/RapidOCR 在同一 crop、同一 736 参数下做 det box 级对照，复现框破碎，排除 C++ DB 后处理移植偏差；不得用受合并层影响的整段 SRT 代替。"
       ],
       "areas": [
         "benchmark/configs",
