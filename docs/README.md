@@ -34,6 +34,7 @@
 | [design/det-pixel-budget-delivery.md](design/det-pixel-budget-delivery.md) | Det 像素预算交付与独立复核 | current |
 | [design/adr-det-geometry-contract.md](design/adr-det-geometry-contract.md) | ADR-0042 草案：det 几何退出逐字节 parity | proposal |
 | [design/det-geometry-evidence-plan.md](design/det-geometry-evidence-plan.md) | Phase 18 D03 切换前证据计划 | proposal |
+| [design/det-geometry-policy-exploration.md](design/det-geometry-policy-exploration.md) | Det 几何策略探索（0.6/0.7/short-320、2K/4K、带高） | current |
 | [design/gpu-execution.md](design/gpu-execution.md) | GPU 执行后端提案（未实现） | proposal |
 | [design/roi-data-path.md](design/roi-data-path.md) | Phase 4 ROI 数据通路 | historical |
 | [design/path-mode-overlap.md](design/path-mode-overlap.md) | Phase 4.1 未采纳实验 | historical |

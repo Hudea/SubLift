@@ -1,6 +1,6 @@
 # ADR-0042（草案）Det 输入几何：从逐字节 parity 转为质量门
 
-> **状态**：提议（proposal），2026-10-21，未批准。批准后并入
+> **状态**：提议（proposal），2026-10-21；2026-10-22 采纳工作决策 C，未批准。批准后并入
 > [`docs/DECISIONS.md`](../DECISIONS.md) 作为 ADR-0042。
 > **证据**：[`det-input-geometry.md`](det-input-geometry.md)、
 > [`det-pixel-budget-delivery.md`](det-pixel-budget-delivery.md)。
@@ -28,6 +28,10 @@ Rec batch=1 等会改变 Latin 输出的微优化（ADR-0028）。但它是一�
 - 质量（官方 one-to-one）：5 个素材组合 CER macro 全部下降（1080p 17.27% → 3.67%，
   mixed_multiline 55.12% → 7.50%），exact 全部上升；但 1080p/720p split 增加
   （1→4、0→3），720p/480p timing precision 各降约 1pp，latin precision 39.1% 仍低。
+- 2026-10-22 策略探索：30% 带上 0.6MP 的 manifest 聚合 precision 87.0%、F1 87.4%，
+  优于 0.7MP 的 81.0%、84.3%；25% 带上短边 320 同时改善 CER 与 timing；720p 是 0.6 的
+  反例（precision 89.4% vs 95.1%）。见
+  [`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md)。
 
 切换默认值会改变每一条 det 框与 SRT，因此 `source_output_sha256_exact` **必然失败**。
 这不是回归，而是"有意改变输出"。
@@ -56,11 +60,23 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
    引入的字幕合并策略已属于质量治理维度，二者在 D02 共用或分别建立基线。
 2. **保留 parity 的维度**：SRT 文本格式/时间码/编码、非 det 的配置与状态语义、模型与
    ORT 二进制指纹、错误与 fail-closed 行为。这些维度仍要求逐字节或逐元素一致。
-3. **几何策略**采用"目标面积"而非固定短边：
-   - 候选 A：固定 0.7MP（实验已验证）；
-   - 候选 B：`clamp(native_area, 0.6MP, 1.0MP)`，即仅当原生面积不足下限时上采样、
-     不超过上限（1080p 上等价于 native，低分辨率才放大）。
-   由 Phase 18 D01 在覆盖矩阵证据后二选一；默认值切换在 D04 执行。
+3. **几何策略采用双下限（工作决策 C）**：
+
+   ```text
+   r           = max(w, h) / min(w, h)
+   target_area = max(0.6MP, 320^2 × r)
+   ratio       = max(1, sqrt(target_area / (w × h)))
+   output      = 32 倍数对齐(w × ratio, h × ratio)
+   ```
+
+   短边不足 320 才放大，面积不足 0.6MP 才放大，两者取更大的目标；永不缩小。
+   - 1080p 30% → native 1920×320（0.61MP）；720p/480p 30% → 1888×320（0.60MP）；
+     25% → 2272×320（0.73MP）；22.5% → 2528×320（0.81MP）；≤20% 由 global padding
+     定在 1920×480（0.92MP）。
+   - 默认 bottom-crop 带高 ≤30%（`region_bottom_ratio=0.3`）；40%+/full-frame 只属于
+     ROI/全帧路径，不参与默认决策。
+   - 回退规则：若 720p/低分辨率 30% 带的 timing precision 相对 736 掉超过 1pp，短边下限
+     提到 352（C'），但短边 ≥320 的源保持 native；该回退由 D03 数据确认。
 4. **质量门**（替代 det 维度的字节相等，具体阈值在 D02 冻结）：
    - CER macro/micro 不得比冻结基线差超过 1pp；
    - exact 不得下降；
@@ -106,7 +122,7 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
 
 ## 6. 未决问题
 
-- 策略选 A 还是 B；若选 B，下限/上限的具体值。
+- 短边下限取 320（C）还是 352（C'）；由 720p 与 22.5–25% 带的 D03 证据决定。
 - 合并策略（`2fe2f91`）与 det 几何共用一套质量基线，还是分别独立重冻？
 - full-frame、ROI、竖屏、超宽条带的几何是否需要单独策略。
 - timing precision 的阈值是否按素材/时长加权，避免小样本主导。

@@ -50,6 +50,20 @@ static const std::array<int, 256> kBase64Table = [] {
   return table;
 }();
 
+// Diagnostic experiment override for the fixed bottom-crop ratio. Default
+// behavior (0.3) is unchanged unless the env is set; not a user-facing
+// setting. Used to measure det geometry across subtitle-band heights.
+double region_bottom_ratio_from_env(double fallback) {
+  if (const char* raw = std::getenv("SUBLIFT_REGION_BOTTOM_RATIO")) {
+    char* end = nullptr;
+    const double value = std::strtod(raw, &end);
+    if (end != raw && value > 0.0 && value <= 1.0) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
 void emit_perf_stats(const sublift::Pipeline& pipeline) {
   const char* enabled = std::getenv("SUBLIFT_PADDLE_PERF_DIAGNOSTICS");
   if (enabled == nullptr || std::string_view(enabled) != "1") {
@@ -431,6 +445,7 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
   // throw (e.g. vision construct failure) cannot leave sticky is_job_running_.
   try {
     sublift::Config cfg;
+    cfg.region_bottom_ratio = region_bottom_ratio_from_env(cfg.region_bottom_ratio);
     cfg.confidence_threshold = msg.confidence_threshold;
     if (msg.enable_ssim_patrol.has_value()) {
       cfg.change_point.enable_ssim_patrol = *msg.enable_ssim_patrol;
@@ -673,6 +688,7 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       sublift::ffmpeg::stage_registry().clear();
     }
     sublift::Config cfg;
+    cfg.region_bottom_ratio = region_bottom_ratio_from_env(cfg.region_bottom_ratio);
     cfg.confidence_threshold = msg.confidence_threshold;
     if (msg.enable_ssim_patrol.has_value()) {
       cfg.change_point.enable_ssim_patrol = *msg.enable_ssim_patrol;
