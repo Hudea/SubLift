@@ -5,10 +5,12 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-10-20
+- **最后更新：** 2026-10-21
 - **当前 Phase：** [Phase 17](docs/phases/phase17.json) `in-progress`；
   [Phase 14](docs/phases/phase14.json) 保持 `ready-for-merge`（detail 已在 `main`，
   D01–D05 全 done；待 `main` 复验后置 `done`）
+- **已登记待启动：** [Phase 18](docs/phases/phase18.json) `not-started`（det 输入几何
+  契约与默认切换；D01 先批准 ADR-0042，契约通过前默认仍为 736）
 - **当前 Deliverable：** Phase 17 / D02「跨端语义对齐」
   （in-progress；SRT 与输出重名已对齐，剩余 confidence/ROI/状态映射）
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
@@ -27,6 +29,8 @@
 3. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
    `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`），
    不能伪造复验。
+4. **Phase 18 / D01**：批准 det 几何契约 ADR（ADR-0042 草案），冻结策略与质量门阈值；
+   实验证据见 `docs/design/det-pixel-budget-delivery.md`，默认保持 736。
 
 ## 阻塞
 
@@ -43,11 +47,13 @@
   批量 ROI、Job/Task 状态映射仍未统一。归入 D02。
 - **Web + token**：开启 `SUBLIFT_ACCESS_TOKEN` 时浏览器工作台不会发送 Bearer，打开即 401；
   容器自托管不要给 Web 开 token，或先补同源鉴权。
-- **工作树**：当前仍有 Phase 16 的未提交改动（集中在 `cpp/`）；结构性重构前先提交/收口，
-  不要在脏树上搬目录。
+- **工作树**：`exp/det-pixel-budget` 的 det 几何重构已提交（09a9137）；主工作树干净。
+  Phase 18 的契约与默认切换尚未开始，不要在该分支直接改默认值。
 
 ## 最近收口
 
+- **det 几何实验（2026-10-21）**：`exp/det-pixel-budget` 提交 09a9137；固定负载
+  136.35s → 45.00s（3.03×），默认仍为 736；质量与 parity 风险见交付报告，Phase 18 承接决策。
 - **Phase 17（2026-10-20）**：D01 合同/parity 收口；D02 已对齐 SRT 与输出重名，
   三端共享 fixtures 测试通过。下一步 confidence/ROI/状态映射。
 - **Phase 16（2026-10-20）**：P0 的 S0 基线与 O1–O8 全部落地；端到端收益在噪声内，det_infer

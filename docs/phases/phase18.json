@@ -1,0 +1,106 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 18 - Det 输入几何契约与默认切换",
+  "goal": "在不牺牲字幕质量的前提下，把 det 输入几何从固定的 RapidOCR min-side 736 切换为可配置的目标面积策略，并把该维度的验收从逐字节 parity 迁移到质量门。完成后，默认路径在固定 1080p bottom-crop 负载上获得约 3 倍端到端加速，文本 CER/exact 不劣于现状，质量门、覆盖矩阵与一键回滚均可复核。",
+  "scope": [
+    "D01：批准 ADR-0042，冻结 det 几何策略与质量门阈值；把 SUBLIFT_DET_PIXEL_BUDGET 诊断开关收敛为可校验配置；本阶段不改变产品默认输出。",
+    "D02：用 python-product-last 历史 Oracle 重放 736 基线；把 check_paddle_gate.py 的 det 维度从逐字节相等改为质量阈值；重冻 paddle 质量基线并保留旧基线归档。",
+    "D03：建立 bottom-crop / full-frame / ROI / 竖屏 / 超宽 / 真实低分辨率的覆盖矩阵；跑 paddle_quality 全门；在未参与调参的素材上复核 0.4–0.8MP 平台。",
+    "D04：切换默认几何，完成固定负载 A/B 与回滚演练，同步 progress.md 与 phases.json，按流程推进 ready-for-merge 与 done。"
+  ],
+  "non_goals": [
+    "不修改 det/rec 模型、ORT 二进制、intra_op 线程数、Rec batch 等 ADR-0025/0028 已冻结值。",
+    "不在本 Phase 实施 det-once + rec-many、GPU/CUDA、并发调度或 ffmpeg 调优；这些另立 Phase。",
+    "不重新引入 Python 产品 runtime、Python IPC 或 .venv 驱动的 Worker 查找。",
+    "不改变 SRT 文本格式、时间码、编码，以及非 det 维度的配置/状态/错误语义。",
+    "不以性能名义跳过质量门、覆盖矩阵或回滚演练，也不伪造跨机 hash 验证。"
+  ],
+  "status": "not-started",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "Det 几何契约 ADR 与配置面",
+      "outcome": "ADR-0042 获批并记录；det 几何策略与质量门阈值冻结；诊断 env 收敛为可校验配置；产品默认仍为 736，本 Deliverable 不改变输出。",
+      "acceptance": [
+        "ADR-0042 写入 docs/DECISIONS.md，明确退出 parity 的维度（det 几何）与保留 parity 的维度（SRT 格式/时间码/编码、非 det 语义、模型与 ORT 指纹）。",
+        "几何策略二选一并记录理由：固定 0.7MP，或 clamp(native_area, 0.6MP, 1.0MP)；说明 1080p native 与低分辨率上采样的取舍。",
+        "配置项可从 CLI/config 读取并覆盖；非法或非正值 fail-closed 或回退默认，不再依赖未校验的 env；SUBLIFT_DET_PIXEL_BUDGET 降级为诊断别名或移除。",
+        "默认值保持 736；现有 CTest 与默认路径 SRT sha256（56b1b08a…）不变。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle",
+        "cpp/include",
+        "cpp/tests",
+        "docs/DECISIONS.md",
+        "docs/design"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D02",
+      "name": "质量门重放与基线重冻",
+      "outcome": "历史 Python Oracle 可在同一负载上重放 736 基线；paddle 质量门把 det 维度改为质量阈值；新基线可复现并被 gate 消费。",
+      "acceptance": [
+        "用 python-product-last 历史 worktree 重放 736 固定负载，SRT sha256 与 56b1b08a… 一致；记录命令、环境与模型指纹。",
+        "check_paddle_gate.py 对 det 维度不再要求 source_output_sha256_exact，改为 CER/exact/usable/timing F1/precision/noise/empty 阈值；非 det 维度保留 parity 断言。",
+        "重冻 paddle_quality_baseline.v1.json 与受影响 benchmark baseline，记录 oracle_commit、模型/ORT 指纹、新 hash 与阈值来源。",
+        "gate 失败时输出 per-source 差异与可读原因；旧基线归档保留，不删除历史 evidence。"
+      ],
+      "areas": [
+        "scripts/parity",
+        "benchmark/parity/goldens",
+        "benchmark/datasets",
+        "docs/TESTMAP.md"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D03",
+      "name": "覆盖矩阵与全门质量验证",
+      "outcome": "在未参与调参的素材与全部产品路径上验证选定几何策略，形成可复核的质量和性能证据。",
+      "acceptance": [
+        "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带与真实低分辨率源（非下采样合成），每类至少 1 个素材。",
+        "paddle_quality 全门通过：CER macro/micro、exact、usable recall、timing F1/precision、noise/empty、split/FP 均记录且满足 D01/D02 冻结的阈值。",
+        "在未参与 0.7MP 调参的素材上确认 0.4–0.8MP 平台；若平台不成立，回到 D01 重选策略。",
+        "用 Python/RapidOCR 在同一 crop、同一 736 参数下复现 det 框破碎，排除 C++ DB 后处理移植偏差。"
+      ],
+      "areas": [
+        "benchmark/configs",
+        "benchmark/datasets",
+        "cpp/tests"
+      ],
+      "status": "not-started",
+      "evidence": []
+    },
+    {
+      "id": "D04",
+      "name": "默认切换、回滚与收口",
+      "outcome": "产品默认路径切换到选定几何策略，固定负载约 3 倍，质量门通过；一键回滚 736 可演练；文档与进度真源同步。",
+      "acceptance": [
+        "默认配置切换，无需 env 即可生效；默认路径输出与 D03 证据一致。",
+        "固定负载 A/B 与质量门证据写入 D04 evidence；det 占比与端到端倍数可复核。",
+        "回滚演练：恢复 736 后固定负载 SRT 回到 56b1b08a…，无需重新构建。",
+        "progress.md/phases.json 同步；Phase 经 ready-for-merge 后在 main 复验并置 done。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle",
+        "cpp/include",
+        "docs",
+        "phases.json",
+        "progress.md"
+      ],
+      "status": "not-started",
+      "evidence": []
+    }
+  ],
+  "exit_criteria": [
+    "ADR-0042 获批并写入 docs/DECISIONS.md。",
+    "质量门在新基线上可执行并通过，旧基线可追溯。",
+    "覆盖矩阵完成，未参与调参素材的平台复核通过。",
+    "默认切换与一键回滚演练完成，回滚后输出恢复 56b1b08a…。",
+    "./init.sh 与匹配的产品/离线验证通过，progress.md 与 phases.json 同步。"
+  ]
+}

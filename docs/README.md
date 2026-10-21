@@ -30,6 +30,9 @@
 | [design/benchmark.md](design/benchmark.md) | 隔离 benchmark 工具现状与用法 | current |
 | [design/macos-gui.md](design/macos-gui.md) | macOS GUI 模块设计 | current |
 | [design/performance-acceleration.md](design/performance-acceleration.md) | 性能归因、P0 负向结论与 P1/P2 候选 | current |
+| [design/det-input-geometry.md](design/det-input-geometry.md) | Det 输入几何实验（736 → 像素预算） | current |
+| [design/det-pixel-budget-delivery.md](design/det-pixel-budget-delivery.md) | Det 像素预算交付与独立复核 | current |
+| [design/adr-det-geometry-contract.md](design/adr-det-geometry-contract.md) | ADR-0042 草案：det 几何退出逐字节 parity | proposal |
 | [design/gpu-execution.md](design/gpu-execution.md) | GPU 执行后端提案（未实现） | proposal |
 | [design/roi-data-path.md](design/roi-data-path.md) | Phase 4 ROI 数据通路 | historical |
 | [design/path-mode-overlap.md](design/path-mode-overlap.md) | Phase 4.1 未采纳实验 | historical |

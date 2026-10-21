@@ -120,6 +120,13 @@
       "description": "维护 Phase：把 Web/macOS 的能力语义收敛到 contracts/，把 Worker/Server 收敛到共享 ApplicationSession，把前端收敛为 domain/application/presentation，并把根目录、Python 离线工具与部署文件归位；不新增用户功能，不改变产品运行时语义。",
       "detail_file": "docs/phases/phase17.json",
       "status": "in-progress"
+    },
+    {
+      "id": "phase18",
+      "name": "Phase 18 - Det 输入几何契约与默认切换",
+      "description": "维护 Phase：把 det 输入几何从固定 min-side 736 切换为可配置的目标面积策略，并将该维度的验收从逐字节 parity 迁移到质量门；D01 先批准 ADR-0042 与配置面，在契约通过前产品默认保持 736。",
+      "detail_file": "docs/phases/phase18.json",
+      "status": "not-started"
     }
   ]
 }
