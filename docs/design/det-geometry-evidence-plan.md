@@ -51,8 +51,9 @@
 | E3 | 路径覆盖：bottom-crop / full-frame / ROI / 竖屏 / 超宽 / 真实低分辨率 | todo | 每路径 A/B + 质量分数 |
 | E4 | 未参与调参素材与 band-controlled 带高矩阵上的平台复核 | in-progress（30% 带已测；带高矩阵待建） | 扫描表 + 策略建议 |
 | E5 | 策略选择：0.6MP 面积下限；短边 320/352 条件项 | done（band-controlled 支持 0.6；条件项待真实素材） | D01 决策记录 |
+| E6 | 相邻插入变体合并：720p precision/F1 与 736 回归 | done（F1 92.3；736 hash 56b1b08a 不变） | 单测 + A/B |
 
-策略探索的 30% 带、带高与 4K 数据见
+策略探索的 30% 带、带高、4K 与去重 A/B 见
 [`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md)。
 
 依赖：E2 的 gate 自动化依赖 D02 的 gate 语义改造；在 D02 完成前用"Python/C++ CLI 手动

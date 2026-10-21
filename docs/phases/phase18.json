@@ -64,7 +64,7 @@
       "acceptance": [
         "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带与真实低分辨率源（非下采样合成），每类至少 1 个素材。",
         "paddle_quality 全门通过：CER macro/micro、exact、usable recall、timing F1/precision、noise/empty、split/FP 均记录且满足 D01/D02 冻结的阈值。",
-        "实现 pipeline 内的相邻碎片合并：时间重叠/相邻（gap 阈值）+ 文本相似度 + 用 OcrLine.confidence 选文本；在 Zootopia 720p 上把 precision 拉回 ≥736（≥96%），CER 不升超过 1pp，并有单元测试与回归样本。",
+        "实现 pipeline 内的相邻碎片合并：时间相邻（≤300ms）+ 较短文本是较长文本的子序列（长度比 ≥0.6）+ 保留较短的干净文本；在 Zootopia 720p 上 timing F1 ≥736、precision 差距 ≤1pp、CER/exact 不劣化；1080p 736 输出 hash 保持 56b1b08a…；有单元测试与回归样本。",
         "在真实 720p 与 22.5–25% 素材上复核 0.6 的左边界裁切与 timing；若 precision 仍低于 736 超过 1pp，再评估短边 320/352 条件项。",
         "用 Python/RapidOCR 在同一 crop、同一 736 参数下做 det box 级对照，复现框破碎，排除 C++ DB 后处理移植偏差；不得用受合并层影响的整段 SRT 代替。"
       ],

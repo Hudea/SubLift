@@ -78,3 +78,40 @@ TEST_CASE("single char not absorbed unless prefix", "[dedupe]") {
       {e(0, 800, "嘛"), e(800, 2800, "知道啦进公司后就禁止")}, 1000, 0, false);
   REQUIRE(out.size() == 2);
 }
+
+TEST_CASE("OCR insertion variant merges to shorter text", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 1000, "哈茱蒂，本市第一位兔警员", 0.7),
+       e(1000, 1800, "哈茱蒂，Y本市第一位兔警员", 0.9)},
+      1000, 0, false);
+  REQUIRE(out.size() == 1);
+  REQUIRE(out[0].text == "哈茱蒂，本市第一位兔警员");
+  REQUIRE(out[0].end_ms == 1800);
+  REQUIRE(out[0].confidence == 0.9);
+}
+
+TEST_CASE("OCR substitution variant is not merged", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 1000, "第一组免狐搭档", 0.7),
+       e(1000, 2000, "第一组兔狐搭档", 0.9)},
+      1000, 0, false);
+  REQUIRE(out.size() == 2);
+}
+
+TEST_CASE("containment keeps longer text over confidence", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 1000, "跟胡尼克", 0.99),
+       e(1000, 2000, "跟胡尼克，一位平凡的狐狸", 0.80)},
+      1000, 0, false);
+  REQUIRE(out.size() == 1);
+  REQUIRE(out[0].text == "跟胡尼克，一位平凡的狐狸");
+  REQUIRE(out[0].confidence == 0.99);
+}
+
+TEST_CASE("similar variant does not merge across a large gap", "[dedupe]") {
+  const auto out = sublift::merge_entries(
+      {e(0, 1000, "哈茱蒂，本市第一位兔警员", 0.9),
+       e(1500, 2500, "哈茱蒂，Y本市第一位兔警员", 0.7)},
+      1000, 0, false);
+  REQUIRE(out.size() == 2);
+}

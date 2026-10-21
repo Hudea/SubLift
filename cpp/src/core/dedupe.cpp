@@ -1,10 +1,18 @@
 #include "sublift/dedupe.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace sublift {
 namespace {
+
+constexpr std::size_t kSimilarityMinCodePoints = 4;
+constexpr std::size_t kSimilarityMinRatioPercent = 60;
+constexpr std::int64_t kSimilarityMaxGapMs = 300;
 
 /// Match Python `str.isspace()` for common Zs + ASCII (same set as line_select).
 [[nodiscard]] bool is_python_space_byte_or_utf8(const std::string& text,
@@ -111,12 +119,55 @@ namespace {
   return n;
 }
 
-[[nodiscard]] bool same_subtitle(const std::string& a, const std::string& b) {
+enum class MergeKind { kNone, kIdentical, kContainment, kSimilar };
+
+[[nodiscard]] std::vector<char32_t> utf8_codepoints(const std::string& text) {
+  std::vector<char32_t> out;
+  out.reserve(text.size());
+  for (std::size_t i = 0; i < text.size();) {
+    const auto c0 = static_cast<unsigned char>(text[i]);
+    char32_t cp = c0;
+    std::size_t length = 1;
+    if ((c0 & 0xE0) == 0xC0 && i + 1 < text.size()) {
+      cp = (static_cast<char32_t>(c0 & 0x1F) << 6) |
+           (static_cast<unsigned char>(text[i + 1]) & 0x3F);
+      length = 2;
+    } else if ((c0 & 0xF0) == 0xE0 && i + 2 < text.size()) {
+      cp = (static_cast<char32_t>(c0 & 0x0F) << 12) |
+           ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 6) |
+           (static_cast<unsigned char>(text[i + 2]) & 0x3F);
+      length = 3;
+    } else if ((c0 & 0xF8) == 0xF0 && i + 3 < text.size()) {
+      cp = (static_cast<char32_t>(c0 & 0x07) << 18) |
+           ((static_cast<unsigned char>(text[i + 1]) & 0x3F) << 12) |
+           ((static_cast<unsigned char>(text[i + 2]) & 0x3F) << 6) |
+           (static_cast<unsigned char>(text[i + 3]) & 0x3F);
+      length = 4;
+    }
+    out.push_back(cp);
+    i += length;
+  }
+  return out;
+}
+
+[[nodiscard]] bool is_subsequence(const std::vector<char32_t>& shorter,
+                                  const std::vector<char32_t>& longer) {
+  std::size_t i = 0;
+  for (const char32_t cp : longer) {
+    if (i < shorter.size() && cp == shorter[i]) {
+      ++i;
+    }
+  }
+  return i == shorter.size();
+}
+
+[[nodiscard]] MergeKind classify_merge(const std::string& a,
+                                       const std::string& b) {
   if (a.empty() || b.empty()) {
-    return false;
+    return MergeKind::kNone;
   }
   if (a == b) {
-    return true;
+    return MergeKind::kIdentical;
   }
   const std::string* shorter = &a;
   const std::string* longer = &b;
@@ -124,13 +175,25 @@ namespace {
     shorter = &b;
     longer = &a;
   }
-  if (longer->find(*shorter) == std::string::npos) {
-    return false;
+  if (longer->find(*shorter) != std::string::npos) {
+    if (utf8_cp_count(*shorter) >= 2) {
+      return MergeKind::kContainment;
+    }
+    if (longer->compare(0, shorter->size(), *shorter) == 0) {
+      return MergeKind::kContainment;
+    }
   }
-  if (utf8_cp_count(*shorter) >= 2) {
-    return true;
+  const auto a_cps = utf8_codepoints(a);
+  const auto b_cps = utf8_codepoints(b);
+  const auto& short_cps = a_cps.size() <= b_cps.size() ? a_cps : b_cps;
+  const auto& long_cps = a_cps.size() <= b_cps.size() ? b_cps : a_cps;
+  if (short_cps.size() >= kSimilarityMinCodePoints &&
+      short_cps.size() * 100 >=
+          long_cps.size() * kSimilarityMinRatioPercent &&
+      is_subsequence(short_cps, long_cps)) {
+    return MergeKind::kSimilar;
   }
-  return longer->compare(0, shorter->size(), *shorter) == 0;
+  return MergeKind::kNone;
 }
 
 [[nodiscard]] std::vector<SubtitleEntry> merge_adjacent(
@@ -161,12 +224,36 @@ namespace {
     const auto last = result[static_cast<std::size_t>(last_ne_idx)];
     const auto last_norm = normalize_for_merge(last.text);
     const auto gap = current.start_ms - last.end_ms;
-    if (gap <= merge_gap_ms && same_subtitle(last_norm, normalized)) {
+    const auto kind = classify_merge(last_norm, normalized);
+    const std::int64_t max_gap =
+        kind == MergeKind::kSimilar
+            ? std::min<std::int64_t>(static_cast<std::int64_t>(merge_gap_ms),
+                                     kSimilarityMaxGapMs)
+            : static_cast<std::int64_t>(merge_gap_ms);
+    if (gap <= max_gap && kind != MergeKind::kNone) {
+      std::string merged_text;
+      switch (kind) {
+        case MergeKind::kContainment:
+          merged_text =
+              normalized.size() > last_norm.size() ? current.text : last.text;
+          break;
+        case MergeKind::kSimilar:
+          // Inserted OCR artifacts ("Y", "VF") make the longer variant; keep
+          // the shorter, artifact-free text.
+          merged_text =
+              normalized.size() < last_norm.size() ? current.text : last.text;
+          break;
+        case MergeKind::kIdentical:
+        case MergeKind::kNone:
+        default:
+          merged_text = last.text;
+          break;
+      }
       result.resize(static_cast<std::size_t>(last_ne_idx) + 1);
       result[static_cast<std::size_t>(last_ne_idx)] = SubtitleEntry{
           .start_ms = last.start_ms,
           .end_ms = current.end_ms,
-          .text = normalized.size() > last_norm.size() ? current.text : last.text,
+          .text = std::move(merged_text),
           .confidence = std::max(last.confidence, current.confidence),
       };
     } else {
