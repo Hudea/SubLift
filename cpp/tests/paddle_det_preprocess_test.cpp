@@ -41,6 +41,55 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Paddle Det geometry keeps the RapidOCR min-736 default",
+    "[paddle][det][preprocess]") {
+  using sublift::paddle::DetInputGeometry;
+  using sublift::paddle::det_input_size;
+
+  CHECK(det_input_size(1920, 324, DetInputGeometry{}) ==
+        sublift::paddle::DetInputSize{4352, 736});
+  CHECK(det_input_size(960, 256, DetInputGeometry{}) ==
+        sublift::paddle::DetInputSize{2752, 736});
+}
+
+TEST_CASE(
+    "Paddle Det geometry supports a pixel budget without downscaling",
+    "[paddle][det][preprocess]") {
+  using sublift::paddle::DetInputGeometry;
+  using sublift::paddle::det_input_size;
+
+  const DetInputGeometry budget{736.0, 700000.0};
+  CHECK(det_input_size(1920, 324, budget) ==
+        sublift::paddle::DetInputSize{2048, 352});
+  CHECK(det_input_size(960, 256, budget) ==
+        sublift::paddle::DetInputSize{1632, 448});
+
+  const DetInputGeometry smaller_than_native{736.0, 400000.0};
+  CHECK(det_input_size(1920, 324, smaller_than_native) ==
+        sublift::paddle::DetInputSize{1920, 320});
+
+  const DetInputGeometry native{0.0, 0.0};
+  CHECK(det_input_size(1920, 324, native) ==
+        sublift::paddle::DetInputSize{1920, 320});
+}
+
+TEST_CASE(
+    "Paddle Det preprocess applies the pixel budget geometry",
+    "[paddle][det][preprocess]") {
+  constexpr std::int32_t kWidth = 960;
+  constexpr std::int32_t kHeight = 256;
+  std::vector<std::uint8_t> rgb(
+      static_cast<std::size_t>(kWidth) * kHeight * 3, 128);
+
+  const auto det = sublift::paddle::prepare_det_input(
+      rgb.data(), kWidth, kHeight,
+      sublift::paddle::DetInputGeometry{736.0, 700000.0});
+  CHECK(det.width == 1632);
+  CHECK(det.height == 448);
+  CHECK(det.nchw.size() == 3U * 1632U * 448U);
+}
+
+TEST_CASE(
     "Paddle global preprocess reproduces RapidOCR vertical padding",
     "[paddle][det][preprocess]") {
   constexpr std::int32_t kWidth = 100;

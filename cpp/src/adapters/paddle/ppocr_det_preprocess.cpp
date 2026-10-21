@@ -17,6 +17,17 @@ namespace sublift::paddle {
 
 namespace {
 
+double read_positive_env(const char* name, double fallback) {
+  if (const char* raw = std::getenv(name)) {
+    char* end = nullptr;
+    const double value = std::strtod(raw, &end);
+    if (end != raw && value > 0.0) {
+      return value;
+    }
+  }
+  return fallback;
+}
+
 std::int32_t round_half_even(double value) {
   const double lower = std::floor(value);
   const double fraction = value - lower;
@@ -82,6 +93,38 @@ cv::Mat resize_with_ratio(
 #endif
 
 }  // namespace
+
+DetInputGeometry det_input_geometry_from_env() noexcept {
+  return DetInputGeometry{
+      .min_side = read_positive_env("SUBLIFT_DET_MIN_SIDE", 736.0),
+      .pixel_budget = read_positive_env("SUBLIFT_DET_PIXEL_BUDGET", 0.0),
+  };
+}
+
+DetInputSize det_input_size(std::int32_t width,
+                            std::int32_t height,
+                            const DetInputGeometry& geometry) noexcept {
+  if (width <= 0 || height <= 0) {
+    return {};
+  }
+  double ratio = 1.0;
+  const double min_side = static_cast<double>(std::min(width, height));
+  if (geometry.pixel_budget > 0.0) {
+    const double area =
+        static_cast<double>(width) * static_cast<double>(height);
+    if (area < geometry.pixel_budget) {
+      ratio = std::sqrt(geometry.pixel_budget / area);
+    }
+  } else if (geometry.min_side > 0.0 && min_side < geometry.min_side) {
+    ratio = geometry.min_side / min_side;
+  }
+  return DetInputSize{
+      .width = multiple_of_32(
+          static_cast<double>(static_cast<std::int32_t>(width * ratio))),
+      .height = multiple_of_32(
+          static_cast<double>(static_cast<std::int32_t>(height * ratio))),
+  };
+}
 
 GlobalPreprocessResult prepare_global_image(
     const std::uint8_t* rgb,
@@ -158,31 +201,23 @@ DetPreprocessResult prepare_det_input(
     const std::uint8_t* packed_rgb,
     std::int32_t width,
     std::int32_t height) {
+  return prepare_det_input(packed_rgb, width, height,
+                           det_input_geometry_from_env());
+}
+
+DetPreprocessResult prepare_det_input(
+    const std::uint8_t* packed_rgb,
+    std::int32_t width,
+    std::int32_t height,
+    const DetInputGeometry& geometry) {
   if (packed_rgb == nullptr || width <= 0 || height <= 0) {
     throw std::invalid_argument("invalid RGB image for Paddle Det preprocess");
   }
 
 #if defined(SUBLIFT_USE_OPENCV_FOR_DET_PREPROCESS)
-  // Diagnostic only (Phase 16 exploration): RapidOCR parity freezes the min
-  // side at 736, which upscales a 1920x324 bottom crop to 4352x736. An explicit
-  // env override lets us measure det cost/quality at other scales without
-  // touching the product default; unset (or invalid) == 736.
-  double kLimitSide = 736.0;
-  if (const char* raw = std::getenv("SUBLIFT_DET_MIN_SIDE")) {
-    char* end = nullptr;
-    const double parsed = std::strtod(raw, &end);
-    if (end != raw && parsed > 0.0) {
-      kLimitSide = parsed;
-    }
-  }
-  double ratio = 1.0;
-  if (std::min(width, height) < kLimitSide) {
-    ratio = width < height ? kLimitSide / width : kLimitSide / height;
-  }
-  const auto resize_h = multiple_of_32(
-      static_cast<double>(static_cast<std::int32_t>(height * ratio)));
-  const auto resize_w = multiple_of_32(
-      static_cast<double>(static_cast<std::int32_t>(width * ratio)));
+  const DetInputSize size = det_input_size(width, height, geometry);
+  const auto resize_h = size.height;
+  const auto resize_w = size.width;
   if (resize_h <= 0 || resize_w <= 0) {
     throw std::runtime_error("Paddle Det resize produced an empty tensor");
   }
