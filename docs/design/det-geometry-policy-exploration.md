@@ -186,6 +186,11 @@ wall：736 在 1080p 为 5.4–9.0s、720p 为 6.8–7.2s；0.6/0.7/C 为 2.8–
   之前 Zootopia 25% 上 0.7 胜出的结论被 crop 覆盖污染了；clean fixture 反转为 0.6 全对。
 - 720p 的 Zootopia precision 回退没有在 clean fixture 上复现（全部 100%），说明它更可能是
   真实 720p 内容（运动/压缩/小字）特有的，而不是 0.6 几何的普遍问题。
+- **720p precision 追问**：Zootopia 720p（下采样，非独立源）上 0.6 的 9 个未匹配 det 中，
+  57.8–62.2s 有 6 条同一行的重叠碎片（"哈茱蒂…" / "跟胡尼克…"），文本含 OCR 变体
+  （"Y"/"VF"）；0.7 只有 2 条。clean fixture 字大，未复现；真实小字会触发。这说明 0.6 的
+  timing precision 风险是真实的，修复候选是 (a) 小字条件用 0.7/352，或 (b) 基于时间重叠 +
+  文本相似度的合并。D03 二者都测，不静默加大面积。
 - 左边界裁切是独立问题：考虑水平 margin/边界 guard，而不是继续加大面积；需要真实 720p
   素材确认。
 
@@ -258,9 +263,9 @@ never downscale; round output to multiples of 32
 
 **未决**：
 
-1. **720p precision 回退**：Zootopia 720p 上 0.6 的 precision 是 89.4%（736 为 96.2%），
-   但 band-controlled 720p fixture 全部 100%，未复现。需要真实 720p 内容确认；若复现，
-   优先查内容/压缩/小字，而不是直接加大面积。
+1. **720p precision 回退**：Zootopia 720p（下采样）上 0.6 的 precision 89.4% 是真实碎片化
+   （57.8–62.2s 有 6 条重叠变体），0.7 为 95.1%；clean fixture 未复现。需要独立真实
+   720p 源，并评估 (a) 小字条件 0.7/352，(b) 时间重叠 + 文本相似度合并。
 2. **22.5% 带**：C 选 short320，但 short320 在 22.5% 不是最优；需要 band-controlled
    素材（合成 1080p、已知字幕带高），而不是靠改 Zootopia 的 crop。
 3. **跨 crop 的绝对分数不可比**：22.5%/25% 的数字不能和 30% 直接比；只用于同 crop 策略对比。
