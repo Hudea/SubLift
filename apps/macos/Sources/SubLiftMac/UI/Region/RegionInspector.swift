@@ -8,9 +8,18 @@ enum RegionInspectorPresentation {
         "X \(Int(candidate.pixelRect.minX))  Y \(Int(candidate.pixelRect.minY))  宽 \(Int(candidate.pixelRect.width))  高 \(Int(candidate.pixelRect.height))  置信度 \(Int(candidate.confidence * 100))%"
     }
 
-    /// 合并区域摘要（全宽 Y 带）。
-    static func mergedSummaryText(_ merged: CGRect) -> String {
-        "合并区域：Y \(Int(merged.minY))–\(Int(merged.maxY))，X 全宽 \(Int(merged.width))"
+    /// 合并区域摘要。
+    ///
+    /// Phase 21 D04：X 全宽时保持旧文案；自适应 band 收窄 X 时展示实际像素范围。
+    /// 传入 videoWidth 才能区分全宽与收窄；不传则维持全宽语义（旧调用兼容）。
+    static func mergedSummaryText(_ merged: CGRect, videoWidth: Int? = nil) -> String {
+        let yRange = "\(Int(merged.minY.rounded()))–\(Int(merged.maxY.rounded()))"
+        if let videoWidth, videoWidth > 0,
+           merged.minX > 0.5 || merged.width < CGFloat(videoWidth) - 0.5 {
+            let xRange = "\(Int(merged.minX.rounded()))–\(Int(merged.maxX.rounded()))"
+            return "合并区域：X \(xRange) · Y \(yRange)"
+        }
+        return "合并区域：Y \(yRange)，X 全宽 \(Int(merged.width.rounded()))"
     }
 
     /// 代表帧信息（真实字段）。
@@ -148,7 +157,10 @@ struct RegionInspector: View {
 
             if let merged = regionModel.mergedRegion {
                 Label(
-                    RegionInspectorPresentation.mergedSummaryText(merged),
+                    RegionInspectorPresentation.mergedSummaryText(
+                        merged,
+                        videoWidth: regionModel.videoWidthForPresentation
+                    ),
                     systemImage: "rectangle.inset.filled"
                 )
                 .font(.caption2)

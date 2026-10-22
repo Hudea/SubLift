@@ -80,4 +80,21 @@ final class RegionEditingTests: XCTestCase {
         XCTAssertTrue(summary.contains("300–380"), "应包含真实 Y 范围: \(summary)")
         XCTAssertTrue(summary.contains("全宽"))
     }
+
+    // MARK: - Phase 21 D04：自适应 band 收窄 X 时的合并摘要
+
+    func testMergedSummaryShowsActualXWhenBandNarrowed() {
+        let merged = CGRect(x: 384, y: 834, width: 1152, height: 104)
+        let summary = RegionInspectorPresentation.mergedSummaryText(merged, videoWidth: 1920)
+        XCTAssertTrue(summary.contains("X 384–1536"), "应展示实际 X 范围: \(summary)")
+        XCTAssertTrue(summary.contains("Y 834–938"), "应展示实际 Y 范围: \(summary)")
+        XCTAssertFalse(summary.contains("全宽"), "X 收窄时不能再显示全宽: \(summary)")
+    }
+
+    func testMergedSummaryKeepsFullWidthLabelForFullWidthRegion() {
+        let merged = CGRect(x: 0, y: 300, width: 1920, height: 80)
+        let summary = RegionInspectorPresentation.mergedSummaryText(merged, videoWidth: 1920)
+        XCTAssertTrue(summary.contains("300–380"), "应包含真实 Y 范围: \(summary)")
+        XCTAssertTrue(summary.contains("全宽"), "全宽区域保持旧文案: \(summary)")
+    }
 }
