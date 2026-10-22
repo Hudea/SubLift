@@ -379,7 +379,7 @@ struct PaddleOcrEngine::Impl {
     {
       StageTimer timer(paddle_stage_registry(), "paddle.det_preprocess");
       prepared = paddle::prepare_det_input(
-          global.rgb.data(), global.width, global.height);
+          global.rgb.data(), global.width, global.height, options.det_geometry);
     }
     const auto rw = prepared.width;
     const auto rh = prepared.height;

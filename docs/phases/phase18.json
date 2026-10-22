@@ -35,9 +35,10 @@
         "docs/DECISIONS.md",
         "docs/design"
       ],
-      "status": "in-progress",
+      "status": "done",
       "evidence": [
-        "2026-10-22：ADR-0042 获批并写入 docs/DECISIONS.md；Phase 17 的 Session/Layout/工具链收口拆出为 Phase 19，Phase 17 以 D01–D02 收口 done，Phase 18 置 in-progress。D01 配置面进行中。"
+        "2026-10-22：ADR-0042 获批并写入 docs/DECISIONS.md；Phase 17 的 Session/Layout/工具链收口拆出为 Phase 19，Phase 17 以 D01–D02 收口 done，Phase 18 置 in-progress。D01 配置面进行中。",
+        "2026-10-22：0.6MP 配置面落地：CLI `--det-pixel-budget`、Server job `det_pixel_budget`、`StartJobMsg.det_pixel_budget` → `IOcrEngineFactory::set_det_geometry` → `PaddleOptions::det_geometry`；非法/非有限/越界在 CLI/协议/路由 fail-closed；默认 0 保持 736。1080p 默认 hash `56b1b08a…` 不变；`--det-pixel-budget 600000` 复现 `f77296e3…`；`SUBLIFT_DET_PIXEL_BUDGET=600000` 无 flag 仍为 `56b1b08a…`，确认 env 已降级为 adapter 诊断。C++ ctest 274/274。"
       ]
     },
     {
@@ -56,7 +57,7 @@
         "benchmark/datasets",
         "docs/TESTMAP.md"
       ],
-      "status": "not-started",
+      "status": "in-progress",
       "evidence": []
     },
     {

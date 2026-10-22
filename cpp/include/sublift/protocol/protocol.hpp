@@ -53,6 +53,8 @@ struct StartJobMsg {
   double fps{0.0};
   std::string engine;
   double confidence_threshold{0.0};
+  /// ADR-0042 optional det area budget; absent/0 keeps RapidOCR min-side 736.
+  std::optional<double> det_pixel_budget;
   std::optional<sublift::Box2i> region_box;
   std::int64_t duration_ms{0};
   std::optional<bool> enable_ssim_patrol;

@@ -93,9 +93,10 @@ SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
   -o /tmp/cpp-zoo-736.srt --engine paddle --fps 5 --script cjk
 
-SUBLIFT_DET_PIXEL_BUDGET=700000 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
-  -o /tmp/cpp-zoo-budget.srt --engine paddle --fps 5 --script cjk
+  -o /tmp/cpp-zoo-budget.srt --engine paddle --fps 5 --script cjk \
+  --det-pixel-budget 700000
 ```
 
 评分（官方 one-to-one）：

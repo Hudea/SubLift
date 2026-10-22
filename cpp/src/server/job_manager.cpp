@@ -568,6 +568,7 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
     start_msg.engine = job->config.engine;
     start_msg.fps = job->config.fps;
     start_msg.confidence_threshold = job->config.confidence_threshold;
+    start_msg.det_pixel_budget = job->config.det_pixel_budget;
 
     if (job->config.region_box.width > 0.0 && job->config.region_box.height > 0.0) {
       // ROI probe failure must fail the job (contract: no silent fallback).

@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <sstream>
 
+#include "sublift/det_geometry.hpp"
+
 namespace sublift::cli {
 namespace {
 
@@ -60,6 +62,23 @@ ParseResult parse_extract_args(const std::vector<std::string>& argv) {
       const char* v = need("--confidence");
       if (!v) return out;
       args.confidence = std::atof(v);
+    } else if (arg == "--det-pixel-budget") {
+      const char* v = need("--det-pixel-budget");
+      if (!v) return out;
+      char* end = nullptr;
+      const double value = std::strtod(v, &end);
+      if (end == v || *end != '\0') {
+        out.status = ParseStatus::Error;
+        out.error = "Error: --det-pixel-budget requires a number";
+        return out;
+      }
+      if (const auto validation = sublift::validate_det_pixel_budget(value);
+          validation.has_value()) {
+        out.status = ParseStatus::Error;
+        out.error = "Error: --det-pixel-budget " + *validation;
+        return out;
+      }
+      args.det_pixel_budget = value;
     } else if (arg == "--engine") {
       const char* v = need("--engine");
       if (!v) return out;

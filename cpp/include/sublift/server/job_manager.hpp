@@ -144,6 +144,8 @@ struct JobConfig {
   std::string engine{"vision"};
   double fps{2.0};
   double confidence_threshold{0.0};
+  /// ADR-0042 optional det area budget; absent/0 keeps RapidOCR min-side 736.
+  std::optional<double> det_pixel_budget;
   std::optional<std::string> script;
   RegionBox region_box;
   /// 部署绑定的 Paddle 执行快照（ADR-0041）。仅 paddle 任务携带；旧文件缺省时
@@ -160,6 +162,9 @@ struct JobConfig {
     };
     if (script.has_value()) {
       j["script"] = *script;
+    }
+    if (det_pixel_budget.has_value()) {
+      j["det_pixel_budget"] = *det_pixel_budget;
     }
     if (paddle_execution.has_value()) {
       nlohmann::json execution = {
@@ -188,6 +193,9 @@ struct JobConfig {
     }
     if (j.contains("script") && j["script"].is_string()) {
       cfg.script = j["script"].get<std::string>();
+    }
+    if (j.contains("det_pixel_budget") && j["det_pixel_budget"].is_number()) {
+      cfg.det_pixel_budget = j["det_pixel_budget"].get<double>();
     }
     if (j.contains("region_box") && j["region_box"].is_object()) {
       cfg.region_box = RegionBox::from_json(j["region_box"]);

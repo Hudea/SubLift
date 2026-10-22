@@ -40,3 +40,11 @@ TEST_CASE("request defaults match contracts/fixtures/defaults.json",
   CHECK(job.engine == preferred_engine);
   CHECK(job.confidence_threshold == confidence);
 }
+
+TEST_CASE("job config parses the optional det pixel budget",
+          "[defaults][contracts]") {
+  const auto cfg = sublift::server::JobConfig::from_json(
+      nlohmann::json{{"video_path", "v.mp4"}, {"det_pixel_budget", 600000.0}});
+  REQUIRE(cfg.det_pixel_budget.has_value());
+  CHECK(*cfg.det_pixel_budget == 600000.0);
+}

@@ -95,6 +95,7 @@ TEST_CASE("CLI parse extract arguments", "[cli][args]") {
     REQUIRE(r.args.output == "output.srt");
     REQUIRE(r.args.fps == 5.0);
     REQUIRE(r.args.confidence == 0.0);
+    REQUIRE(r.args.det_pixel_budget == 0.0);
     REQUIRE(r.args.engine == "vision");
     REQUIRE(r.args.script == "auto");
     REQUIRE_FALSE(r.args.worker.has_value());
@@ -110,6 +111,21 @@ TEST_CASE("CLI parse extract arguments", "[cli][args]") {
     REQUIRE(r.args.engine == "mock");
     REQUIRE(r.args.script == "cjk");
     REQUIRE(r.args.worker == fs::path{"/tmp/sublift_worker"});
+  }
+
+  SECTION("det pixel budget") {
+    const auto ok = sublift::cli::parse_extract_args(
+        {"sublift", "extract", "v.mp4", "--det-pixel-budget", "600000"});
+    REQUIRE(ok.status == ParseStatus::Ok);
+    REQUIRE(ok.args.det_pixel_budget == 600000.0);
+
+    const auto too_small = sublift::cli::parse_extract_args(
+        {"sublift", "extract", "v.mp4", "--det-pixel-budget", "1000"});
+    REQUIRE(too_small.status == ParseStatus::Error);
+
+    const auto not_a_number = sublift::cli::parse_extract_args(
+        {"sublift", "extract", "v.mp4", "--det-pixel-budget", "abc"});
+    REQUIRE(not_a_number.status == ParseStatus::Error);
   }
 
   SECTION("--runtime is a product error") {

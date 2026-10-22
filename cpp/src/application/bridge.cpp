@@ -64,6 +64,16 @@ double region_bottom_ratio_from_env(double fallback) {
   return fallback;
 }
 
+// ADR-0042: per-job det input geometry from the start message. An absent
+// budget keeps the product default (RapidOCR min-side 736).
+sublift::DetInputGeometry det_geometry_from_msg(
+    const sublift::ipc::StartJobMsg& msg) {
+  return sublift::DetInputGeometry{
+      .min_side = 736.0,
+      .pixel_budget = msg.det_pixel_budget.value_or(0.0),
+  };
+}
+
 void emit_perf_stats(const sublift::Pipeline& pipeline) {
   const char* enabled = std::getenv("SUBLIFT_PADDLE_PERF_DIAGNOSTICS");
   if (enabled == nullptr || std::string_view(enabled) != "1") {
@@ -488,6 +498,7 @@ std::optional<ipc::Message> BridgeHandler::handle_start_job(const ipc::StartJobM
       detector = detector_factory_->make_bottom_crop(cfg.region_bottom_ratio);
     }
 
+    engine_factory_->set_det_geometry(det_geometry_from_msg(msg));
     auto ocr_engine = engine_factory_->create_engine();
 
     {
@@ -751,6 +762,7 @@ void BridgeHandler::run_path_mode(ipc::StartJobMsg msg, PushCallback push_cb) {
       detector = detector_factory_->make_bottom_crop(cfg.region_bottom_ratio);
     }
 
+    engine_factory_->set_det_geometry(det_geometry_from_msg(msg));
     auto ocr_engine = engine_factory_->create_engine();
     auto extractor = path_media_->create_extractor(fps, plan.output_crop);
 

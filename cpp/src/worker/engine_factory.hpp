@@ -28,12 +28,17 @@ class EngineFactory final : public sublift::application::IOcrEngineFactory {
 
   [[nodiscard]] std::optional<std::string> validate_engine(const std::string& requested_engine) const override;
 
+  void set_det_geometry(const sublift::DetInputGeometry& geometry) override {
+    det_geometry_ = geometry;
+  }
+
   [[nodiscard]] std::unique_ptr<sublift::IOcrEngine> create_engine(
       const std::string& mock_text = "mock_ocr", double mock_confidence = 1.0) const override;
 
  private:
   std::string bound_engine_;
   sublift::PaddleExecutionConfig paddle_execution_;
+  sublift::DetInputGeometry det_geometry_{};
 };
 
 }  // namespace sublift::worker

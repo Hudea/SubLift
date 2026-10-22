@@ -90,6 +90,7 @@ std::unique_ptr<sublift::IOcrEngine> EngineFactory::create_engine(
     }
     sublift::PaddleOptions options;
     options.execution = paddle_execution_;
+    options.det_geometry = det_geometry_;
     return std::make_unique<sublift::PaddleOcrEngine>(options);
   }
   if (bound_engine_ == "mock") {

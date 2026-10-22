@@ -2,7 +2,8 @@
 
 > **状态**：实验与实现分支 `exp/det-pixel-budget`（2026-10-21），未改产品默认值，未合入
 > `main`。几何策略已收敛为可测试接口（`DetInputGeometry` / `det_input_size`）并由
-> `SUBLIFT_DET_PIXEL_BUDGET` 驱动；默认仍为 736。交付与验证见
+> 产品配置 `--det-pixel-budget` / Server `det_pixel_budget` 驱动（2026-10-22 起；
+> `SUBLIFT_DET_PIXEL_BUDGET` 仅作 adapter 3 参入口的诊断别名）；默认仍为 736。交付与验证见
 > [`det-pixel-budget-delivery.md`](det-pixel-budget-delivery.md)。
 > **结论先行**：当前 `limit_side_len=736, limit_type=min` 会把任意 bottom-crop 拉到
 > 4352×736（3.2MP）；改为"像素预算约 0.7MP"后，固定负载端到端 **快 2.9–3.3×**
@@ -32,6 +33,7 @@ det 成本与像素近似线性（D01 归因：84.35% core_wall；实测 ≈120m
 - `budget`：目标面积 B，仅在面积 < B 时放大到 B（**不缩小**）。
 
 实验实现：`SUBLIFT_DET_MIN_SIDE`、`SUBLIFT_DET_PIXEL_BUDGET` 两个环境变量；默认仍为 736。
+（2026-10-22 起产品路径改用 `--det-pixel-budget` / Server `det_pixel_budget`，env 只对 adapter 3 参入口有效。）
 
 ## 3. 方法
 
@@ -187,17 +189,17 @@ SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
   -o /tmp/a.srt --engine paddle --fps 5 --script cjk
 
-SUBLIFT_DET_PIXEL_BUDGET=700000 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
-  -o /tmp/b.srt --engine paddle --fps 5 --script cjk
+  -o /tmp/b.srt --engine paddle --fps 5 --script cjk --det-pixel-budget 700000
 
 # latin fixture 必须用 latin，否则会得到 cjk 垃圾结果
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
   -o /tmp/latin-a.srt --engine paddle --fps 5 --script latin
-SUBLIFT_DET_PIXEL_BUDGET=700000 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
-  -o /tmp/latin-b.srt --engine paddle --fps 5 --script latin
+  -o /tmp/latin-b.srt --engine paddle --fps 5 --script latin --det-pixel-budget 700000
 
 # 官方 one-to-one 质量诊断
 PYTHONPATH=src python3 - <<'PY'

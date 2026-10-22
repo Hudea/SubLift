@@ -27,7 +27,7 @@
 | 文件 | 变更 |
 |---|---|
 | `cpp/src/adapters/paddle/ppocr_det_preprocess.hpp` | 新增 `DetInputGeometry`、`DetInputSize`、`det_input_geometry_from_env()`、`det_input_size()`；新增 4 参 `prepare_det_input()` 重载 |
-| `cpp/src/adapters/paddle/ppocr_det_preprocess.cpp` | 几何计算抽成纯函数；3 参入口保持读 env（`SUBLIFT_DET_MIN_SIDE` / `SUBLIFT_DET_PIXEL_BUDGET`）；4 参入口接受显式策略 |
+| `cpp/src/adapters/paddle/ppocr_det_preprocess.cpp` | 几何计算抽成纯函数；3 参入口保持读 env（`SUBLIFT_DET_MIN_SIDE` / `SUBLIFT_DET_PIXEL_BUDGET`，2026-10-22 起仅诊断）；4 参入口接受显式策略 |
 | `cpp/tests/paddle_det_preprocess_test.cpp` | 新增默认 736、0.7MP 预算、预算小于原生、纯 native、显式策略预处理 5 个用例 |
 | `docs/design/det-input-geometry.md` | 更新状态与建议段，标注实现已落地、默认未切换 |
 | `docs/design/det-pixel-budget-delivery.md` | 本报告 |
@@ -130,7 +130,8 @@ det 省下的 101.1s 占 core wall 差异的 **99.1%**；OCR segment 调用数�
    `paddle_quality` 全门。本报告的官方诊断只对已有 SRT 重新评分，不是全门运行。
 3. **替代解释未完全排除**：实验文档要求用 Python/RapidOCR 参考实现在同一 crop、同一 736
    下复现“框破碎”，确认差异来自几何而非 C++ DB 后处理移植偏差。
-4. **策略仍是诊断开关**：`SUBLIFT_DET_PIXEL_BUDGET` 只用于实验，不是用户配置项；0.7MP
+4. **策略配置面已收敛**（Phase 18 D01）：产品路径改用 `--det-pixel-budget` / Server
+   `det_pixel_budget`；env 只对 adapter 3 参入口有效。默认仍 736；0.7MP
    是宽平台上的可解释折中，不是精确最优点（实验 4.2：质量在 0.4–0.8MP 为平台）。
 5. **旧质量口径有偏**：实验期 matched CER 允许多个 GT 复用同一条 det，且不惩罚未匹配 det；
    官方 one-to-one 复核方向不变，但绝对数和命中数都不同。合并判断必须以 3.4 的官方指标为准。
@@ -165,17 +166,19 @@ SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   -o debug/ab-det-budget/baseline.srt --engine paddle --fps 5 --script cjk
 
 # 0.7MP 预算
-SUBLIFT_DET_PIXEL_BUDGET=700000 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
-  -o debug/ab-det-budget/budget-0.7mp.srt --engine paddle --fps 5 --script cjk
+  -o debug/ab-det-budget/budget-0.7mp.srt --engine paddle --fps 5 --script cjk \
+  --det-pixel-budget 700000
 
 # latin fixture 必须用 latin；否则输出是 cjk 垃圾，不能用于质量评估
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
   -o debug/ab-det-budget/latin-736.srt --engine paddle --fps 5 --script latin
-SUBLIFT_DET_PIXEL_BUDGET=700000 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
-  -o debug/ab-det-budget/latin-budget.srt --engine paddle --fps 5 --script latin
+  -o debug/ab-det-budget/latin-budget.srt --engine paddle --fps 5 --script latin \
+  --det-pixel-budget 700000
 ```
 
 阶段归因在命令前加 `SUBLIFT_STAGE_TIMING=1`；官方质量诊断见

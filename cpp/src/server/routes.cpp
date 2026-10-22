@@ -24,6 +24,7 @@
 #include <httplib.h>
 
 #include "sublift/adapters/ffmpeg.hpp"
+#include "sublift/det_geometry.hpp"
 #include "sublift/adapters/paddle.hpp"
 #include "sublift/adapters/vision.hpp"
 #include "sublift/models/resource_locator.hpp"
@@ -1239,6 +1240,24 @@ void register_routes(httplib::Server& server,
       }
       if (body_json.contains("confidence_threshold") && body_json["confidence_threshold"].is_number()) {
         cfg.confidence_threshold = body_json["confidence_threshold"].get<double>();
+      }
+      if (body_json.contains("det_pixel_budget") &&
+          !body_json["det_pixel_budget"].is_null()) {
+        if (!body_json["det_pixel_budget"].is_number()) {
+          res.status = 400;
+          nlohmann::json err = {{"error", "det_pixel_budget must be a number"}};
+          res.set_content(err.dump(), "application/json; charset=utf-8");
+          return;
+        }
+        const double budget = body_json["det_pixel_budget"].get<double>();
+        if (const auto validation = sublift::validate_det_pixel_budget(budget);
+            validation.has_value()) {
+          res.status = 400;
+          nlohmann::json err = {{"error", *validation}};
+          res.set_content(err.dump(), "application/json; charset=utf-8");
+          return;
+        }
+        cfg.det_pixel_budget = budget;
       }
       if (body_json.contains("script") && body_json["script"].is_string()) {
         cfg.script = body_json["script"].get<std::string>();

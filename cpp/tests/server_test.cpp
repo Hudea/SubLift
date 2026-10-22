@@ -903,6 +903,16 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
     auto res_bad_eng = cli.Post("/api/jobs", req_bad_engine.dump(), "application/json");
     REQUIRE(res_bad_eng != nullptr);
     REQUIRE(res_bad_eng->status == 400);
+
+    // Invalid det pixel budget is rejected before job creation (ADR-0042).
+    nlohmann::json req_bad_budget = {
+        {"video_path", temp_job_video.path.string()},
+        {"engine", "mock"},
+        {"det_pixel_budget", 1000}
+    };
+    auto res_bad_budget = cli.Post("/api/jobs", req_bad_budget.dump(), "application/json");
+    REQUIRE(res_bad_budget != nullptr);
+    REQUIRE(res_bad_budget->status == 400);
   }
 
   SECTION("POST /api/jobs validates paddle_execution assertions") {

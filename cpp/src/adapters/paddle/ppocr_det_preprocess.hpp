@@ -3,7 +3,11 @@
 #include <cstdint>
 #include <vector>
 
+#include "sublift/det_geometry.hpp"
+
 namespace sublift::paddle {
+
+using sublift::DetInputGeometry;
 
 /// Packed RGB image after RapidOCR's global resize and optional vertical pad.
 /// ratio_h/ratio_w map the pre-padding working coordinates back to the source.
@@ -23,21 +27,12 @@ struct DetPreprocessResult {
   std::int32_t height{0};
 };
 
-/// Det input scaling policy. The default reproduces RapidOCR's min-side 736
-/// rule; a positive pixel budget instead upscales only until width*height
-/// reaches the budget and never downscales.
-struct DetInputGeometry {
-  double min_side{736.0};
-  double pixel_budget{0.0};
-
-  friend constexpr bool operator==(const DetInputGeometry&,
-                                   const DetInputGeometry&) = default;
-};
-
 /// Reads the diagnostic experiment overrides:
 ///   SUBLIFT_DET_MIN_SIDE=<side>      min-side target (default 736)
 ///   SUBLIFT_DET_PIXEL_BUDGET=<area>  target area; takes precedence over min side
-/// Invalid or non-positive values fall back to the defaults.
+/// Invalid or non-positive values fall back to the defaults. Product config
+/// flows through `PaddleOptions::det_geometry` instead; this function remains
+/// for diagnostics and direct adapter tests.
 [[nodiscard]] DetInputGeometry det_input_geometry_from_env() noexcept;
 
 struct DetInputSize {

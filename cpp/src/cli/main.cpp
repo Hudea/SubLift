@@ -60,6 +60,7 @@ void print_usage(const char* prog) {
                "  -o, --output PATH         Output SRT (default: output.srt)\n"
                "  --fps N                   Sample rate (default: 5.0)\n"
                "  --confidence N            OCR confidence (default: 0.0)\n"
+               "  --det-pixel-budget N      Det target area; 0 keeps 736 (default: 0)\n"
                "  --engine mock|vision|paddle  OCR engine (default: vision)\n"
                "  --script auto|cjk|latin  Subtitle script (default: auto)\n"
                "  --worker PATH             Override sublift_worker binary\n",
@@ -257,6 +258,9 @@ int run_resources(int argc, char** argv) {
         .fps = args.fps,
         .engine = args.engine,
         .confidence_threshold = args.confidence,
+        .det_pixel_budget = args.det_pixel_budget > 0.0
+                                ? std::optional<double>(args.det_pixel_budget)
+                                : std::nullopt,
         .video_path = fs::absolute(args.video).string(),
         .subtitle_profile =
             sublift::SubtitleProfile{

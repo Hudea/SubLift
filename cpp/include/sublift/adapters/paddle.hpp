@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "sublift/det_geometry.hpp"
 #include "sublift/models.hpp"
 #include "sublift/ocr.hpp"
 #include "sublift/ocr_execution.hpp"
@@ -53,6 +54,8 @@ struct PaddleOptions {
   std::int32_t rec_batch_size{6};
   /// 执行后端配置（ADR-0041）；默认 CPU，保持既有产品行为。
   PaddleExecutionConfig execution{};
+  /// Det 输入几何（ADR-0042）；默认 min-side 736，保持既有产品行为。
+  DetInputGeometry det_geometry{};
 };
 
 /// Backward-compatible alias used by existing call sites / parity tools.

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "sublift/det_geometry.hpp"
 #include "sublift/ocr.hpp"
 
 namespace sublift::application {
@@ -14,6 +15,12 @@ namespace sublift::application {
 class IOcrEngineFactory {
  public:
   virtual ~IOcrEngineFactory() = default;
+
+  /// Optional Paddle det-input geometry (ADR-0042). Non-Paddle engines ignore
+  /// it; the default keeps RapidOCR min-side 736.
+  virtual void set_det_geometry(const sublift::DetInputGeometry& geometry) {
+    (void)geometry;
+  }
 
   /// Returns the name of the engine this factory is bound to.
   [[nodiscard]] virtual const std::string& bound_engine() const noexcept = 0;

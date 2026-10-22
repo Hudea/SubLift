@@ -4,6 +4,8 @@
 
 #include <cmath>
 
+#include "sublift/det_geometry.hpp"
+
 namespace sublift::ipc {
 
 namespace {
@@ -261,6 +263,14 @@ Message parse_message(std::string_view json_str) {
         throw ProtocolError("Invalid engine type: " + msg.engine);
       }
       msg.confidence_threshold = require_double(root, "confidence_threshold");
+      if (root.contains("det_pixel_budget") && !root.at("det_pixel_budget").is_null()) {
+        const double budget = require_double(root, "det_pixel_budget");
+        if (const auto err = sublift::validate_det_pixel_budget(budget);
+            err.has_value()) {
+          throw ProtocolError(*err);
+        }
+        msg.det_pixel_budget = budget;
+      }
       if (root.contains("region_box") && !root.at("region_box").is_null()) {
         msg.region_box = parse_box2i(root.at("region_box"));
       }
@@ -380,6 +390,7 @@ std::string serialize_message(const Message& msg) {
           j["fps"] = arg.fps;
           j["engine"] = arg.engine;
           j["confidence_threshold"] = arg.confidence_threshold;
+          if (arg.det_pixel_budget) j["det_pixel_budget"] = *arg.det_pixel_budget;
           if (arg.region_box) j["region_box"] = serialize_box2i(*arg.region_box);
           j["duration_ms"] = arg.duration_ms;
           if (arg.enable_ssim_patrol) j["enable_ssim_patrol"] = *arg.enable_ssim_patrol;
