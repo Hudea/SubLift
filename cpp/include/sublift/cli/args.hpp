@@ -14,7 +14,10 @@ struct ExtractArgs {
   std::filesystem::path video;
   std::filesystem::path output{"output.srt"};
   double fps{5.0};
-  double confidence{0.5};
+  // ExtractionSpec default from contracts/fixtures/defaults.json (0.0 = no
+  // high-confidence filter). The internal Pipeline Config keeps its
+  // Oracle-compatible 0.5 default; this value is the request boundary.
+  double confidence{0.0};
   std::string engine{"vision"};
   std::string script{"auto"};
   std::optional<std::filesystem::path> worker;

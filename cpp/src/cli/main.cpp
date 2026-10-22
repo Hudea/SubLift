@@ -59,7 +59,7 @@ void print_usage(const char* prog) {
                "extract options:\n"
                "  -o, --output PATH         Output SRT (default: output.srt)\n"
                "  --fps N                   Sample rate (default: 5.0)\n"
-               "  --confidence N            OCR confidence (default: 0.5)\n"
+               "  --confidence N            OCR confidence (default: 0.0)\n"
                "  --engine mock|vision|paddle  OCR engine (default: vision)\n"
                "  --script auto|cjk|latin  Subtitle script (default: auto)\n"
                "  --worker PATH             Override sublift_worker binary\n",

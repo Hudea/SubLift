@@ -64,7 +64,7 @@ final class BatchExtractionRunner: BatchTaskRunning, @unchecked Sendable {
                 videoId: UUID().uuidString,
                 fps: 5,
                 engine: engine,
-                confidenceThreshold: 0.5,
+                confidenceThreshold: 0.0,
                 regionBox: nil,
                 durationMs: durationMs,
                 videoPath: task.sourceURL.standardizedFileURL.path,

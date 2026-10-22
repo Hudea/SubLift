@@ -143,7 +143,7 @@ final class SubtitleExtractor: ObservableObject {
             let totalFrames = await FrameSampler.estimateFrameCount(url: videoURL, fps: fps)
             let totalFramesSafe = max(1, totalFrames)
             let videoId = UUID().uuidString
-            let confidenceThreshold = 0.5
+            let confidenceThreshold = 0.0
             let videoPath = videoURL.standardizedFileURL.path
 
             // SSIM patrol 是 Worker 内部默认机制（Config.enable_ssim_patrol=True）。

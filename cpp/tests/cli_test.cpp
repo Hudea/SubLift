@@ -94,7 +94,7 @@ TEST_CASE("CLI parse extract arguments", "[cli][args]") {
     REQUIRE(r.args.video == "clip.mp4");
     REQUIRE(r.args.output == "output.srt");
     REQUIRE(r.args.fps == 5.0);
-    REQUIRE(r.args.confidence == 0.5);
+    REQUIRE(r.args.confidence == 0.0);
     REQUIRE(r.args.engine == "vision");
     REQUIRE(r.args.script == "auto");
     REQUIRE_FALSE(r.args.worker.has_value());

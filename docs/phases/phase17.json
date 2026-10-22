@@ -68,7 +68,8 @@
         "2026-10-20：D02 启动。先以 contracts 的 SRT/输出/默认值 fixtures 对齐三端，并逐项消除 parity matrix 中的 gap；不一次性改状态机与前端结构。",
         "2026-10-20：SRT 合同对齐。Web formatSrt 改为跳过纯空白并保持 canonical 钳制；Swift SrtFormatter 改为排序/跳空/钳制且不再抛 SrtFormatError；C++ CLI 与 Server formatter 增加排序、clamp 与末尾空行（两个换行，兼容容器 golden 的精确比对）。三端均消费 contracts/fixtures/srt-cases.json：Web 4 例、Swift 1 套共享 fixture、C++ CLI/Server 各 3 例通过。",
         "2026-10-20：输出重名对齐。Swift BatchOutputPlanner 从 name (N).srt 改为 name_N.srt，BatchOutputTests/Phase8AcceptanceTests 同步；Server/Web 已使用 _1。Web 157 tests、Swift 381 XCTest + 142 Swift Testing、C++ [srt] 33 assertions 与 ctest 261/261 全部通过。",
-        "2026-10-20：Phase8 真实 IPC 验收的 SRT 断言改为“空或包含时间码”。spike 素材可能没有字幕；canonical 跳空后空 SRT 是合法结果，原断言依赖空文本条目生成非空文件。"
+        "2026-10-20：Phase8 真实 IPC 验收的 SRT 断言改为“空或包含时间码”。spike 素材可能没有字幕；canonical 跳空后空 SRT 是合法结果，原断言依赖空文本条目生成非空文件。",
+        "2026-10-22：confidence 请求默认值对齐 contracts/fixtures/defaults.json（0.0）：C++ CLI args/help、macOS 单视频与批量从 0.5 改为 0.0；Server/Web/protocol 已是 0.0；内部 Pipeline Config 保持 0.5 以兼容冻结 Python Oracle。C++ ctest 268/268、Swift 142 tests、Web 157 tests + build 通过。"
       ]
     },
     {
