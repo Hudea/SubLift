@@ -1184,7 +1184,10 @@ void register_routes(httplib::Server& server,
           }},
           {"preview_text", result.preview_text},
           {"confidence", result.confidence},
-          {"total_candidates", result.total_candidates}
+          {"total_candidates", result.total_candidates},
+          // Phase 21 D02: 无法确定字幕区时给出可解释原因（detected=false），
+          // 供 Web/调试端展示；成功时为空字符串。新增字段，兼容旧客户端。
+          {"reason", result.error_msg}
       };
       res.status = 200;
       res.set_content(out.dump(), "application/json; charset=utf-8");

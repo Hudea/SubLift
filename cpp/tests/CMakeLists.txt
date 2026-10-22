@@ -7,6 +7,7 @@ set(_sublift_test_srcs
   timeline_test.cpp
   dedupe_test.cpp
   line_select_test.cpp
+  subtitle_band_test.cpp
   ocr_execution_test.cpp
   ocr_test.cpp
   stage_timing_test.cpp
@@ -89,6 +90,9 @@ sublift_stringify_path(_contract_statuses_esc "${_contract_statuses}")
 set(_contract_defaults "${PROJECT_SOURCE_DIR}/../contracts/fixtures/defaults.json")
 sublift_stringify_path(_contract_defaults_esc "${_contract_defaults}")
 
+set(_band_fixtures "${PROJECT_SOURCE_DIR}/tests/fixtures/subtitle_band")
+sublift_stringify_path(_band_fixtures_esc "${_band_fixtures}")
+
 set(_tl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/segments/timeline.v1.json")
 set(_dd_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/entries/dedupe.v1.json")
 set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/line_select.v1.json")
@@ -107,6 +111,7 @@ target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_CONTRACT_ROI=\"${_contract_roi_esc}\""
   "SUBLIFT_CONTRACT_STATUSES=\"${_contract_statuses_esc}\""
   "SUBLIFT_CONTRACT_DEFAULTS=\"${_contract_defaults_esc}\""
+  "SUBLIFT_BAND_FIXTURE_DIR=\"${_band_fixtures_esc}\""
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_TIMELINE=\"${_tl_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_DEDUPE=\"${_dd_golden_esc}\""

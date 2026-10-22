@@ -1,0 +1,101 @@
+{
+ "source": "debug/band-test/band_1080p.mp4",
+ "note": "Phase 21 D01 录制：Paddle OCR 行（归一化到画面宽高）；frame 为 (i+0.5)/8*duration 抽帧。由 debug/band-prototype 原型采集，用于 SubtitleBandDetector 单测黄金。",
+ "sample_frames": 8,
+ "frames": [
+  {
+   "frame_index": 0,
+   "time_s": 3.75,
+   "lines": [
+    {
+     "x": 0.301563,
+     "y": 0.906944,
+     "width": 0.39375,
+     "height": 0.091667,
+     "text": "SubLift 自动提取 100%",
+     "confidence": 0.98537
+    }
+   ]
+  },
+  {
+   "frame_index": 1,
+   "time_s": 11.25,
+   "lines": [
+    {
+     "x": 0.214062,
+     "y": 0.911111,
+     "width": 0.571875,
+     "height": 0.0875,
+     "text": "C++ Paddle 原生质量门完整链路",
+     "confidence": 0.99566
+    }
+   ]
+  },
+  {
+   "frame_index": 2,
+   "time_s": 18.75,
+   "lines": []
+  },
+  {
+   "frame_index": 3,
+   "time_s": 26.25,
+   "lines": [
+    {
+     "x": 0.397656,
+     "y": 0.909722,
+     "width": 0.203906,
+     "height": 0.088889,
+     "text": "动态批处理",
+     "confidence": 0.99994
+    }
+   ]
+  },
+  {
+   "frame_index": 4,
+   "time_s": 33.75,
+   "lines": [
+    {
+     "x": 0.34375,
+     "y": 0.911111,
+     "width": 0.3125,
+     "height": 0.0875,
+     "text": "低对比度也要准确",
+     "confidence": 0.99996
+    }
+   ]
+  },
+  {
+   "frame_index": 5,
+   "time_s": 41.25,
+   "lines": [
+    {
+     "x": 0.214062,
+     "y": 0.913889,
+     "width": 0.571875,
+     "height": 0.084722,
+     "text": "性能优化不牺牲质量并且保持稳定",
+     "confidence": 0.99916
+    }
+   ]
+  },
+  {
+   "frame_index": 6,
+   "time_s": 48.75,
+   "lines": []
+  },
+  {
+   "frame_index": 7,
+   "time_s": 56.25,
+   "lines": [
+    {
+     "x": 0.416406,
+     "y": 0.908333,
+     "width": 0.167969,
+     "height": 0.090278,
+     "text": "双语字幕",
+     "confidence": 0.99963
+    }
+   ]
+  }
+ ]
+}

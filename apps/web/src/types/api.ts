@@ -35,6 +35,8 @@ export interface RegionDetectionDTO {
   preview_text: string;
   confidence: number;
   total_candidates: number;
+  /** Phase 21: detected=false 时的可解释原因（旧服务端可能缺省）。 */
+  reason?: string;
 }
 
 export interface JobConfig {

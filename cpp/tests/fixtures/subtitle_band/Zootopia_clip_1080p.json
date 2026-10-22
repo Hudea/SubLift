@@ -1,0 +1,142 @@
+{
+ "source": "debug/Zootopia_clip_1080p.mp4",
+ "note": "Phase 21 D01 录制：Paddle OCR 行（归一化到画面宽高）；frame 为 (i+0.5)/8*duration 抽帧。由 debug/band-prototype 原型采集，用于 SubtitleBandDetector 单测黄金。",
+ "sample_frames": 8,
+ "frames": [
+  {
+   "frame_index": 0,
+   "time_s": 15.891,
+   "lines": [
+    {
+     "x": 0.346094,
+     "y": 0.531944,
+     "width": 0.291406,
+     "height": 0.286111,
+     "text": "DisNep",
+     "confidence": 0.75217
+    }
+   ]
+  },
+  {
+   "frame_index": 1,
+   "time_s": 47.672,
+   "lines": [
+    {
+     "x": 0.385156,
+     "y": 0.783333,
+     "width": 0.230469,
+     "height": 0.077778,
+     "text": "是你的片面之词",
+     "confidence": 0.99986
+    }
+   ]
+  },
+  {
+   "frame_index": 2,
+   "time_s": 79.453,
+   "lines": [
+    {
+     "x": 0.353125,
+     "y": 0.781944,
+     "width": 0.292969,
+     "height": 0.080556,
+     "text": "成为动物方城市史上",
+     "confidence": 0.99993
+    }
+   ]
+  },
+  {
+   "frame_index": 3,
+   "time_s": 111.234,
+   "lines": [
+    {
+     "x": 0.321875,
+     "y": 0.781944,
+     "width": 0.354687,
+     "height": 0.080556,
+     "text": "彻底化解偏见和刻板印象",
+     "confidence": 0.99975
+    }
+   ]
+  },
+  {
+   "frame_index": 4,
+   "time_s": 143.016,
+   "lines": [
+    {
+     "x": 0.278125,
+     "y": 0.781944,
+     "width": 0.442188,
+     "height": 0.080556,
+     "text": "在ZPD，搭档合作是成功的基石",
+     "confidence": 0.99988
+    }
+   ]
+  },
+  {
+   "frame_index": 5,
+   "time_s": 174.797,
+   "lines": [
+    {
+     "x": 0.273438,
+     "y": 0.4625,
+     "width": 0.072656,
+     "height": 0.118056,
+     "text": "大大大大",
+     "confidence": 0.63702
+    },
+    {
+     "x": 0.0,
+     "y": 0.5625,
+     "width": 0.06875,
+     "height": 0.069444,
+     "text": "lers",
+     "confidence": 0.96588
+    },
+    {
+     "x": 0.067187,
+     "y": 0.575,
+     "width": 0.057813,
+     "height": 0.065278,
+     "text": "and",
+     "confidence": 0.85048
+    },
+    {
+     "x": 0.307031,
+     "y": 0.780556,
+     "width": 0.3875,
+     "height": 0.080556,
+     "text": "但身为菜鸟，你们只能观摩",
+     "confidence": 0.99975
+    }
+   ]
+  },
+  {
+   "frame_index": 6,
+   "time_s": 206.578,
+   "lines": [
+    {
+     "x": 0.101562,
+     "y": 0.559722,
+     "width": 0.020313,
+     "height": 0.068056,
+     "text": "mom",
+     "confidence": 0.92222
+    },
+    {
+     "x": 0.396094,
+     "y": 0.777778,
+     "width": 0.203906,
+     "height": 0.086111,
+     "text": "这里是管制区",
+     "confidence": 0.99999
+    }
+   ]
+  },
+  {
+   "frame_index": 7,
+   "time_s": 238.359,
+   "lines": []
+  }
+ ]
+}

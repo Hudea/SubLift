@@ -1,0 +1,199 @@
+{
+ "source": "debug/watermark-repro/watermark_band_32s.mp4",
+ "note": "Phase 21 D01 录制：Paddle OCR 行（归一化到画面宽高）；frame 为 (i+0.5)/8*duration 抽帧。由 debug/band-prototype 原型采集，用于 SubtitleBandDetector 单测黄金。",
+ "sample_frames": 8,
+ "frames": [
+  {
+   "frame_index": 0,
+   "time_s": 2.0,
+   "lines": [
+    {
+     "x": 0.011719,
+     "y": 0.836111,
+     "width": 0.085156,
+     "height": 0.056944,
+     "text": "暖暖的猫",
+     "confidence": 0.99747
+    },
+    {
+     "x": 0.011719,
+     "y": 0.879167,
+     "width": 0.133594,
+     "height": 0.054167,
+     "text": "98Tang.COM",
+     "confidence": 0.99981
+    }
+   ]
+  },
+  {
+   "frame_index": 1,
+   "time_s": 6.0,
+   "lines": [
+    {
+     "x": 0.379688,
+     "y": 0.831944,
+     "width": 0.238281,
+     "height": 0.076389,
+     "text": "第三句台词内容",
+     "confidence": 0.99979
+    },
+    {
+     "x": 0.014063,
+     "y": 0.841667,
+     "width": 0.08125,
+     "height": 0.047222,
+     "text": "暖暖的猫",
+     "confidence": 0.99757
+    },
+    {
+     "x": 0.014063,
+     "y": 0.884722,
+     "width": 0.129688,
+     "height": 0.045833,
+     "text": "98Tang.COM",
+     "confidence": 0.99994
+    }
+   ]
+  },
+  {
+   "frame_index": 2,
+   "time_s": 10.0,
+   "lines": [
+    {
+     "x": 0.0125,
+     "y": 0.8375,
+     "width": 0.083594,
+     "height": 0.052778,
+     "text": "暖暖的猫",
+     "confidence": 0.99928
+    },
+    {
+     "x": 0.010156,
+     "y": 0.875,
+     "width": 0.135937,
+     "height": 0.058333,
+     "text": "98Tang.COM",
+     "confidence": 0.99939
+    }
+   ]
+  },
+  {
+   "frame_index": 3,
+   "time_s": 14.0,
+   "lines": [
+    {
+     "x": 0.380469,
+     "y": 0.831944,
+     "width": 0.2375,
+     "height": 0.076389,
+     "text": "第六句字幕内容",
+     "confidence": 0.98803
+    },
+    {
+     "x": 0.014063,
+     "y": 0.841667,
+     "width": 0.08125,
+     "height": 0.047222,
+     "text": "暖暖的猫",
+     "confidence": 0.99808
+    },
+    {
+     "x": 0.014063,
+     "y": 0.883333,
+     "width": 0.128125,
+     "height": 0.045833,
+     "text": "98Tang.COM",
+     "confidence": 0.99995
+    }
+   ]
+  },
+  {
+   "frame_index": 4,
+   "time_s": 18.0,
+   "lines": [
+    {
+     "x": 0.0125,
+     "y": 0.8375,
+     "width": 0.083594,
+     "height": 0.052778,
+     "text": "暖暖的猫",
+     "confidence": 0.99928
+    },
+    {
+     "x": 0.010156,
+     "y": 0.875,
+     "width": 0.135937,
+     "height": 0.058333,
+     "text": "98Tang.COM",
+     "confidence": 0.99939
+    }
+   ]
+  },
+  {
+   "frame_index": 5,
+   "time_s": 22.0,
+   "lines": [
+    {
+     "x": 0.0125,
+     "y": 0.8375,
+     "width": 0.083594,
+     "height": 0.052778,
+     "text": "暖暖的猫",
+     "confidence": 0.99928
+    },
+    {
+     "x": 0.010156,
+     "y": 0.875,
+     "width": 0.135937,
+     "height": 0.058333,
+     "text": "98Tang.COM",
+     "confidence": 0.99939
+    }
+   ]
+  },
+  {
+   "frame_index": 6,
+   "time_s": 26.0,
+   "lines": [
+    {
+     "x": 0.0125,
+     "y": 0.8375,
+     "width": 0.083594,
+     "height": 0.052778,
+     "text": "暖暖的猫",
+     "confidence": 0.99928
+    },
+    {
+     "x": 0.010156,
+     "y": 0.875,
+     "width": 0.135937,
+     "height": 0.058333,
+     "text": "98Tang.COM",
+     "confidence": 0.99938
+    }
+   ]
+  },
+  {
+   "frame_index": 7,
+   "time_s": 30.0,
+   "lines": [
+    {
+     "x": 0.0125,
+     "y": 0.8375,
+     "width": 0.083594,
+     "height": 0.052778,
+     "text": "暖暖的猫",
+     "confidence": 0.99928
+    },
+    {
+     "x": 0.010156,
+     "y": 0.875,
+     "width": 0.135937,
+     "height": 0.058333,
+     "text": "98Tang.COM",
+     "confidence": 0.99938
+    }
+   ]
+  }
+ ]
+}

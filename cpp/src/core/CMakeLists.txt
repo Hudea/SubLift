@@ -7,6 +7,7 @@ set(_sublift_core_srcs
   dedupe.cpp
   line_select.cpp
   ocr_execution.cpp
+  subtitle_band.cpp
 )
 
 add_library(sublift_core STATIC ${_sublift_core_srcs})
