@@ -86,6 +86,11 @@ class Pipeline {
   /// dedupe-merged final entry list. Idempotent: a second call returns the
   /// same merged list (closed_entries_ is not cleared). Matches Python
   /// `Pipeline.finalize` (core.py 399-432).
+  ///
+  /// Phase 21 D03: before `merge_entries`, persistent-watermark families are
+  /// suppressed from the raw closed entries (see `suppress_watermark_entries`
+  /// in dedupe.hpp; `last_timestamp_ms_` is the video-duration proxy).
+  /// `SUBLIFT_WATERMARK_FILTER=0` disables just that step (default ON).
   [[nodiscard]] std::vector<SubtitleEntry> finalize();
 
   /// Cancel and reset all internal state; release retained frames. After

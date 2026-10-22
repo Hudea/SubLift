@@ -6,6 +6,8 @@
 #include <regex>
 #include <utility>
 
+#include "sublift/core/subtitle_band.hpp"
+
 namespace sublift {
 namespace {
 
@@ -258,6 +260,11 @@ namespace {
 const std::regex kLeadingLatinEdge{R"(^[A-Za-z][A-Za-z0-9 .:_/\-]*)"};
 const std::regex kTrailingLatinEdge{R"([A-Za-z][A-Za-z0-9 .:_/\-]*$)"};
 
+/// Watermark lines are never subtitle text: cap their score below every
+/// meaningful select threshold (default min_score = 0.28). Kept as a named
+/// constant so the D03 rule stays observable/testable ("可解释降分").
+constexpr double kWatermarkScoreCap = 0.02;
+
 [[nodiscard]] std::string edge_match(const std::string& text,
                                      const std::regex& pattern) {
   std::smatch m;
@@ -310,6 +317,135 @@ const std::regex kTrailingLatinEdge{R"([A-Za-z][A-Za-z0-9 .:_/\-]*$)"};
     }
   }
   return text;
+}
+
+/// Short CJK line carrying an URL-ish mixed-script token: ASCII digits
+/// immediately followed by >= 2 ASCII letters inside one alphanumeric run
+/// ("98Tang", "98Ta"), i.e. how a scrolling "xxxx 98Tang.COM" watermark reads
+/// when the frame clips the domain before the dot. This is the "CJK + Latin
+/// mixed short line" rule from Phase 21 D03.
+///
+/// Deliberately narrow so normal dialogue stays selectable:
+///  - requires CJK in the same line (pure-Latin lines such as "20th century"
+///    are untouched);
+///  - the line itself must be short (4..12 non-space code points) like an
+///    overlay nickname/URL fragment;
+///  - digit run must be followed by >= 2 letters ("iPhone14", "1080P", "3D",
+///    "4K", "5cm" and digit-only tokens like "第2集" do not match).
+[[nodiscard]] bool has_mixed_script_watermark_token(std::string_view text) {
+  auto ascii_alpha = [](unsigned char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+  };
+  auto ascii_digit = [](unsigned char c) { return c >= '0' && c <= '9'; };
+  auto ascii_alnum = [&](unsigned char c) {
+    return ascii_alpha(c) || ascii_digit(c);
+  };
+  std::size_t cps = 0;
+  bool has_cjk = false;
+  std::size_t i = 0;
+  while (i < text.size()) {
+    char32_t cp = 0;
+    if (!decode_utf8(text, i, cp)) {
+      break;
+    }
+    if (is_space_cp(cp)) {
+      continue;
+    }
+    ++cps;
+    if (is_cjk_cp(cp)) {
+      has_cjk = true;
+    }
+  }
+  if (!has_cjk || cps < 4 || cps > 12) {
+    return false;
+  }
+  for (std::size_t start = 0; start < text.size();) {
+    const auto c0 = static_cast<unsigned char>(text[start]);
+    if (!ascii_alnum(c0)) {
+      ++start;
+      continue;
+    }
+    std::size_t end = start;
+    while (end < text.size() &&
+           ascii_alnum(static_cast<unsigned char>(text[end]))) {
+      ++end;
+    }
+    std::size_t k = start;
+    while (k < end) {
+      if (!ascii_digit(static_cast<unsigned char>(text[k]))) {
+        ++k;
+        continue;
+      }
+      std::size_t digit_end = k;
+      while (digit_end < end &&
+             ascii_digit(static_cast<unsigned char>(text[digit_end]))) {
+        ++digit_end;
+      }
+      std::size_t letter_end = digit_end;
+      while (letter_end < end &&
+             ascii_alpha(static_cast<unsigned char>(text[letter_end]))) {
+        ++letter_end;
+      }
+      if (letter_end - digit_end >= 2) {
+        return true;
+      }
+      k = digit_end;
+    }
+    start = end;
+  }
+  return false;
+}
+
+/// True when the text has at least one CJK code point.
+[[nodiscard]] bool has_cjk_codepoints(std::string_view text) {
+  std::size_t i = 0;
+  while (i < text.size()) {
+    char32_t cp = 0;
+    if (!decode_utf8(text, i, cp)) {
+      break;
+    }
+    if (is_cjk_cp(cp)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// ASCII token in front of a '.' that mixes letters and digits ("98Tang." /
+/// "98Tang.cor") - the typical truncated/partial tail of a scrolling URL
+/// watermark when it is clipped at the frame edge or its TLD is unknown. Used
+/// as URL-fragment evidence (with CJK present, or as frame context); stricter
+/// than `is_watermark_text` so normal dialogue ("Hello.", "U.S.", "3.14",
+/// "1080p.") is not treated as evidence: needs >= 4 token chars, >= 1 digit
+/// and >= 2 letters.
+[[nodiscard]] bool has_domain_fragment_token(std::string_view text) {
+  auto ascii_alpha = [](unsigned char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+  };
+  auto ascii_digit = [](unsigned char c) { return c >= '0' && c <= '9'; };
+  for (std::size_t dot = 0; dot < text.size(); ++dot) {
+    if (text[dot] != '.') {
+      continue;
+    }
+    std::size_t begin = dot;
+    std::size_t count = 0;
+    std::size_t letters = 0;
+    bool has_digit = false;
+    while (begin > 0) {
+      const auto c = static_cast<unsigned char>(text[begin - 1]);
+      if (!ascii_alpha(c) && !ascii_digit(c)) {
+        break;
+      }
+      letters += ascii_alpha(c) ? 1U : 0U;
+      has_digit = has_digit || ascii_digit(c);
+      --begin;
+      ++count;
+    }
+    if (count >= 4 && letters >= 2 && has_digit) {
+      return true;
+    }
+  }
+  return false;
 }
 
 }  // namespace
@@ -400,6 +536,218 @@ double script_score(std::string_view text, std::string_view script) {
   return 0.0;
 }
 
+bool is_watermark_text(std::string_view text) {
+  // Phase 21 D03 line-level rules (ordered by precision):
+  //   1) URL/domain text. The URL/domain definition is shared with the D02
+  //      band detector (contains_watermark_domain, single source of truth: no
+  //      drift between "exclude from band" and "never select as subtitle").
+  //   2) Short CJK + URL-ish Latin token ("暖暖的猫 98Ta"), i.e. the scrolling
+  //      overlay clipped before its domain dot.
+  //   3) CJK line with a partial/unknown-TLD domain fragment ("98Tang.cor",
+  //      "98Tang."): the scrolling overlay clipped after the dot, or a
+  //      watermarked domain the shared TLD list does not know.
+  // Kept as a named, testable predicate so the pipeline can explain *why* a
+  // line was dropped.
+  return contains_watermark_domain(text) ||
+         has_mixed_script_watermark_token(text) ||
+         (has_cjk_codepoints(text) && has_domain_fragment_token(text));
+}
+
+namespace {
+
+/// Pure-CJK short line that matches a watermark URL line's font size and
+/// position in the same OCR frame - the nickname half of a scrolling overlay
+/// split into two detection boxes ("暖暖的猫" + "苗98Tang.COM"). The height /
+/// vertical-distance / horizontal-proximity guards keep normal short dialogue
+/// safe: subtitle glyphs are noticeably taller than the overlay and centered
+/// away from it.
+[[nodiscard]] bool is_watermark_fragment_line(
+    const OcrLine& line, const std::vector<const OcrLine*>& context_lines) {
+  const auto text = normalize_ocr_text(line.text);
+  if (text.empty()) {
+    return false;
+  }
+  std::size_t cps = 0;
+  std::size_t i = 0;
+  while (i < text.size()) {
+    char32_t cp = 0;
+    if (!decode_utf8(text, i, cp)) {
+      break;
+    }
+    if (!is_cjk_cp(cp)) {
+      return false;  // fragments are pure CJK; mixed lines use other rules
+    }
+    ++cps;
+  }
+  if (cps < 2 || cps > 6) {
+    return false;
+  }
+  const double h = static_cast<double>(line.box.height);
+  if (!(h > 0.0)) {
+    return false;
+  }
+  const double cy = static_cast<double>(line.box.y) + h / 2.0;
+  const double x0 = static_cast<double>(line.box.x);
+  const double x1 = x0 + static_cast<double>(line.box.width);
+  for (const OcrLine* context : context_lines) {
+    if (context == nullptr || context == &line) {
+      continue;
+    }
+    const double ch = static_cast<double>(context->box.height);
+    if (!(ch > 0.0)) {
+      continue;
+    }
+    const double height_ratio = h / ch;
+    if (height_ratio < 0.55 || height_ratio > 1.25) {
+      continue;
+    }
+    const double context_cy =
+        static_cast<double>(context->box.y) + ch / 2.0;
+    if (std::abs(cy - context_cy) > std::max(h, ch)) {
+      continue;
+    }
+    const double context_x0 = static_cast<double>(context->box.x);
+    const double context_x1 = context_x0 + static_cast<double>(context->box.width);
+    const double gap =
+        std::max(0.0, std::max(context_x0 - x1, x0 - context_x1));
+    if (gap > std::max(h, ch)) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+/// Frame-level watermark context: explicit URL/domain lines plus clipped
+/// domain-fragment tokens (the scrolling overlay is often split by bbox).
+[[nodiscard]] std::vector<const OcrLine*> collect_watermark_context(
+    const std::vector<OcrLine>& lines) {
+  std::vector<const OcrLine*> context;
+  for (const auto& line : lines) {
+    if (normalize_ocr_text(line.text).empty()) {
+      continue;
+    }
+    if (is_watermark_text(line.text) || has_domain_fragment_token(line.text)) {
+      context.push_back(&line);
+    }
+  }
+  return context;
+}
+
+[[nodiscard]] bool is_ascii_latin_run_char(unsigned char c) {
+  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+         (c >= '0' && c <= '9') || c == '.' || c == '_' || c == '-';
+}
+
+[[nodiscard]] std::size_t codepoint_count(std::string_view text) {
+  std::size_t cps = 0;
+  std::size_t i = 0;
+  while (i < text.size()) {
+    char32_t cp = 0;
+    if (!decode_utf8(text, i, cp)) {
+      break;
+    }
+    ++cps;
+  }
+  return cps;
+}
+
+/// Locate the first URL-ish ASCII run in a mixed line: consecutive
+/// [A-Za-z0-9._-] that either contains a dot with >= 2 letters (domain or
+/// partial domain, known TLD or not) or is a clipped overlay token
+/// (>= 2 digits immediately followed by >= 2 letters, e.g. "98Ta").
+[[nodiscard]] std::optional<std::pair<std::size_t, std::size_t>>
+find_latin_watermark_run(std::string_view text) {
+  auto ascii_alpha = [](unsigned char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+  };
+  auto ascii_digit = [](unsigned char c) { return c >= '0' && c <= '9'; };
+  auto run_has_clipped_token = [&](std::string_view run) {
+    for (std::size_t p = 0; p < run.size();) {
+      if (!ascii_digit(static_cast<unsigned char>(run[p]))) {
+        ++p;
+        continue;
+      }
+      std::size_t digits_end = p;
+      while (digits_end < run.size() &&
+             ascii_digit(static_cast<unsigned char>(run[digits_end]))) {
+        ++digits_end;
+      }
+      std::size_t letters_end = digits_end;
+      while (letters_end < run.size() &&
+             ascii_alpha(static_cast<unsigned char>(run[letters_end]))) {
+        ++letters_end;
+      }
+      if (digits_end - p >= 2 && letters_end - digits_end >= 2) {
+        return true;
+      }
+      p = digits_end;
+    }
+    return false;
+  };
+  for (std::size_t start = 0; start < text.size();) {
+    if (!is_ascii_latin_run_char(static_cast<unsigned char>(text[start]))) {
+      ++start;
+      continue;
+    }
+    std::size_t end = start;
+    while (end < text.size() &&
+           is_ascii_latin_run_char(static_cast<unsigned char>(text[end]))) {
+      ++end;
+    }
+    const std::string_view run = text.substr(start, end - start);
+    bool has_letters = false;
+    std::size_t letters = 0;
+    for (const char c : run) {
+      if (ascii_alpha(static_cast<unsigned char>(c))) {
+        has_letters = true;
+        ++letters;
+      }
+    }
+    if ((has_letters && letters >= 2 &&
+         run.find('.') != std::string_view::npos) ||
+        run_has_clipped_token(run)) {
+      return std::make_pair(start, end);
+    }
+    start = end;
+  }
+  return std::nullopt;
+}
+
+/// Recover CJK dialogue glued to an overlay on either side of the overlay's
+/// URL run. cleanup_subtitle_text only strips edge-attached latin, but the
+/// scrolling overlay also lands in the middle of a line:
+///   "暖暖的猫 98Tang.cor第四句测试文本" -> "第四句测试文本" (suffix)
+///   "第三句台词内容Tang.COM"          -> "第三句台词内容" (prefix)
+/// The prefix path deliberately needs >= 6 CJK code points so an overlay
+/// nickname ("暖暖的猫") is never salvaged as dialogue; an unusable remainder
+/// leaves the line unselectable.
+[[nodiscard]] std::string salvage_glued_dialogue(std::string_view text) {
+  const auto span = find_latin_watermark_run(text);
+  if (!span.has_value()) {
+    return {};
+  }
+  const std::string prefix = normalize_ocr_text(text.substr(0, span->first));
+  const std::string suffix = normalize_ocr_text(text.substr(span->second));
+  const auto usable = [](const std::string& candidate, std::size_t min_cps) {
+    if (candidate.empty() || is_watermark_text(candidate) ||
+        cjk_ratio(candidate) < 0.5) {
+      return false;
+    }
+    return codepoint_count(candidate) >= min_cps;
+  };
+  if (usable(suffix, 2)) {
+    return suffix;
+  }
+  if (usable(prefix, 6)) {
+    return prefix;
+  }
+  return {};
+}
+
+}  // namespace
+
+
 LineScore score_line(const OcrLine& line, const SubtitleProfile& profile) {
   const double s_script = script_score(line.text, profile.script);
   const double cy =
@@ -431,8 +779,15 @@ LineScore score_line(const OcrLine& line, const SubtitleProfile& profile) {
   const double s_c =
       std::max(0.0, 1.0 - std::abs(cx - static_cast<double>(profile.center_x)) / span);
   const double conf = std::max(0.0, std::min(1.0, line.confidence));
-  const double total = 0.40 * s_script + 0.30 * s_y + 0.15 * s_h + 0.10 * s_c +
-                       0.05 * conf;
+  double total = 0.40 * s_script + 0.30 * s_y + 0.15 * s_h + 0.10 * s_c +
+                 0.05 * conf;
+  // D03: a URL/domain overlay line must never win selection. Cap instead of
+  // dropping components so the penalty is visible in LineScore.total and any
+  // score-aggregating caller rejects the line too (select_line skips it
+  // explicitly as well).
+  if (is_watermark_text(line.text)) {
+    total = std::min(total, kWatermarkScoreCap);
+  }
   return LineScore{total, s_script, s_y, s_h, s_c, conf};
 }
 
@@ -442,24 +797,66 @@ std::optional<OcrLine> select_line(const std::vector<OcrLine>& lines,
   if (lines.empty()) {
     return std::nullopt;
   }
+  // D03 frame context: explicit URL/domain lines (or a clipped domain token)
+  // identify a watermark overlay in this OCR frame. Used to reject the CJK
+  // nickname fragment when the overlay is split into two bboxes.
+  const auto watermark_context = collect_watermark_context(lines);
   std::optional<OcrLine> best;
   double best_score = -1.0;
-  for (const auto& line : lines) {
-    // Python: if not line.text.strip(): continue (Unicode whitespace)
-    if (normalize_ocr_text(line.text).empty()) {
-      continue;
-    }
+  const auto consider = [&](const OcrLine& line) {
     const auto sc = score_line(line, profile);
     if (sc.total < min_score) {
-      continue;
+      return;
     }
     if (profile.script != SCRIPT_AUTO && sc.script < min_script) {
-      continue;
+      return;
     }
     if (sc.total > best_score) {
       best_score = sc.total;
       best = line;
     }
+  };
+  for (const auto& line : lines) {
+    // Python: if not line.text.strip(): continue (Unicode whitespace)
+    if (normalize_ocr_text(line.text).empty()) {
+      continue;
+    }
+    if (is_watermark_text(line.text)) {
+      // D03: a URL-bearing line is never a subtitle as-is. One exception keeps
+      // real dialogue: OCR often glues the scrolling overlay to the subtitle
+      // ("第三句台词内容Tang.COM"). If cleanup_subtitle_text can strip the
+      // edge-attached URL and leaves meaningful CJK, select the cleaned text
+      // instead of dropping the whole cue. URL-only lines stay unselectable.
+      if (profile.script != SCRIPT_CJK) {
+        continue;
+      }
+      auto salvaged_text = cleanup_subtitle_text(line.text, SCRIPT_CJK);
+      if (salvaged_text.empty() || is_watermark_text(salvaged_text) ||
+          cjk_ratio(salvaged_text) < 0.5) {
+        // cleanup only strips edge-attached latin; the overlay can also glue
+        // in the middle ("暖暖的猫 98Tang.cor第四句测试文本").
+        salvaged_text = salvage_glued_dialogue(line.text);
+      }
+      if (salvaged_text.empty() || is_watermark_text(salvaged_text) ||
+          cjk_ratio(salvaged_text) < 0.5) {
+        continue;
+      }
+      const OcrLine salvaged{std::move(salvaged_text), line.confidence,
+                             line.box};
+      if (!watermark_context.empty() &&
+          is_watermark_fragment_line(salvaged, watermark_context)) {
+        continue;
+      }
+      consider(salvaged);
+      continue;
+    }
+    // D03: short pure-CJK fragment of an overlay that is also present as a URL
+    // line in this frame (scrolling watermark split into two boxes).
+    if (!watermark_context.empty() &&
+        is_watermark_fragment_line(line, watermark_context)) {
+      continue;
+    }
+    consider(line);
   }
   return best;
 }

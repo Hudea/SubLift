@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include "sublift/line_select.hpp"
+
 namespace sublift {
 namespace {
 
@@ -300,6 +302,153 @@ enum class MergeKind { kNone, kIdentical, kContainment, kSimilar };
   return out;
 }
 
+// ---- Phase 21 D03: entry-level persistent-watermark suppression ------------
+//
+// Thresholds are frozen by docs/design/subtitle-band-detection.md + phase21
+// D03 acceptance. Kept as named constants so the rule is explainable and a
+// single place to tune after an A/B run.
+
+/// A watermark family needs at least this many raw binder entries (single
+/// noisy lines are never suppressed).
+constexpr std::size_t kWatermarkMinFamilyCount = 5;
+/// The family's union duration must cover at least this % of the video.
+constexpr std::int64_t kWatermarkMinCoveragePercent = 8;
+/// The family's first->last span must cover at least this % of the video.
+constexpr std::int64_t kWatermarkMinSpanPercent = 60;
+/// "Short text" candidate bound (whitespace-stripped UTF-8 code points).
+constexpr std::size_t kWatermarkShortTextMaxCodePoints = 12;
+/// Candidate-subset bound for the O(m^2) family grouping; above it we fail
+/// safe (return input) rather than spend unbounded time in finalize.
+constexpr std::size_t kWatermarkMaxCandidates = 4096;
+
+struct DisjointSet {
+  std::vector<std::size_t> parent;
+
+  explicit DisjointSet(std::size_t n) : parent(n) {
+    for (std::size_t i = 0; i < n; ++i) {
+      parent[i] = i;
+    }
+  }
+
+  [[nodiscard]] std::size_t find(std::size_t x) {
+    while (parent[x] != x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  }
+
+  void unite(std::size_t a, std::size_t b) {
+    a = find(a);
+    b = find(b);
+    if (a != b) {
+      parent[b] = a;
+    }
+  }
+};
+
+/// Candidate = non-empty entry whose stripped text is URL/domain-like or short.
+[[nodiscard]] bool is_watermark_candidate(const SubtitleEntry& entry) {
+  if (is_strip_empty(entry.text)) {
+    return false;
+  }
+  const std::string normalized = normalize_for_merge(entry.text);
+  if (normalized.empty()) {
+    return false;
+  }
+  if (is_watermark_text(normalized)) {
+    return true;
+  }
+  return utf8_cp_count(normalized) <= kWatermarkShortTextMaxCodePoints;
+}
+
+/// Same-overlay predicate: exact text, existing merge containment/subsequence,
+/// or bounded edit similarity (one-character OCR variants of the same overlay).
+[[nodiscard]] bool same_watermark_family(const std::string& a,
+                                         const std::string& b) {
+  if (a == b) {
+    return true;
+  }
+  if (classify_merge(a, b) != MergeKind::kNone) {
+    return true;
+  }
+  const std::size_t shorter = std::min(utf8_cp_count(a), utf8_cp_count(b));
+  const std::size_t longer = std::max(utf8_cp_count(a), utf8_cp_count(b));
+  // is_similar's edit-ratio bound (0.4, or 0.34 up to 4 code points) implies
+  // shorter/longer >= 0.66; reject impossible pairs before the O(len^2) DP so
+  // the O(m^2) candidate comparison stays cheap.
+  if (longer == 0 || shorter * 100 < longer * 66) {
+    return false;
+  }
+  return is_similar(a, b);
+}
+
+struct WatermarkFamily {
+  std::vector<std::size_t> members;  // indices into the candidate subset
+  std::vector<std::pair<std::int64_t, std::int64_t>> intervals;
+  std::int64_t min_start{0};
+  std::int64_t max_end{0};
+};
+
+/// Safety guard: a removable family must carry a watermark signal - at least
+/// one URL/domain/mixed-token text, or at least two distinct OCR variants of
+/// the same text. Exact-identical repeated normal dialogue (looped source,
+/// repeated lyric/short line whose total coverage happens to pass the frozen
+/// 8%/60% thresholds) is kept: such a family has no URL evidence and only one
+/// variant. See the phase21 128s loop A/B (40-entry baseline).
+[[nodiscard]] bool family_has_watermark_signal(
+    const WatermarkFamily& family, const std::vector<SubtitleEntry>& entries) {
+  std::vector<std::string> variants;
+  variants.reserve(family.members.size());
+  for (const std::size_t index : family.members) {
+    const std::string normalized = normalize_for_merge(entries[index].text);
+    if (is_watermark_text(normalized)) {
+      return true;
+    }
+    variants.push_back(normalized);
+  }
+  std::sort(variants.begin(), variants.end());
+  variants.erase(std::unique(variants.begin(), variants.end()), variants.end());
+  return variants.size() >= 2;
+}
+
+/// Remove a whole watermark family only when all three frozen conditions hold.
+[[nodiscard]] bool family_is_persistent_watermark(
+    const WatermarkFamily& family, std::int64_t video_duration_ms) {
+  if (family.members.size() < kWatermarkMinFamilyCount) {
+    return false;
+  }
+  // Coverage: union length of the member intervals (overlaps counted once).
+  std::vector<std::pair<std::int64_t, std::int64_t>> intervals = family.intervals;
+  std::sort(intervals.begin(), intervals.end());
+  std::int64_t coverage = 0;
+  bool open = false;
+  std::int64_t union_start = 0;
+  std::int64_t union_end = 0;
+  for (const auto& [start, end] : intervals) {
+    if (end <= start) {
+      continue;
+    }
+    if (!open) {
+      union_start = start;
+      union_end = end;
+      open = true;
+    } else if (start <= union_end) {
+      union_end = std::max(union_end, end);
+    } else {
+      coverage += union_end - union_start;
+      union_start = start;
+      union_end = end;
+    }
+  }
+  if (open) {
+    coverage += union_end - union_start;
+  }
+  const std::int64_t span = family.max_end - family.min_start;
+  return coverage * 100 >= video_duration_ms * kWatermarkMinCoveragePercent &&
+         span * 100 >= video_duration_ms * kWatermarkMinSpanPercent;
+}
+
 }  // namespace
 
 std::vector<SubtitleEntry> merge_entries(const std::vector<SubtitleEntry>& entries,
@@ -314,6 +463,90 @@ std::vector<SubtitleEntry> merge_entries(const std::vector<SubtitleEntry>& entri
       drop_empty_text ? filter_empty(merged) : std::move(merged);
   auto filtered_short = filter_short(after_empty, min_duration_ms);
   return merge_adjacent(filtered_short, merge_gap_ms);
+}
+
+std::vector<SubtitleEntry> suppress_watermark_entries(
+    const std::vector<SubtitleEntry>& entries,
+    std::int64_t video_duration_ms) {
+  if (video_duration_ms <= 0 ||
+      entries.size() < kWatermarkMinFamilyCount) {
+    return entries;
+  }
+
+  // 1) Candidate subset: only "short text or URLish" entries take part in the
+  //    O(m^2) grouping. Empty entries are deliberately excluded: blank cues are
+  //    merge inputs for adjacent text and must keep their exact behaviour.
+  std::vector<std::size_t> candidates;
+  std::vector<std::string> keys;
+  candidates.reserve(entries.size());
+  keys.reserve(entries.size());
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    if (!is_watermark_candidate(entries[i])) {
+      continue;
+    }
+    candidates.push_back(i);
+    keys.push_back(normalize_for_merge(entries[i].text));
+  }
+  if (candidates.size() < kWatermarkMinFamilyCount) {
+    return entries;
+  }
+  if (candidates.size() > kWatermarkMaxCandidates) {
+    return entries;  // fail safe: bound the O(m^2) comparison
+  }
+
+  // 2) Union-find family grouping over the candidate subset only.
+  DisjointSet dsu(candidates.size());
+  for (std::size_t a = 0; a < candidates.size(); ++a) {
+    for (std::size_t b = a + 1; b < candidates.size(); ++b) {
+      if (dsu.find(a) == dsu.find(b)) {
+        continue;
+      }
+      if (same_watermark_family(keys[a], keys[b])) {
+        dsu.unite(a, b);
+      }
+    }
+  }
+
+  // 3) Aggregate per-family count / coverage / span.
+  std::vector<WatermarkFamily> families(candidates.size());
+  for (std::size_t i = 0; i < candidates.size(); ++i) {
+    const auto& entry = entries[candidates[i]];
+    const std::int64_t start = std::min(entry.start_ms, entry.end_ms);
+    const std::int64_t end = std::max(entry.start_ms, entry.end_ms);
+    auto& family = families[dsu.find(i)];
+    if (family.members.empty()) {
+      family.min_start = start;
+      family.max_end = end;
+    } else {
+      family.min_start = std::min(family.min_start, start);
+      family.max_end = std::max(family.max_end, end);
+    }
+    family.members.push_back(candidates[i]);
+    family.intervals.emplace_back(start, end);
+  }
+
+  // 4) Mark every entry of a family that behaves like a full-film watermark.
+  std::vector<bool> removed(entries.size(), false);
+  for (auto& family : families) {
+    if (family.members.empty() ||
+        !family_has_watermark_signal(family, entries) ||
+        !family_is_persistent_watermark(family, video_duration_ms)) {
+      continue;
+    }
+    for (const std::size_t index : family.members) {
+      removed[index] = true;
+    }
+  }
+
+  // 5) Preserve input order; removed entries must never reach the final output.
+  std::vector<SubtitleEntry> out;
+  out.reserve(entries.size());
+  for (std::size_t i = 0; i < entries.size(); ++i) {
+    if (!removed[i]) {
+      out.push_back(entries[i]);
+    }
+  }
+  return out;
 }
 
 }  // namespace sublift

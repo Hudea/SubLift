@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <set>
 #include <stdexcept>
 #include <utility>
@@ -13,6 +15,22 @@
 #include "sublift/signature.hpp"
 
 namespace sublift {
+namespace {
+
+/// D03 entry-level watermark suppression kill-switch (default ON).
+///
+/// `SUBLIFT_WATERMARK_FILTER=0` disables the suppression step for A/B and
+/// rollback. Kept as an env knob (not a Config field) so the frozen config
+/// golden and wire protocol stay untouched.
+[[nodiscard]] bool watermark_filter_enabled() {
+  const char* raw = std::getenv("SUBLIFT_WATERMARK_FILTER");
+  if (raw == nullptr) {
+    return true;
+  }
+  return std::strcmp(raw, "0") != 0;
+}
+
+}  // namespace
 
 Pipeline::Pipeline(IDetector& detector, IOcrEngine& ocr, Config config)
     : detector_(detector),
@@ -275,7 +293,17 @@ std::vector<SubtitleEntry> Pipeline::finalize() {
     reset_segment_ocr_state();
   }
   // Global dedupe (core.py 423-429). closed_entries_ is NOT cleared.
-  return merge_entries(closed_entries_, config_.merge_gap_ms,
+  //
+  // D03 (Phase 21): before merging, drop whole persistent-watermark families
+  // from the raw closed entries (last frame timestamp = video duration proxy).
+  // Suppressed entries must not reach the final output; normal dialogue and
+  // blank entries are untouched. SUBLIFT_WATERMARK_FILTER=0 restores the
+  // pre-D03 behaviour for A/B / rollback.
+  std::vector<SubtitleEntry> entries = closed_entries_;
+  if (watermark_filter_enabled()) {
+    entries = suppress_watermark_entries(entries, last_timestamp_ms_);
+  }
+  return merge_entries(entries, config_.merge_gap_ms,
                        config_.min_duration_ms, config_.drop_empty_text);
 }
 
