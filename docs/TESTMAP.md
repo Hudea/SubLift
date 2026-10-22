@@ -60,7 +60,7 @@
   │     └─► 完整测试: ctest --test-dir build/cpp --output-on-failure
   │
   ├─► apps/macos/ (SwiftUI 客户端 / ViewModel / IPC Client)
-  │     ├─► 构建/运行: cd apps/macos && swift build && swift run SubLiftMac
+  │     ├─► 构建/运行: apps/macos/run.sh（写入真实链接 SDK；见 README macOS GUI）
   │     └─► 运行测试: cd apps/macos && swift test
   │
   ├─► apps/web/ (Vue 3 前端 / Pinia Stores / Components / Utils)

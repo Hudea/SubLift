@@ -96,9 +96,20 @@ cmake --build build/cpp-rel
 通过 SwiftPM 在开发者环境运行，**没有独立 `.app` 安装包**。处理 mkv 需要系统 ffmpeg。
 
 ```bash
+apps/macos/run.sh      # 构建并启动（推荐）
+```
+
+macOS 26 起系统按二进制链接的 SDK 决定是否启用现代设计语言（Liquid Glass 工具栏/材质/新控件样式）。
+SwiftPM 直接构建会把 deployment target（13.0）写成 linked SDK，系统因此回退到旧版平面外观——
+表现为工具栏没有玻璃胶囊、按钮变旧式圆角、材质效果消失。`run.sh` 显式向链接器传
+`-platform_version` 写入真实 SDK 版本，并在启动前校验 linked SDK ≥ 26。等价手动命令：
+
+```bash
 cd apps/macos
-swift build
-swift run SubLiftMac
+swift run \
+  -Xlinker -platform_version -Xlinker macos \
+  -Xlinker 13.0 -Xlinker "$(xcrun --show-sdk-version)" \
+  SubLiftMac
 ```
 
 可以拖入 mp4 / mov / mkv，预览视频，选择字幕区域，看增量结果，编辑后导出 SRT。批量处理在独立的 Task Center（⌘⇧T）。

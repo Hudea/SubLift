@@ -17,12 +17,29 @@ enum EvidenceShot {
 
     /// 若设置了 SUBLIFT_EVIDENCE_SHOT，则在（可选延迟后）渲染当前窗口并保存。
     static func scheduleIfRequested() {
+        // 截图口径固定：SUBLIFT_EVIDENCE_APPEARANCE=light|dark 强制 App 外观，
+        // 避免系统外观影响与参考图（Light）的对照。
+        if let appearance = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_APPEARANCE"] {
+            NSApp.appearance = NSAppearance(named: appearance == "light" ? .aqua : .darkAqua)
+        }
+
         guard let path = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_SHOT"] else { return }
         let delay = Double(ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_DELAY"] ?? "0") ?? 0
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             // keyWindow 优先；多窗口（Settings fixture）时取最后创建的可见窗口。
             guard let window = NSApp.keyWindow ?? NSApp.windows.last(where: { $0.isVisible }) else { return }
-            save(window: window, to: path)
+            // SUBLIFT_EVIDENCE_WINDOW_SIZE=WxH（content 尺寸）：截图前固定窗口尺寸，
+            // 便于与参考图逐状态对照；尺寸生效后再等一帧渲染。
+            if let rawSize = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_WINDOW_SIZE"],
+               case let parts = rawSize.split(separator: "x"), parts.count == 2,
+               let width = Double(parts[0]), let height = Double(parts[1]) {
+                window.setContentSize(NSSize(width: width, height: height))
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    save(window: window, to: path)
+                }
+            } else {
+                save(window: window, to: path)
+            }
         }
     }
 
@@ -136,11 +153,38 @@ enum EvidenceShot {
     }
 
     static func save(window: NSWindow, to path: String) {
-        guard let view = window.contentView else { return }
+        if ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_WINDOW_DUMP"] == "1" {
+            dumpWindow(window)
+        }
+        guard let content = window.contentView else { return }
+        // SUBLIFT_EVIDENCE_FULL=1：截取整窗（含系统 titlebar/toolbar 区域），
+        // 用于区分「EvidenceShot 只截 contentView」与真实 chrome 视觉效果。
+        let fullWindow = ProcessInfo.processInfo.environment["SUBLIFT_EVIDENCE_FULL"] == "1"
+        let view = fullWindow ? (content.superview ?? content) : content
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else { return }
         try? data.write(to: URL(fileURLWithPath: path))
+        print("[EvidenceShot] saved \(path) view=\(fullWindow ? "full" : "content") size=\(Int(view.bounds.width))x\(Int(view.bounds.height))px=\(rep.pixelsWide)x\(rep.pixelsHigh)")
+    }
+
+    /// DEBUG-only：窗口/工具栏结构探针（用于 macOS 版本适配对比）。
+    private static func dumpWindow(_ window: NSWindow) {
+        print("[EvidenceShot] window frame=\(window.frame) contentLayoutRect=\(window.contentLayoutRect)")
+        print("[EvidenceShot] appearance=\(window.effectiveAppearance.name.rawValue) titleVisibility=\(window.titleVisibility.rawValue) styleMask=\(window.styleMask.rawValue)")
+        print("[EvidenceShot] toolbar=\(String(describing: window.toolbar)) items=\(window.toolbar?.items.map { $0.itemIdentifier.rawValue } ?? [])")
+        if let content = window.contentView, let superview = content.superview {
+            print("[EvidenceShot] content frame=\(content.frame) superview=\(type(of: superview)) bounds=\(superview.bounds)")
+            dumpSubviews(superview, depth: 0)
+        }
+    }
+
+    private static func dumpSubviews(_ view: NSView, depth: Int) {
+        guard depth <= 6 else { return }
+        print("[EvidenceShot] \(String(repeating: "  ", count: depth))\(type(of: view)) frame=\(view.frame) hidden=\(view.isHidden)")
+        for subview in view.subviews {
+            dumpSubviews(subview, depth: depth + 1)
+        }
     }
 }
 #endif
