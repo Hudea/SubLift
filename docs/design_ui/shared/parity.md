@@ -22,7 +22,7 @@
 | 提取配置 | engine + quality（无 confidence/script UI） | engine + quality；batch 还有 ROI policy | `extraction.schema.json` | gap |
 | 默认值（confidence） | 0.0 | 0.0 | `defaults.json`（规范 0.0） | shared |
 | 默认值（engine/script） | engine 由 Worker/capability 选择；script auto | engine 由 capability 选择；script auto | `defaults.json` | 待 D02 核 |
-| ROI 坐标 | Worker 像素 `[x,y,w,h]` | HTTP/UI 归一化 box | `roi-cases.json` | gap |
+| ROI 坐标 | Worker 像素 `[x,y,w,h]` | HTTP/UI 归一化 box | `roi-cases.json` | shared |
 | SRT 字节 | 排序、跳过空白、钳制；与 fixture 一致 | 排序、跳过空白、钳制；与 fixture 一致 | `srt-cases.json` | shared |
 | 输出重名 | `name_1.srt` | `name_1.srt` | `output-cases.json` | shared |
 | 批量队列持久化 | versioned JSON Repository | 无（仅单视频草稿 localStorage） | 待 D03 | gap |
@@ -37,7 +37,7 @@
 
 ## 3. 收敛顺序
 
-1. **D02 已冻结 SRT、输出重名与 confidence 默认值**：C++/Swift/Web 的 fixture 与请求默认值消费通过；下一步 ROI 转换、状态映射与 engine/script 核对。
+1. **D02 已冻结 SRT、输出重名、confidence 默认值与 ROI 转换**：C++/Swift/Web 的 fixture 与请求默认值消费通过；下一步 Job/Task 状态映射与 engine/script 核对。
 2. **D02 再冻结状态**：Job/Task 映射、stage 名称、取消/中断语义。
 3. **D03 补 Web 队列持久化**：与 Swift `BatchQueueState` 语义对齐，优先版本化 JSON。
 4. **D05 处理表现层差异**：编辑能力（split/undo/draft）与 UI 设计基线，按产品价值取舍，

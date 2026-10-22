@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -11,6 +12,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -82,6 +84,32 @@ struct RegionBox {
     box.width = std::clamp(box.width, 0.0, 1.0);
     box.height = std::clamp(box.height, 0.0, 1.0);
     return box;
+  }
+
+  /// HTTP/UI normalized box -> Worker pixel box, per
+  /// contracts/fixtures/roi-cases.json: round each edge, clamp origin to
+  /// [0,size-1], clamp width/height to the remaining area with a minimum of 1.
+  [[nodiscard]] Box2i to_pixel_box(std::int32_t frame_width,
+                                   std::int32_t frame_height) const {
+    if (frame_width <= 0 || frame_height <= 0) {
+      throw std::invalid_argument("region box requires a non-empty frame");
+    }
+    const auto clamp01 = [](double value) {
+      return std::clamp(value, 0.0, 1.0);
+    };
+    const auto px_x = std::clamp(
+        static_cast<std::int32_t>(std::round(clamp01(x) * frame_width)), 0,
+        frame_width - 1);
+    const auto px_y = std::clamp(
+        static_cast<std::int32_t>(std::round(clamp01(y) * frame_height)), 0,
+        frame_height - 1);
+    const auto px_w = std::clamp(
+        static_cast<std::int32_t>(std::round(clamp01(width) * frame_width)), 1,
+        frame_width - px_x);
+    const auto px_h = std::clamp(
+        static_cast<std::int32_t>(std::round(clamp01(height) * frame_height)), 1,
+        frame_height - px_y);
+    return Box2i{px_x, px_y, px_w, px_h};
   }
 };
 
