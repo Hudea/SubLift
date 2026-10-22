@@ -18,7 +18,7 @@
 | 能力 | macOS / Swift | Web | 合同 | 状态 |
 |---|---|---|---|---|
 | 单视频 Session 状态 | 10 态（empty/loading/ready/regionEditing/starting/processing/finalizing/review/failed/cancelled） | 6 态（Empty/Ready/Processing/Review/Failed/Cancelled） | `job-snapshot` + parity 映射 | gap |
-| Job/Task 状态 | Task 9 态；Worker progress/finalizing | Task 9 态；Server queued/running | `statuses.json` | gap |
+| Job/Task 状态 | Task 9 态；Worker progress/finalizing | Task 9 态；Server Job 8 态 | `statuses.json` | shared |
 | 提取配置 | engine + quality（无 confidence/script UI） | engine + quality；batch 还有 ROI policy | `extraction.schema.json` | gap |
 | 默认值（confidence） | 0.0 | 0.0 | `defaults.json`（规范 0.0） | shared |
 | 默认值（engine/script） | engine 由 Worker/capability 选择；script auto | engine 由 capability 选择；script auto | `defaults.json` | 待 D02 核 |
@@ -37,7 +37,7 @@
 
 ## 3. 收敛顺序
 
-1. **D02 已冻结 SRT、输出重名、confidence 默认值与 ROI 转换**：C++/Swift/Web 的 fixture 与请求默认值消费通过；下一步 Job/Task 状态映射与 engine/script 核对。
+1. **D02 已冻结 SRT、输出重名、confidence 默认值、ROI 转换与 Job/Task 状态**：C++/Swift/Web 的 fixture 与请求默认值消费通过；下一步 engine/script 默认值与 capability 选择核对。
 2. **D02 再冻结状态**：Job/Task 映射、stage 名称、取消/中断语义。
 3. **D03 补 Web 队列持久化**：与 Swift `BatchQueueState` 语义对齐，优先版本化 JSON。
 4. **D05 处理表现层差异**：编辑能力（split/undo/draft）与 UI 设计基线，按产品价值取舍，

@@ -32,7 +32,9 @@ namespace sublift::server {
 
 enum class JobStatus {
   Queued,
-  Running,
+  Preparing,
+  Extracting,
+  Finalizing,
   Completed,
   Failed,
   Cancelled,
@@ -42,7 +44,9 @@ enum class JobStatus {
 [[nodiscard]] inline std::string to_string(JobStatus status) {
   switch (status) {
     case JobStatus::Queued: return "queued";
-    case JobStatus::Running: return "running";
+    case JobStatus::Preparing: return "preparing";
+    case JobStatus::Extracting: return "extracting";
+    case JobStatus::Finalizing: return "finalizing";
     case JobStatus::Completed: return "completed";
     case JobStatus::Failed: return "failed";
     case JobStatus::Cancelled: return "cancelled";
@@ -53,12 +57,32 @@ enum class JobStatus {
 
 [[nodiscard]] inline JobStatus job_status_from_string(std::string_view str) {
   if (str == "queued") return JobStatus::Queued;
-  if (str == "running") return JobStatus::Running;
+  if (str == "preparing") return JobStatus::Preparing;
+  if (str == "extracting") return JobStatus::Extracting;
+  if (str == "finalizing") return JobStatus::Finalizing;
+  // Legacy persisted state used a single "running" status; treat it as the
+  // extracting stage so old snapshots stay loadable.
+  if (str == "running") return JobStatus::Extracting;
   if (str == "completed") return JobStatus::Completed;
   if (str == "failed") return JobStatus::Failed;
   if (str == "cancelled") return JobStatus::Cancelled;
   if (str == "interrupted") return JobStatus::Interrupted;
   return JobStatus::Interrupted;
+}
+
+/// contracts/fixtures/statuses.json task -> job mapping. Returns nullopt for
+/// task states without a job counterpart (skipped) and unknown inputs.
+[[nodiscard]] inline std::optional<std::string_view> task_status_to_job_status(
+    std::string_view task) {
+  if (task == "waiting") return "queued";
+  if (task == "preparing") return "preparing";
+  if (task == "extracting") return "extracting";
+  if (task == "exporting") return "finalizing";
+  if (task == "completed") return "completed";
+  if (task == "failed") return "failed";
+  if (task == "cancelled") return "cancelled";
+  if (task == "interrupted") return "interrupted";
+  return std::nullopt;
 }
 
 struct RegionBox {

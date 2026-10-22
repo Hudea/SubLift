@@ -334,7 +334,9 @@ void JobManager::load_state_locked() {
       status_str = job_json["status"].get<std::string>();
     }
 
-    if (status_str == "queued" || status_str == "running") {
+    if (status_str == "queued" || status_str == "preparing" ||
+        status_str == "extracting" || status_str == "finalizing" ||
+        status_str == "running") {
       // Incomplete jobs MUST transition to Interrupted and remain paused!
       job->status = JobStatus::Interrupted;
       state_changed = true;
@@ -465,7 +467,7 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
 
   {
     std::lock_guard<std::mutex> job_lock(job->state_mutex);
-    job->status = JobStatus::Running;
+    job->status = JobStatus::Preparing;
     job->started_at = std::chrono::system_clock::now();
   }
   {
@@ -502,6 +504,18 @@ void JobManager::execute_job(const std::shared_ptr<JobContext>& job) {
     sublift::worker::PushCallback push_cb = [&](const sublift::ipc::Message& msg) {
       if (std::holds_alternative<sublift::ipc::ProgressMsg>(msg)) {
         const auto& p = std::get<sublift::ipc::ProgressMsg>(msg);
+        std::optional<JobStatus> next_status;
+        if (p.stage == "ready" || p.stage == "preparing") {
+          next_status = JobStatus::Preparing;
+        } else if (p.stage == "processing" || p.stage == "extracting") {
+          next_status = JobStatus::Extracting;
+        } else if (p.stage == "finalizing") {
+          next_status = JobStatus::Finalizing;
+        }
+        if (next_status.has_value()) {
+          std::lock_guard<std::mutex> job_lock(job->state_mutex);
+          job->status = *next_status;
+        }
         job->event_stream->publish("progress", {
             {"stage", p.stage},
             {"pct", p.pct},

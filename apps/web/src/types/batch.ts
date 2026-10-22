@@ -12,18 +12,22 @@ export {
 } from './config';
 
 /**
- * 08102 / 08308 对齐：9 状态批量任务状态机
+ * 08102 / 08308 对齐：9 状态批量任务状态机。
+ * 与 contracts/fixtures/statuses.json 的 task 列表保持同一集合。
  */
-export type BatchTaskStatus =
-  | 'waiting'
-  | 'preparing'
-  | 'extracting'
-  | 'exporting'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'interrupted'
-  | 'skipped';
+export const BATCH_TASK_STATUSES = [
+  'waiting',
+  'preparing',
+  'extracting',
+  'exporting',
+  'completed',
+  'failed',
+  'cancelled',
+  'interrupted',
+  'skipped',
+] as const;
+
+export type BatchTaskStatus = (typeof BATCH_TASK_STATUSES)[number];
 
 /** 状态投影过滤器 */
 export type BatchTaskStatusFilter =

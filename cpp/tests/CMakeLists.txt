@@ -27,6 +27,7 @@ set(_sublift_test_srcs
   worker_framing_test.cpp
   cli_test.cpp
   roi_conversion_test.cpp
+  statuses_test.cpp
 
   worker_protocol_test.cpp
   worker_path_mode_test.cpp
@@ -81,6 +82,9 @@ sublift_stringify_path(_contract_srt_esc "${_contract_srt}")
 set(_contract_roi "${PROJECT_SOURCE_DIR}/../contracts/fixtures/roi-cases.json")
 sublift_stringify_path(_contract_roi_esc "${_contract_roi}")
 
+set(_contract_statuses "${PROJECT_SOURCE_DIR}/../contracts/fixtures/statuses.json")
+sublift_stringify_path(_contract_statuses_esc "${_contract_statuses}")
+
 set(_tl_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/segments/timeline.v1.json")
 set(_dd_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/entries/dedupe.v1.json")
 set(_ls_golden "${PROJECT_SOURCE_DIR}/../benchmark/parity/goldens/line_select/line_select.v1.json")
@@ -97,6 +101,7 @@ sublift_stringify_path(_pad_golden_esc "${_pad_golden}")
 target_compile_definitions(sublift_tests PRIVATE
   "SUBLIFT_CONTRACT_SRT=\"${_contract_srt_esc}\""
   "SUBLIFT_CONTRACT_ROI=\"${_contract_roi_esc}\""
+  "SUBLIFT_CONTRACT_STATUSES=\"${_contract_statuses_esc}\""
   "SUBLIFT_PARITY_GOLDEN_CONFIG=\"${_config_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_TIMELINE=\"${_tl_golden_esc}\""
   "SUBLIFT_PARITY_GOLDEN_DEDUPE=\"${_dd_golden_esc}\""

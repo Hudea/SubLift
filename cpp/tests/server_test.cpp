@@ -2711,10 +2711,10 @@ TEST_CASE("Server SSE 10 Events Resumption and Cursor Greater Than Latest", "[se
     REQUIRE(!initial_history.empty());
     std::uint64_t latest_seq = initial_history.back().seq_id;
 
-    // Reset status to Running to simulate ongoing streaming work
+    // Reset status to Extracting to simulate ongoing streaming work
     {
       std::lock_guard<std::mutex> lk(job->state_mutex);
-      job->status = sublift::server::JobStatus::Running;
+      job->status = sublift::server::JobStatus::Extracting;
     }
 
     // Background thread that pushes new events (latest_seq + 1, latest_seq + 2, and done) after a short delay
