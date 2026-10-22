@@ -98,6 +98,7 @@ DetInputGeometry det_input_geometry_from_env() noexcept {
   return DetInputGeometry{
       .min_side = read_positive_env("SUBLIFT_DET_MIN_SIDE", 736.0),
       .pixel_budget = read_positive_env("SUBLIFT_DET_PIXEL_BUDGET", 0.0),
+      .short_side = read_positive_env("SUBLIFT_DET_SHORT_SIDE", 0.0),
   };
 }
 
@@ -108,15 +109,22 @@ DetInputSize det_input_size(std::int32_t width,
     return {};
   }
   double ratio = 1.0;
-  const double min_side = static_cast<double>(std::min(width, height));
+  const double short_side = static_cast<double>(std::min(width, height));
   if (geometry.pixel_budget > 0.0) {
     const double area =
         static_cast<double>(width) * static_cast<double>(height);
     if (area < geometry.pixel_budget) {
       ratio = std::sqrt(geometry.pixel_budget / area);
     }
-  } else if (geometry.min_side > 0.0 && min_side < geometry.min_side) {
-    ratio = geometry.min_side / min_side;
+    // Conditional short-side floor (ADR-0042): only active with the area
+    // policy, for real 720p / narrow-band material. It may lift the area
+    // above the budget but never downscales.
+    if (geometry.short_side > 0.0 &&
+        short_side * ratio < geometry.short_side) {
+      ratio = geometry.short_side / short_side;
+    }
+  } else if (geometry.min_side > 0.0 && short_side < geometry.min_side) {
+    ratio = geometry.min_side / short_side;
   }
   return DetInputSize{
       .width = multiple_of_32(

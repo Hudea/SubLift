@@ -140,3 +140,8 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
 D03 完成覆盖矩阵与全门质量验证，D04 完成默认切换与回滚演练。执行计划与素材矩阵见
 [`det-geometry-evidence-plan.md`](det-geometry-evidence-plan.md)。在 D01 批准之前，产品
 默认值保持 736，`SUBLIFT_DET_PIXEL_BUDGET` 仅作诊断开关。
+
+**D03 复核（2026-10-22）**：720p（1080p 下采样，非独立源）/1080p/22.5–25% band 上
+area-only 0.6 的 CER/exact/usable 优于 736，timing P/F1 持平；band 左前缀已恢复；短边
+320/352 条件项实测更差（CER 4.7–7.3%），**不启用**。详见
+[`det-geometry-policy-exploration.md`](det-geometry-policy-exploration.md) §8。

@@ -309,6 +309,8 @@ never downscale; round output to multiples of 32
    30% 带全对，但在 0.225–0.25 仍会出现。需要水平 margin/边界 guard 或真实素材复核，
    不应靠继续加大面积。
 
+   > 2026-10-22 D03 复核：当前合并层 + area-only 0.6 已恢复前缀；short 320/352 更差，见 §8。
+
 ## 7. 下一步（Phase 18 D03）
 
 1. 生成 **band-controlled** 合成素材（1080p，10/15/20/22.5/25/30% 带高，GT 固定），
@@ -317,3 +319,17 @@ never downscale; round output to multiples of 32
 3. 真实 2K/4K 片源（非上采样）各 1 个，确认 global 上限与 0.6/native 的行为。
 4. 同 session 跑 0.6 vs 0.7 的 1080p A/B，给出可信的 wall 差异。
 5. 通过后再进入 D01 的策略冻结与配置面；当前产品默认仍为 736。
+
+## 8. D03 实测结论（2026-10-22）
+
+- **720p（1080p 下采样，非独立源）**：0.6 vs 736：CER 2.96% vs 13.20%、exact 94.9% vs 76.9%、
+  timing P/F1 96.3%/92.9% 持平、usable 86.2% vs 70.1%；wall 36.86s vs 138.07s（3.74×）。
+- **1080p**：CER 3.88% vs 17.27%、exact 91.9% vs 72.6%、usable 79.3% vs 62.1%；
+  wall 49.09s vs 151.76s（3.09×）。
+- **22.5%/25% band**：area-only 0.6 **恢复** `SubLift` 前缀（CER 0%、exact 100%）；736 仍丢前缀；
+  **short 320/352 条件项实测更差（CER 4.7–7.3%、前缀再次丢失），不启用**——§6/§7 的
+  short320 假设被实测否定。
+- **覆盖**：full-frame 1080p 736/0.6 输出 hash 相同（native 不缩放）；portrait 720×1280
+  P/F1 100%（CER 4.9→6.4%）；ultrawide 2560×720 hash 相同、P/F1 100%。
+- **未解决项关闭**：左边界前缀在当前合并层 + area-only 0.6 下未复现；不需要水平 margin
+  或短边条件项。

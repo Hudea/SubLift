@@ -64,6 +64,19 @@ double region_bottom_ratio_from_env(double fallback) {
   return fallback;
 }
 
+// Diagnostic experiment override for the conditional short-side floor
+// (ADR-0042). Only used with the area policy; not a user-facing setting.
+double short_side_from_env() {
+  if (const char* raw = std::getenv("SUBLIFT_DET_SHORT_SIDE")) {
+    char* end = nullptr;
+    const double value = std::strtod(raw, &end);
+    if (end != raw && value >= 64.0 && value <= 4096.0) {
+      return value;
+    }
+  }
+  return 0.0;
+}
+
 // ADR-0042: per-job det input geometry from the start message. An absent
 // budget keeps the product default (RapidOCR min-side 736).
 sublift::DetInputGeometry det_geometry_from_msg(
@@ -71,6 +84,7 @@ sublift::DetInputGeometry det_geometry_from_msg(
   return sublift::DetInputGeometry{
       .min_side = 736.0,
       .pixel_budget = msg.det_pixel_budget.value_or(0.0),
+      .short_side = short_side_from_env(),
   };
 }
 

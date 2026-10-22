@@ -81,8 +81,14 @@
         "cpp/src/pipeline",
         "cpp/tests"
       ],
-      "status": "in-progress",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-10-22：720p 素材由现有 1080p 下采样构造（`ffmpeg -vf scale=1280:720 -crf 18`，GT 复用 1080p GT），明确标注**非独立源**，不参与调参。",
+        "2026-10-22：720p 质量（one-to-one，fps 5 cjk）：0.6 vs 736：CER 2.96% vs 13.20%、exact 94.9% vs 76.9%、timing P/F1 96.3%/92.9% 持平、usable 86.2% vs 70.1%；wall 36.86s vs 138.07s（3.74×）。1080p：CER 3.88% vs 17.27%、exact 91.9% vs 72.6%、timing P 92.5% vs 90.1%、usable 79.3% vs 62.1%；wall 49.09s vs 151.76s（3.09×）。",
+        "2026-10-22：22.5%/25% band 左边界复核（1080p/720p band fixtures）：area-only 0.6 **恢复** `SubLift` 前缀（CER 0%、exact 100%）；736 仍丢前缀（CER 7.3–12.3%、exact 80–90%）；短边 320/352 条件项实测更差（CER 4.7–7.3%、前缀再次丢失），评估后**拒绝启用**；precision 无 >1pp 差距。",
+        "2026-10-22：覆盖矩阵：bottom-crop（1080p/720p 30%、22.5/25% bands）、full-frame（ratio 1.0：736/0.6 输出 hash 相同，native 几何不缩放）、portrait 720×1280（P/F1 100%、CER 4.9→6.4%）、ultrawide 2560×720（hash 相同、P/F1 100%）、ROI 由 roi-cases/服务端合同与几何单测覆盖；碎片合并（4fe4fa5）在 720p timing F1/precision 与 736 持平、CER/exact 更优，1080p 736 hash 保持 `56b1b08a…`。",
+        "2026-10-22：D02 的 paddle_quality 0.6MP 全门 PASS 作为全门证据；Python/RapidOCR 同 crop/736 det box 对照见 det-geometry-policy-exploration §4.5/§4.6（已复现框破碎，排除 C++ DB 移植偏差）；新增短边几何单测，ctest 275/275。"
+      ]
     },
     {
       "id": "D04",
@@ -101,7 +107,7 @@
         "phases.json",
         "progress.md"
       ],
-      "status": "not-started",
+      "status": "in-progress",
       "evidence": []
     }
   ],

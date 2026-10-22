@@ -74,6 +74,40 @@ TEST_CASE(
 }
 
 TEST_CASE(
+    "Paddle Det geometry applies the conditional short-side floor",
+    "[paddle][det][preprocess]") {
+  using sublift::paddle::DetInputGeometry;
+  using sublift::paddle::det_input_size;
+
+  // 720p 30% band: 1280x216. The area policy already lands at a 320px short
+  // side; the 352 floor must raise it further without downscaling.
+  const auto no_floor = det_input_size(1280, 216, DetInputGeometry{736.0, 600000.0});
+  const auto floor320 =
+      det_input_size(1280, 216, DetInputGeometry{736.0, 600000.0, 320.0});
+  const auto floor352 =
+      det_input_size(1280, 216, DetInputGeometry{736.0, 600000.0, 352.0});
+  CHECK(no_floor.height >= 320);
+  CHECK(floor320.height >= 320);
+  CHECK(floor352.height >= 352);
+  CHECK(floor352.height > no_floor.height);
+  CHECK(floor352.width % 32 == 0);
+  CHECK(floor352.height % 32 == 0);
+  CHECK(static_cast<double>(floor352.width) * floor352.height >= 600000.0);
+
+  // 22.5% band: 1920x243. The area-only short side is below 320; the floor
+  // must lift it.
+  const auto p225_no = det_input_size(1920, 243, DetInputGeometry{736.0, 600000.0});
+  const auto p225_320 =
+      det_input_size(1920, 243, DetInputGeometry{736.0, 600000.0, 320.0});
+  const auto p225_352 =
+      det_input_size(1920, 243, DetInputGeometry{736.0, 600000.0, 352.0});
+  CHECK(p225_no.height < 320);
+  CHECK(p225_320.height >= 320);
+  CHECK(p225_352.height >= 352);
+  CHECK(p225_352.width > p225_320.width);
+}
+
+TEST_CASE(
     "Paddle Det preprocess applies the pixel budget geometry",
     "[paddle][det][preprocess]") {
   constexpr std::int32_t kWidth = 960;
