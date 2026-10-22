@@ -32,7 +32,7 @@
 | [design/performance-acceleration.md](design/performance-acceleration.md) | 性能归因、P0 负向结论与 P1/P2 候选 | current |
 | [design/det-input-geometry.md](design/det-input-geometry.md) | Det 输入几何实验（736 → 像素预算） | current |
 | [design/det-pixel-budget-delivery.md](design/det-pixel-budget-delivery.md) | Det 像素预算交付与独立复核 | current |
-| [design/adr-det-geometry-contract.md](design/adr-det-geometry-contract.md) | ADR-0042 草案：det 几何退出逐字节 parity | proposal |
+| [design/adr-det-geometry-contract.md](design/adr-det-geometry-contract.md) | ADR-0042：det 几何退出逐字节 parity，改为 0.6MP 面积下限 + 质量门（已确认） | current |
 | [design/det-geometry-evidence-plan.md](design/det-geometry-evidence-plan.md) | Phase 18 D03 切换前证据计划 | proposal |
 | [design/det-geometry-policy-exploration.md](design/det-geometry-policy-exploration.md) | Det 几何策略探索（0.6/0.7/short-320、2K/4K、带高） | current |
 | [design/gpu-execution.md](design/gpu-execution.md) | GPU 执行后端提案（未实现） | proposal |
@@ -44,7 +44,7 @@
 
 | 文档 | 内容 | 状态 |
 |---|---|---|
-| [DECISIONS.md](DECISIONS.md) | ADR-0001–ADR-0041，按时间追加；仍是历史决策的权威记录 | current |
+| [DECISIONS.md](DECISIONS.md) | ADR-0001–ADR-0042，按时间追加；仍是历史决策的权威记录 | current |
 | [HURDLES.md](HURDLES.md) | 踩坑、根因与解决记录 | historical |
 | [phases/](phases/) | Phase detail；仅 active/recent 进入导航，done 只读 | historical/current |
 | [design_ui/evidence/](design_ui/evidence/) | Phase 8/10 实际应用截图与 fixture 证据 | historical |

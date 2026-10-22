@@ -6,13 +6,13 @@
 ## 当前状态
 
 - **最后更新：** 2026-10-22
-- **当前 Phase：** [Phase 17](docs/phases/phase17.json) `in-progress`；
+- **当前 Phase：** [Phase 18](docs/phases/phase18.json) `in-progress`；
   [Phase 14](docs/phases/phase14.json) 保持 `ready-for-merge`（detail 已在 `main`，
   D01–D05 全 done；待 `main` 复验后置 `done`）
-- **已登记待启动：** [Phase 18](docs/phases/phase18.json) `not-started`（det 输入几何
-  契约与默认切换；D01 先批准 ADR-0042，契约通过前默认仍为 736）
-- **当前 Deliverable：** Phase 17 / D03「Web 批量队列持久化与恢复」
-  （in-progress；D02 已完成，Web 刷新后队列成员/顺序/终态恢复）
+- **已登记待启动：** [Phase 19](docs/phases/phase19.json) `not-started`（Phase 17 拆出的
+  Session/Layout/工具链收口）；[Phase 17](docs/phases/phase17.json) 已以 D01–D02 `done`
+- **当前 Deliverable：** Phase 18 / D01「Det 几何契约 ADR 与配置面」
+  （in-progress；ADR-0042 已获批，配置面待实现）
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
@@ -22,13 +22,14 @@
 
 ## 下一步
 
-1. **D03 启动**：Web 批量队列版本化持久化/恢复；优先复用 Swift BatchQueueState 语义，
-   再决定 localStorage 还是服务端 queue endpoint。
-2. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
-   `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`），
-   不能伪造复验。
-3. **Phase 18 / D01**：批准 det 几何契约 ADR（ADR-0042 草案），冻结策略与质量门阈值；
-   实验证据见 `docs/design/det-pixel-budget-delivery.md`，默认保持 736。
+1. **Phase 18 D01**：落地 0.6MP 配置面（默认仍 736），把 `SUBLIFT_DET_PIXEL_BUDGET`
+   收敛为配置项；非法值 fail-closed。
+2. **Phase 18 D02**：历史 Oracle 重放与 gate 重冻（含合并层基线）。
+3. **Phase 18 D03**：720p 从 1080p 下采样构造（明确标注非独立源）、左边界 guard、全门质量。
+4. **Phase 18 D04**：默认切换、回滚演练与收口。
+5. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
+   `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`）。
+6. **Phase 19（backlog）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
 
 ## 阻塞
 
@@ -55,7 +56,8 @@
   89.4% → 95.1%、F1 88.4% → 92.3%，736 hash 保持 `56b1b08a…`。
 - **Phase 17 D02（2026-10-22）**：SRT、输出重名、confidence、ROI、Job/Task 状态与
   engine/script 默认值全部对齐 contracts；C++ ctest 273/273、Web 159 tests、Swift 143 tests。
-- **Phase 17（2026-10-20）**：D01 合同/parity 收口；D02 首批 SRT 与输出重名对齐。
+- **Phase 17（2026-10-22）**：D02 收口，Phase 17 以 D01–D02 `done`；Session/Layout/工具链
+  拆出为 [Phase 19](docs/phases/phase19.json) `not-started`；Phase 18 置 `in-progress`。
 - **Phase 16（2026-10-20）**：P0 的 S0 基线与 O1–O8 全部落地；端到端收益在噪声内，det_infer
   占 84.35%，以负向结论收口。P1/P2 未启动，后续另立 Phase。
 - **Phase 12（2026-10-20）**：12509–12516 全部交付；12505 历史 blocked 由 Phase 14 承接。

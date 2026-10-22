@@ -1,8 +1,7 @@
-# ADR-0042（草案）Det 输入几何：从逐字节 parity 转为质量门
+# ADR-0042（已确认）Det 输入几何：从逐字节 parity 转为质量门
 
-> **状态**：提议（proposal），2026-10-21；2026-10-22 按 band-controlled 验证简化为
-> 0.6MP 面积下限，未批准。批准后并入
-> [`docs/DECISIONS.md`](../DECISIONS.md) 作为 ADR-0042。
+> **状态**：已确认（2026-10-22），已并入 [`docs/DECISIONS.md`](../DECISIONS.md) 作为
+> ADR-0042；由 Phase 18 D01–D04 实施。
 > **证据**：[`det-input-geometry.md`](det-input-geometry.md)、
 > [`det-pixel-budget-delivery.md`](det-pixel-budget-delivery.md)。
 > **关联**：Phase 16 D04 要求后续加速方向另立 Phase 并给出"目标阶段占比 + 预计移动毫秒数"；

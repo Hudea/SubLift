@@ -116,16 +116,23 @@
     },
     {
       "id": "phase17",
-      "name": "Phase 17 - 产品表面收口（Contract / Session / Layout）",
-      "description": "维护 Phase：把 Web/macOS 的能力语义收敛到 contracts/，把 Worker/Server 收敛到共享 ApplicationSession，把前端收敛为 domain/application/presentation，并把根目录、Python 离线工具与部署文件归位；不新增用户功能，不改变产品运行时语义。",
+      "name": "Phase 17 - 产品表面收口（Contract 语义）",
+      "description": "维护 Phase：把 Web/macOS/CLI/Server 的能力语义收敛到 contracts/ 与 parity matrix；SRT/输出/ROI/默认值/Job-Task 状态已对齐并有 fixture 消费测试。Session/Layout/工具链收口拆出到 Phase 19。",
       "detail_file": "docs/phases/phase17.json",
-      "status": "in-progress"
+      "status": "done"
     },
     {
       "id": "phase18",
       "name": "Phase 18 - Det 输入几何契约与默认切换",
       "description": "维护 Phase：把 det 输入几何从固定 min-side 736 切换为可配置的目标面积策略，并将该维度的验收从逐字节 parity 迁移到质量门；D01 先批准 ADR-0042 与配置面，在契约通过前产品默认保持 736。",
       "detail_file": "docs/phases/phase18.json",
+      "status": "in-progress"
+    },
+    {
+      "id": "phase19",
+      "name": "Phase 19 - 产品表面收口（Session / Layout / 工具链）",
+      "description": "承接 Phase 17 拆出的 Session/Layout/工具链收口：Web 批量队列持久化、共享 ApplicationSession、Web/Swift 前端分层、根目录与验证门归位；not-started。",
+      "detail_file": "docs/phases/phase19.json",
       "status": "not-started"
     }
   ]

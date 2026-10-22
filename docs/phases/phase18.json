@@ -16,7 +16,7 @@
     "不改变 SRT 文本格式、时间码、编码，以及非 det 维度的配置/状态/错误语义。",
     "不以性能名义跳过质量门、覆盖矩阵或回滚演练，也不伪造跨机 hash 验证。"
   ],
-  "status": "not-started",
+  "status": "in-progress",
   "deliverables": [
     {
       "id": "D01",
@@ -35,8 +35,10 @@
         "docs/DECISIONS.md",
         "docs/design"
       ],
-      "status": "not-started",
-      "evidence": []
+      "status": "in-progress",
+      "evidence": [
+        "2026-10-22：ADR-0042 获批并写入 docs/DECISIONS.md；Phase 17 的 Session/Layout/工具链收口拆出为 Phase 19，Phase 17 以 D01–D02 收口 done，Phase 18 置 in-progress。D01 配置面进行中。"
+      ]
     },
     {
       "id": "D02",

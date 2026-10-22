@@ -5,6 +5,37 @@
 
 ---
 
+## ADR-0042 Det 输入几何退出逐字节 parity，改为 0.6MP 面积下限 + 质量门（2026-10-22）
+
+- **状态**：已确认；由 Phase 18 D01 实施，D02–D04 完成质量门、覆盖矩阵与默认切换。
+- **背景**：Phase 6 cutover 的 parity 契约要求 C++ 输出与冻结 Python/RapidOCR Oracle 逐字节
+  一致；Phase 16 归因显示 `det_infer` 占 core wall **84.35%**，根因是 `limit_side_len=736`
+  把 1920×324 bottom-crop 放大到 4352×736（3.203MP），成本与源分辨率无关。0.6MP 面积下限实验
+  在固定 1080p 负载上端到端 136.35s → 45.00s（3.03×），官方 one-to-one 质量门 CER/exact 改善；
+  736 在 band-controlled 素材上持续丢左前缀。冻结 Oracle 基线（`544426e`）还早于 C++ 合并层
+  （`2fe2f91`），byte-exact 门在 det 切换前已经失效。
+- **决策**：
+  1. det 输入几何从逐字节 parity 维度移出，改为质量治理：目标面积为
+     `max(0.6MP, native_area)`，只放大不缩小，输出取 32 倍数；短边 320/352 仅作为真实
+     720p / 22.5–25% 素材复现问题时的条件项，不进入默认。
+  2. 保留 parity 的维度：SRT 文本格式/时间码/编码、非 det 的配置与状态语义、模型与 ORT
+     二进制指纹、错误与 fail-closed 行为。
+  3. 质量门改用合同阈值（CER macro/micro、exact、usable recall、timing F1/precision、
+     noise/empty、split/FP）；基线重冻并保留旧基线归档，不以 byte-exact 作为 det 维度的
+     默认验收。
+  4. 合并层（`2fe2f91`）的既有偏离与 det 几何一并纳入质量治理；ADR-0028 对 ORT 二进制/
+     intra-op/Rec batch 的冻结继续有效。
+  5. 回滚保留 736 作为可配置回退值，回滚不依赖重新构建。
+- **理由**：736 的 min-side 规则与源分辨率无关，导致 3.2–4.3MP 的固定 det 成本；0.6MP 面积
+  下限在 30% bottom-crop 上等效 native，并显著改善文本质量；子序列去重修复了 720p precision
+  回退；默认保持 736 直到质量门与回滚演练完成。
+- **影响**：Phase 18 D01 配置面、D02 gate 重放/重冻、D03 覆盖矩阵（720p 从 1080p 下采样，
+  明确标注非独立源）、D04 默认切换；
+  `benchmark/parity/goldens/paddle/paddle_quality_baseline.v1.json` 与相关 benchmark
+  baselines 需重冻。
+
+---
+
 ## ADR-0041 采纳 GPU 执行后端与容器框架，先交付配置与 CPU 兼容（2026-09-06）
 
 - **状态**：已确认；由 Phase 15（D01 配置与 CPU 兼容）先行实施，D02–D04 待冻结输入。
