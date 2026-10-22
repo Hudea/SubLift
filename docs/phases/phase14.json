@@ -19,7 +19,7 @@
     "不扩张或改写 Phase 12 已完成 Feature，也不为 12505 补写未经真实执行的证据。",
     "不创建 docs/plans 或 docs/reports 过程归档目录。"
   ],
-  "status": "ready-for-merge",
+  "status": "blocked",
   "deliverables": [
     {
       "id": "D01",

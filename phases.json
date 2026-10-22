@@ -98,7 +98,7 @@
       "name": "Phase 14 - 局域网容器化自托管",
       "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。detail 已在 main，D01–D05 全 done；保持 ready-for-merge 直到在 main 上完成复验。",
       "detail_file": "docs/phases/phase14.json",
-      "status": "ready-for-merge"
+      "status": "blocked"
     },
     {
       "id": "phase15",
