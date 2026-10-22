@@ -23,6 +23,9 @@ struct DBPostProcessOptions {
   float unclip_ratio{1.6f};
   std::string score_mode{"fast"};
   bool use_dilation{true};
+  /// Implementation switch for equivalence tests: both paths must produce
+  /// identical quads/scores; product always uses the parallel path.
+  bool parallel{true};
   int min_size{3};
   int max_candidates{1000};
 };

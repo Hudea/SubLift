@@ -1,5 +1,9 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "ppocr_crop_cls.hpp"
@@ -81,4 +85,57 @@ TEST_CASE("Cls 180 rotation uses RapidOCR strict threshold",
       sublift::paddle::apply_cls_result(crop, 1, 0.9001F, 0.9F);
   CHECK(above_threshold.rotated_180);
   CHECK(crop.rgb_data == std::vector<std::uint8_t>{4, 5, 6, 1, 2, 3});
+}
+
+TEST_CASE("Rec and Cls tensor preparation fully defines the target buffer",
+          "[paddle][rec_tensor][cls_tensor][equivalence]") {
+  sublift::paddle::CropResult crop;
+  crop.width = 64;
+  crop.height = 32;
+  crop.rgb_data.resize(static_cast<std::size_t>(crop.width) *
+                       static_cast<std::size_t>(crop.height) * 3U);
+  for (std::size_t index = 0; index < crop.rgb_data.size(); ++index) {
+    crop.rgb_data[index] = static_cast<std::uint8_t>(index * 37U);
+  }
+
+  constexpr float kSentinel = 12345.0F;
+  {
+    constexpr int kRecHeight = 48;
+    constexpr int kTargetWidth = 160;
+    const std::size_t elements =
+        static_cast<std::size_t>(3) * kRecHeight * kTargetWidth;
+    std::vector<float> tensor(elements, kSentinel);
+    sublift::paddle::prepare_rec_tensor(
+        crop, kRecHeight, kTargetWidth, tensor.data());
+    CHECK(std::none_of(tensor.begin(), tensor.end(),
+                       [](float value) { return value == kSentinel; }));
+    const int valid_width = sublift::paddle::resized_valid_width(
+        crop, kRecHeight, kTargetWidth);
+    REQUIRE(valid_width > 0);
+    REQUIRE(valid_width < kTargetWidth);
+    for (int channel = 0; channel < 3; ++channel) {
+      for (int y = 0; y < kRecHeight; ++y) {
+        CHECK(tensor[static_cast<std::size_t>(channel) * kRecHeight *
+                         kTargetWidth +
+                     static_cast<std::size_t>(y) * kTargetWidth +
+                     valid_width] == 0.0F);
+      }
+    }
+  }
+  {
+    constexpr int kClsHeight = 48;
+    constexpr int kClsWidth = 192;
+    const std::size_t elements =
+        static_cast<std::size_t>(3) * kClsHeight * kClsWidth;
+    std::vector<float> tensor(elements, kSentinel);
+    sublift::paddle::prepare_cls_tensor(crop, tensor.data());
+    CHECK(std::none_of(tensor.begin(), tensor.end(),
+                       [](float value) { return value == kSentinel; }));
+    const int valid_width = sublift::paddle::resized_valid_width(
+        crop, kClsHeight, kClsWidth);
+    REQUIRE(valid_width > 0);
+    REQUIRE(valid_width < kClsWidth);
+    CHECK(tensor[static_cast<std::size_t>(valid_width)] == 0.0F);
+    CHECK(tensor[kClsWidth - 1] == 0.0F);
+  }
 }

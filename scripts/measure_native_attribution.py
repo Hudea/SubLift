@@ -62,8 +62,12 @@ STAGE_TREE: dict[str, str] = {
     "paddle.det_postprocess": "ocr",
     "paddle.cls_preprocess": "ocr",
     "paddle.cls_infer": "ocr",
+    # Phase 20 operator-level stages.
+    "paddle.cls_apply": "ocr",
     "paddle.rec_preprocess": "ocr",
     "paddle.rec_infer": "ocr",
+    "paddle.rec_decode": "ocr",
+    "paddle.ocr_post": "ocr",
     "finalize": "",
 }
 

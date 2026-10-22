@@ -358,13 +358,14 @@ DBPostProcessResult db_postprocess(
   cv::Mat probability(
       map_h, map_w, CV_32FC1, const_cast<float*>(prob_map_data));
   cv::Mat bitmap;
-  cv::threshold(
-      probability, bitmap, options.det_thresh, 255.0, cv::THRESH_BINARY);
-  bitmap.convertTo(bitmap, CV_8UC1);
+  // Phase 20: a single cv::compare pass replaces the threshold-to-CV_32F +
+  // convertTo-CV_8U pair. THRESH_BINARY and CMP_GT produce the same 0/255
+  // bitmap (NaN compares false in both paths).
+  cv::compare(probability, options.det_thresh, bitmap, cv::CMP_GT);
   if (options.use_dilation) {
-    cv::dilate(
-        bitmap, bitmap,
-        cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2)));
+    static const cv::Mat kDilationKernel =
+        cv::getStructuringElement(cv::MORPH_RECT, cv::Size(2, 2));
+    cv::dilate(bitmap, bitmap, kDilationKernel);
   }
 
   std::vector<std::vector<cv::Point>> contours;
@@ -373,28 +374,37 @@ DBPostProcessResult db_postprocess(
   const auto contour_count = std::min(
       contours.size(),
       static_cast<std::size_t>(std::max(0, options.max_candidates)));
-  result.quads.reserve(contour_count);
 
-  for (std::size_t index = 0; index < contour_count; ++index) {
+  // Phase 20: candidate evaluation (minAreaRect, polygon score, pyclipper-
+  // compatible unclip, coordinate mapping) is independent per contour. The
+  // parallel path writes each candidate into its own slot and the final
+  // compression keeps contour order, so results are identical to the serial
+  // loop. The serial path remains available for equivalence tests.
+  struct Candidate {
+    bool usable{false};
+    QuadPolygon quad{};
+  };
+  std::vector<Candidate> candidates(contour_count);
+  const auto evaluate = [&](std::size_t index) {
     const auto& contour = contours[index];
     if (contour.empty()) {
-      continue;
+      return;
     }
     const auto mini_box = get_mini_box(contour);
     if (mini_box.short_side < options.min_size) {
-      continue;
+      return;
     }
     const float score =
         options.score_mode == "fast"
             ? box_score_fast(probability, mini_box.points)
             : box_score_slow(probability, contour);
     if (options.det_box_thresh > score) {
-      continue;
+      return;
     }
 
     const auto expanded = unclip_rectangle(mini_box, options.unclip_ratio);
     if (expanded.short_side < options.min_size + 2) {
-      continue;
+      return;
     }
     auto mapped = expanded.points;
     for (auto& point : mapped) {
@@ -405,7 +415,26 @@ DBPostProcessResult db_postprocess(
     }
     const auto quad = to_quad(mapped, score, orig_w, orig_h);
     if (usable_quad(quad)) {
-      result.quads.push_back(quad);
+      candidates[index] = Candidate{.usable = true, .quad = quad};
+    }
+  };
+  if (options.parallel) {
+    cv::parallel_for_(
+        cv::Range(0, static_cast<int>(contour_count)),
+        [&](const cv::Range& range) {
+          for (int index = range.start; index < range.end; ++index) {
+            evaluate(static_cast<std::size_t>(index));
+          }
+        });
+  } else {
+    for (std::size_t index = 0; index < contour_count; ++index) {
+      evaluate(index);
+    }
+  }
+  result.quads.reserve(contour_count);
+  for (const auto& candidate : candidates) {
+    if (candidate.usable) {
+      result.quads.push_back(candidate.quad);
     }
   }
 

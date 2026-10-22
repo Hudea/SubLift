@@ -1,8 +1,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
+#include <random>
 #include <vector>
 
 #include <opencv2/imgproc.hpp>
@@ -156,4 +158,66 @@ TEST_CASE(
         {116.0F, 81.0F}, {17.0F, 94.0F}}});
   CHECK(result.quads[0].score ==
         Approx(0.8286049134F).margin(1e-5F));
+}
+
+TEST_CASE("DBPostProcess parallel candidates match the serial reference",
+          "[paddle][db][equivalence]") {
+  using sublift::paddle::DBPostProcessOptions;
+  std::mt19937 rng(20261022U);
+  std::uniform_real_distribution<float> noise(0.0F, 1.0F);
+  for (int iteration = 0; iteration < 12; ++iteration) {
+    const int width = 64 + static_cast<int>(rng() % 192U);
+    const int height = 32 + static_cast<int>(rng() % 128U);
+    std::vector<float> probability(
+        static_cast<std::size_t>(width) * static_cast<std::size_t>(height),
+        0.0F);
+    for (auto& value : probability) {
+      value = noise(rng) * 0.6F;
+    }
+    const int boxes = 1 + static_cast<int>(rng() % 6U);
+    for (int box = 0; box < boxes; ++box) {
+      const int x0 = static_cast<int>(rng() % static_cast<unsigned>(width - 16));
+      const int y0 = static_cast<int>(rng() % static_cast<unsigned>(height - 16));
+      const int box_width = 4 + static_cast<int>(rng() % 24U);
+      const int box_height = 3 + static_cast<int>(rng() % 10U);
+      for (int y = y0; y < std::min(height, y0 + box_height); ++y) {
+        for (int x = x0; x < std::min(width, x0 + box_width); ++x) {
+          probability[static_cast<std::size_t>(y) * width + x] =
+              0.8F + noise(rng) * 0.2F;
+        }
+      }
+    }
+
+    DBPostProcessOptions serial_options;
+    serial_options.parallel = false;
+    DBPostProcessOptions parallel_options;
+    parallel_options.parallel = true;
+    const auto serial = sublift::paddle::db_postprocess(
+        probability.data(), height, width, height * 2, width * 2,
+        serial_options);
+    const auto parallel = sublift::paddle::db_postprocess(
+        probability.data(), height, width, height * 2, width * 2,
+        parallel_options);
+
+    INFO("iteration=" << iteration << " map=" << width << "x" << height);
+    REQUIRE(serial.quads.size() == parallel.quads.size());
+    REQUIRE(serial.aabbs.size() == parallel.aabbs.size());
+    for (std::size_t index = 0; index < serial.quads.size(); ++index) {
+      const auto& lhs = serial.quads[index];
+      const auto& rhs = parallel.quads[index];
+      CHECK(lhs.score == rhs.score);
+      CHECK(lhs.p0.x == rhs.p0.x);
+      CHECK(lhs.p0.y == rhs.p0.y);
+      CHECK(lhs.p1.x == rhs.p1.x);
+      CHECK(lhs.p1.y == rhs.p1.y);
+      CHECK(lhs.p2.x == rhs.p2.x);
+      CHECK(lhs.p2.y == rhs.p2.y);
+      CHECK(lhs.p3.x == rhs.p3.x);
+      CHECK(lhs.p3.y == rhs.p3.y);
+      CHECK(serial.aabbs[index].x == parallel.aabbs[index].x);
+      CHECK(serial.aabbs[index].y == parallel.aabbs[index].y);
+      CHECK(serial.aabbs[index].width == parallel.aabbs[index].width);
+      CHECK(serial.aabbs[index].height == parallel.aabbs[index].height);
+    }
+  }
 }

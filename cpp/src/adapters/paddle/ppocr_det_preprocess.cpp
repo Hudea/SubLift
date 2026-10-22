@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 #if defined(SUBLIFT_HAS_OPENCV) || __has_include(<opencv2/opencv.hpp>)
@@ -195,9 +196,17 @@ GlobalPreprocessResult prepare_global_image(
   result.ratio_h = ratio_h;
   result.ratio_w = ratio_w;
   result.padding_top = padding_top;
-  result.rgb.assign(
-      working.data,
-      working.data + static_cast<std::size_t>(working.total()) * 3);
+  // Phase 20 D01 audit fix: when no global resize/pad happened, "working" is
+  // a view over the caller's possibly strided buffer. Copy row by row in that
+  // case; a packed copy would shift every row for stride > width * 3.
+  const auto packed_row_bytes =
+      static_cast<std::size_t>(working.cols) * 3U;
+  result.rgb.resize(packed_row_bytes * static_cast<std::size_t>(working.rows));
+  for (int row = 0; row < working.rows; ++row) {
+    std::memcpy(result.rgb.data() + static_cast<std::size_t>(row) *
+                                        packed_row_bytes,
+                working.ptr<std::uint8_t>(row), packed_row_bytes);
+  }
   return result;
 #else
   throw std::runtime_error(
@@ -218,7 +227,32 @@ DetPreprocessResult prepare_det_input(
     std::int32_t width,
     std::int32_t height,
     const DetInputGeometry& geometry) {
-  if (packed_rgb == nullptr || width <= 0 || height <= 0) {
+  const DetInputSize size = det_input_size(width, height, geometry);
+  if (size.width <= 0 || size.height <= 0) {
+    throw std::runtime_error("Paddle Det resize produced an empty tensor");
+  }
+  DetPreprocessResult result;
+  result.width = size.width;
+  result.height = size.height;
+  const auto plane =
+      static_cast<std::size_t>(size.width) * static_cast<std::size_t>(size.height);
+  result.nchw.resize(plane * 3);
+  const auto actual = prepare_det_input_into(
+      packed_rgb, width, height, geometry, result.nchw.data());
+  if (actual != size) {
+    throw std::runtime_error("Paddle Det preprocess geometry mismatch");
+  }
+  return result;
+}
+
+DetInputSize prepare_det_input_into(
+    const std::uint8_t* packed_rgb,
+    std::int32_t width,
+    std::int32_t height,
+    const DetInputGeometry& geometry,
+    float* out_nchw) {
+  if (packed_rgb == nullptr || width <= 0 || height <= 0 ||
+      out_nchw == nullptr) {
     throw std::invalid_argument("invalid RGB image for Paddle Det preprocess");
   }
 
@@ -237,27 +271,29 @@ DetPreprocessResult prepare_det_input(
       source, resized, cv::Size(resize_w, resize_h), 0.0, 0.0,
       cv::INTER_LINEAR);
 
-  DetPreprocessResult result;
-  result.width = resize_w;
-  result.height = resize_h;
-  const auto plane = static_cast<std::size_t>(resize_w) * resize_h;
-  result.nchw.resize(plane * 3);
+  const auto plane =
+      static_cast<std::size_t>(resize_w) * static_cast<std::size_t>(resize_h);
   const auto& normalized = normalization_lut();
-  for (std::int32_t y = 0; y < resize_h; ++y) {
-    const auto* row = resized.ptr<std::uint8_t>(y);
-    for (std::int32_t x = 0; x < resize_w; ++x) {
-      const auto* pixel = row + static_cast<std::size_t>(x) * 3;
-      const auto index =
-          static_cast<std::size_t>(y) * resize_w + x;
-      // RapidOCR loads BGR. The source here is RGB, so reverse channels while
-      // producing NCHW. NumPy keeps the image multiply/subtract/divide in
-      // float32 even though the resulting temporary array is typed float64.
-      result.nchw[index] = normalized[pixel[2]];
-      result.nchw[plane + index] = normalized[pixel[1]];
-      result.nchw[plane * 2 + index] = normalized[pixel[0]];
+  // Phase 20: the scalar conversion/NCHW pass is independent per output row,
+  // so it runs on OpenCV's parallel backend. Values remain byte-identical to
+  // the previous single-threaded loop (same LUT, same channel order).
+  cv::parallel_for_(cv::Range(0, resize_h), [&](const cv::Range& range) {
+    for (std::int32_t y = range.start; y < range.end; ++y) {
+      const auto* row = resized.ptr<std::uint8_t>(y);
+      for (std::int32_t x = 0; x < resize_w; ++x) {
+        const auto* pixel = row + static_cast<std::size_t>(x) * 3;
+        const auto index =
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(resize_w) +
+            static_cast<std::size_t>(x);
+        // RapidOCR loads BGR. The source here is RGB, so reverse channels
+        // while producing NCHW.
+        out_nchw[index] = normalized[pixel[2]];
+        out_nchw[plane + index] = normalized[pixel[1]];
+        out_nchw[plane * 2 + index] = normalized[pixel[0]];
+      }
     }
-  }
-  return result;
+  });
+  return size;
 #else
   throw std::runtime_error(
       "Paddle Det preprocess requires an OpenCV-enabled build");

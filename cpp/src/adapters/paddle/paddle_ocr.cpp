@@ -7,6 +7,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -296,6 +297,11 @@ struct PaddleOcrEngine::Impl {
   std::unique_ptr<Ort::Session> cls_session;
   std::unique_ptr<Ort::Session> rec_session;
 
+  /// Reused NCHW Det input buffer (Phase 20). recognize() is single-consumer
+  /// by contract, so one buffer per engine avoids a fresh 7 MB value-
+  /// initialized vector on every OCR call.
+  std::vector<float> det_input_buffer_;
+
   std::string det_input_name;
   std::string det_output_name;
   std::string cls_input_name;
@@ -375,19 +381,36 @@ struct PaddleOcrEngine::Impl {
 
   paddle::DBPostProcessResult run_det(
       const paddle::GlobalPreprocessResult& global) {
-    paddle::DetPreprocessResult prepared;
+    paddle::DetInputSize det_size{};
     {
       StageTimer timer(paddle_stage_registry(), "paddle.det_preprocess");
-      prepared = paddle::prepare_det_input(
-          global.rgb.data(), global.width, global.height, options.det_geometry);
+      det_size = paddle::det_input_size(
+          global.width, global.height, options.det_geometry);
+      if (det_size.width <= 0 || det_size.height <= 0) {
+        throw std::runtime_error("Paddle Det resize produced an empty tensor");
+      }
+      const auto required =
+          static_cast<std::size_t>(det_size.width) *
+          static_cast<std::size_t>(det_size.height) * 3U;
+      if (det_input_buffer_.size() < required) {
+        det_input_buffer_.resize(required);
+      }
+      const auto actual = paddle::prepare_det_input_into(
+          global.rgb.data(), global.width, global.height, options.det_geometry,
+          det_input_buffer_.data());
+      if (actual.width != det_size.width || actual.height != det_size.height) {
+        throw std::runtime_error("Paddle Det preprocess geometry mismatch");
+      }
     }
-    const auto rw = prepared.width;
-    const auto rh = prepared.height;
-    auto& input = prepared.nchw;
+    const auto rw = det_size.width;
+    const auto rh = det_size.height;
+    const auto input_elements = static_cast<std::size_t>(rw) *
+                                static_cast<std::size_t>(rh) * 3U;
 
     std::array<int64_t, 4> shape{1, 3, rh, rw};
-    Ort::Value tensor = Ort::Value::CreateTensor<float>(memory_info, input.data(), input.size(),
-                                                        shape.data(), shape.size());
+    Ort::Value tensor = Ort::Value::CreateTensor<float>(
+        memory_info, det_input_buffer_.data(), input_elements, shape.data(),
+        shape.size());
     const char* in_names[] = {det_input_name.c_str()};
     const char* out_names[] = {det_output_name.c_str()};
     auto outputs = [&] {
@@ -448,18 +471,19 @@ struct PaddleOcrEngine::Impl {
       ++runtime_stats.cls_batches;
       const std::size_t end = std::min(indices.size(), begin + batch_size);
       const std::size_t batch = end - begin;
-      std::vector<float> input(
-          batch * static_cast<std::size_t>(
-                      kChannels * kHeight * kWidth),
-          0.0F);
       const std::size_t item_size =
           static_cast<std::size_t>(kChannels * kHeight * kWidth);
+      const std::size_t input_elements = batch * item_size;
+      // Phase 20: value-initialising the tensor here duplicated the full
+      // zero-fill already done by prepare_padded_tensor (B10). Allocate
+      // uninitialised storage and let the preprocessor own the padding zeros.
+      auto input = std::make_unique_for_overwrite<float[]>(input_elements);
       {
         StageTimer timer(paddle_stage_registry(), "paddle.cls_preprocess");
         for (std::size_t item = 0; item < batch; ++item) {
           paddle::prepare_cls_tensor(
               crops[indices[begin + item]],
-              input.data() + item * item_size);
+              input.get() + item * item_size);
         }
       }
       std::array<std::int64_t, 4> shape{
@@ -471,8 +495,8 @@ struct PaddleOcrEngine::Impl {
 
       Ort::Value tensor = Ort::Value::CreateTensor<float>(
           memory_info,
-          input.data(),
-          input.size(),
+          input.get(),
+          input_elements,
           shape.data(),
           shape.size());
       const char* input_names[] = {cls_input_name.c_str()};
@@ -496,14 +520,17 @@ struct PaddleOcrEngine::Impl {
         throw std::runtime_error("PaddleOCR cls 输出维度异常");
       }
 
-      for (std::size_t item = 0; item < batch; ++item) {
-        const float* scores = output + item * 2;
-        const int label = scores[1] > scores[0] ? 1 : 0;
-        const float score = scores[label];
-        const std::size_t original_index = indices[begin + item];
-        auto result = paddle::apply_cls_result(
-            crops[original_index], label, score, kRotateThreshold);
-        results[original_index] = result;
+      {
+        StageTimer timer(paddle_stage_registry(), "paddle.cls_apply");
+        for (std::size_t item = 0; item < batch; ++item) {
+          const float* scores = output + item * 2;
+          const int label = scores[1] > scores[0] ? 1 : 0;
+          const float score = scores[label];
+          const std::size_t original_index = indices[begin + item];
+          auto result = paddle::apply_cls_result(
+              crops[original_index], label, score, kRotateThreshold);
+          results[original_index] = result;
+        }
       }
     }
     return results;
@@ -551,7 +578,10 @@ struct PaddleOcrEngine::Impl {
               static_cast<double>(kHeight) * max_width_ratio));
       const std::size_t item_size = static_cast<std::size_t>(
           kChannels * kHeight * target_width);
-      std::vector<float> input(batch * item_size, 0.0F);
+      const std::size_t input_elements = batch * item_size;
+      // Phase 20: avoid the duplicate value-initialisation (B10); the
+      // preprocessor zero-fills the right padding itself.
+      auto input = std::make_unique_for_overwrite<float[]>(input_elements);
       {
         StageTimer timer(paddle_stage_registry(), "paddle.rec_preprocess");
         for (std::size_t item = 0; item < batch; ++item) {
@@ -559,7 +589,7 @@ struct PaddleOcrEngine::Impl {
               crops[indices[begin + item]],
               static_cast<int>(kHeight),
               static_cast<int>(target_width),
-              input.data() + item * item_size);
+              input.get() + item * item_size);
         }
       }
       std::array<std::int64_t, 4> shape{
@@ -571,8 +601,8 @@ struct PaddleOcrEngine::Impl {
 
       Ort::Value tensor = Ort::Value::CreateTensor<float>(
           memory_info,
-          input.data(),
-          input.size(),
+          input.get(),
+          input_elements,
           shape.data(),
           shape.size());
       const char* in_names[] = {rec_input_name.c_str()};
@@ -605,13 +635,16 @@ struct PaddleOcrEngine::Impl {
       const std::size_t output_item_size =
           static_cast<std::size_t>(sequence_length) *
           static_cast<std::size_t>(class_count);
-      for (std::size_t item = 0; item < batch; ++item) {
-        auto decoded = paddle_detail::ctc_greedy_decode(
-            output + item * output_item_size,
-            sequence_length,
-            class_count,
-            dictionary);
-        results[indices[begin + item]] = decoded;
+      {
+        StageTimer timer(paddle_stage_registry(), "paddle.rec_decode");
+        for (std::size_t item = 0; item < batch; ++item) {
+          auto decoded = paddle_detail::ctc_greedy_decode(
+              output + item * output_item_size,
+              sequence_length,
+              class_count,
+              dictionary);
+          results[indices[begin + item]] = decoded;
+        }
       }
     }
     return results;
@@ -666,41 +699,44 @@ OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
     crops.reserve(db_res.quads.size());
     {
       StageTimer timer(paddle_stage_registry(), "paddle.crop");
-      for (size_t i = 0; i < db_res.quads.size(); ++i) {
-        const auto& quad = db_res.quads[i];
-        paddle::CropResult crop = paddle::get_rotate_crop(
+      for (std::size_t i = 0; i < db_res.quads.size(); ++i) {
+        crops.push_back(paddle::get_rotate_crop(
             global.rgb.data(), global.width, global.height, global.width * 3,
-            quad);
-        crops.push_back(std::move(crop));
+            db_res.quads[i]));
       }
     }
 
     (void)impl_->run_cls(crops);
     auto recognized = impl_->run_rec(crops);
 
-    std::vector<OcrLine> lines;
-    lines.reserve(db_res.quads.size());
-    for (std::size_t i = 0; i < db_res.quads.size(); ++i) {
-      const auto& quad = db_res.quads[i];
-      auto& ctc = recognized[i];
-      if (is_strip_empty(ctc.text) || ctc.confidence < 0.5f) {
-        continue;
+    // Phase 20 measurement: result filtering/mapping/sorting/text assembly was
+    // previously invisible in the stage attribution.
+    return [&] {
+      StageTimer timer(paddle_stage_registry(), "paddle.ocr_post");
+      std::vector<OcrLine> lines;
+      lines.reserve(db_res.quads.size());
+      for (std::size_t i = 0; i < db_res.quads.size(); ++i) {
+        const auto& quad = db_res.quads[i];
+        auto& ctc = recognized[i];
+        if (is_strip_empty(ctc.text) || ctc.confidence < 0.5f) {
+          continue;
+        }
+        const std::array<Point2D, 4> original_points{
+            map_point_to_original(quad.p0, global, w, h),
+            map_point_to_original(quad.p1, global, w, h),
+            map_point_to_original(quad.p2, global, w, h),
+            map_point_to_original(quad.p3, global, w, h),
+        };
+        OcrCropBox crop_box = clamp_box(quad_to_aabb(original_points), w, h);
+        lines.push_back(OcrLine{
+            .text = std::move(ctc.text),
+            .confidence = ctc.confidence,
+            .box = crop_box,
+        });
       }
-      const std::array<Point2D, 4> original_points{
-          map_point_to_original(quad.p0, global, w, h),
-          map_point_to_original(quad.p1, global, w, h),
-          map_point_to_original(quad.p2, global, w, h),
-          map_point_to_original(quad.p3, global, w, h),
-      };
-      OcrCropBox crop_box = clamp_box(quad_to_aabb(original_points), w, h);
-      lines.push_back(OcrLine{
-          .text = std::move(ctc.text),
-          .confidence = ctc.confidence,
-          .box = crop_box,
-      });
-    }
-    sort_ocr_lines(lines);
-    return OcrResult::from_lines(lines);
+      sort_ocr_lines(lines);
+      return OcrResult::from_lines(lines);
+    }();
   } catch (const Ort::Exception& e) {
     throw std::runtime_error(std::string("PaddleOCR ONNX Runtime 推理故障: ") + e.what());
   } catch (const std::runtime_error&) {

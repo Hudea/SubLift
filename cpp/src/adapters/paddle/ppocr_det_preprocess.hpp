@@ -76,4 +76,16 @@ struct DetInputSize {
     std::int32_t height,
     const DetInputGeometry& geometry);
 
+/// Fill a caller-provided contiguous NCHW float tensor instead of allocating
+/// a fresh vector. The caller must provide enough storage for
+/// det_input_size(width, height, geometry) * 3 floats; this form exists for
+/// hot loops that reuse one buffer across frames (Phase 20). Returns the
+/// resolved input geometry.
+[[nodiscard]] DetInputSize prepare_det_input_into(
+    const std::uint8_t* packed_rgb,
+    std::int32_t width,
+    std::int32_t height,
+    const DetInputGeometry& geometry,
+    float* out_nchw);
+
 }  // namespace sublift::paddle
