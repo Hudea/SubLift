@@ -1,0 +1,130 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 21 - 字幕区域自适应条带与水印抑制（维护）",
+  "goal": "修复带常驻水印条带视频的字幕区域误吸附与全片水印条目问题：以多帧 OCR 证据驱动的居中式自适应条带替换单帧 Y 合并，并在行级/条目级抑制水印文本；Web（C++ server）与 macOS GUI 两端口径一致，输出可复核的检测/提取 A/B、测试与文档，具备合入 main 条件。",
+  "scope": [
+    "D01：复现与基线：用合成水印条带视频（静态左水印/滚动水印，含真实中文字幕）与现有 hardsub 片源复现「水印进入 ROI / 全片水印条目」；记录现状检测框、预览文本、提取条目与耗时基线，产出 OCR 行级 fixture 与设计文档。",
+    "D02：自适应条带检测：新增多帧行证据纯逻辑模块（外观分、间歇性、锚点、向外扩散、自适应 padding、可选 X 收窄），替换 server region_detector 的单帧合并；无锚点 fail-closed；4 片源检测 A/B 与单测。",
+    "D03：水印文本抑制：行级可解释规则（URL/域名、常驻/贴边混排等）与条目级全片重复覆盖过滤，合成水印片提取水印条目显著下降、Zootopia 基线 SRT sha256 不变；规则与阈值可解释、可配置。",
+    "D04：macOS 同口径与收口：Swift 端多帧 Vision 候选聚合 + 同口径自适应条带，选区不再只取最佳单帧；Swift 单测/构建、C++ 全量 CTest、检测与提取 A/B、验证记录与文档同步，Phase 收口到 ready-for-merge。"
+  ],
+  "non_goals": [
+    "不改变字幕打轴/OCR/去重语义与既有 SRT 基线；Zootopia 全片 SRT sha256 必须不变（若水印规则命中，需在证据中说明并回退）。",
+    "不引入第三方依赖，不改模型/ORT/推理线程/arena 与 ADR-0025/0028 冻结项。",
+    "不扩展到 GPU/CUDA、Web UI 视觉改版、批量队列持久化（Phase 19）或分发/签名。",
+    "不重写 Phase 1–20 历史 evidence；本 Phase 只改区域检测、水印抑制、macOS 选区与对应测试/文档。",
+    "不改变 ROI/打轴固定选区契约：任务期间 ROI 仍固定；自适应只发生在检测阶段。"
+  ],
+  "status": "ready-for-merge",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "复现、基线与设计收口",
+      "outcome": "水印条带场景可稳定复现并被基线量化；自适应条带算法、阈值、X 策略、失败与回退边界在文档中冻结，成为 D02/D03/D04 的验收依据。",
+      "acceptance": [
+        "复现素材与命令可复核：合成水印条带视频（静态左水印 + 滚动水印两种）与至少 2 个真实 hardsub 片源；记录现状 detect-region 输出（box/preview_text）与提取条目中水印占比。",
+        "基线写入 benchmark/baselines/subtitle-region-band-phase21.md：检测框、preview_text、提取条目数/水印条目数、耗时；标明复现环境与命令。",
+        "docs/design/subtitle-band-detection.md 冻结算法：多帧行证据、外观分、间歇性加权、锚点、向外扩散约束、自适应 padding、X 收窄条件、无锚点 fail-closed；解释与 D03 的边界。",
+        "OCR 行级 fixture（多帧归一化行框+文本+置信度）落入 cpp/tests/fixtures/subtitle_band/ 并注明来源与生成方式。"
+      ],
+      "areas": [
+        "docs/design",
+        "benchmark/baselines",
+        "cpp/tests/fixtures"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-23：复现与基线完成。片源：debug/watermark-repro/watermark_band_32s.mp4、scrolling_watermark_32s.mp4（合成），debug/band-test/band_1080p.mp4、debug/Zootopia_clip_1080p.mp4（真实）。现状 detect-region（7 采样点）中水印片 preview 直接含水印文本、box X 全宽；scrolling 提取 10 条/3 水印，detect-region ROI 提取 15 条/6 水印。数字与命令写入 benchmark/baselines/subtitle-region-band-phase21.md §1–§5。",
+        "2026-10-23：OCR 行级 fixture 4 个（各 8 帧、归一化行框+文本+置信度，16KB）落入 cpp/tests/fixtures/subtitle_band/，来源与生成方式（Paddle trace + (i+0.5)/8*duration 抽帧）记录于 fixture note 与 benchmark 基线。",
+        "2026-10-23：算法/阈值/边界冻结于 docs/design/subtitle-band-detection.md：行级外观分、跨帧几何支持、间歇性锚点（阈值作用于外观分×间歇性）、居中外扩、自适应 padding、侧边水印 X 收窄与宁宽勿窄回退、fail-closed 与 D03 边界。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "自适应条带检测（C++ 核心与 server 接线）",
+      "outcome": "自动字幕区域不再依赖单帧 Y 合并：多帧 OCR 行经纯逻辑自适应条带输出稳定 ROI，水印/台标行被排除或降权，无法确定字幕时 fail-closed，不返回水印框。",
+      "acceptance": [
+        "新增 sublift 纯逻辑条带模块（无 OCR/IO 依赖）：输入多帧归一化行，输出归一化 band + 锚点/行高/支持帧/排除诊断；默认参数配置化。",
+        "region_detector 聚合全部采样帧 OCR 行后调用新模块；suggested_box 与 preview_text 不再包含水印/台标行；无锚点时 detected=false 且 error_msg 可解释。",
+        "单测覆盖：单行、多行、侧边常驻水印（X 收窄）、URL/滚动水印、台标大框异常、无字幕、单帧 playhead 模式、letterbox；fixture 黄金期望可复核。",
+        "4 片源 A/B 显示 y/h 与现状差异及 X 策略；Web detect-region 响应字段保持兼容。",
+        "Debug CTest 全量通过。"
+      ],
+      "areas": [
+        "cpp/src/core",
+        "cpp/include/sublift/core",
+        "cpp/src/server/region_detector.cpp",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-23：新增 sublift::SubtitleBandDetector 纯逻辑（cpp/include/sublift/core/subtitle_band.hpp、cpp/src/core/subtitle_band.cpp，无 OCR/IO 依赖），实现多帧行证据外观分、跨帧支持度、间歇性锚点、居中外扩、自适应 padding、侧边常驻水印 X 收窄，无锚点 fail-closed。",
+        "2026-10-23：region_detector 改为聚合全部采样帧（7 点，去掉单帧早停）OCR 行后调用新模块；preview_text 过滤水印碎片/URL；detect-region 响应新增可选 reason 字段（兼容旧客户端）。",
+        "2026-10-23：单测 cpp/tests/subtitle_band_test.cpp：[subtitle_band] 16 cases / 82 assertions 全过（单行/双行/侧边水印 X 收窄/滚动 URL 水印/台标大框/空输入/仅 URL/playhead 水印帧 fail-closed/letterbox + 4 片源 fixture 黄金）。",
+        "2026-10-23：4 片源 A/B（写入 benchmark/baselines/subtitle-region-band-phase21.md §7）：watermark_band 新 box x=0.2000,y=0.8090,w=0.6000,h=0.1222 且 preview 不再含水印；scrolling preview 不再含水印（Y 与字幕重叠残留交 D03）；band_1080p/Zootopia 无侧水印时保持全宽、Y 按多帧行自适应；耗时 2.3–5.0s。",
+        "2026-10-23：fail-closed A/B（§8）：playhead t=5s 无字幕仅水印，旧 detector detected=true/preview 含“暖暖的猫 98Tang.COM”，新 detector detected=false reason=no_subtitle_anchor；全黑视频 detected=false；playhead t=14s 有字幕时正常返回 X 收窄框。",
+        "2026-10-23：Debug CTest 全量 311/311 passed（含并行 D03 改动）；验证命令与产物：build/cpp、debug/phase21/detect-new.jsonl。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "水印文本抑制（行级 + 条目级）",
+      "outcome": "带有水印文本的 ROI 在提取阶段不再全片产出水印条目：行级规则拒绝可解释的水印行，条目级重复覆盖过滤兜底；正常字幕与无字幕基线不被误杀。",
+      "acceptance": [
+        "行级规则（URL/域名、常驻/贴边混排等）在选行阶段生效，规则阈值与解释可复核；单测覆盖命中与不误杀。",
+        "条目级全片重复覆盖过滤（同/近义文本出现次数、覆盖时长占比、全片跨度）实现并可配置/关闭；单测覆盖水印族与重复字幕（如短句多次出现）不误杀。",
+        "合成滚动水印片提取：水印条目数从 D01 基线显著下降（记录前后数字），真实中文字幕条目保留。",
+        "Zootopia 全片提取 SRT sha256 与基线一致；Debug CTest 全量通过。"
+      ],
+      "areas": [
+        "cpp/src/pipeline",
+        "cpp/src/core",
+        "cpp/include/sublift",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-23：行级（cpp/src/core/line_select.cpp/.hpp）：is_watermark_text() 复用 contains_watermark_domain 单一口径，另加短 CJK 混排 URL token 与部分 TLD 碎片；score_line 命中封顶 0.02，select_line 拒绝并支持粘连 salvage（第三句台词内容Tang.COM→第三句台词内容）与同帧 URL 上下文下的 CJK 碎片抑制。",
+        "2026-10-23：条目级（cpp/src/core/dedupe.cpp/.hpp）：suppress_watermark_entries(entries, video_duration_ms) 纯函数（短文本/URLish 候选子集、union-find 近似族、m≤4096 fail-safe），族≥5 条 + 覆盖≥8% + 跨度≥60% 整族移除；安全阀要求族带 URL/混排或 ≥2 变体（128s loop A/B 发现纯重复对白会被三阈值误删后加入）；Pipeline::finalize 在 merge_entries 前应用，SUBLIFT_WATERMARK_FILTER=0 只关条目级（默认开，不改 Config/协议）。",
+        "2026-10-23：A/B（默认 ROI，5fps/paddle/cjk）：32s scrolling 10 条/3 水印 → 7 条/0 水印（7 句全保留）；128s loop 40 条/15 水印 → 28 条/0 水印（28 句=7×4 全保留，含 salvage 回收的第四句）；输出 sha256 506b15bb…（见 benchmark/baselines/subtitle-region-band-phase21.md §9）。",
+        "2026-10-23：零影响：debug/Zootopia_clip_1080p.mp4 Release 提取 sha256 f77296e3736be0f0…（80 条，=Phase20 冻结）；Zootopia_clip_1080p.mkv sha256 ce856f6a5e700d2e…（82 条）均逐字节一致。",
+        "2026-10-23：测试：build/cpp-wm [watermark] 22 cases/87 assertions；全量 Debug CTest 319/319 passed；line_select/dedupe/pipeline parity golden 未改且通过。"
+      ]
+    },
+    {
+      "id": "D04",
+      "name": "macOS 同口径自适应选区与收口验证",
+      "outcome": "macOS GUI 的自动选区与 Web 同口径：多帧 Vision 候选聚合后运行同一自适应条带逻辑，水印条带不再被自动吸附；构建、单测与跨端 A/B 完成，Phase 可合入。",
+      "acceptance": [
+        "RegionSelectionModel 从「最佳单帧」改为聚合全部采样帧候选，并调用 Swift 自适应条带逻辑；选区与 candidate 排除原因可观察。",
+        "Swift 单测覆盖多帧聚合、单帧/无候选、侧边水印排除、与现有 RegionMerger 行为兼容；swift build/test 通过（记录沙箱限制）。",
+        "C++ Debug CTest、verify-harness 与适用产品门通过；检测/提取 A/B 和验证记录写入 evidence。",
+        "docs/design、benchmark/baselines、progress.md、phases.json/phase21 同步；Phase 状态置 ready-for-merge。"
+      ],
+      "areas": [
+        "apps/macos/Sources/SubLiftMac",
+        "apps/macos/Tests",
+        "docs",
+        "benchmark/baselines",
+        "progress.md",
+        "phases.json",
+        "docs/phases"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-23：macOS 同口径：新增 Core/SubtitleBandDetector.swift（C++ D02 逐条移植，含 sampleFramesHint）+ RegionSelectionAggregator；RegionSelectionModel.detect 聚合全部采样帧候选（含无文字帧）后做 band 决策，mergedRegion 由 band 生成并排除 band 外/水印行，无锚点 fail-closed；regionBoxForIPC 在 band 自动模式保留真实 x/width，使 X 收窄进入 start_job region_box；RegionInspector 摘要显示实际 X 范围。",
+        "2026-10-23：Swift 验证（Lead 侧 clean scratch /tmp/sublift-swift-phase21-lead，--disable-sandbox）：swift build Build complete 12.94s exit 0；swift test --filter SubLiftMacTests → XCTest 383 tests / 0 failures + swift-testing 167 tests / 16 suites passed，exit 0；4 个 D01 fixture 黄金与 C++ 同区间通过。新增 SubtitleBandDetectorTests（15）与 RegionSelectionAggregationTests（7）及 RegionEditingTests 补充。",
+        "2026-10-23：C++ Debug CTest 319/319 passed；./init.sh OK；PYTHON=.venv/bin/python ./scripts/verify-harness.sh → 21 phases / 118 links / schema OK（22 documents）；Web Vitest 159/159、Web build OK。",
+        "2026-10-23：./scripts/verify-product.sh 22/23 OK；唯一 FAIL 为 swift test 在 DSH 沙箱内无法执行 sandbox-exec（sandbox_apply: Operation not permitted，环境限制，同 Phase 20），替代验证为上条 Lead 侧 --disable-sandbox 全量 Swift 测试；其余 C++/Web/CLI/Server 门全过。",
+        "2026-10-23：检测/提取 A/B 与零影响证据见 benchmark/baselines/subtitle-region-band-phase21.md §7–§9：4 片源检测 A/B、fail-closed、128s 水印片 40 条/15 水印 → 28 条/0 水印、Zootopia mp4/mkv sha256 不变；Phase 置 ready-for-merge（未合入 main、未推送）。"
+      ]
+    }
+  ],
+  "exit_criteria": [
+    "多帧自适应条带在 4 个片源（含两个水印条带合成片）上产出可复核的 y/h 与 X 策略；水印/台标行有明确排除诊断与 fail-closed 行为。",
+    "合成水印片端到端提取中水印条目从基线显著下降且中文字幕条目保留；Zootopia 全片 SRT sha256 与基线一致。",
+    "C++ Debug CTest 全量、Swift 构建/单测、verify-harness 通过；检测/提取 A/B 与阈值/边界写入 docs/design 与 benchmark/baselines。",
+    "Web 与 macOS 两端选区口径一致，进度真源同步，Phase 具备合入 main 条件。"
+  ]
+}

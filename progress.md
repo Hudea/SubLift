@@ -5,16 +5,19 @@
 
 ## 当前状态
 
-- **最后更新：** 2026-10-22
-- **当前 Phase：** 无 `in-progress` / `ready-for-merge`；[Phase 20](docs/phases/phase20.json)
-  `done`（Paddle OCR 算子优化 D01–D04，已合入 `main` 并在 main 完成验收）；
+- **最后更新：** 2026-10-23
+- **当前 Phase：** [Phase 21](docs/phases/phase21.json) `ready-for-merge`（字幕区域自适应
+  条带与水印抑制：多帧居中式条带、行级/条目级水印过滤、macOS 同口径；分支
+  `feat/adaptive-subtitle-band` 待合入 `main`）；
+  [Phase 20](docs/phases/phase20.json) `done`（已合入 `main`）；
   [Phase 18](docs/phases/phase18.json) `done`；[Phase 14](docs/phases/phase14.json)
-  `blocked`（外部 Docker/容器运行时缺失，D01–D05 已 done，`verify-container` 无法执行）；
-  [Phase 15](docs/phases/phase15.json) `blocked`（GPU 外部条件）
+  `blocked`（外部 Docker/容器运行时缺失）；[Phase 15](docs/phases/phase15.json)
+  `blocked`（GPU 外部条件）
 - **已登记待启动：** [Phase 19](docs/phases/phase19.json) `not-started`（Phase 17 拆出的
   Session/Layout/工具链收口）；[Phase 17](docs/phases/phase17.json) 已以 D01–D02 `done`
-- **当前 Deliverable：** 无 in-progress；Phase 20 D01–D04 全部 `done`；下一 Phase 19 待启动
-- **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
+- **当前 Deliverable：** 无 `in-progress`；Phase 21 D01–D04 全部 `done`，等待合入 `main`
+- **最近收口：** [Phase 21](docs/phases/phase21.json) `ready-for-merge`（自适应条带与水印抑制，
+  D01–D04 done）；[Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
 - **验证入口：** `./scripts/verify-harness.sh`（真源/链接）· `./scripts/verify-product.sh`
@@ -23,10 +26,12 @@
 
 ## 下一步
 
-1. **Phase 19（next）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
-2. **Phase 14 复验（外部）**：需要 Docker/podman/colima 等容器运行时；本机均不可用，
+1. **Phase 21 合入**：分支 `feat/adaptive-subtitle-band` 已完成 D01–D04 与分支验收，
+   待用户确认后合入 `main` 并在 main 复跑 init/harness/CTest。
+2. **Phase 19（next）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
+3. **Phase 14 复验（外部）**：需要 Docker/podman/colima 等容器运行时；本机均不可用，
    故 Phase 14 置 `blocked`，具备环境后运行 `verify-container` 复验即可。
-3. **Phase 15（外部）**：GPU 真机条件，保持 `blocked`。
+4. **Phase 15（外部）**：GPU 真机条件，保持 `blocked`。
 
 ## 阻塞
 
@@ -46,9 +51,15 @@
   det 调用次数/pipeline 侧算子或 GPU，均已超出本 Phase。
 - **未登记分支**：`feat/llm-subtitle-correction`（独立 worktree）自带 Phase 9 字幕校正，
   未进入 `phases.json` 真源，待决定合并/归档。
+- **水印抑制已知边界**：水印与字幕同一 Y 带横滚时由文本层兜底；同帧无 URL 证据的裸昵称
+  行级无法区分，条目级也缺少证据时可能保留（详见 docs/design/subtitle-band-detection.md §3/§6）。
 
 ## 最近收口
 
+- **Phase 21（2026-10-23）**：字幕区域自适应条带与水印抑制 D01–D04 done（`ready-for-merge`，
+  分支 `feat/adaptive-subtitle-band`）。多帧居中外扩 band + X 收窄/fail-closed；行级+条目级
+  水印抑制；macOS 同口径。128s 水印片 40 条/15 水印 → 28 条/0 水印，Zootopia mp4/mkv
+  SRT sha256 不变；Debug CTest 319/319，Lead 侧 Swift 383 XCTest + 167 swift-testing 全过。
 - **Phase 20（2026-10-22）**：Paddle OCR 算子优化 D01–D04 done 并合入 `main`；RapidOCR→C++
   审计、算子级归因，det 前处理 -40%、DB 后处理 -24%、CTC 解码 -94%；全片默认与 736 回滚
   SRT sha256 不变，main 验收 CTest 281/281。

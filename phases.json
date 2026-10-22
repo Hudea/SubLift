@@ -141,6 +141,13 @@
       "description": "梳理 RapidOCR 3.9.2 Python 包迁移到 C++ 的 Paddle OCR 算子实现，在逐字节等价与产品质量门不变的前提下优化预处理/后处理/解码/推理胶水，并建立算子级归因基线；D01–D04 done，已合入 main 并在 main 完成验收。",
       "detail_file": "docs/phases/phase20.json",
       "status": "done"
+    },
+    {
+      "id": "phase21",
+      "name": "Phase 21 - 字幕区域自适应条带与水印抑制（维护）",
+      "description": "修复带常驻水印条带视频的自动选区误吸附与全片水印条目：多帧居中式自适应条带、行级/条目级水印抑制、macOS 同口径；D01–D04 done，分支 feat/adaptive-subtitle-band 待合入 main。",
+      "detail_file": "docs/phases/phase21.json",
+      "status": "ready-for-merge"
     }
   ]
 }
