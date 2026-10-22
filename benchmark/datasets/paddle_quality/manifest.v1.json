@@ -17,7 +17,14 @@
       "q1_window_seconds": 30.0,
       "fps": 5.0,
       "script": "cjk",
-      "tags": ["real", "cjk", "bottom", "outline", "motion", "blank-intervals"]
+      "tags": [
+        "real",
+        "cjk",
+        "bottom",
+        "outline",
+        "motion",
+        "blank-intervals"
+      ]
     },
     {
       "id": "synthetic_latin_motion",
@@ -33,7 +40,14 @@
       "q1_window_seconds": 30.0,
       "fps": 2.0,
       "script": "latin",
-      "tags": ["generated", "latin", "bottom", "outline", "motion", "blank-intervals"]
+      "tags": [
+        "generated",
+        "latin",
+        "bottom",
+        "outline",
+        "motion",
+        "blank-intervals"
+      ]
     },
     {
       "id": "synthetic_mixed_multiline",
@@ -49,12 +63,19 @@
       "q1_window_seconds": 30.0,
       "fps": 2.0,
       "script": "auto",
-      "tags": ["generated", "mixed", "multiline", "color", "low-contrast", "blank-intervals"]
+      "tags": [
+        "generated",
+        "mixed",
+        "multiline",
+        "color",
+        "low-contrast",
+        "blank-intervals"
+      ]
     }
   ],
   "generator": {
     "script": "scripts/parity/gen_paddle_quality_assets.py",
-    "script_sha256": "sha256:b97e22e332bededbb77592f7366069f146b6192e71c4f069614da1be8772d479",
+    "script_sha256": "sha256:10a3d4d4cb3c9dacb6dd448f4abe7ef47991c0fb6ce297d4d7507adcbdb12e9e",
     "ffmpeg_frozen_for_current_baseline": "8.1",
     "fonts": [
       {

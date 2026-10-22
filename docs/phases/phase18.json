@@ -49,7 +49,7 @@
         "用 python-product-last 历史 worktree 在合并层不介入的素材上重放 736，归一化文本与 C++ 736 一致；记录命令、依赖版本、模型指纹与偏离原因。",
         "记录并解释冻结 Oracle 基线（544426e）与 C++ 合并层（2fe2f91）的既有偏离；确认该偏离属于有意质量变更，并纳入新基线或分层定义。",
         "check_paddle_gate.py 对 det 几何与合并层分别定义质量门（CER/exact/usable/timing F1/precision/noise/empty）；不再要求受这两层影响的整段 SRT 逐字节相等。",
-        "重冻 paddle_quality_baseline.v1.json 与受影响 benchmark baseline，记录 oracle_commit、合并层 commit、模型/ORT 指纹、新 hash 与阈值来源；旧基线归档保留。"
+        "重冻 paddle_quality_baseline.v2.json 与受影响 benchmark baseline，记录 oracle_commit、replay tag/commit、合并层 commit、模型/ORT 指纹、新 hash 与阈值来源；v1 历史基线保留归档。"
       ],
       "areas": [
         "scripts/parity",
@@ -57,18 +57,22 @@
         "benchmark/datasets",
         "docs/TESTMAP.md"
       ],
-      "status": "in-progress",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-10-22：历史 Oracle 重放（python-product-last worktree `782b876`，`.venv` RapidOCR 3.9.2 / ORT 1.28.0）在 manifest 参数（zoo fps5 cjk、latin fps2 latin、mixed fps2 auto，confidence 0.0）下 736 复现：v2 基线的 aggregate/per-source 指标与 v1 完全一致；mixed 10/10 条目归一化文本与 C++ 736 相同（合并层不介入）；zoo 85→81、latin 62→34 的差异定位为 `2fe2f91` 合并层的子序列去重，属于有意质量变更，不是 det 几何偏差。",
+        "2026-10-22：check_paddle_gate.py 改为历史 Oracle 重放：新增 `--oracle-worktree`、`--candidate-det-pixel-budget`（默认 600000）与 v2 `--freeze-oracle`；移除 `source_output_sha256_exact` 硬门，保留相对/绝对质量门与逐 source 质量门；修复 manifest/generator/freeze-manifest 路径与宿主字体 hash drift（已冻结视频仍按 hash 校验）。v2 基线 `paddle_quality_baseline.v2.json` 记录 oracle_commit 544426e、replay tag/commit、merge_commit 2fe2f91、模型/ORT 指纹与 dataset hash；v1 保留归档。",
+        "2026-10-22：0.6MP 候选全门 PASS：aggregate timing F1 0.887 vs 0.644、precision 0.895 vs 0.541、CER macro 0.0385 vs 0.236、usable 0.822 vs 0.495、noise 0；三来源逐 source PASS；wall zoo 44.1s vs 136.5s（3.09×）、latin 24.8s vs 79.7s（3.21×）、mixed 2.46s vs 7.45s（3.03×）。报告 `debug/phase18-d02/gate-check-0.6mp.{md,json}`。"
+      ]
     },
     {
       "id": "D03",
       "name": "覆盖矩阵、碎片合并与全门质量验证",
-      "outcome": "在未参与调参的素材与全部产品路径上验证选定几何策略，并修复真实 720p 的相邻碎片化，形成可复核的质量和性能证据。",
+      "outcome": "在未参与调参的素材与全部产品路径上验证选定几何策略，并修复真实 720p 的相邻碎片化，形成可复核的质量和性能证据。本机无原生 720p 时，720p 素材由现有 1080p 下采样构造并明确标注非独立源。",
       "acceptance": [
-        "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带与真实低分辨率源（非下采样合成），每类至少 1 个素材。",
+        "覆盖 bottom-crop、full-frame、ROI、竖屏、超宽条带；本机无原生 720p 时，用现有 1080p 下采样构造 720p 并标注“非独立源”，不得当作独立素材证明泛化。",
         "paddle_quality 全门通过：CER macro/micro、exact、usable recall、timing F1/precision、noise/empty、split/FP 均记录且满足 D01/D02 冻结的阈值。",
         "实现 pipeline 内的相邻碎片合并：时间相邻（≤300ms）+ 较短文本是较长文本的子序列（长度比 ≥0.6）+ 保留较短的干净文本；在 Zootopia 720p 上 timing F1 ≥736、precision 差距 ≤1pp、CER/exact 不劣化；1080p 736 输出 hash 保持 56b1b08a…；有单元测试与回归样本。",
-        "在真实 720p 与 22.5–25% 素材上复核 0.6 的左边界裁切与 timing；若 precision 仍低于 736 超过 1pp，再评估短边 320/352 条件项。",
+        "在 720p（下采样构造，标注非独立源）与 22.5–25% 素材上复核 0.6 的左边界裁切与 timing；若 precision 仍低于 736 超过 1pp，再评估短边 320/352 条件项。",
         "用 Python/RapidOCR 在同一 crop、同一 736 参数下做 det box 级对照，复现框破碎，排除 C++ DB 后处理移植偏差；不得用受合并层影响的整段 SRT 代替。"
       ],
       "areas": [
@@ -77,7 +81,7 @@
         "cpp/src/pipeline",
         "cpp/tests"
       ],
-      "status": "not-started",
+      "status": "in-progress",
       "evidence": []
     },
     {

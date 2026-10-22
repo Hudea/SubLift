@@ -88,7 +88,7 @@ Python Oracle 是 **736 参考实现**，不是产品规格。它无法表达"�
    - timing F1 / timing precision 不得下降超过 1pp；
    - noise / empty 计数不得增加；
    - split / false alarm 必须报告，并对增量给出解释。
-5. **重冻基线**：更新 `benchmark/parity/goldens/paddle/paddle_quality_baseline.v1.json`
+5. **重冻基线**：更新 `benchmark/parity/goldens/paddle/paddle_quality_baseline.v2.json`（v1 归档）
    与受影响的 benchmark baselines，记录新的 `oracle_commit`、模型指纹、输出 hash 与
    gate 结果；旧基线保留为归档，不删除。
 6. **回滚**：保留 736 作为可配置的回退值，D04 必须演练"一键回 736 并恢复

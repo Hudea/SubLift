@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-FIXTURE_DIR = REPO_ROOT / "benchmark" / "fixtures" / "paddle_quality"
+FIXTURE_DIR = REPO_ROOT / "benchmark" / "datasets" / "paddle_quality"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "debug" / "paddle-quality"
 DURATION_SECONDS = 180.0
 

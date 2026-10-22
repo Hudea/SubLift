@@ -136,7 +136,7 @@ SubLift 维护全栈统一的测试资产。资产按生命周期状态分类：
 |---|---|---|---|---|
 | `cpp/tests/parity/` | Catch2 v3<br>(C++20) | **Frozen Parity** | C++ 原生 Parity 测试（比对 Config, Changepoint, Dedupe, Extractor, LineSelect, Paddle, Pipeline, Signature, Timeline, Vision 黄金输出） | `./build/cpp/bin/sublift_tests "[parity]"` |
 | `scripts/parity/check_cutover_gate.py` | Python 3.12+ | **Frozen Parity** | C++ Worker 与 Python Oracle 全流水线切量对比门禁（支持 parity、runtime 与 GT 比对） | `uv run python scripts/parity/check_cutover_gate.py --check` |
-| `scripts/parity/check_paddle_*.py` | Python 3.12+ | **Frozen Parity** | Paddle OCR 适配切量与性能门禁（`check_paddle_cutover.py`, `check_paddle_gate.py`, `check_paddle_perf.py`） | `uv run python scripts/parity/check_paddle_gate.py` |
+| `scripts/parity/check_paddle_*.py` | Python 3.12+ | **Frozen Parity** | Paddle OCR 适配切量与性能门禁（`check_paddle_cutover.py`, `check_paddle_gate.py`, `check_paddle_perf.py`）；质量门用 `python-product-last` 历史 worktree 重放 Oracle | `uv run python scripts/parity/check_paddle_gate.py --check --oracle-worktree /tmp/sublift-python-oracle` |
 | `scripts/parity/dump_*.py` | Python 3.12+ | **Frozen Parity** | 11 个 Oracle 特征与中间结果转储工具（用于生成/更新 changepoint, config, dedupe, extractor, pipeline 等 goldens） | `uv run python scripts/parity/dump_<module>.py` |
 | `scripts/parity/gen_*.py` | Python 3.12+ | **Frozen Parity** | 固定测试夹具生成脚本（生成 changepoint, paddle, paddle_quality, signature 测试用例与图例） | `uv run python scripts/parity/gen_<fixture>.py` |
 | `scripts/parity/golden_registry.py` | Python 3.12+ | **Frozen Parity** | Parity 黄金集元数据注册表与校验工具 | `uv run python scripts/parity/golden_registry.py` |

@@ -11,8 +11,8 @@
   D01–D05 全 done；待 `main` 复验后置 `done`）
 - **已登记待启动：** [Phase 19](docs/phases/phase19.json) `not-started`（Phase 17 拆出的
   Session/Layout/工具链收口）；[Phase 17](docs/phases/phase17.json) 已以 D01–D02 `done`
-- **当前 Deliverable：** Phase 18 / D02「质量门重放与基线重冻」
-  （in-progress；D01 配置面已完成，历史 Oracle 重放与 gate 重冻进行中）
+- **当前 Deliverable：** Phase 18 / D03「覆盖矩阵、碎片合并与全门质量验证」
+  （in-progress；D02 基线重冻完成，0.6MP 全门 PASS）
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
@@ -22,12 +22,11 @@
 
 ## 下一步
 
-1. **Phase 18 D02**：历史 Oracle 重放与 gate 重冻（含合并层基线）。
-2. **Phase 18 D03**：720p 从 1080p 下采样构造（明确标注非独立源）、左边界 guard、全门质量。
-3. **Phase 18 D04**：默认切换、回滚演练与收口。
-4. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
+1. **Phase 18 D03**：720p 从 1080p 下采样构造（标注非独立源）、左边界 guard、覆盖矩阵与全门质量。
+2. **Phase 18 D04**：默认切换、回滚演练与收口。
+3. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
    `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`）。
-5. **Phase 19（backlog）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
+4. **Phase 19（backlog）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
 
 ## 阻塞
 
@@ -49,6 +48,9 @@
 
 ## 最近收口
 
+- **Phase 18 D02（2026-10-22）**：历史 Oracle 重放精确复现 v1 指标；gate 改为
+  `--oracle-worktree` + 质量门；v2 基线重冻；0.6MP 候选全门 PASS，timing F1/precision、CER、usable 均优于
+  Oracle，三来源 wall 约 3.0–3.2×。
 - **Phase 18 D01（2026-10-22）**：ADR-0042 获批；0.6MP 配置面落地（CLI `--det-pixel-budget`、
   Server `det_pixel_budget`）；默认 736 hash `56b1b08a…` 不变，env 降级为 adapter 诊断。
 - **det 几何实验（2026-10-22）**：实验、去重修复与 Phase 18 计划已合入 `main`（4fe4fa5）；

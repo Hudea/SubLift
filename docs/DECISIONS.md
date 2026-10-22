@@ -31,8 +31,8 @@
   回退；默认保持 736 直到质量门与回滚演练完成。
 - **影响**：Phase 18 D01 配置面、D02 gate 重放/重冻、D03 覆盖矩阵（720p 从 1080p 下采样，
   明确标注非独立源）、D04 默认切换；
-  `benchmark/parity/goldens/paddle/paddle_quality_baseline.v1.json` 与相关 benchmark
-  baselines 需重冻。
+  `benchmark/parity/goldens/paddle/paddle_quality_baseline.v2.json` 已重冻（v1 保留
+  归档），相关 benchmark baselines 按 D02/D04 同步。
 
 ---
 

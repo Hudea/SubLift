@@ -30,22 +30,34 @@ Golden path: `benchmark/parity/goldens/config/default_config.v1.json`.
 
 C++ loads the same file in Catch2 `[parity][config]` (offline; no Python at test time).
 
-## Paddle E2E quality gate (feat-06805)
+## Paddle E2E quality gate (feat-06805 / Phase 18 D02)
+
+历史 Python product runtime 已从产品路径移除；该 gate 不再依赖活 Python 产品，而是用
+`python-product-last` 历史 worktree 重放 Oracle（冻结 736），对 C++ 候选做质量门：
 
 ```bash
-# 缺外置真实源、生成素材、模型、Release worker 或 frozen baseline 时直接失败
+# 仅用于有意重建历史冻结资产；需要历史 Oracle worktree
+uv run python scripts/parity/check_paddle_gate.py --freeze-oracle \
+  --oracle-worktree /tmp/sublift-python-oracle
+
+# 0.6MP 候选（默认 600000；传 0 表示 736 回归）；--check 失败即非零退出
 uv run python scripts/parity/check_paddle_gate.py --check \
+  --oracle-worktree /tmp/sublift-python-oracle \
+  --candidate-det-pixel-budget 600000 \
   --report-out /tmp/sublift_paddle_quality_gate.md \
   --json-out /tmp/sublift_paddle_quality_gate.json
-
-# 仅用于有意重建历史冻结资产；不得用来设定新产品水位
-uv run python scripts/parity/check_paddle_gate.py --freeze-oracle
 ```
 
-Manifest 位于 `benchmark/datasets/paddle_quality/manifest.v1.json`，冻结 3 个来源共
-614.272s 的输入/GT/生成 recipe 与 font hash。该历史门会重放 Python/C++ CLI，
-同时检查当时的 Oracle 相对门、冻结 Python 绝对门、逐 clip noise/empty 与 Q0 live box；
-不接受硬编码指标或缺依赖 skip。
+- 基线：`benchmark/parity/goldens/paddle/paddle_quality_baseline.v2.json`（历史
+  `paddle_quality_baseline.v1.json` 保留为 544426e Oracle 基线）。
+- 质量门：Oracle 相对门（timing F1/precision、CER macro/micro、usable recall、
+  noise/empty、box IoU/recall）加冻结基线绝对门；det 几何与合并层不再要求整段 SRT
+  逐字节相等，逐 source 仍记录输出 hash 以便审计。
+- 历史 worktree：`git worktree add /tmp/sublift-python-oracle python-product-last`；
+  依赖仓库 `.venv`。
+- Manifest 位于 `benchmark/datasets/paddle_quality/manifest.v1.json`，冻结 3 个来源共
+  614.272s 的输入/GT/生成 recipe 与 font hash。字体是生成输入：已冻结视频仍按 hash
+  校验，宿主字体更新只记录 provenance drift 警告，不改变已提交资产。
 
 ## Paddle 历史 canonical performance 重放（feat-06806）
 
