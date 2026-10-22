@@ -6,13 +6,12 @@
 ## 当前状态
 
 - **最后更新：** 2026-10-22
-- **当前 Phase：** [Phase 18](docs/phases/phase18.json) `in-progress`；
+- **当前 Phase：** [Phase 18](docs/phases/phase18.json) `done`（0.6MP 默认已切换）；
   [Phase 14](docs/phases/phase14.json) 保持 `ready-for-merge`（detail 已在 `main`，
   D01–D05 全 done；待 `main` 复验后置 `done`）
 - **已登记待启动：** [Phase 19](docs/phases/phase19.json) `not-started`（Phase 17 拆出的
   Session/Layout/工具链收口）；[Phase 17](docs/phases/phase17.json) 已以 D01–D02 `done`
-- **当前 Deliverable：** Phase 18 / D04「默认切换、回滚与收口」
-  （in-progress；D03 覆盖矩阵与 720p/band 质量验证完成，短边条件项拒绝启用）
+- **当前 Deliverable：** 无 in-progress；Phase 18 D01–D04 全部 `done`，下一 Phase 19 待启动
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
@@ -22,10 +21,9 @@
 
 ## 下一步
 
-1. **Phase 18 D04**：默认切换到 0.6MP、736 一键回滚演练、固定负载 A/B 与收口。
-2. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
+1. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
    `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`）。
-3. **Phase 19（backlog）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
+2. **Phase 19（next）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
 
 ## 阻塞
 
@@ -47,6 +45,9 @@
 
 ## 最近收口
 
+- **Phase 18 D04（2026-10-22）**：产品默认切到 0.6MP（无 flag，无需 env/重建）；默认 1080p
+  输出 `f77296e3…`（49.50s），`--det-pixel-budget 0` 回滚 `56b1b08a…`（138.20s，2.79×）；
+  Phase 18 以 D01–D04 `done` 收口。
 - **Phase 18 D03（2026-10-22）**：720p 由 1080p 下采样（非独立源）验证；0.6 的 CER/exact/usable
   全面优于 736，720p wall 3.74×；22.5/25% band 前缀恢复，short320/352 更差并拒绝启用。
 - **Phase 18 D02（2026-10-22）**：历史 Oracle 重放精确复现 v1 指标；gate 改为

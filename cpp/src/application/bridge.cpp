@@ -83,7 +83,8 @@ sublift::DetInputGeometry det_geometry_from_msg(
     const sublift::ipc::StartJobMsg& msg) {
   return sublift::DetInputGeometry{
       .min_side = 736.0,
-      .pixel_budget = msg.det_pixel_budget.value_or(0.0),
+      .pixel_budget = msg.det_pixel_budget.value_or(
+          sublift::kProductDetPixelBudget),
       .short_side = short_side_from_env(),
   };
 }

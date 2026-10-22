@@ -21,6 +21,11 @@ struct DetInputGeometry {
                                    const DetInputGeometry&) = default;
 };
 
+/// Product default det area budget (ADR-0042 / Phase 18 D04): 0.6MP with the
+/// area-only policy. The CLI/server omission path uses this value; an explicit
+/// 0 restores RapidOCR min-side 736 for rollback.
+inline constexpr double kProductDetPixelBudget = 600000.0;
+
 /// Product-facing validation for the optional det pixel budget. Zero disables
 /// the budget (min-side 736). Positive values must be finite and within a sane
 /// range; invalid values are rejected instead of silently falling back.

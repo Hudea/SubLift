@@ -16,7 +16,7 @@
     "不改变 SRT 文本格式、时间码、编码，以及非 det 维度的配置/状态/错误语义。",
     "不以性能名义跳过质量门、覆盖矩阵或回滚演练，也不伪造跨机 hash 验证。"
   ],
-  "status": "in-progress",
+  "status": "done",
   "deliverables": [
     {
       "id": "D01",
@@ -107,8 +107,12 @@
         "phases.json",
         "progress.md"
       ],
-      "status": "in-progress",
-      "evidence": []
+      "status": "done",
+      "evidence": [
+        "2026-10-22：默认切换：未指定 det 预算时使用 `kProductDetPixelBudget=600000`（0.6MP）；CLI `--det-pixel-budget` 改为 optional（缺省 0.6MP，显式 0=736 回滚）；Server/Worker 缺省同路径，无需 env 或重建。",
+        "2026-10-22：默认路径（无 flag）1080p 输出 `f77296e3…`（= D03 0.6 输出），wall 49.50s；`--det-pixel-budget 0` 回滚输出 `56b1b08a…`，wall 138.20s；同 session 2.79×（D02/D03 分别 3.09×/3.74×）。",
+        "2026-10-22：ctest 275/275、Web 159 tests + build、Swift 143 tests、harness schema OK；Phase 18 D01–D04 完成，Phase 置 done。"
+      ]
     }
   ],
   "exit_criteria": [

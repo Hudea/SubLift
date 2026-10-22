@@ -123,7 +123,8 @@ det 省下的 101.1s 占 core wall 差异的 **99.1%**；OCR segment 调用数�
 
 ## 4. 未做与风险
 
-1. **未切换默认值**：产品仍走 736。切换会改变 det 框与 SRT 输出，必须作为独立决策，
+1. **默认值切换（Phase 18 D04）**：产品默认已切到 0.6MP；显式 `--det-pixel-budget 0`
+   回滚 736，无需重建。原风险条保留作历史：
    重新冻结 RapidOCR parity / golden hash，不能以性能优化名义静默合入。
 2. **未覆盖全部路径**：本次 A/B 只测 1080p bottom-crop。实验文档已提示合入前需补真实
    低分辨率源（非下采样合成）、竖屏/超宽条带、全帧路径与 region 检测路径，并复跑
@@ -131,7 +132,7 @@ det 省下的 101.1s 占 core wall 差异的 **99.1%**；OCR segment 调用数�
 3. **替代解释未完全排除**：实验文档要求用 Python/RapidOCR 参考实现在同一 crop、同一 736
    下复现“框破碎”，确认差异来自几何而非 C++ DB 后处理移植偏差。
 4. **策略配置面已收敛**（Phase 18 D01）：产品路径改用 `--det-pixel-budget` / Server
-   `det_pixel_budget`；env 只对 adapter 3 参入口有效。默认仍 736；0.7MP
+   `det_pixel_budget`；env 只对 adapter 3 参入口有效。D04 起默认 0.6MP（显式 0 = 736）；0.7MP
    是宽平台上的可解释折中，不是精确最优点（实验 4.2：质量在 0.4–0.8MP 为平台）。
 5. **旧质量口径有偏**：实验期 matched CER 允许多个 GT 复用同一条 det，且不惩罚未匹配 det；
    官方 one-to-one 复核方向不变，但绝对数和命中数都不同。合并判断必须以 3.4 的官方指标为准。
@@ -160,10 +161,15 @@ cmake -S cpp -B build/cpp-rel -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON -DSUBLIFT_ENABLE_PADDLE=ON
 cmake --build build/cpp-rel -j 8
 
-# 默认 736
+# 默认 0.6MP（无 flag）
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
-  -o debug/ab-det-budget/baseline.srt --engine paddle --fps 5 --script cjk
+  -o debug/ab-det-budget/default-0.6mp.srt --engine paddle --fps 5 --script cjk
+
+# 736 回滚（显式 0）
+SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
+  build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
+  -o debug/ab-det-budget/baseline.srt --engine paddle --fps 5 --script cjk --det-pixel-budget 0
 
 # 0.7MP 预算
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \

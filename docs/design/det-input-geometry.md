@@ -3,7 +3,8 @@
 > **状态**：实验与实现分支 `exp/det-pixel-budget`（2026-10-21），未改产品默认值，未合入
 > `main`。几何策略已收敛为可测试接口（`DetInputGeometry` / `det_input_size`）并由
 > 产品配置 `--det-pixel-budget` / Server `det_pixel_budget` 驱动（2026-10-22 起；
-> `SUBLIFT_DET_PIXEL_BUDGET` 仅作 adapter 3 参入口的诊断别名）；默认仍为 736。交付与验证见
+> `SUBLIFT_DET_PIXEL_BUDGET` 仅作 adapter 3 参入口的诊断别名）；Phase 18 D04 起默认
+> 0.6MP，显式 `--det-pixel-budget 0` 回滚 736。交付与验证见
 > [`det-pixel-budget-delivery.md`](det-pixel-budget-delivery.md)。
 > **结论先行**：当前 `limit_side_len=736, limit_type=min` 会把任意 bottom-crop 拉到
 > 4352×736（3.2MP）；改为"像素预算约 0.7MP"后，固定负载端到端 **快 2.9–3.3×**
@@ -32,7 +33,8 @@ det 成本与像素近似线性（D01 归因：84.35% core_wall；实测 ≈120m
 - `native`：不放大（短边保持原样）。
 - `budget`：目标面积 B，仅在面积 < B 时放大到 B（**不缩小**）。
 
-实验实现：`SUBLIFT_DET_MIN_SIDE`、`SUBLIFT_DET_PIXEL_BUDGET` 两个环境变量；默认仍为 736。
+实验实现：`SUBLIFT_DET_MIN_SIDE`、`SUBLIFT_DET_PIXEL_BUDGET` 两个环境变量；实验期默认
+736，Phase 18 D04 起产品默认 0.6MP（显式 0 = 736 回滚）。
 （2026-10-22 起产品路径改用 `--det-pixel-budget` / Server `det_pixel_budget`，env 只对 adapter 3 参入口有效。）
 
 ## 3. 方法
@@ -163,7 +165,7 @@ det 成本 ∝ 输入像素；736 规则让成本恒等于 3.2MP。质量下降�
 
 1. **默认策略改为像素预算**（建议 0.7MP，或 `min(max(0.6MP, native), 1.0MP)` 的变体），
    替换固定 736。固定负载实测 120.26s → 41.50s（2.90×），官方 CER/exact 显著改善，但
-   split/timing precision 有轻微退步。策略与单测已落地，默认值仍是 736，切换需走第 2 条。
+   split/timing precision 有轻微退步。策略与单测已落地；Phase 18 D04 已切换默认 0.6MP，回滚走 `--det-pixel-budget 0`。
 2. 这会改变 det 框与 SRT 输出 → **RapidOCR parity / golden hash 必须作为独立决策重冻**，
    不得以优化名义静默合入。
 3. 合入前补：真实低分辨率源（非下采样合成）、竖屏/超宽条带、全帧路径与 region 检测路径；
@@ -184,10 +186,10 @@ cmake -S cpp -B build/cpp-rel -G Ninja -DCMAKE_BUILD_TYPE=Release \
   -DSUBLIFT_REQUIRE_OPENCV=ON -DSUBLIFT_ENABLE_VISION=ON -DSUBLIFT_ENABLE_PADDLE=ON
 cmake --build build/cpp-rel -j 8
 
-# 基线（736）与 0.7MP
+# 默认 0.6MP、736 回滚与 0.7MP
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
-  -o /tmp/a.srt --engine paddle --fps 5 --script cjk
+  -o /tmp/a.srt --engine paddle --fps 5 --script cjk --det-pixel-budget 0
 
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/Zootopia_clip_1080p.mp4 \
@@ -196,7 +198,7 @@ SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
 # latin fixture 必须用 latin，否则会得到 cjk 垃圾结果
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
-  -o /tmp/latin-a.srt --engine paddle --fps 5 --script latin
+  -o /tmp/latin-a.srt --engine paddle --fps 5 --script latin --det-pixel-budget 0
 SUBLIFT_WORKER_PATH=build/cpp-rel/bin/sublift_worker \
   build/cpp-rel/bin/sublift extract debug/paddle-quality/latin_motion_180s.mp4 \
   -o /tmp/latin-b.srt --engine paddle --fps 5 --script latin --det-pixel-budget 700000

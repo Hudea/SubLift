@@ -95,7 +95,7 @@ TEST_CASE("CLI parse extract arguments", "[cli][args]") {
     REQUIRE(r.args.output == "output.srt");
     REQUIRE(r.args.fps == 5.0);
     REQUIRE(r.args.confidence == 0.0);
-    REQUIRE(r.args.det_pixel_budget == 0.0);
+    REQUIRE_FALSE(r.args.det_pixel_budget.has_value());
     REQUIRE(r.args.engine == "vision");
     REQUIRE(r.args.script == "auto");
     REQUIRE_FALSE(r.args.worker.has_value());
@@ -118,6 +118,11 @@ TEST_CASE("CLI parse extract arguments", "[cli][args]") {
         {"sublift", "extract", "v.mp4", "--det-pixel-budget", "600000"});
     REQUIRE(ok.status == ParseStatus::Ok);
     REQUIRE(ok.args.det_pixel_budget == 600000.0);
+
+    const auto rollback = sublift::cli::parse_extract_args(
+        {"sublift", "extract", "v.mp4", "--det-pixel-budget", "0"});
+    REQUIRE(rollback.status == ParseStatus::Ok);
+    REQUIRE(rollback.args.det_pixel_budget == 0.0);
 
     const auto too_small = sublift::cli::parse_extract_args(
         {"sublift", "extract", "v.mp4", "--det-pixel-budget", "1000"});

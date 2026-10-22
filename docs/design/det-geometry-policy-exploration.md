@@ -318,7 +318,7 @@ never downscale; round output to multiples of 32
 2. 用同一批素材复核 **720p precision**；若 C 仍低于 736 超过 1pp，把短边下限提到 352 再测。
 3. 真实 2K/4K 片源（非上采样）各 1 个，确认 global 上限与 0.6/native 的行为。
 4. 同 session 跑 0.6 vs 0.7 的 1080p A/B，给出可信的 wall 差异。
-5. 通过后再进入 D01 的策略冻结与配置面；当前产品默认仍为 736。
+5. 通过后再进入 D01 的策略冻结与配置面；Phase 18 D04 起产品默认 0.6MP。
 
 ## 8. D03 实测结论（2026-10-22）
 

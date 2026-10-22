@@ -18,8 +18,9 @@ struct ExtractArgs {
   // high-confidence filter). The internal Pipeline Config keeps its
   // Oracle-compatible 0.5 default; this value is the request boundary.
   double confidence{0.0};
-  // ADR-0042 optional det area budget; 0 keeps RapidOCR min-side 736.
-  double det_pixel_budget{0.0};
+  // ADR-0042 det area budget. Unspecified uses the 0.6MP product default;
+  // an explicit 0 restores RapidOCR min-side 736 for rollback.
+  std::optional<double> det_pixel_budget;
   std::string engine{"vision"};
   std::string script{"auto"};
   std::optional<std::filesystem::path> worker;

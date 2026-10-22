@@ -124,9 +124,9 @@
     {
       "id": "phase18",
       "name": "Phase 18 - Det 输入几何契约与默认切换",
-      "description": "维护 Phase：把 det 输入几何从固定 min-side 736 切换为可配置的目标面积策略，并将该维度的验收从逐字节 parity 迁移到质量门；D01 先批准 ADR-0042 与配置面，在契约通过前产品默认保持 736。",
+      "description": "det 输入几何退出逐字节 parity：0.6MP 面积下限、质量门重冻、720p/band 覆盖；产品默认已切到 0.6MP，显式 0 = 736 回滚。",
       "detail_file": "docs/phases/phase18.json",
-      "status": "in-progress"
+      "status": "done"
     },
     {
       "id": "phase19",

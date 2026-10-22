@@ -28,7 +28,7 @@
   5. 回滚保留 736 作为可配置回退值，回滚不依赖重新构建。
 - **理由**：736 的 min-side 规则与源分辨率无关，导致 3.2–4.3MP 的固定 det 成本；0.6MP 面积
   下限在 30% bottom-crop 上等效 native，并显著改善文本质量；子序列去重修复了 720p precision
-  回退；默认保持 736 直到质量门与回滚演练完成。
+  回退；质量门与回滚演练完成后由 Phase 18 D04 切换默认 0.6MP，显式 0 = 736 回滚。
 - **影响**：Phase 18 D01 配置面、D02 gate 重放/重冻、D03 覆盖矩阵（720p 从 1080p 下采样，
   明确标注非独立源）、D04 默认切换；
   `benchmark/parity/goldens/paddle/paddle_quality_baseline.v2.json` 已重冻（v1 保留
