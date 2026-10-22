@@ -139,7 +139,9 @@ struct RegionBox {
 
 struct JobConfig {
   std::string video_path;
-  std::string engine{"paddle"};
+  // contracts/fixtures/defaults.json engine_preference[0]; unavailable engines
+  // are rejected at the route, never silently replaced.
+  std::string engine{"vision"};
   double fps{2.0};
   double confidence_threshold{0.0};
   std::optional<std::string> script;

@@ -63,7 +63,7 @@
         "apps/macos/Sources/SubLiftMac/Core",
         "contracts/fixtures"
       ],
-      "status": "in-progress",
+      "status": "done",
       "evidence": [
         "2026-10-20：D02 启动。先以 contracts 的 SRT/输出/默认值 fixtures 对齐三端，并逐项消除 parity matrix 中的 gap；不一次性改状态机与前端结构。",
         "2026-10-20：SRT 合同对齐。Web formatSrt 改为跳过纯空白并保持 canonical 钳制；Swift SrtFormatter 改为排序/跳空/钳制且不再抛 SrtFormatError；C++ CLI 与 Server formatter 增加排序、clamp 与末尾空行（两个换行，兼容容器 golden 的精确比对）。三端均消费 contracts/fixtures/srt-cases.json：Web 4 例、Swift 1 套共享 fixture、C++ CLI/Server 各 3 例通过。",
@@ -71,7 +71,8 @@
         "2026-10-20：Phase8 真实 IPC 验收的 SRT 断言改为“空或包含时间码”。spike 素材可能没有字幕；canonical 跳空后空 SRT 是合法结果，原断言依赖空文本条目生成非空文件。",
         "2026-10-22：confidence 请求默认值对齐 contracts/fixtures/defaults.json（0.0）：C++ CLI args/help、macOS 单视频与批量从 0.5 改为 0.0；Server/Web/protocol 已是 0.0；内部 Pipeline Config 保持 0.5 以兼容冻结 Python Oracle。C++ ctest 268/268、Swift 142 tests、Web 157 tests + build 通过。",
         "2026-10-22：ROI 转换对齐 contracts/fixtures/roi-cases.json。抽出 RegionBox::to_pixel_box（round → clamp origin → clamp w/h、最小 1），Server 使用；新增 [roi] 测试消费 5 个 fixture 用例并覆盖空帧 fail-closed；ROI probe 失败不再静默回退，改由 Job 外层 catch 标记 Failed。ctest 270/270。",
-        "2026-10-22：Job/Task 状态映射对齐 contracts/fixtures/statuses.json。C++ JobStatus 扩展为 queued/preparing/extracting/finalizing/completed/failed/cancelled/interrupted，由 Worker progress stage 迁移；legacy \"running\" 读入映射为 extracting；新增 [statuses] 测试消费 fixture 的 job/task/mapping；Web BATCH_TASK_STATUSES 与 Swift BatchTaskStatus 增加 fixture 消费测试。C++ ctest 272/272、Web 159 tests + build、Swift 143 tests 通过。"
+        "2026-10-22：Job/Task 状态映射对齐 contracts/fixtures/statuses.json。C++ JobStatus 扩展为 queued/preparing/extracting/finalizing/completed/failed/cancelled/interrupted，由 Worker progress stage 迁移；legacy \"running\" 读入映射为 extracting；新增 [statuses] 测试消费 fixture 的 job/task/mapping；Web BATCH_TASK_STATUSES 与 Swift BatchTaskStatus 增加 fixture 消费测试。C++ ctest 272/272、Web 159 tests + build、Swift 143 tests 通过。",
+        "2026-10-22：engine/script 默认值对齐 defaults.json。Server JobConfig.engine 从 paddle 改为 vision（engine_preference[0]），不可用引擎仍由路由 400 fail-closed；新增 [defaults] 测试消费 defaults.json，断言 CLI/Server 的 engine/script/confidence 默认值与内部 Config 的 script；新增 [server][jobs] ROI probe 失败用例，确认 Job 置 Failed 而非静默丢弃 region。ctest 273/273。"
       ]
     },
     {
@@ -91,7 +92,7 @@
         "apps/macos/Sources/SubLiftMac/Core/Batch",
         "cpp/src/server"
       ],
-      "status": "not-started",
+      "status": "in-progress",
       "evidence": []
     },
     {

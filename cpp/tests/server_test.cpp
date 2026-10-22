@@ -941,6 +941,34 @@ TEST_CASE("Server Job Management, SSE and Export", "[server][jobs]") {
                          {"paddle_execution", {{"provider", "cpu"}}}}) == 400);
   }
 
+  SECTION("ROI probe failure fails the job closed") {
+    // A file inside the media root that cannot be probed: the ROI conversion
+    // must fail the job instead of silently dropping the region.
+    TempTestFile corrupt_video("sublift_roi_probe_fail.mp4",
+                               {0x00, 0x01, 0x02, 0x03});
+    nlohmann::json req = {
+        {"video_path", corrupt_video.path.string()},
+        {"engine", "mock"},
+        {"fps", 5.0},
+        {"region_box", {{"x", 0.0}, {"y", 0.6}, {"width", 1.0}, {"height", 0.4}}}
+    };
+    auto res = cli.Post("/api/jobs", req.dump(), "application/json");
+    REQUIRE(res != nullptr);
+    REQUIRE(res->status == 201);
+    const auto job_id =
+        nlohmann::json::parse(res->body).at("job_id").get<std::string>();
+    auto job = server.job_manager()->get_job(job_id);
+    REQUIRE(job != nullptr);
+    int wait_count = 0;
+    while (!job->is_terminal() && wait_count < 50) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      ++wait_count;
+    }
+    REQUIRE(job->is_terminal());
+    REQUIRE(job->status == sublift::server::JobStatus::Failed);
+    REQUIRE(!job->error_message.empty());
+  }
+
   SECTION("POST /api/jobs/:id/cancel returns 404 for unknown job") {
     auto res = cli.Post("/api/jobs/unknown-uuid-12345/cancel", "{}", "application/json");
     REQUIRE(res != nullptr);

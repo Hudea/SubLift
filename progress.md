@@ -11,8 +11,8 @@
   D01–D05 全 done；待 `main` 复验后置 `done`）
 - **已登记待启动：** [Phase 18](docs/phases/phase18.json) `not-started`（det 输入几何
   契约与默认切换；D01 先批准 ADR-0042，契约通过前默认仍为 736）
-- **当前 Deliverable：** Phase 17 / D02「跨端语义对齐」
-  （in-progress；SRT 与输出重名已对齐，剩余 confidence/ROI/状态映射）
+- **当前 Deliverable：** Phase 17 / D03「Web 批量队列持久化与恢复」
+  （in-progress；D02 已完成，Web 刷新后队列成员/顺序/终态恢复）
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
@@ -22,14 +22,12 @@
 
 ## 下一步
 
-1. **D02 收尾**：SRT 与输出重名已对齐；下一步处理 confidence 默认值、ROI 转换与
-   Job/Task 状态映射，仍以 contracts fixtures + 三端测试为准。
-2. **D03 启动**：Web 批量队列版本化持久化/恢复；优先复用 Swift BatchQueueState 语义，
+1. **D03 启动**：Web 批量队列版本化持久化/恢复；优先复用 Swift BatchQueueState 语义，
    再决定 localStorage 还是服务端 queue endpoint。
-3. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
+2. **Phase 14 收口**：在具备 Docker 的环境于 `main` 上运行 `verify-product` 与
    `verify-container`；通过后置 `done`。本机当前没有 Docker（`docker: command not found`），
    不能伪造复验。
-4. **Phase 18 / D01**：批准 det 几何契约 ADR（ADR-0042 草案），冻结策略与质量门阈值；
+3. **Phase 18 / D01**：批准 det 几何契约 ADR（ADR-0042 草案），冻结策略与质量门阈值；
    实验证据见 `docs/design/det-pixel-budget-delivery.md`，默认保持 736。
 
 ## 阻塞
@@ -55,8 +53,9 @@
 - **det 几何实验（2026-10-22）**：实验、去重修复与 Phase 18 计划已合入 `main`（4fe4fa5）；
   固定负载 136.35s → 45.00s（3.03×），默认仍为 736；720p 0.6 经去重后 precision
   89.4% → 95.1%、F1 88.4% → 92.3%，736 hash 保持 `56b1b08a…`。
-- **Phase 17（2026-10-20）**：D01 合同/parity 收口；D02 已对齐 SRT 与输出重名，
-  三端共享 fixtures 测试通过。下一步 confidence/ROI/状态映射。
+- **Phase 17 D02（2026-10-22）**：SRT、输出重名、confidence、ROI、Job/Task 状态与
+  engine/script 默认值全部对齐 contracts；C++ ctest 273/273、Web 159 tests、Swift 143 tests。
+- **Phase 17（2026-10-20）**：D01 合同/parity 收口；D02 首批 SRT 与输出重名对齐。
 - **Phase 16（2026-10-20）**：P0 的 S0 基线与 O1–O8 全部落地；端到端收益在噪声内，det_infer
   占 84.35%，以负向结论收口。P1/P2 未启动，后续另立 Phase。
 - **Phase 12（2026-10-20）**：12509–12516 全部交付；12505 历史 blocked 由 Phase 14 承接。
