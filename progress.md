@@ -6,14 +6,14 @@
 ## 当前状态
 
 - **最后更新：** 2026-10-22
-- **当前 Phase：** [Phase 20](docs/phases/phase20.json) `ready-for-merge`（Paddle OCR
-  算子优化，D01–D04 done；分支 `opt/paddle-operators`，待合入 main 并复验后置 done）；
+- **当前 Phase：** 无 `in-progress` / `ready-for-merge`；[Phase 20](docs/phases/phase20.json)
+  `done`（Paddle OCR 算子优化 D01–D04，已合入 `main` 并在 main 完成验收）；
   [Phase 18](docs/phases/phase18.json) `done`；[Phase 14](docs/phases/phase14.json)
   `blocked`（外部 Docker/容器运行时缺失，D01–D05 已 done，`verify-container` 无法执行）；
   [Phase 15](docs/phases/phase15.json) `blocked`（GPU 外部条件）
 - **已登记待启动：** [Phase 19](docs/phases/phase19.json) `not-started`（Phase 17 拆出的
   Session/Layout/工具链收口）；[Phase 17](docs/phases/phase17.json) 已以 D01–D02 `done`
-- **当前 Deliverable：** 无 in-progress；Phase 20 D01–D04 全部 `done`，待合并验收
+- **当前 Deliverable：** 无 in-progress；Phase 20 D01–D04 全部 `done`；下一 Phase 19 待启动
 - **最近收口：** [Phase 16](docs/phases/phase16.json) 以负向结论 `done`；
   [Phase 12](docs/phases/phase12.json) `done`（12505 为历史 blocked）；
   [Phase 15](docs/phases/phase15.json) 保持 `blocked`（GPU 外部条件）
@@ -23,12 +23,10 @@
 
 ## 下一步
 
-1. **Phase 20 收口**：分支 `opt/paddle-operators` 上 D01–D04 已完成、等价性与产品门
-   证据就绪；合入 `main` 并在 `main` 上复验后置 `done`（用户批准前不推送）。
+1. **Phase 19（next）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
 2. **Phase 14 复验（外部）**：需要 Docker/podman/colima 等容器运行时；本机均不可用，
    故 Phase 14 置 `blocked`，具备环境后运行 `verify-container` 复验即可。
-3. **Phase 19（next）**：Web 队列持久化、ApplicationSession、前端分层、根目录收口。
-4. **Phase 15（外部）**：GPU 真机条件，保持 `blocked`。
+3. **Phase 15（外部）**：GPU 真机条件，保持 `blocked`。
 
 ## 阻塞
 
@@ -51,9 +49,9 @@
 
 ## 最近收口
 
-- **Phase 20（2026-10-22）**：Paddle OCR 算子优化 D01–D04 done；RapidOCR→C++ 审计、
-  算子级归因，det 前处理 -40%、DB 后处理 -24%、CTC 解码 -94%；全片 SRT sha256 与 736 回滚
-  hash 不变，CTest 281/281；分支 `opt/paddle-operators` 待合入 main 复验。
+- **Phase 20（2026-10-22）**：Paddle OCR 算子优化 D01–D04 done 并合入 `main`；RapidOCR→C++
+  审计、算子级归因，det 前处理 -40%、DB 后处理 -24%、CTC 解码 -94%；全片默认与 736 回滚
+  SRT sha256 不变，main 验收 CTest 281/281。
 - **收尾（2026-10-22）**：清理本地实验 worktree（`.worktrees/det-geometry`、
   `/tmp/sublift-baseline`），保留质量门需要的 `/tmp/sublift-python-oracle`；测试视频
   `zoo_480p/zoo_720p` 已复制回 `debug/det-policy/`；Phase 14 因无容器运行时置 `blocked`。

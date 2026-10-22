@@ -16,7 +16,7 @@
     "不改变 Pipeline/OCR 单消费者串行契约，不引入跨帧/跨任务缓存或记忆化。",
     "不重写 Phase 1–19 历史 evidence；本 Phase 只改 Paddle 适配器算子、测量基础设施与对应文档。"
   ],
-  "status": "ready-for-merge",
+  "status": "done",
   "deliverables": [
     {
       "id": "D01",
@@ -111,7 +111,8 @@
         "2026-10-22：全片 A/B（单次）：core_wall 38608.3 vs 38541.8ms（ORT 波动内）；算子侧 det_pre -112.6ms、det_post -27.2ms、CTC 约 -115ms，合计约 -255ms≈-0.66%；60s 密集片段约 -1.5%，30s 稀疏片段约 -0.6%。详见 benchmark/baselines/paddle-operator-attribution-phase20.md。",
         "2026-10-22：等价性硬门全过：全片默认 0.6MP sha256 f77296e3736be0f0…（baseline=optimized）、--det-pixel-budget 0 回滚 56b1b08acdf2770a…、30s 6b047aa8813c182b…、60s f479e8ed7172b62d…；Debug CTest 281/281 passed。",
         "2026-10-22：./scripts/verify-product.sh 22/23 OK（C++ Debug build/CTest、Web vitest/build、CLI/Server E2E 全过）；唯一失败为 swift test 在 DSH 沙箱内无法执行 sandbox-exec（环境限制）。另以 --disable-sandbox 复跑：143 个 swift-testing 用例与 UI/集成 XCTest 通过；Phase8 真实 IPC 闭环在整套运行中超时，单测重跑通过（2.7s），属测试时序/环境 flake，且改动范围不涉及 Swift/Worker（见 debug/phase20/swift-test*.log）。",
-        "2026-10-22：docs/design/paddle-operator-audit.md 与 benchmark/baselines/paddle-operator-attribution-phase20.md 写入；progress.md/phases.json 同步；Phase 置 ready-for-merge（未合入 main、未推送）。"
+        "2026-10-22：docs/design/paddle-operator-audit.md 与 benchmark/baselines/paddle-operator-attribution-phase20.md 写入；progress.md/phases.json 同步；Phase 置 ready-for-merge（未合入 main、未推送）。",
+        "2026-10-22：合入 main（fast-forward 至 1c25f4b）后在 main 完成验收：./init.sh OK；scripts/verify-harness.sh 20 phases/117 links/schema OK；Debug CTest 281/281 passed；[paddle] 632 assertions/36 test cases；全片默认 0.6MP sha256 f77296e3…、--det-pixel-budget 0 回滚 56b1b08a…；main 工作树干净。Phase 置 done。"
       ]
     }
   ],
