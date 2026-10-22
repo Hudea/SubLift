@@ -218,3 +218,14 @@ PY
 
 阶段归因：在命令前加 `SUBLIFT_STAGE_TIMING=1`，stderr 会输出单行 JSON；对比
 `ocr`、`paddle.det_infer`、`paddle.rec_infer` 的 `calls` 与 `total_ms`。
+
+## 8. 补充验证（Phase 18 D04）
+
+- 480p（854×480，254.25s）：736 98.94s → 默认 0.6MP 25.71s（**3.85×**）。
+- 4K 60s（3840×2160，global 2000 上限，60s）：736 40.85s → 0.6MP 17.03s（**2.40×**）。
+- 与 1080p（2.79–3.09×）、720p 下采样（3.74×）、latin（3.17×）、mixed（2.31×）合并，
+  主 debug 视频均 ≥2×；full-frame/portrait/ultrawide 短 fixture 因 native 面积不缩小而 <2×。
+- 官方 `./scripts/verify-product.sh`：22 项通过，仅 `swift test` 在 DSH 沙箱因
+  `sandbox-exec: sandbox_apply: Operation not permitted` 失败；等价
+  `swift test --disable-sandbox` 通过 381 XCTest + 143 Swift Testing，其余 CTest/Web/
+  CLI/Server 检查均通过。
