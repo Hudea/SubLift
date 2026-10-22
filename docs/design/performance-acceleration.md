@@ -1,6 +1,8 @@
 # SubLift 性能加速方案
 
 > **状态**：分析文档，2026-10-19；P0（S0 + O1–O8）已于 2026-10-20 实施并实测，端到端收益 −0.7%（噪声内），P0 已关闭（见第 7 节）；Phase 16 已以负向结论 `done` 收口（D04），P1/P2 未实施。各节优先级判断以第 7 节为准。
+> **Phase 20 补充（2026-10-22）**：Paddle 适配器算子侧（B8/B10/B13）已完成一轮逐位等价优化，
+> 结论见第 8 节；ORT 推理仍是唯一结构性上限。
 > **分析对象**：Phase 13 之后的 Native-only 产品运行时（C++ Core / Pipeline / Application / Adapters / Worker / Native Server）。
 > **数据基础**：版本化归因基线 `benchmark/baselines/performance-attribution-baseline.md`、`docs/design/ocr-performance-attribution.md` 的决策表，以及对 `cpp/` 全树的代码级普查（带 `file:line` 证据）。
 > **文档定位**：优化候选清单、瓶颈归因与优先级排序。实施任一措施前，须按项目契约登记维护 Phase（2–8 个纵向 Deliverable）并通过相应验证门；本文不自行批准代码变更。
@@ -371,3 +373,23 @@ P0（S0 + O1–O8）已全部落地（Phase 16 D01–D03），结论是**数值�
 - GPU 路线与 gate：`docs/design/gpu-execution.md`
 - 架构与契约：`docs/ARCHITECTURE.md`、`docs/cpp/native-architecture.md`、`docs/cpp/runtime-contract.md`、`docs/cpp/worker-ipc-contract.md`
 - 代码证据：正文各 `file:line`（2026-10-19 对 `cpp/` 全树普查）
+---
+
+## 8. Phase 20 实施结果：Paddle 算子侧（2026-10-22）
+
+本节的优化对象是第 2.2 节的 Paddle 适配器算子（B8/B10/B13）与 DB/CTC 后处理，不是 ORT 推理。
+
+- **落地**：det 前处理改为 engine 级复用缓冲 + 按行并行归一化/NCHW（B13 的标量路径）；
+  cls/rec 批输入去掉重复值初始化（B10）；DB 后处理使用单 pass `cv::compare` + 静态膨胀核 +
+  按轮廓并行的候选评估；CTC argmax 使用 NEON 8-lane 扫描。全部保持逐字节等价。
+- **实测**（全片 254s 固定负载，Release，详见
+  [`benchmark/baselines/paddle-operator-attribution-phase20.md`](../../benchmark/baselines/paddle-operator-attribution-phase20.md)）：
+  `det_preprocess` 281.4→168.8ms（−40%）、`det_postprocess` 115.0→87.7ms（−24%）、
+  CTC 解码约 −115ms；算子侧合计约 −255ms ≈ core wall −0.66%；字幕密集片段约 −1.5%。
+- **未采纳**：crop 跨 box 并行（真实 box 数少，A/B 中性）；ORT 线程/arena 调参
+  （intra_op=4 已最优，增加线程显著拖慢 rec 推理）。两者均已写入 Phase 20 审计文档，避免重提。
+- **剩余结构**：ORT 推理约占 core wall 75%（det_infer 65%，ADR-0025/0028 冻结）；全片
+  296 次 det 仅对应 186 个 OCR segment，det 调用次数与 pipeline 侧 `signature`/`changepoint`
+  （合计约 22%）比剩余算子成本大一个量级，应另立 Phase 处理。
+
+审计与优化细节：[`docs/design/paddle-operator-audit.md`](paddle-operator-audit.md)。

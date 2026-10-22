@@ -96,7 +96,7 @@
     {
       "id": "phase14",
       "name": "Phase 14 - 局域网容器化自托管",
-      "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。detail 已在 main，D01–D05 全 done；保持 ready-for-merge 直到在 main 上完成复验。",
+      "description": "以 Docker 镜像与 Compose 编排把 Web / Native Server 交付到可信局域网服务器；宿主卷 /media 为唯一媒体授权根，非 loopback 暴露受最小访问控制约束，并由真实容器运行与 golden SRT 比对验收。detail 已在 main，D01–D05 全 done；因本机无容器运行时，verify-container 无法在 main 复验，置 blocked 等待外部环境。",
       "detail_file": "docs/phases/phase14.json",
       "status": "blocked"
     },
@@ -134,6 +134,13 @@
       "description": "承接 Phase 17 拆出的 Session/Layout/工具链收口：Web 批量队列持久化、共享 ApplicationSession、Web/Swift 前端分层、根目录与验证门归位；not-started。",
       "detail_file": "docs/phases/phase19.json",
       "status": "not-started"
+    },
+    {
+      "id": "phase20",
+      "name": "Phase 20 - Paddle OCR 算子优化（RapidOCR C++ 迁移）",
+      "description": "梳理 RapidOCR 3.9.2 Python 包迁移到 C++ 的 Paddle OCR 算子实现，在逐字节等价与产品质量门不变的前提下优化预处理/后处理/解码/推理胶水，并建立算子级归因基线；D01–D04 done，待合入 main 复验。",
+      "detail_file": "docs/phases/phase20.json",
+      "status": "ready-for-merge"
     }
   ]
 }

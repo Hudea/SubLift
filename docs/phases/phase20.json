@@ -1,0 +1,125 @@
+{
+  "schema_version": 2,
+  "project": "SubLift",
+  "phase": "Phase 20 - Paddle OCR 算子优化（RapidOCR C++ 迁移）",
+  "goal": "梳理 RapidOCR 3.9.2 Python 包迁移到 C++ 的 Paddle OCR 算子实现，在输出逐字节等价、contracts 与产品质量门不变的前提下，消除预处理、后处理、张量装配与推理胶水中的冗余拷贝、重复清零与标量热点，并建立算子级阶段归因基线，量化剩余成本与 ORT 内核的不可优化边界，为后续推理层/硬件加速提供对照。",
+  "scope": [
+    "D01：扩展 Paddle 阶段归因到未计时内部（CTC 解码、结果装配、cls 应用、DB 子步骤），产出算子级基线（warmup+3 次中位数）；逐项对照 RapidOCR 3.9.2 Python 实现形成审计清单（file:line、收益估算、parity 风险、优先级）。",
+    "D02：优化预处理算子：det global/preprocess 的整帧拷贝与双重写、逐像素 normalize/NCHW 标量热点、crop 逐 box warpPerspective 与分配、cls/rec 前处理的双重 memset 与标量 resize；允许向量化与并行化，但必须逐位等价。",
+    "D03：优化后处理与解码算子：DB 后处理的阈值/膨胀/box score/unclip 分配与热点、CTC greedy decode 的 argmax 与结果装配、结果过滤/排序；必须与改造前逐位等价（文本、confidence、box、SRT 字节）。",
+    "D04：等价验证与收口：Debug/Release 构建、CTest、算子等价单测、真实视频 SRT sha256 A/B（默认 0.6MP 与 --det-pixel-budget 0）、产品门与可执行质量门；归因/基准/审计写入 benchmark/baselines 与 docs/design，更新 progress.md/phases.json 并向 ready-for-merge 收口。"
+  ],
+  "non_goals": [
+    "不改变 RapidOCR 迁移后的数值语义、SRT 字节、confidence/box 语义与 contracts；任何 hash 变化必须回退，不得以优化名义重冻基线。",
+    "不改模型文件与模型 SHA、不改 ORT 二进制与 ADR-0025/0028 冻结项（intra_op=4、Rec batch=6、source_output_sha256_exact 等）；推理线程/arena 只做测量评估，不改默认。",
+    "不实施 Phase 16 的 P1/P2（引擎缓存、并发、选区 ROI、持久化等）与 Phase 15 GPU/CUDA；不引入第三方依赖。",
+    "不改变 Pipeline/OCR 单消费者串行契约，不引入跨帧/跨任务缓存或记忆化。",
+    "不重写 Phase 1–19 历史 evidence；本 Phase 只改 Paddle 适配器算子、测量基础设施与对应文档。"
+  ],
+  "status": "ready-for-merge",
+  "deliverables": [
+    {
+      "id": "D01",
+      "name": "算子级归因基线与迁移逻辑审计",
+      "outcome": "Paddle 适配器具备覆盖预处理/后处理/解码/装配的算子级阶段计时，并产出固定负载的算子归因基线；RapidOCR 3.9.2 Python 与 C++ 实现的逐项对照审计清单（含冗余点、收益估算与 parity 风险）成为后续优化的依据。",
+      "acceptance": [
+        "新增的算子级计时默认关闭（SUBLIFT_STAGE_TIMING=1 才启用），关闭时零成本，产品行为不变；覆盖 CTC 解码、结果过滤/排序/装配（原未计时段落）。",
+        "在 debug/phase20/zoo_1080p_30s.mp4 与 1080p 全片固定负载上产出 warmup=1 + measured=3 的中位数算子归因表，写入 benchmark/baselines/ 并说明与 Phase 16 基线不可直接比较的边界。",
+        "审计清单覆盖 det global/preprocess、DB 后处理、crop、cls/rec 前处理、CTC 解码与推理胶水，每条含 file:line、现状、优化方向、预期毫秒收益、parity 风险与优先级。",
+        "审计发现与基线数字写入 docs/design/paddle-operator-audit.md；任何结论有可复现命令或产物引用。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle",
+        "cpp/include/sublift/adapters/paddle.hpp",
+        "benchmark/baselines",
+        "docs/design",
+        "scripts"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-22：算子级归因扩展：paddle_ocr.cpp 新增 paddle.rec_decode / paddle.ocr_post / paddle.cls_apply 计时（SUBLIFT_STAGE_TIMING=1 门控，关闭零成本），scripts/measure_native_attribution.py STAGE_TREE 同步。30s/1080p baseline：core_wall 7155.1ms，ORT 推理 75.2%（det_infer 64.9%），Paddle 标量算子 181.9ms（2.54%），未计时残差 11.7ms（0.16%）。",
+        "2026-10-22：RapidOCR 3.9.2 Python↔C++ 逐项审计完成并写入 docs/design/paddle-operator-audit.md；覆盖 global/det/DB/crop/cls/rec/CTC/装配，主路径语义一致；发现 P1 strided 读缺陷（D02 修复）。原始审计报告 debug/phase20/operator-audit.md。",
+        "2026-10-22：ORT 配置复测（intra_op 0/8/10、arena on，60s 密集片段各 2 次）：冻结默认（4 线程、arena off）最优，8/10 线程与 default 均更慢，arena 无稳定收益，SRT hash 全部相同；结论见 benchmark/baselines/paddle-operator-attribution-phase20.md §4，维持 ADR-0025/0028 冻结值。"
+      ]
+    },
+    {
+      "id": "D02",
+      "name": "预处理算子优化（det/global/crop/cls/rec）",
+      "outcome": "Paddle 预处理路径中的冗余整帧拷贝、双重写、逐像素标量循环与逐 box 分配显著减少；相同输入产出的 det/cls/rec 张量与改造前逐位相同。",
+      "acceptance": [
+        "新增参考实现与优化实现的逐位等价单测：随机图像/合法几何下 det NCHW 张量、cls/rec 张量、crop 像素全部 memcmp 相等（含边界与奇异 quad）。",
+        "det preprocess 与 global preprocess 的冗余拷贝/重复写被消除；允许向量化/并行化，但数值与字节不变。",
+        "crop 路径减少逐 box 重新分配或按 box 并行（顺序无关），crop 像素与改造前逐位相同。",
+        "cls/rec 前处理去除双重 memset 与可避免的标量热点，张量逐位相同。",
+        "Debug CTest 全量通过，[paddle][det]/[paddle][crop] 等既有用例不变；固定负载的算子归因显示预处理阶段耗时下降且输出 SRT sha256 不变。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle/ppocr_det_preprocess.cpp",
+        "cpp/src/adapters/paddle/ppocr_crop_cls.cpp",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-22：det 前处理新增 prepare_det_input_into() 与 engine 级 grow-only 缓冲，归一化/NCHW 按行 cv::parallel_for_，删除每次 7.37MB 值初始化。全片 296 calls 281.4→168.8ms（-40%）；30s 68.4→43.3ms。",
+        "2026-10-22：cls/rec 批输入改 make_unique_for_overwrite（消除与 prepare_padded_tensor 重复整体清零）；global preprocess 无 resize/pad 时按行拷贝，修复 stride>width*3 逐行错位（P1），新增 strided 回归测试。",
+        "2026-10-22：等价性：det NCHW 张量与测试内标量参考在 5 组几何/随机图像上 memcmp 逐位相等；全片 SRT sha256 f77296e3… 不变。crop 跨 box 并行因真实 box 数少、A/B 中性已回退（记录于审计文档）。"
+      ]
+    },
+    {
+      "id": "D03",
+      "name": "后处理与解码算子优化（DB/CTC/结果装配）",
+      "outcome": "DB 后处理与 CTC 解码的每 box/每时间步开销下降，结果过滤/排序/装配的分配减少；quads、score、文本、confidence、token 序列与改造前逐位相同。",
+      "acceptance": [
+        "DB 后处理在保持 quads/score 逐位相同的前提下减少逐候选 mask 分配或重复转换，并记录前后耗时。",
+        "CTC greedy decode 优化（如 SIMD/降低每字符开销）在随机 logits（含并列、NaN、全 blank、重复字符）上与参考实现文本、confidence、token_indices 完全一致。",
+        "结果过滤、box 映射、排序与 OcrResult 装配的分配/拷贝减少，真实视频输出 SRT sha256 不变。",
+        "新增等价单测通过，Debug CTest 全量通过；归因显示后处理/解码阶段耗时下降。"
+      ],
+      "areas": [
+        "cpp/src/adapters/paddle/ppocr_db_postprocess.cpp",
+        "cpp/src/adapters/paddle/ppocr_ctc.hpp",
+        "cpp/src/adapters/paddle/paddle_ocr.cpp",
+        "cpp/tests"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-22：DB 后处理改为 cv::compare 单 pass、静态膨胀核、候选按轮廓并行（结果按序压缩，serial 路径保留为等价测试开关）；全片 296 calls 115.0→87.7ms（-24%），quads/score 与 serial 逐位一致（随机概率图单测）。",
+        "2026-10-22：CTC argmax 改为 NEON 8-lane（保持首个最大值/NaN 语义），标量参考保留；60s 密集片段 decode 108.3→6.8ms（-94%），全片估计 -115ms；[paddle] 632 assertions/36 cases 全过。",
+        "2026-10-22：结果过滤/映射/排序新增 paddle.ocr_post 计时（全片 0.26ms），确认装配无热点，未再改动。"
+      ]
+    },
+    {
+      "id": "D04",
+      "name": "等价验证、基准 A/B 与收口",
+      "outcome": "以真实视频、全量测试与算子/阶段归因 A/B 证明优化是逐字节等价的，并在同机同负载下量化收益；Phase 事实、基准与文档同步，具备合入条件。",
+      "acceptance": [
+        "Release 构建下用同一 30s 与 1080p 全片（默认 0.6MP）分别用基线二进制与优化二进制跑 A/B，输出 SRT sha256 与基线 f77296e3… 一致；--det-pixel-budget 0 回滚路径输出 56b1b08a… 一致。",
+        "算子/阶段归因 A/B 表（warmup=1 + measured=3 median）记录各优化项的毫秒与占比变化，写入 benchmark/baselines/ 与 Phase evidence。",
+        "Debug CTest 全量通过；./scripts/verify-product.sh 在产品代码改动范围内通过（若受环境限制则记录具体 SKIP 原因，不得假绿）。",
+        "算子等价单测、ctest、真实视频 A/B 与产品门结果写入 D02/D03/D04 evidence；progress.md/phases.json 同步，Phase 具备 ready-for-merge 条件。"
+      ],
+      "areas": [
+        "benchmark/baselines",
+        "cpp/tests",
+        "docs/design",
+        "progress.md",
+        "phases.json",
+        "docs/phases"
+      ],
+      "status": "done",
+      "evidence": [
+        "2026-10-22：全片 A/B（单次）：core_wall 38608.3 vs 38541.8ms（ORT 波动内）；算子侧 det_pre -112.6ms、det_post -27.2ms、CTC 约 -115ms，合计约 -255ms≈-0.66%；60s 密集片段约 -1.5%，30s 稀疏片段约 -0.6%。详见 benchmark/baselines/paddle-operator-attribution-phase20.md。",
+        "2026-10-22：等价性硬门全过：全片默认 0.6MP sha256 f77296e3736be0f0…（baseline=optimized）、--det-pixel-budget 0 回滚 56b1b08acdf2770a…、30s 6b047aa8813c182b…、60s f479e8ed7172b62d…；Debug CTest 281/281 passed。",
+        "2026-10-22：./scripts/verify-product.sh 22/23 OK（C++ Debug build/CTest、Web vitest/build、CLI/Server E2E 全过）；唯一失败为 swift test 在 DSH 沙箱内无法执行 sandbox-exec（环境限制）。另以 --disable-sandbox 复跑：143 个 swift-testing 用例与 UI/集成 XCTest 通过；Phase8 真实 IPC 闭环在整套运行中超时，单测重跑通过（2.7s），属测试时序/环境 flake，且改动范围不涉及 Swift/Worker（见 debug/phase20/swift-test*.log）。",
+        "2026-10-22：docs/design/paddle-operator-audit.md 与 benchmark/baselines/paddle-operator-attribution-phase20.md 写入；progress.md/phases.json 同步；Phase 置 ready-for-merge（未合入 main、未推送）。"
+      ]
+    }
+  ],
+  "exit_criteria": [
+    "算子级归因与 RapidOCR→C++ 审计清单完成，覆盖未计时内部成本与 ORT 内核边界。",
+    "预处理、后处理、解码与推理胶水的优化全部落地，且算子等价单测证明逐位不变。",
+    "真实视频默认 0.6MP 与 736 回滚路径 SRT sha256 与基线一致；全量 CTest 与适用产品门通过。",
+    "同机同负载 A/B 给出各算子阶段收益数字与端到端收益边界；文档与进度真源同步。",
+    "本 Phase 不改变模型、ORT 二进制、冻结 ADR 项与任何产品语义。"
+  ]
+}
