@@ -1,0 +1,51 @@
+---
+Language: Cpp
+BasedOnStyle: Google
+Standard: c++20
+
+# Indentation and Layout
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -2
+ColumnLimit: 100
+
+# Braces and Wrapping
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+BinPackArguments: true
+BinPackParameters: true
+
+# Pointer and Reference Alignment
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Spacing and Angles
+SpaceBeforeParens: ControlStatements
+SpacesInAngles: false
+SpacesInContainerLiterals: false
+SpacesBeforeTrailingComments: 2
+
+# Includes Management
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+IncludeCategories:
+  - Regex: '^<sublift/'
+    Priority: 2
+    SortPriority: 2
+  - Regex: '^<[^/]+>'
+    Priority: 1
+    SortPriority: 1
+  - Regex: '.*'
+    Priority: 3
+    SortPriority: 3
+
+# Namespaces and Modern C++
+FixNamespaceComments: true
+NamespaceIndentation: None
+CompactNamespaces: false
+Cpp11BracedListStyle: true
+...

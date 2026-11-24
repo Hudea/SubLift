@@ -1,0 +1,59 @@
+{
+  "dataset": {
+    "video": "debug/smoke-test-data/Zootopia_clip_1080p.mp4",
+    "reference_srt": "debug/smoke-test-data/Zootopia_clip_1080p.srt",
+    "fps": 5.0
+  },
+  "tracks": {
+    "default": {
+      "bottom_ratio": 0.30,
+      "tp_min": 70,
+      "f1_min": 0.895,
+      "cer_matched_max": 0.090,
+      "wall_sec_max": 45.0,
+      "rss_mb_max": 650.0,
+      "required_intact_clauses": [
+        ["可以收工啦", "长舌妇"],
+        ["在ZPD", "搭档合作是成功的基石"]
+      ]
+    },
+    "region": {
+      "region": [0, 848, 1920, 87],
+      "cues_exact": 87,
+      "f1_min": 0.990,
+      "cer_matched_max": 0.040,
+      "wall_sec_max": 20.0,
+      "rss_mb_max": 450.0
+    },
+    "auto_region": {
+      "tp_min": 80,
+      "f1_min": 0.980,
+      "cer_matched_max": 0.040,
+      "wall_sec_max": 22.0,
+      "rss_mb_max": 550.0,
+      "required_intact_clauses": [
+        ["可以收工啦", "长舌妇"],
+        ["在ZPD", "搭档合作是成功的基石"]
+      ],
+      "expected_box": {
+        "x": 0,
+        "y_min": 840,
+        "y_max": 875,
+        "width": 1920,
+        "height_min": 65,
+        "height_max": 115
+      }
+    }
+  },
+  "e2e_smoke_clip": {
+    "start_sec": 24.0,
+    "duration_sec": 30.5,
+    "time_range_ms": [24000, 54500],
+    "region": [0, 848, 1920, 87],
+    "cues_min": 14,
+    "cues_max": 16,
+    "f1_min": 0.950,
+    "cer_matched_max": 0.060,
+    "required_substrings": ["我流血啦", "可以收工啦"]
+  }
+}

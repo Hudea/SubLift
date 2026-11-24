@@ -1,0 +1,167 @@
+{
+  "golden_schema_version": 1,
+  "kind": "line_select",
+  "oracle": {
+    "oracle_commit": "da19e14d4544a60fc8d5eb9204a63815980c4bab",
+    "oracle_branch": "refactor/cpp",
+    "python_version": "3.12.13",
+    "git_dirty": true
+  },
+  "cases": [
+    {
+      "name": "normalize_ws",
+      "kind": "normalize",
+      "input": "  你  好  ",
+      "output": "你 好"
+    },
+    {
+      "name": "cleanup_ellipsis",
+      "kind": "cleanup",
+      "input": "你好...",
+      "script": "cjk",
+      "output": "你好…"
+    },
+    {
+      "name": "cleanup_quotes",
+      "kind": "cleanup",
+      "input": "他们说：『没问题』",
+      "script": "cjk",
+      "output": "他们说：「没问题」"
+    },
+    {
+      "name": "cleanup_fact_dot",
+      "kind": "cleanup",
+      "input": "事实上.",
+      "script": "cjk",
+      "output": "事实上…"
+    },
+    {
+      "name": "cleanup_strip_both_edges",
+      "kind": "cleanup",
+      "input": "FOR一起揭穿阴谋SON",
+      "script": "cjk",
+      "output": "一起揭穿阴谋"
+    },
+    {
+      "name": "cleanup_strip_trailing_phison",
+      "kind": "cleanup",
+      "input": "（前市长杨咩咩入狱）PHISON",
+      "script": "cjk",
+      "output": "（前市长杨咩咩入狱）"
+    },
+    {
+      "name": "cleanup_strip_trailing_son",
+      "kind": "cleanup",
+      "input": "在动物方城市气候墙SON",
+      "script": "cjk",
+      "output": "在动物方城市气候墙"
+    },
+    {
+      "name": "cleanup_strip_trailing_efs",
+      "kind": "cleanup",
+      "input": "哈茱蒂，本市第一位兔警员EFS CONSPI _N/、",
+      "script": "cjk",
+      "output": "哈茱蒂，本市第一位兔警员"
+    },
+    {
+      "name": "cleanup_keep_mixed_zpd",
+      "kind": "cleanup",
+      "input": "后来加入ZPD警局",
+      "script": "cjk",
+      "output": "后来加入ZPD警局"
+    },
+    {
+      "name": "cleanup_keep_spaced_english",
+      "kind": "cleanup",
+      "input": "欢迎来到 ZPD",
+      "script": "cjk",
+      "output": "欢迎来到 ZPD"
+    },
+    {
+      "name": "cleanup_keep_pure_english",
+      "kind": "cleanup",
+      "input": "HELLO",
+      "script": "cjk",
+      "output": "HELLO"
+    },
+    {
+      "name": "normalize_ideo_space",
+      "kind": "normalize",
+      "input": "你　好",
+      "output": "你 好"
+    },
+    {
+      "name": "select_prefers_cjk_in_band",
+      "kind": "select_line",
+      "profile": {
+        "script": "cjk",
+        "center_x": 160,
+        "center_y": 40,
+        "height": 30,
+        "y_min": 20,
+        "y_max": 60
+      },
+      "lines": [
+        {
+          "text": "BREAKING",
+          "confidence": 0.99,
+          "box": {
+            "x": 10,
+            "y": 5,
+            "width": 100,
+            "height": 20
+          }
+        },
+        {
+          "text": "你好世界",
+          "confidence": 0.9,
+          "box": {
+            "x": 100,
+            "y": 30,
+            "width": 120,
+            "height": 28
+          }
+        }
+      ],
+      "selected_text": "你好世界"
+    },
+    {
+      "name": "consensus_cjk",
+      "kind": "consensus",
+      "samples": [
+        [
+          "你好",
+          0.9
+        ],
+        [
+          "你好",
+          0.8
+        ],
+        [
+          "你号",
+          0.7
+        ]
+      ],
+      "script": "cjk",
+      "result": {
+        "text": "你好",
+        "confidence": 0.8500000000000001,
+        "support_votes": 2
+      }
+    },
+    {
+      "name": "edit_distance_kitten",
+      "kind": "edit_distance",
+      "a": "kitten",
+      "b": "sitting",
+      "distance": 3
+    },
+    {
+      "name": "should_accept_cjk",
+      "kind": "should_accept",
+      "text": "你好世界",
+      "confidence": 0.6,
+      "accept": true
+    }
+  ]
+}

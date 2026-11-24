@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sublift.local/schemas/vlm-ocr-slots.schema.json",
+  "title": "SubLiftVlmOcrSlotsResponse",
+  "description": "Schema for slot-driven multimodal VLM OCR subtitle extraction output.",
+  "type": "object",
+  "properties": {
+    "slots": {
+      "type": "array",
+      "description": "Ordered list of transcribed timing slots matching the #NNN labels on the contact sheet.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "1-indexed slot ID matching the #NNN label on the left column of the contact sheet."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "dialogue",
+              "bracket_note",
+              "watermark",
+              "scene_text",
+              "empty"
+            ],
+            "description": "Semantic category of the visual text in the slot."
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Subtitle lines from top to bottom (empty array for empty/noise slots)."
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "lines"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "slots"
+  ],
+  "additionalProperties": false
+}

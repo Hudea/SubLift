@@ -1,0 +1,54 @@
+# Prerequisites & Build Output
+build/*
+!build/README.md
+cmake-build-*/
+.cache/
+compile_commands.json
+CMakeUserPresets.json
+CTestTestfile.cmake
+Testing/
+.worktree/
+debug/
+
+# System Artifacts (macOS / Linux / Windows)
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE & Editor Configurations
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+*~
+
+# Python Bytecode & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Teamwork & Agent Working Directories
+.agents/
+skills/
+
+# Benchmark Large Media & Debug Video Artifacts
+debug/*.mp4
+debug/*.mkv
+debug/*.mov
+*.raw
+*.rgb.tmp
+
+# Environment Variables
+.env
+.env.*
+!.env.example

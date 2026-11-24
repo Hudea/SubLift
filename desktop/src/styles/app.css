@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@theme {
+  /* === 字体家族 === */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Inter", system-ui, sans-serif;
+  --font-mono: "SF Mono", "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+
+  /* === 圆角规范（严格 <= 8px） === */
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* === 4px 基准间距扩展 === */
+  --spacing-toolbar: 2.5rem;      /* 40px 顶部工作台栏 */
+  --spacing-transport: 2.25rem;   /* 36px 播控条 */
+  --spacing-param-strip: 2.75rem; /* 44px ROI/参数条 */
+  --spacing-traffic: 4.75rem;     /* 76px macOS 红绿灯安全区 */
+
+  /* === 语义色彩映射（绑定至 :root / [data-theme]） === */
+  --color-bg-app: var(--bg-app);
+  --color-bg-panel: var(--bg-panel);
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-active: var(--bg-active);
+  --color-stage: var(--stage);
+
+  --color-border-subtle: var(--border-subtle);
+  --color-border-default: var(--border-default);
+  --color-border-input: var(--border-input);
+  --color-border-focus: var(--border-focus);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-highlight: var(--sl-highlight);
+
+  --color-roi: var(--roi);
+  --color-roi-accent: var(--roi-accent);
+  --color-roi-mask: var(--roi-mask);
+
+  --color-status-idle: var(--status-idle);
+  --color-status-extracting: var(--status-extracting);
+  --color-status-ready: var(--status-ready);
+  --color-status-exported: var(--status-exported);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-failed: var(--status-failed);
+  --color-status-warning: var(--status-warning);
+}
+
+/* === 默认：Dark-First 专业工作台主题 === */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-app: #0c0d10;
+  --bg-panel: #13151a;
+  --bg-canvas: #07080a;
+  --bg-elevated: #1a1d24;
+  --bg-hover: #222630;
+  --bg-active: #272c38;
+  --stage: #000000;
+
+  --border-subtle: #1f232c;
+  --border-default: #2b303c;
+  --border-input: #606a80;
+  --border-focus: #3b8bff;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #a1a7b3;
+  --text-muted: #767d8c;
+
+  --primary: #1768d1;
+  --primary-hover: #1f78eb;
+  --primary-foreground: #ffffff;
+  --sl-highlight: #3b8bff;
+
+  --roi: #ffd60a;
+  --roi-accent: #38bdf8;
+  --roi-mask: rgba(0, 0, 0, 0.45);
+
+  --status-idle: #767d8c;
+  --status-extracting: #3b8bff;
+  --status-ready: #38bdf8;
+  --status-exported: #22c55e;
+  --status-cancelled: #9ca3af;
+  --status-failed: #f87171;
+  --status-warning: #f59e0b;
+
+  --tint-extracting: rgba(59, 139, 255, 0.12);
+  --tint-ready: rgba(56, 189, 248, 0.12);
+  --tint-exported: rgba(34, 197, 94, 0.12);
+  --tint-failed: rgba(239, 68, 68, 0.12);
+  --tint-warning: rgba(245, 158, 11, 0.12);
+  --tint-selected: rgba(59, 139, 255, 0.10);
+  --tint-search-hit: rgba(250, 204, 21, 0.30);
+}
+
+/* === 浅色工作台主题（含 WCAG 4.83:1 输入框边框修正） === */
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-app: #f7f7f8;
+  --bg-panel: #ffffff;
+  --bg-canvas: #141417;
+  --bg-elevated: #ffffff;
+  --bg-hover: #efeff1;
+  --bg-active: #e4e4e7;
+  --stage: #000000;
+
+  --border-subtle: #e4e4e7;
+  --border-default: #d4d4d8;
+  --border-input: #71717a;
+  --border-focus: #0a6cff;
+
+  --text-primary: #111114;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+
+  --primary: #0a6cff;
+  --primary-hover: #0058db;
+  --primary-foreground: #ffffff;
+  --sl-highlight: #0a6cff;
+
+  --roi: #ffd60a;
+  --roi-accent: #0284c7;
+  --roi-mask: rgba(0, 0, 0, 0.45);
+
+  --status-idle: #71717a;
+  --status-extracting: #0a6cff;
+  --status-ready: #0284c7;
+  --status-exported: #15803d;
+  --status-cancelled: #71717a;
+  --status-failed: #dc2626;
+  --status-warning: #b45309;
+
+  --tint-extracting: rgba(10, 108, 255, 0.12);
+  --tint-ready: rgba(2, 132, 199, 0.12);
+  --tint-exported: rgba(21, 128, 61, 0.12);
+  --tint-failed: rgba(220, 38, 38, 0.12);
+  --tint-warning: rgba(217, 119, 6, 0.12);
+  --tint-selected: rgba(10, 108, 255, 0.10);
+  --tint-search-hit: rgba(250, 204, 21, 0.35);
+}
+
+/* === 等宽数字与无障碍辅助规则 === */
+.tabular-nums-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root,
+  [data-theme="dark"] {
+    --border-subtle: #4b5563;
+    --border-default: #6b7280;
+    --border-input: #9ca3af;
+    --text-secondary: #d1d5db;
+    --roi: #ffe600;
+  }
+  [data-theme="light"] {
+    --border-subtle: #71717a;
+    --border-default: #52525b;
+    --border-input: #3f3f46;
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "valid_model_types": [
+    "medium",
+    "small",
+    "tiny"
+  ],
+  "text": "line1_left\nline1_right\n  line2_bottom  ",
+  "confidence": 0.9133333333333334,
+  "lines": [
+    {
+      "text": "line1_left",
+      "confidence": 0.91,
+      "box": {
+        "x": 10,
+        "y": 15,
+        "width": 45,
+        "height": 25
+      }
+    },
+    {
+      "text": "line1_right",
+      "confidence": 0.95,
+      "box": {
+        "x": 60,
+        "y": 15,
+        "width": 80,
+        "height": 25
+      }
+    },
+    {
+      "text": "  line2_bottom  ",
+      "confidence": 0.88,
+      "box": {
+        "x": 12,
+        "y": 60,
+        "width": 120,
+        "height": 30
+      }
+    }
+  ]
+}

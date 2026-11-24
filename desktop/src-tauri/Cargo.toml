@@ -1,0 +1,44 @@
+[package]
+name = "sublift-desktop"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+
+[lib]
+name = "sublift_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"
+tokio = { version = "1.54", features = ["rt-multi-thread", "macros", "process", "io-util", "io-std", "sync", "time", "fs"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "gzip", "deflate", "brotli", "system-proxy"] }
+sha2 = "0.10"
+hex = "0.4"
+tempfile = "3.27"
+dirs = "7.0"
+thiserror = "2.0"
+url = "2.5"
+percent-encoding = "2.3"
+async-trait = "0.1"
+uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
+http = "1"
+png = "0.18"
+rand = "0.10"
+regex = "1.13"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tauri = { version = "2.12", features = ["test"] }
+
+[profile.release]
+strip = "none"

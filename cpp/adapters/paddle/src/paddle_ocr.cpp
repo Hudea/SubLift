@@ -1,0 +1,803 @@
+#include <sublift/adapters/paddle/paddle_ocr.hpp>
+#include <sublift/adapters/paddle/paddle_geometry.hpp>
+#include <sublift/adapters/paddle/paddle_stage_timing.hpp>
+
+#include <algorithm>
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <memory>
+#include <mutex>
+#include <numeric>
+#include <optional>
+#include <sstream>
+#include <stdexcept>
+#include <vector>
+
+#include "hash.hpp"
+#include "model_bundle.hpp"
+#include "native_manifest.hpp"
+#include "ppocr_crop_cls.hpp"
+#include "ppocr_ctc.hpp"
+#include "ppocr_db_postprocess.hpp"
+#include "ppocr_det_preprocess.hpp"
+#include "resource_locator.hpp"
+
+#if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
+#include <onnxruntime_cxx_api.h>
+
+#if defined(SUBLIFT_HAS_OPENCV) || __has_include(<opencv2/core.hpp>)
+#include <opencv2/core.hpp>
+#include <opencv2/imgproc.hpp>
+#define SUBLIFT_PADDLE_USE_OPENCV 1
+#endif
+#endif
+
+namespace sublift::adapters::paddle {
+
+#if defined(SUBLIFT_HAS_PADDLE) && SUBLIFT_HAS_PADDLE
+
+namespace {
+
+void ensure_paddle_opencv_single_thread() noexcept {
+#if defined(SUBLIFT_PADDLE_USE_OPENCV)
+  static std::once_flag once;
+  std::call_once(once, []() noexcept {
+    int threads = 1;
+    if (const char* env = std::getenv("SUBLIFT_OPENCV_THREADS");
+        env != nullptr && *env != '\0') {
+      char* end = nullptr;
+      const long parsed = std::strtol(env, &end, 10);
+      if (end != env && *end == '\0' && parsed >= 0) {
+        threads = static_cast<int>(std::clamp(parsed, 0L, 64L));
+      }
+    }
+    cv::setNumThreads(threads);
+  });
+#endif
+}
+
+std::filesystem::path resolve_keys_path(const detail::ModelPaths& paths) {
+  if (std::filesystem::exists(paths.keys_path)) {
+    return paths.keys_path;
+  }
+  auto alt = paths.keys_path.parent_path() / "ppocrv6_dict.txt";
+  if (std::filesystem::exists(alt)) {
+    return alt;
+  }
+  return paths.keys_path;
+}
+
+std::vector<std::string> parse_dictionary(std::string_view contents) {
+  std::istringstream input{std::string(contents)};
+  std::vector<std::string> dictionary;
+  std::string line;
+  while (std::getline(input, line)) {
+    if (!line.empty() && line.back() == '\r') {
+      line.pop_back();
+    }
+    dictionary.push_back(line);
+  }
+  dictionary.emplace_back(" ");
+  if (dictionary.size() <= 1) {
+    throw std::runtime_error("Paddle Rec 字典为空");
+  }
+  return dictionary;
+}
+
+std::vector<std::string> load_verified_dictionary(
+    const std::filesystem::path& keys_path) {
+  std::ifstream in(keys_path, std::ios::binary);
+  if (!in) {
+    throw std::runtime_error("无法读取 Paddle 字典: " + keys_path.string());
+  }
+  const std::vector<std::uint8_t> bytes{
+      std::istreambuf_iterator<char>(in),
+      std::istreambuf_iterator<char>()};
+  const auto digest = detail::sha256_prefixed(
+      std::span<const std::uint8_t>(bytes));
+  static constexpr std::string_view kPpocrV6DictionarySha =
+      "sha256:b5f2bfe2bdd9448429e3e82b51c789775d9b42f2403d082b00662eb77e401c5d";
+  if (digest != kPpocrV6DictionarySha) {
+    throw std::runtime_error(
+        "Paddle Rec 模型缺少 character 元数据，且外部字典未通过 SHA-256 "
+        "校验: " + keys_path.string() + " (" + digest + ")");
+  }
+  return parse_dictionary(std::string_view(
+      reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+}
+
+Point2D map_point_to_original(
+    Point2D point,
+    const detail::GlobalPreprocessResult& global,
+    std::int32_t original_width,
+    std::int32_t original_height) {
+  point.x = static_cast<float>(
+      (point.x - global.padding_left) * global.ratio_w);
+  point.y = static_cast<float>(
+      (point.y - global.padding_top) * global.ratio_h);
+  point.x = std::clamp(point.x, 0.0F, static_cast<float>(original_width));
+  point.y = std::clamp(point.y, 0.0F, static_cast<float>(original_height));
+  return point;
+}
+
+struct ProbeCacheEntry {
+  std::string model_root_dir;
+  std::string model_type;
+  std::string fingerprint;
+  std::chrono::steady_clock::time_point stored_at;
+  PaddleCapabilities caps;
+};
+
+std::mutex g_probe_cache_mutex;
+std::optional<ProbeCacheEntry> g_probe_cache;
+constexpr auto kProbeCacheTtl = std::chrono::seconds(60);
+
+std::atomic<std::uint64_t> g_probe_cache_hits{0};
+std::atomic<std::uint64_t> g_probe_cache_misses{0};
+std::atomic<std::uint64_t> g_probe_cache_stores{0};
+
+std::string probe_file_fingerprint(const std::filesystem::path& path) {
+  std::error_code ec;
+  const auto size = std::filesystem::file_size(path, ec);
+  if (ec) {
+    return path.string() + ":missing";
+  }
+  const auto mtime = std::filesystem::last_write_time(path, ec);
+  if (ec) {
+    return path.string() + ":nomtime";
+  }
+  std::ostringstream oss;
+  const auto ticks = static_cast<std::int64_t>(mtime.time_since_epoch().count());
+  oss << path.string() << ':' << size << ':' << ticks;
+  return oss.str();
+}
+
+std::string probe_bundle_fingerprint(const detail::ModelPaths& paths,
+                                     const std::filesystem::path& manifest_path) {
+  return probe_file_fingerprint(paths.det_path) + "|" +
+         probe_file_fingerprint(paths.cls_path) + "|" +
+         probe_file_fingerprint(paths.rec_path) + "|" +
+         probe_file_fingerprint(paths.keys_path) + "|" +
+         probe_file_fingerprint(manifest_path);
+}
+
+std::optional<PaddleCapabilities> probe_cache_lookup(
+    const std::string& model_root_dir, const std::string& model_type,
+    const std::string& fingerprint) {
+  std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+  if (!g_probe_cache.has_value()) {
+    return std::nullopt;
+  }
+  const ProbeCacheEntry& entry = *g_probe_cache;
+  if (entry.model_root_dir != model_root_dir || entry.model_type != model_type ||
+      entry.fingerprint != fingerprint) {
+    return std::nullopt;
+  }
+  if (std::chrono::steady_clock::now() - entry.stored_at > kProbeCacheTtl) {
+    return std::nullopt;
+  }
+  return entry.caps;
+}
+
+void probe_cache_store(const std::string& model_root_dir,
+                       const std::string& model_type,
+                       const std::string& fingerprint,
+                       const PaddleCapabilities& caps) {
+  std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+  g_probe_cache = ProbeCacheEntry{
+      .model_root_dir = model_root_dir,
+      .model_type = model_type,
+      .fingerprint = fingerprint,
+      .stored_at = std::chrono::steady_clock::now(),
+      .caps = caps,
+  };
+  g_probe_cache_stores.fetch_add(1, std::memory_order_relaxed);
+}
+
+}  // namespace
+
+PaddleProbeCacheStats paddle_probe_cache_stats() noexcept {
+  return PaddleProbeCacheStats{
+      .hits = g_probe_cache_hits.load(std::memory_order_relaxed),
+      .misses = g_probe_cache_misses.load(std::memory_order_relaxed),
+      .stores = g_probe_cache_stores.load(std::memory_order_relaxed),
+  };
+}
+
+void reset_paddle_probe_cache_for_testing() noexcept {
+  {
+    std::lock_guard<std::mutex> lock(g_probe_cache_mutex);
+    g_probe_cache.reset();
+  }
+  g_probe_cache_hits.store(0, std::memory_order_relaxed);
+  g_probe_cache_misses.store(0, std::memory_order_relaxed);
+  g_probe_cache_stores.store(0, std::memory_order_relaxed);
+}
+
+bool is_paddle_available() noexcept {
+  return PaddleOcrEngine::probe_capabilities().available;
+}
+
+PaddleCapabilities PaddleOcrEngine::probe_capabilities(
+    const std::string& model_root_dir, const std::string& model_type) {
+  PaddleCapabilities caps;
+  caps.model_type = model_type;
+  caps.model_root = model_root_dir;
+#if !SUBLIFT_HAS_PADDLE
+  caps.available = false;
+  caps.detail = "SUBLIFT_ENABLE_PADDLE=OFF";
+  return caps;
+#else
+  try {
+    detail::ResourceLocator locator;
+    auto type = detail::parse_model_type(model_type);
+    auto loaded = detail::load_default_native_manifest();
+    auto located = locator.probe_model_bundle(model_root_dir, type, false);
+    std::string fingerprint;
+    if (located.found) {
+      fingerprint = probe_bundle_fingerprint(
+          located.value, loaded.ok ? loaded.path : std::filesystem::path{});
+      if (auto cached = probe_cache_lookup(model_root_dir, model_type, fingerprint)) {
+        g_probe_cache_hits.fetch_add(1, std::memory_order_relaxed);
+        return *cached;
+      }
+    }
+    g_probe_cache_misses.fetch_add(1, std::memory_order_relaxed);
+    auto res = locator.probe_model_bundle(model_root_dir, type, true);
+    caps.available = res.found;
+    if (res.found) {
+      caps.model_root = res.value.det_path.parent_path().string();
+      if (loaded.ok) {
+        caps.detail = "ok (" + loaded.manifest.paddle.id + "@" +
+                      loaded.manifest.paddle.version + ")";
+      } else {
+        caps.detail = "ok";
+      }
+      if (located.found) {
+        probe_cache_store(model_root_dir, model_type, fingerprint, caps);
+      }
+    } else {
+      caps.detail = res.error_msg;
+    }
+  } catch (const std::exception& e) {
+    caps.available = false;
+    caps.detail = e.what();
+  }
+  return caps;
+#endif
+}
+
+struct PaddleOcrEngine::Impl {
+  PaddleOptions options;
+  PaddleRuntimeStats runtime_stats;
+  detail::ModelType model_type;
+  std::filesystem::path model_dir;
+  detail::ModelPaths model_paths;
+  std::vector<std::string> dictionary;
+
+  Ort::Env env;
+  Ort::SessionOptions session_options;
+  Ort::MemoryInfo memory_info;
+  std::unique_ptr<Ort::Session> det_session;
+  std::unique_ptr<Ort::Session> cls_session;
+  std::unique_ptr<Ort::Session> rec_session;
+
+  detail::GlobalPreprocessResult global_buffer_;
+  std::vector<float> det_input_buffer_;
+  std::vector<float> cls_input_buffer_;
+  std::vector<float> rec_input_buffer_;
+
+  std::string det_input_name;
+  std::string det_output_name;
+  std::string cls_input_name;
+  std::string cls_output_name;
+  std::string rec_input_name;
+  std::string rec_output_name;
+
+  std::mutex mutex_;
+
+  Impl(PaddleOptions opts)
+      : options(std::move(opts)),
+        model_type(detail::parse_model_type(options.model_type)),
+        env(ORT_LOGGING_LEVEL_WARNING, "sublift_paddle"),
+        memory_info(
+            Ort::MemoryInfo::CreateCpu(
+                OrtArenaAllocator, OrtMemTypeDefault)) {
+    if (const std::string exec_err = validate_paddle_execution(options.execution);
+        !exec_err.empty()) {
+      throw std::runtime_error(exec_err);
+    }
+    detail::ResourceLocator locator;
+    model_paths = locator.locate_model_bundle(options.model_root_dir, model_type);
+    model_dir = model_paths.det_path.parent_path();
+
+    if (options.intra_op_threads < 0 ||
+        options.cls_batch_size <= 0 ||
+        options.rec_batch_size <= 0) {
+      throw std::invalid_argument(
+          "Paddle OCR thread count must be >= 0 and batch sizes must be > 0");
+    }
+    if (options.intra_op_threads > 0) {
+      session_options.SetIntraOpNumThreads(options.intra_op_threads);
+    }
+    session_options.DisableCpuMemArena();
+    session_options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
+
+    det_session = std::make_unique<Ort::Session>(env, model_paths.det_path.c_str(), session_options);
+    cls_session = std::make_unique<Ort::Session>(env, model_paths.cls_path.c_str(), session_options);
+    rec_session = std::make_unique<Ort::Session>(env, model_paths.rec_path.c_str(), session_options);
+
+    Ort::AllocatorWithDefaultOptions alloc;
+    {
+      auto in = det_session->GetInputNameAllocated(0, alloc);
+      det_input_name = in.get();
+      auto out = det_session->GetOutputNameAllocated(0, alloc);
+      det_output_name = out.get();
+    }
+    {
+      auto in = cls_session->GetInputNameAllocated(0, alloc);
+      cls_input_name = in.get();
+      auto out = cls_session->GetOutputNameAllocated(0, alloc);
+      cls_output_name = out.get();
+    }
+    {
+      auto in = rec_session->GetInputNameAllocated(0, alloc);
+      rec_input_name = in.get();
+      auto out = rec_session->GetOutputNameAllocated(0, alloc);
+      rec_output_name = out.get();
+    }
+    try {
+      auto metadata = rec_session->GetModelMetadata();
+      auto characters =
+          metadata.LookupCustomMetadataMapAllocated("character", alloc);
+      if (characters && characters.get()[0] != '\0') {
+        dictionary = parse_dictionary(characters.get());
+      }
+    } catch (const Ort::Exception&) {
+    }
+    if (dictionary.empty()) {
+      dictionary = load_verified_dictionary(resolve_keys_path(model_paths));
+    }
+  }
+
+  detail::DBPostProcessResult run_det(
+      const detail::GlobalPreprocessResult& global) {
+    detail::DetInputSize det_size{};
+    {
+      StageTimer timer(stage_registry(), "paddle.det_preprocess");
+      det_size = detail::det_input_size(
+          global.width, global.height, options.det_geometry);
+      if (det_size.width <= 0 || det_size.height <= 0) {
+        throw std::runtime_error("Paddle Det resize produced an empty tensor");
+      }
+      const auto required =
+          static_cast<std::size_t>(det_size.width) *
+          static_cast<std::size_t>(det_size.height) * 3U;
+      if (det_input_buffer_.size() < required) {
+        det_input_buffer_.resize(required);
+      }
+      const auto actual = detail::prepare_det_input_into(
+          global.rgb.data(), global.width, global.height, options.det_geometry,
+          det_input_buffer_.data());
+      if (actual.width != det_size.width || actual.height != det_size.height) {
+        throw std::runtime_error("Paddle Det preprocess geometry mismatch");
+      }
+    }
+    const auto rw = det_size.width;
+    const auto rh = det_size.height;
+    const auto input_elements = static_cast<std::size_t>(rw) *
+                                static_cast<std::size_t>(rh) * 3U;
+
+    std::array<int64_t, 4> shape{1, 3, rh, rw};
+    Ort::Value tensor = Ort::Value::CreateTensor<float>(
+        memory_info, det_input_buffer_.data(), input_elements, shape.data(),
+        shape.size());
+    const char* in_names[] = {det_input_name.c_str()};
+    const char* out_names[] = {det_output_name.c_str()};
+    auto outputs = [&] {
+      StageTimer timer(stage_registry(), "paddle.det_infer");
+      return det_session->Run(Ort::RunOptions{nullptr}, in_names, &tensor, 1, out_names, 1);
+    }();
+    float* out = outputs[0].GetTensorMutableData<float>();
+    auto info = outputs[0].GetTensorTypeAndShapeInfo();
+    auto dims = info.GetShape();
+    int32_t oh = rh;
+    int32_t ow = rw;
+    if (dims.size() == 4) {
+      oh = static_cast<int32_t>(dims[2]);
+      ow = static_cast<int32_t>(dims[3]);
+    } else if (dims.size() == 3) {
+      oh = static_cast<int32_t>(dims[1]);
+      ow = static_cast<int32_t>(dims[2]);
+    }
+    detail::DBPostProcessOptions opts;
+    opts.det_box_thresh = 0.5F;
+    detail::DBPostProcessResult result;
+    {
+      StageTimer timer(stage_registry(), "paddle.det_postprocess");
+      result = detail::db_postprocess(
+          out, oh, ow, global.height, global.width, opts);
+    }
+    detail::sort_db_result(&result);
+    runtime_stats.det_boxes += result.quads.size();
+    return result;
+  }
+
+  std::vector<detail::ClsResult> run_cls(
+      std::vector<detail::CropResult>& crops) {
+    constexpr std::int64_t kChannels = 3;
+    constexpr std::int64_t kHeight = 48;
+    constexpr std::int64_t kWidth = 192;
+    constexpr float kRotateThreshold = 0.9F;
+
+    std::vector<detail::ClsResult> results(crops.size());
+    std::vector<std::size_t> indices(crops.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::stable_sort(
+        indices.begin(),
+        indices.end(),
+        [&](std::size_t left, std::size_t right) {
+          const double left_ratio =
+              static_cast<double>(crops[left].width) /
+              static_cast<double>(std::max(1, crops[left].height));
+          const double right_ratio =
+              static_cast<double>(crops[right].width) /
+              static_cast<double>(std::max(1, crops[right].height));
+          return left_ratio < right_ratio;
+        });
+
+    const auto batch_size =
+        static_cast<std::size_t>(options.cls_batch_size);
+    for (std::size_t begin = 0; begin < indices.size(); begin += batch_size) {
+      ++runtime_stats.cls_batches;
+      const std::size_t end = std::min(indices.size(), begin + batch_size);
+      const std::size_t batch = end - begin;
+      const std::size_t item_size =
+          static_cast<std::size_t>(kChannels * kHeight * kWidth);
+      const std::size_t input_elements = batch * item_size;
+      if (cls_input_buffer_.size() < input_elements) {
+        cls_input_buffer_.resize(input_elements);
+      }
+      {
+        StageTimer timer(stage_registry(), "paddle.cls_preprocess");
+        for (std::size_t item = 0; item < batch; ++item) {
+          detail::prepare_cls_tensor(
+              crops[indices[begin + item]],
+              cls_input_buffer_.data() + item * item_size);
+        }
+      }
+      std::array<std::int64_t, 4> shape{
+          static_cast<std::int64_t>(batch),
+          kChannels,
+          kHeight,
+          kWidth,
+      };
+
+      Ort::Value tensor = Ort::Value::CreateTensor<float>(
+          memory_info,
+          cls_input_buffer_.data(),
+          input_elements,
+          shape.data(),
+          shape.size());
+      const char* input_names[] = {cls_input_name.c_str()};
+      const char* output_names[] = {cls_output_name.c_str()};
+      auto outputs = [&] {
+        StageTimer timer(stage_registry(), "paddle.cls_infer");
+        return cls_session->Run(
+            Ort::RunOptions{nullptr},
+            input_names,
+            &tensor,
+            1,
+            output_names,
+            1);
+      }();
+      const float* output = outputs[0].GetTensorData<float>();
+      const auto output_info = outputs[0].GetTensorTypeAndShapeInfo();
+      const auto output_shape = output_info.GetShape();
+      if (output_shape.size() != 2 ||
+          output_shape[0] != static_cast<std::int64_t>(batch) ||
+          output_shape[1] != 2) {
+        throw std::runtime_error("PaddleOCR cls 输出维度异常");
+      }
+
+      {
+        StageTimer timer(stage_registry(), "paddle.cls_apply");
+        for (std::size_t item = 0; item < batch; ++item) {
+          const float* scores = output + item * 2;
+          const int label = scores[1] > scores[0] ? 1 : 0;
+          const float score = scores[label];
+          const std::size_t original_index = indices[begin + item];
+          auto result = detail::apply_cls_result(
+              crops[original_index], label, score, kRotateThreshold);
+          results[original_index] = result;
+        }
+      }
+    }
+    return results;
+  }
+
+  std::vector<detail::CtcResult> run_rec(
+      const std::vector<detail::CropResult>& crops) {
+    constexpr std::int64_t kChannels = 3;
+    constexpr std::int64_t kHeight = 48;
+    constexpr double kBaseWidthRatio = 320.0 / 48.0;
+
+    std::vector<detail::CtcResult> results(crops.size());
+    std::vector<std::size_t> indices(crops.size());
+    std::iota(indices.begin(), indices.end(), 0);
+    std::stable_sort(
+        indices.begin(),
+        indices.end(),
+        [&](std::size_t left, std::size_t right) {
+          const double left_ratio =
+              static_cast<double>(crops[left].width) /
+              static_cast<double>(std::max(1, crops[left].height));
+          const double right_ratio =
+              static_cast<double>(crops[right].width) /
+              static_cast<double>(std::max(1, crops[right].height));
+          return left_ratio < right_ratio;
+        });
+
+    const auto batch_size =
+        static_cast<std::size_t>(options.rec_batch_size);
+    for (std::size_t begin = 0; begin < indices.size(); begin += batch_size) {
+      ++runtime_stats.rec_batches;
+      const std::size_t end = std::min(indices.size(), begin + batch_size);
+      const std::size_t batch = end - begin;
+      double max_width_ratio = kBaseWidthRatio;
+      for (std::size_t item = begin; item < end; ++item) {
+        const auto& crop = crops[indices[item]];
+        max_width_ratio = std::max(
+            max_width_ratio,
+            static_cast<double>(crop.width) /
+                static_cast<double>(std::max(1, crop.height)));
+      }
+      const auto target_width = std::max<std::int64_t>(
+          1,
+          static_cast<std::int64_t>(
+              static_cast<double>(kHeight) * max_width_ratio));
+      const std::size_t item_size = static_cast<std::size_t>(
+          kChannels * kHeight * target_width);
+      const std::size_t input_elements = batch * item_size;
+      if (rec_input_buffer_.size() < input_elements) {
+        rec_input_buffer_.resize(input_elements);
+      }
+      {
+        StageTimer timer(stage_registry(), "paddle.rec_preprocess");
+        for (std::size_t item = 0; item < batch; ++item) {
+          detail::prepare_rec_tensor(
+              crops[indices[begin + item]],
+              static_cast<int>(kHeight),
+              static_cast<int>(target_width),
+              rec_input_buffer_.data() + item * item_size);
+        }
+      }
+      std::array<std::int64_t, 4> shape{
+          static_cast<std::int64_t>(batch),
+          kChannels,
+          kHeight,
+          target_width,
+      };
+
+      Ort::Value tensor = Ort::Value::CreateTensor<float>(
+          memory_info,
+          rec_input_buffer_.data(),
+          input_elements,
+          shape.data(),
+          shape.size());
+      const char* in_names[] = {rec_input_name.c_str()};
+      const char* out_names[] = {rec_output_name.c_str()};
+      auto outputs = [&] {
+        StageTimer timer(stage_registry(), "paddle.rec_infer");
+        return rec_session->Run(
+            Ort::RunOptions{nullptr},
+            in_names,
+            &tensor,
+            1,
+            out_names,
+            1);
+      }();
+      const float* output = outputs[0].GetTensorData<float>();
+      const auto output_info = outputs[0].GetTensorTypeAndShapeInfo();
+      const auto output_shape = output_info.GetShape();
+      if (output_shape.size() != 3 ||
+          output_shape[0] != static_cast<std::int64_t>(batch)) {
+        throw std::runtime_error("PaddleOCR rec 输出维度异常");
+      }
+      const int sequence_length = static_cast<int>(output_shape[1]);
+      const int class_count = static_cast<int>(output_shape[2]);
+      if (sequence_length <= 0 || class_count <= 1 ||
+          static_cast<std::size_t>(class_count - 1) != dictionary.size()) {
+        throw std::runtime_error(
+            "PaddleOCR rec 输出类别数与模型字典不一致");
+      }
+
+      const std::size_t output_item_size =
+          static_cast<std::size_t>(sequence_length) *
+          static_cast<std::size_t>(class_count);
+      {
+        StageTimer timer(stage_registry(), "paddle.rec_decode");
+        for (std::size_t item = 0; item < batch; ++item) {
+          auto decoded = detail::ctc_greedy_decode(
+              output + item * output_item_size,
+              sequence_length,
+              class_count,
+              dictionary);
+          results[indices[begin + item]] = decoded;
+        }
+      }
+    }
+    return results;
+  }
+};
+
+PaddleOcrEngine::PaddleOcrEngine(PaddleOptions options)
+    : impl_(nullptr) {
+  ensure_paddle_opencv_single_thread();
+  if (const std::string exec_err = validate_paddle_execution(options.execution);
+      !exec_err.empty()) {
+    throw std::runtime_error(exec_err);
+  }
+  impl_ = std::make_unique<Impl>(std::move(options));
+}
+
+PaddleOcrEngine::~PaddleOcrEngine() = default;
+
+PaddleOcrEngine::PaddleOcrEngine(PaddleOcrEngine&&) noexcept = default;
+PaddleOcrEngine& PaddleOcrEngine::operator=(PaddleOcrEngine&&) noexcept = default;
+
+OcrResult PaddleOcrEngine::recognize(const ImageView& image) {
+  if (image.width() <= 0 || image.height() <= 0) {
+    return OcrResult::from_lines({});
+  }
+  if (image.format() != PixelFormat::RGB24) {
+    throw std::runtime_error("PaddleOCR 仅支持 RGB24 ImageView");
+  }
+  if (!impl_ || !impl_->det_session ||
+      !impl_->cls_session || !impl_->rec_session) {
+    throw std::runtime_error("PaddleOCR 推理会话未初始化");
+  }
+
+  std::lock_guard<std::mutex> lock(impl_->mutex_);
+
+  try {
+    ++impl_->runtime_stats.recognize_calls;
+    const uint8_t* rgb = image.data();
+    const int32_t w = image.width();
+    const int32_t h = image.height();
+    const int32_t stride = static_cast<int32_t>(image.stride_bytes());
+
+    detail::GlobalPreprocessResult& global = impl_->global_buffer_;
+    {
+      StageTimer timer(stage_registry(), "paddle.global_preprocess");
+      detail::prepare_global_image_into(rgb, w, h, stride, &global);
+    }
+    auto db_res = impl_->run_det(global);
+    if (db_res.quads.empty()) {
+      return OcrResult::from_lines({});
+    }
+
+    std::vector<detail::CropResult> crops;
+    crops.reserve(db_res.quads.size());
+    {
+      StageTimer timer(stage_registry(), "paddle.crop");
+      for (std::size_t i = 0; i < db_res.quads.size(); ++i) {
+        crops.push_back(detail::get_rotate_crop(
+            global.rgb.data(), global.width, global.height, global.width * 3,
+            db_res.quads[i]));
+      }
+    }
+
+    (void)impl_->run_cls(crops);
+    auto recognized = impl_->run_rec(crops);
+
+    return [&] {
+      StageTimer timer(stage_registry(), "paddle.ocr_post");
+      std::vector<OcrLine> lines;
+      lines.reserve(db_res.quads.size());
+      for (std::size_t i = 0; i < db_res.quads.size(); ++i) {
+        const auto& quad = db_res.quads[i];
+        auto& ctc = recognized[i];
+        if (is_strip_empty(ctc.text) || ctc.confidence < 0.5f) {
+          continue;
+        }
+        const std::array<Point2D, 4> original_points{
+            map_point_to_original(quad.p0, global, w, h),
+            map_point_to_original(quad.p1, global, w, h),
+            map_point_to_original(quad.p2, global, w, h),
+            map_point_to_original(quad.p3, global, w, h),
+        };
+        OcrCropBox crop_box = clamp_box(quad_to_aabb(original_points), w, h);
+        lines.push_back(OcrLine{
+            .text = std::move(ctc.text),
+            .confidence = ctc.confidence,
+            .box = crop_box,
+        });
+      }
+      sort_ocr_lines(lines);
+      return OcrResult::from_lines(lines);
+    }();
+  } catch (const Ort::Exception& e) {
+    throw std::runtime_error(std::string("PaddleOCR ONNX Runtime 推理故障: ") + e.what());
+  } catch (const std::runtime_error&) {
+    throw;
+  } catch (const std::exception& e) {
+    throw std::runtime_error(std::string("PaddleOCR 推理故障: ") + e.what());
+  }
+}
+
+std::string PaddleOcrEngine::engine_name() const {
+  return "PaddleOcrEngine";
+}
+
+PaddleRuntimeStats PaddleOcrEngine::runtime_stats() const noexcept {
+  return impl_ ? impl_->runtime_stats : PaddleRuntimeStats{};
+}
+
+#else
+
+bool is_paddle_available() noexcept { return false; }
+
+PaddleCapabilities PaddleOcrEngine::probe_capabilities(
+    const std::string& model_root_dir, const std::string& model_type) {
+  PaddleCapabilities caps;
+  caps.available = false;
+  caps.model_type = model_type;
+  caps.model_root = model_root_dir;
+  caps.detail = "SUBLIFT_ENABLE_PADDLE=OFF";
+  return caps;
+}
+
+PaddleProbeCacheStats paddle_probe_cache_stats() noexcept {
+  return {};
+}
+
+void reset_paddle_probe_cache_for_testing() noexcept {}
+
+struct PaddleOcrEngine::Impl {};
+
+PaddleOcrEngine::PaddleOcrEngine(PaddleOptions options) {
+  if (const std::string exec_err = validate_paddle_execution(options.execution);
+      !exec_err.empty()) {
+    throw std::runtime_error(exec_err);
+  }
+  (void)detail::parse_model_type(options.model_type);
+  throw std::runtime_error("PaddleOCR 不可用：C++ 构建未启用 SUBLIFT_ENABLE_PADDLE");
+}
+
+PaddleOcrEngine::~PaddleOcrEngine() = default;
+
+PaddleOcrEngine::PaddleOcrEngine(PaddleOcrEngine&&) noexcept = default;
+PaddleOcrEngine& PaddleOcrEngine::operator=(PaddleOcrEngine&&) noexcept = default;
+
+OcrResult PaddleOcrEngine::recognize(const ImageView& /*image*/) {
+  throw std::runtime_error("PaddleOCR 不可用：C++ 构建未启用 SUBLIFT_ENABLE_PADDLE");
+}
+
+std::string PaddleOcrEngine::engine_name() const {
+  return "PaddleOcrEngine";
+}
+
+PaddleRuntimeStats PaddleOcrEngine::runtime_stats() const noexcept {
+  return {};
+}
+
+#endif
+
+std::string validate_paddle_execution(const PaddleExecutionConfig& config) {
+  if (config.provider == PaddleProvider::Cpu) {
+    if (config.device_id.has_value()) {
+      return "CPU 执行后端不接受设备编号（device_id）";
+    }
+    return "";
+  }
+  return "Paddle 执行后端 cuda 在当前构建不可用：未启用 CUDA 运行库"
+         "（需要 Phase 15 D02 冻结的 GPU 资源与运行库），不得静默降级";
+}
+
+}  // namespace sublift::adapters::paddle
